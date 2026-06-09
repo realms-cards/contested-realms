@@ -51,6 +51,7 @@ import { InteractionConsentDialog } from "@/components/game/InteractionConsentDi
 import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
 import KelpCavernOverlay from "@/components/game/KelpCavernOverlay";
 import KettletopLeprechaunOverlay from "@/components/game/KettletopLeprechaunOverlay";
+import KingswoodPoachersOverlay from "@/components/game/KingswoodPoachersOverlay";
 import LegionOfGallOverlay from "@/components/game/LegionOfGallOverlay";
 import LilithOverlay from "@/components/game/LilithOverlay";
 import MephistophelesOverlay from "@/components/game/MephistophelesOverlay";
@@ -1151,6 +1152,7 @@ export default function PlayPage() {
           <SelfsameSimulacrumOverlay />
           {/* Legion of Gall Overlay (inspect and banish from opponent collection) */}
           <LegionOfGallOverlay />
+          <KingswoodPoachersOverlay />
           {/* Artifact Cast Overlay (Toolbox, Silver Bullet) */}
           <ArtifactCastOverlay />
           {/* Auto-Resolve Confirmation Overlay (for silence effects) */}

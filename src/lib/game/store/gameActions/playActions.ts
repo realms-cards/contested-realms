@@ -1034,6 +1034,7 @@ export const createPlayActionsSlice: StateCreator<
       const isShapeshift = cardNameLower === "shapeshift";
       const isTorshammarTrinket = cardNameLower === "torshammar trinket";
       const isTheInquisition = cardNameLower === "the inquisition";
+      const isKingswoodPoachers = cardNameLower === "kingswood poachers";
       const isFeastForCrows = cardNameLower === "feast for crows";
       const isSelfsameSimulacrum = cardNameLower === "selfsame simulacrum";
 
@@ -1550,6 +1551,28 @@ export const createPlayActionsSlice: StateCreator<
           });
         } catch (e) {
           console.error("[playActions] Error triggering The Inquisition:", e);
+        }
+      }
+      // If this is Kingswood Poachers minion, trigger Genesis (search a spellbook, banish Beasts)
+      if (isKingswoodPoachers && newest && type.includes("minion")) {
+        console.log("[playActions] Triggering Kingswood Poachers Genesis:", {
+          at: key,
+          owner: newest.owner,
+          ownerSeat: who,
+        });
+        try {
+          get().beginKingswoodPoachers({
+            minion: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch (e) {
+          console.error("[playActions] Error triggering Kingswood Poachers:", e);
         }
       }
       // If this is Highland Princess minion, trigger Genesis (search for artifact ≤1)

@@ -4558,6 +4558,181 @@ export function handleCustomMessage(
     return;
   }
 
+  // --- Kingswood Poachers message handlers ---
+  if (t === "kingswoodPoachersBegin") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const minionAny = (msg as { minion?: unknown }).minion as unknown;
+    if (!id || !casterSeat || !minionAny) return;
+
+    // Skip if we're the caster - already handled locally
+    if (get().actorKey === casterSeat) return;
+
+    const rec = minionAny as Record<string, unknown>;
+    set({
+      pendingKingswoodPoachers: {
+        id,
+        casterSeat,
+        minion: {
+          at: rec.at as CellKey,
+          index: Number(rec.index),
+          instanceId: (rec.instanceId as string | null) ?? null,
+          owner: Number(rec.owner) as 1 | 2,
+          card: rec.card as CardRef,
+        },
+        phase: "confirming",
+        targetSeat: null,
+        eligibleCards: [],
+        eligibleIndices: [],
+        selectedIndices: [],
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+    try {
+      get().log(
+        `[${casterSeat.toUpperCase()}] Kingswood Poachers enters - awaiting Genesis confirmation`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "kingswoodPoachersConfirm") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const pending = get().pendingKingswoodPoachers;
+    if (!pending || (id && pending.id !== id)) return;
+    set({
+      pendingKingswoodPoachers: {
+        ...pending,
+        phase: "selecting_spellbook",
+      },
+    } as Partial<GameState> as GameState);
+    return;
+  }
+
+  if (t === "kingswoodPoachersSelectSpellbook") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const targetSeat = (msg as { targetSeat?: unknown }).targetSeat as
+      | PlayerKey
+      | undefined;
+    const pending = get().pendingKingswoodPoachers;
+    if (!pending || (id && pending.id !== id) || !targetSeat) return;
+    set({
+      pendingKingswoodPoachers: {
+        ...pending,
+        phase: "selecting",
+        targetSeat,
+      },
+    } as Partial<GameState> as GameState);
+    return;
+  }
+
+  if (t === "kingswoodPoachersResolve") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    const casterSeat = (msg as { casterSeat?: unknown }).casterSeat as
+      | PlayerKey
+      | undefined;
+    const targetSeat = (msg as { targetSeat?: unknown }).targetSeat as
+      | PlayerKey
+      | undefined;
+    const spellbookIndices = (msg as { spellbookIndices?: unknown })
+      .spellbookIndices as number[] | undefined;
+    const cardsToBanish = (msg as { cardsToBanish?: unknown }).cardsToBanish as
+      | CardRef[]
+      | undefined;
+
+    if (!id || !casterSeat || !targetSeat) return;
+
+    const actorKey = get().actorKey;
+
+    // Caster already applied everything locally.
+    if (actorKey === casterSeat) {
+      set({
+        pendingKingswoodPoachers: null,
+      } as Partial<GameState> as GameState);
+      return;
+    }
+
+    // We are the searched opponent: mutate + shuffle our OWN spellbook and patch.
+    // (The server blocks cross-player zone patches, so the caster could not do it.)
+    if (
+      actorKey === targetSeat &&
+      targetSeat !== casterSeat &&
+      Array.isArray(spellbookIndices)
+    ) {
+      const zones = get().zones;
+      const spellbook = [...(zones[targetSeat]?.spellbook || [])];
+      // Indices arrive sorted descending; remove in that order.
+      spellbookIndices.forEach((idx) => {
+        if (idx >= 0 && idx < spellbook.length) {
+          spellbook.splice(idx, 1);
+        }
+      });
+      for (let i = spellbook.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [spellbook[i], spellbook[j]] = [spellbook[j], spellbook[i]];
+      }
+      const banished = [
+        ...(zones[targetSeat]?.banished || []),
+        ...(cardsToBanish || []),
+      ];
+
+      const targetZones: Zones = {
+        spellbook,
+        atlas: [...(zones[targetSeat]?.atlas || [])],
+        hand: [...(zones[targetSeat]?.hand || [])],
+        graveyard: [...(zones[targetSeat]?.graveyard || [])],
+        battlefield: [...(zones[targetSeat]?.battlefield || [])],
+        collection: [...(zones[targetSeat]?.collection || [])],
+        banished,
+      };
+
+      set({
+        zones: { ...zones, [targetSeat]: targetZones },
+        pendingKingswoodPoachers: null,
+      } as Partial<GameState> as GameState);
+
+      try {
+        get().trySendPatch({
+          zones: { [targetSeat]: targetZones },
+        } as ServerPatchT);
+      } catch {}
+    } else {
+      // Spectator or own-book case (caster patched their own zones already).
+      set({
+        pendingKingswoodPoachers: null,
+      } as Partial<GameState> as GameState);
+    }
+
+    try {
+      const cardNames =
+        (cardsToBanish || []).map((c) => c.name || "Unknown").join(", ") ||
+        "no Beasts";
+      get().log(
+        `[${casterSeat.toUpperCase()}] Kingswood Poachers banishes ${
+          (cardsToBanish || []).length
+        } Beast(s) from ${targetSeat.toUpperCase()}'s spellbook: ${cardNames}`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "kingswoodPoachersCancel") {
+    const id = (msg as { id?: unknown }).id as string | undefined;
+    set((s) => {
+      if (
+        !s.pendingKingswoodPoachers ||
+        (id && s.pendingKingswoodPoachers.id !== id)
+      )
+        return s as GameState;
+      return {
+        pendingKingswoodPoachers: null,
+      } as Partial<GameState> as GameState;
+    });
+    return;
+  }
+
   // --- Auto-Resolve Confirmation message handlers ---
   if (t === "autoResolveBegin") {
     const id = (msg as { id?: unknown }).id as string | undefined;

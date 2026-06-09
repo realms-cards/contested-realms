@@ -4435,6 +4435,11 @@ io.on("connection", async (socket: SocketClient) => {
       type === "legionOfGallSelect" ||
       type === "legionOfGallResolve" ||
       type === "legionOfGallCancel" ||
+      type === "kingswoodPoachersBegin" ||
+      type === "kingswoodPoachersConfirm" ||
+      type === "kingswoodPoachersSelectSpellbook" ||
+      type === "kingswoodPoachersResolve" ||
+      type === "kingswoodPoachersCancel" ||
       type === "searingTruthBegin" ||
       type === "searingTruthTarget" ||
       type === "searingTruthResolve" ||

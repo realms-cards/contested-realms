@@ -1221,6 +1221,34 @@ export type PendingAssortedAnimals = {
   createdAt: number;
 };
 
+// --- Kingswood Poachers State -----------------------------------------------
+// Minion. Genesis → Search a spellbook (own or opponent) for up to three
+// Beasts, banish them, then shuffle.
+export type KingswoodPoachersPhase =
+  | "confirming"
+  | "selecting_spellbook"
+  | "selecting"
+  | "resolving"
+  | "complete";
+
+export type PendingKingswoodPoachers = {
+  id: string;
+  casterSeat: PlayerKey;
+  minion: {
+    at: CellKey;
+    index: number;
+    instanceId: string | null;
+    owner: 1 | 2;
+    card: CardRef;
+  };
+  phase: KingswoodPoachersPhase;
+  targetSeat: PlayerKey | null;
+  eligibleCards: CardRef[];
+  eligibleIndices: number[];
+  selectedIndices: number[];
+  createdAt: number;
+};
+
 // --- Frontier Settlers State ------------------------------------------------
 // Tap → Reveal and play your topmost site to an adjacent void or Rubble. Frontier Settlers move there and lose this ability.
 export type FrontierSettlersPhase =
@@ -2587,6 +2615,23 @@ export type GameState = {
   selectLegionOfGallCard: (index: number) => void;
   resolveLegionOfGall: () => void;
   cancelLegionOfGall: () => void;
+  // Kingswood Poachers (Genesis: search a spellbook, banish up to 3 Beasts, shuffle)
+  pendingKingswoodPoachers: PendingKingswoodPoachers | null;
+  beginKingswoodPoachers: (input: {
+    minion: {
+      at: CellKey;
+      index: number;
+      instanceId: string | null;
+      owner: 1 | 2;
+      card: CardRef;
+    };
+    casterSeat: PlayerKey;
+  }) => void;
+  confirmKingswoodPoachers: () => void;
+  selectKingswoodPoachersSpellbook: (targetSeat: PlayerKey) => void;
+  selectKingswoodPoachersBeast: (index: number) => void;
+  resolveKingswoodPoachers: () => void;
+  cancelKingswoodPoachers: () => void;
   // Artifact Cast (Toolbox = Ordinary, Silver Bullet = Exceptional spells from collection)
   pendingArtifactCast: PendingArtifactCast | null;
   beginArtifactCast: (input: {

@@ -54,6 +54,7 @@ import InquisitionSummonOverlay from "@/components/game/InquisitionSummonOverlay
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
 import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
 import KelpCavernOverlay from "@/components/game/KelpCavernOverlay";
+import KingswoodPoachersOverlay from "@/components/game/KingswoodPoachersOverlay";
 import LegionOfGallOverlay from "@/components/game/LegionOfGallOverlay";
 import LilithOverlay from "@/components/game/LilithOverlay";
 import MagicHudOverlay from "@/components/game/MagicHudOverlay";
@@ -3589,6 +3590,7 @@ export default function OnlineMatchPage() {
               <SelfsameSimulacrumOverlay />
               {/* Legion of Gall Overlay (inspect and banish from opponent collection) */}
               <LegionOfGallOverlay />
+              <KingswoodPoachersOverlay />
               {/* Artifact Cast Overlay (Toolbox, Silver Bullet) */}
               <ArtifactCastOverlay />
               {/* Auto-Resolve Confirmation Overlay (for silence effects) */}

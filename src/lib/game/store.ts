@@ -73,6 +73,7 @@ import { createInteractionSlice } from "./store/interactionState";
 import { createInterrogatorSlice } from "./store/interrogatorState";
 import { createKelpCavernSlice } from "./store/kelpCavernState";
 import { createKettletopLeprechaunSlice } from "./store/kettletopLeprechaunState";
+import { createKingswoodPoachersSlice } from "./store/kingswoodPoachersState";
 import { createLegionOfGallSlice } from "./store/legionOfGallState";
 import { createLilithSlice } from "./store/lilithState";
 import { createMagicSlice } from "./store/magicState";
@@ -235,6 +236,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createRaiseDeadSlice(set, get, storeApi),
   ...createRealmFloodSlice(set, get, storeApi),
   ...createLegionOfGallSlice(set, get, storeApi),
+  ...createKingswoodPoachersSlice(set, get, storeApi),
   ...createAutoResolveSlice(set, get, storeApi),
   ...createDholChantsSlice(set, get, storeApi),
   ...createAnnualFairSlice(set, get, storeApi),
@@ -411,6 +413,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingMephistopheles: null,
         pendingRaiseDead: null,
         pendingLegionOfGall: null,
+        pendingKingswoodPoachers: null,
         pendingAutoResolve: null,
         pendingArtifactCast: null,
         mephistophelesSummonUsed: createInitialMephistophelesSummonUsed(),
