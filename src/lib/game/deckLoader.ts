@@ -8,17 +8,14 @@ import { preCacheDeckFromResponse } from "@/lib/service-worker/registration";
 // Internal helper: extend CardRef with an optional classification zone
 type CardRefWithZone = CardRef & { __zone?: string | null };
 
-// Official constructed minimums; limited (sealed/draft) uses 24/12 instead
+// Official constructed minimums — enforced only for tournament matches
 const CONSTRUCTED_MIN_SPELLS = 60;
 const CONSTRUCTED_MIN_SITES = 30;
 
-// Seeded preconstructed decks are much smaller than constructed minimums
-// (~35 spellbook incl. avatar / 16 atlas) and are only legal against other
-// precons; validate with the limited-style floor to catch broken loads only
-const PRECON_MIN_SPELLS = 24;
-const PRECON_MIN_SITES = 12;
-
-export type ConstructedRulesMode = "constructed" | "precon";
+// Regular (non-tournament) matches use a lenient floor so precons and
+// learning decks stay playable; tournaments enforce full constructed rules
+const CASUAL_MIN_SPELLS = 24;
+const CASUAL_MIN_SITES = 12;
 
 /**
  * Validate a Duplicator deck: spellbook and atlas can only contain matching pairs of Uniques.
@@ -82,7 +79,6 @@ export async function loadDeckFor(
   who: "p1" | "p2",
   deckId: string,
   setError: (error: string) => void,
-  rulesMode: ConstructedRulesMode = "constructed",
 ): Promise<boolean> {
   if (!deckId) return false;
 
@@ -165,33 +161,27 @@ export async function loadDeckFor(
         setError(validationResult.error || "Invalid Duplicator deck");
         return false;
       }
+    } else if (magicianDeck) {
+      // Magician: no atlas — sites live in the spellbook, so only the
+      // combined spellbook size is enforced
+      if (spellbook.length + rawAtlas.length < CASUAL_MIN_SPELLS) {
+        setError(
+          `Magician spellbook needs at least ${CASUAL_MIN_SPELLS} cards including sites (excluding Avatar)`,
+        );
+        return false;
+      }
     } else {
-      const minSpells =
-        rulesMode === "precon" ? PRECON_MIN_SPELLS : CONSTRUCTED_MIN_SPELLS;
-      const minSites =
-        rulesMode === "precon" ? PRECON_MIN_SITES : CONSTRUCTED_MIN_SITES;
-      if (magicianDeck) {
-        // Magician: no atlas — sites live in the spellbook, so only the
-        // combined spellbook size is enforced
-        if (spellbook.length + rawAtlas.length < minSpells) {
-          setError(
-            `Magician spellbook needs at least ${minSpells} cards including sites (excluding Avatar)`,
-          );
-          return false;
-        }
-      } else {
-        // Standard constructed deck validation
-        if (rawAtlas.length < minSites) {
-          setError(`Atlas needs at least ${minSites} sites`);
-          return false;
-        }
+      // Lenient validation for regular matches (precons stay playable)
+      if (rawAtlas.length < CASUAL_MIN_SITES) {
+        setError(`Atlas needs at least ${CASUAL_MIN_SITES} sites`);
+        return false;
+      }
 
-        if (spellbook.length < minSpells) {
-          setError(
-            `Spellbook needs at least ${minSpells} cards (excluding Avatar)`,
-          );
-          return false;
-        }
+      if (spellbook.length < CASUAL_MIN_SPELLS) {
+        setError(
+          `Spellbook needs at least ${CASUAL_MIN_SPELLS} cards (excluding Avatar)`,
+        );
+        return false;
       }
     }
 
