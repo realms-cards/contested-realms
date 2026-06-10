@@ -306,6 +306,9 @@ export function registerPubSubListeners({
     if (channel === lobbyState) {
       const msg = payload as AnyRecord;
       if (!msg || typeof msg !== "object") return;
+      // Skip our own echoed messages — the local lobby object is already
+      // authoritative, and the serialized form is a lossy projection of it.
+      if (typeof msg.origin === "string" && msg.origin === instanceId) return;
       const msgType =
         typeof msg.type === "string" ? (msg.type as string) : null;
       if (

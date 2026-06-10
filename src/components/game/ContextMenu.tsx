@@ -482,12 +482,20 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
               }
             }
 
-            // Get available position actions after abilities are set
+            // Get available position actions after abilities are set.
+            // Force actions fill in whatever states the native abilities
+            // don't already offer (e.g. force submerge on a burrow-only card).
             const nativeActions = getAvailableActions(permanentId);
-            const actions =
-              nativeActions.length > 0
-                ? nativeActions
-                : buildForcePositionActions(permanentId, item.card.type);
+            const forceActions = buildForcePositionActions(
+              permanentId,
+              item.card.type,
+            ).filter(
+              (f) =>
+                !nativeActions.some(
+                  (n) => n.newPositionState === f.newPositionState,
+                ),
+            );
+            const actions = nativeActions.concat(forceActions);
             console.log("Debug - Permanent ID:", permanentId);
             console.log("Debug - Available actions:", actions);
             console.log("Debug - Abilities set:", { canBurrow, canSubmerge });
@@ -558,10 +566,16 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             }
 
             const nativeActions = getAvailableActions(permanentId);
-            const actions =
-              nativeActions.length > 0
-                ? nativeActions
-                : buildForcePositionActions(permanentId, item.card.type);
+            const forceActions = buildForcePositionActions(
+              permanentId,
+              item.card.type,
+            ).filter(
+              (f) =>
+                !nativeActions.some(
+                  (n) => n.newPositionState === f.newPositionState,
+                ),
+            );
+            const actions = nativeActions.concat(forceActions);
             console.log("Debug - Fallback - Permanent ID:", permanentId);
             console.log("Debug - Fallback - Available actions:", actions);
             console.log("Debug - Fallback - Abilities set:", {

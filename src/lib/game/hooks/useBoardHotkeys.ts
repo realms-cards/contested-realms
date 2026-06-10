@@ -179,8 +179,12 @@ export function useBoardHotkeys({
         setPermanentAbility,
         setPermanentPosition,
         updatePermanentState,
+        log,
       } = store.getState();
-      if (!selectedPermanent) return;
+      if (!selectedPermanent) {
+        log("Select a minion or artifact first, then press B to force burrow/surface");
+        return;
+      }
 
       const { at, index } = selectedPermanent;
       const item = permanents[at]?.[index];
@@ -209,11 +213,18 @@ export function useBoardHotkeys({
           position: { x: 0, y: 0, z: 0 },
         });
       }
+      // Toggle: surface → burrowed; burrowed/submerged → force surface
       const currentState =
         permanentPositions[permanentId]?.state ?? "surface";
       const next = currentState === "surface" ? "burrowed" : "surface";
       try {
         updatePermanentState(permanentId, next);
+        const cardName = item.card?.name ?? "permanent";
+        log(
+          next === "burrowed"
+            ? `Forced burrow: ${cardName}`
+            : `Forced surface: ${cardName}`,
+        );
         playCardFlip();
       } catch {}
     };

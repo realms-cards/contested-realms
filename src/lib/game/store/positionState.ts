@@ -68,7 +68,14 @@ export const createPositionSlice: StateCreator<
       try {
         const tr = get().transport;
         if (tr) {
-          const patch: ServerPatchT = { permanentPositions: nextPositions };
+          // Send only the changed entry — a full-map patch would overwrite
+          // concurrent position changes from the other seat (see patch
+          // safety rules in CLAUDE.md).
+          const patch: ServerPatchT = {
+            permanentPositions: {
+              [permanentId]: updatedPosition,
+            } as GameState["permanentPositions"],
+          };
           get().trySendPatch(patch);
         }
       } catch {}

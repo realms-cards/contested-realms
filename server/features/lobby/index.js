@@ -158,6 +158,10 @@ function createLobbyFeature(deps) {
       matchmakingRequiresAcceptance:
         lobby.matchmakingRequiresAcceptance === true,
       soatcLeagueMatch: lobby.soatcLeagueMatch || null,
+      matchId: lobby.matchId ?? null,
+      createdAt: lobby.createdAt ?? null,
+      allowSpectators: lobby.allowSpectators || false,
+      hostReady: lobby.hostReady !== false,
       lastActive: lobby.lastActive,
       playerIds: Array.from(lobby.playerIds || []),
       ready: Array.from(lobby.ready || []),
@@ -190,6 +194,12 @@ function createLobbyFeature(deps) {
     lb.matchmakingRequiresAcceptance =
       obj.matchmakingRequiresAcceptance === true;
     lb.soatcLeagueMatch = obj.soatcLeagueMatch || null;
+    // Guard with `in` checks for rolling-deploy compat: older instances publish
+    // messages without these fields, and applying undefined would wipe them.
+    if ("matchId" in obj) lb.matchId = obj.matchId ?? null;
+    if ("createdAt" in obj) lb.createdAt = obj.createdAt ?? lb.createdAt;
+    if ("allowSpectators" in obj) lb.allowSpectators = !!obj.allowSpectators;
+    if ("hostReady" in obj) lb.hostReady = obj.hostReady !== false;
     lb.lastActive = obj.lastActive || Date.now();
     lb.playerIds = new Set(Array.isArray(obj.playerIds) ? obj.playerIds : []);
     lb.ready = new Set(Array.isArray(obj.ready) ? obj.ready : []);
@@ -204,7 +214,11 @@ function createLobbyFeature(deps) {
       if (storeRedis)
         await storeRedis.publish(
           LOBBY_STATE_CHANNEL,
-          JSON.stringify({ type: "upsert", lobby: serializeLobby(lobby) }),
+          JSON.stringify({
+            type: "upsert",
+            origin: INSTANCE_ID,
+            lobby: serializeLobby(lobby),
+          }),
         );
     } catch {}
   }
@@ -217,7 +231,7 @@ function createLobbyFeature(deps) {
       if (storeRedis)
         await storeRedis.publish(
           LOBBY_STATE_CHANNEL,
-          JSON.stringify({ type: "delete", id: lobbyId }),
+          JSON.stringify({ type: "delete", origin: INSTANCE_ID, id: lobbyId }),
         );
     } catch {}
   }
@@ -235,7 +249,15 @@ function createLobbyFeature(deps) {
       id: lobby.id,
       name: lobby.name,
       hostId: lobby.hostId,
-      players: Array.from(lobby.playerIds).map(getPlayerInfo).filter(Boolean),
+      players: Array.from(lobby.playerIds).map(
+        (pid) =>
+          getPlayerInfo(pid) || {
+            // Player record not cached locally (cross-instance lobby or
+            // restart) — emit a placeholder so the count stays accurate.
+            id: pid,
+            displayName: `Player ${String(pid).slice(-4)}`,
+          },
+      ),
       status: lobby.status,
       maxPlayers: lobby.maxPlayers,
       visibility: lobby.visibility,

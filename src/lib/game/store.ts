@@ -465,3 +465,7 @@ export const createGameStore = () => create<GameState>(createGameStoreState);
 
 export const useGameStore = createGameStore();
 setTransportStateAccessor(useGameStore.getState);
+
+if (process.env.NODE_ENV !== "production" && typeof window !== "undefined") {
+  (window as unknown as Record<string, unknown>).__gameStore = useGameStore;
+}

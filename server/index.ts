@@ -5573,6 +5573,12 @@ io.on("connection", async (socket: SocketClient) => {
         if (!lobby) {
           lobbies.delete(player.lobbyId);
           player.lobbyId = null;
+        } else if (lobby.status === "started") {
+          // Match in progress: keep the registration intact. Disconnects don't
+          // end matches (players can rejoin anytime), so dropping them here
+          // would corrupt the lobby's player count, reassign the host, or even
+          // delete the lobby while the match is still running. Stale started
+          // lobbies are hidden from the list via STALE_MATCH_DISPLAY_MS.
         } else {
           lobby.playerIds.delete(player.id);
           lobby.ready.delete(player.id);
