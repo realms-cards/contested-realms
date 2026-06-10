@@ -12,10 +12,11 @@ type CardRefWithZone = CardRef & { __zone?: string | null };
 const CONSTRUCTED_MIN_SPELLS = 60;
 const CONSTRUCTED_MIN_SITES = 30;
 
-// Seeded preconstructed decks are smaller (~50 spellbook / 30 atlas) and are
-// only legal against other precons, so precon matches validate against these
-const PRECON_MIN_SPELLS = 50;
-const PRECON_MIN_SITES = 30;
+// Seeded preconstructed decks are much smaller than constructed minimums
+// (~35 spellbook incl. avatar / 16 atlas) and are only legal against other
+// precons; validate with the limited-style floor to catch broken loads only
+const PRECON_MIN_SPELLS = 24;
+const PRECON_MIN_SITES = 12;
 
 export type ConstructedRulesMode = "constructed" | "precon";
 
