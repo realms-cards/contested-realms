@@ -98,7 +98,8 @@ export default function OnlineDeckSelector({
       const success = await loadDeckFor(
         myPlayerKey,
         selectedDeck,
-        setDeckError
+        setDeckError,
+        isPrecon ? "precon" : "constructed"
       );
 
       if (success) {

@@ -78,8 +78,12 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
 
     if (!deckIdP1 || !deckIdP2) return;
 
-    const ok1 = await loadDeckFor("p1", deckIdP1, setDeckErrP1);
-    const ok2 = await loadDeckFor("p2", deckIdP2, setDeckErrP2);
+    // Precon decks only meet the relaxed precon minimums, and are only legal
+    // against other precons — a mixed pairing validates as constructed
+    const bothPrecon = isPreconP1 && isPreconP2;
+    const rulesMode = bothPrecon ? ("precon" as const) : ("constructed" as const);
+    const ok1 = await loadDeckFor("p1", deckIdP1, setDeckErrP1, rulesMode);
+    const ok2 = await loadDeckFor("p2", deckIdP2, setDeckErrP2, rulesMode);
 
     if (ok1 && ok2) {
       useGameStore.getState().setPhase("Start");

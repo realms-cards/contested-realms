@@ -12,6 +12,13 @@ type CardRefWithZone = CardRef & { __zone?: string | null };
 const CONSTRUCTED_MIN_SPELLS = 60;
 const CONSTRUCTED_MIN_SITES = 30;
 
+// Seeded preconstructed decks are smaller (~50 spellbook / 30 atlas) and are
+// only legal against other precons, so precon matches validate against these
+const PRECON_MIN_SPELLS = 50;
+const PRECON_MIN_SITES = 30;
+
+export type ConstructedRulesMode = "constructed" | "precon";
+
 /**
  * Validate a Duplicator deck: spellbook and atlas can only contain matching pairs of Uniques.
  * Each unique card name must appear exactly twice total (can be split across zones).
@@ -74,6 +81,7 @@ export async function loadDeckFor(
   who: "p1" | "p2",
   deckId: string,
   setError: (error: string) => void,
+  rulesMode: ConstructedRulesMode = "constructed",
 ): Promise<boolean> {
   if (!deckId) return false;
 
@@ -156,27 +164,33 @@ export async function loadDeckFor(
         setError(validationResult.error || "Invalid Duplicator deck");
         return false;
       }
-    } else if (magicianDeck) {
-      // Magician: no atlas — sites live in the spellbook, so only the
-      // combined spellbook size is enforced
-      if (spellbook.length + rawAtlas.length < CONSTRUCTED_MIN_SPELLS) {
-        setError(
-          `Magician spellbook needs at least ${CONSTRUCTED_MIN_SPELLS} cards including sites (excluding Avatar)`,
-        );
-        return false;
-      }
     } else {
-      // Standard constructed deck validation
-      if (rawAtlas.length < CONSTRUCTED_MIN_SITES) {
-        setError(`Atlas needs at least ${CONSTRUCTED_MIN_SITES} sites`);
-        return false;
-      }
+      const minSpells =
+        rulesMode === "precon" ? PRECON_MIN_SPELLS : CONSTRUCTED_MIN_SPELLS;
+      const minSites =
+        rulesMode === "precon" ? PRECON_MIN_SITES : CONSTRUCTED_MIN_SITES;
+      if (magicianDeck) {
+        // Magician: no atlas — sites live in the spellbook, so only the
+        // combined spellbook size is enforced
+        if (spellbook.length + rawAtlas.length < minSpells) {
+          setError(
+            `Magician spellbook needs at least ${minSpells} cards including sites (excluding Avatar)`,
+          );
+          return false;
+        }
+      } else {
+        // Standard constructed deck validation
+        if (rawAtlas.length < minSites) {
+          setError(`Atlas needs at least ${minSites} sites`);
+          return false;
+        }
 
-      if (spellbook.length < CONSTRUCTED_MIN_SPELLS) {
-        setError(
-          `Spellbook needs at least ${CONSTRUCTED_MIN_SPELLS} cards (excluding Avatar)`,
-        );
-        return false;
+        if (spellbook.length < minSpells) {
+          setError(
+            `Spellbook needs at least ${minSpells} cards (excluding Avatar)`,
+          );
+          return false;
+        }
       }
     }
 
