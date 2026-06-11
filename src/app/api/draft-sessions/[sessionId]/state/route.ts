@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getServerAuthSession } from '@/lib/auth';
+import { resolveActorUserId } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 // Avoid importing the engine here to prevent extra DB queries; we'll parse state directly
 
@@ -9,24 +9,10 @@ export const dynamic = 'force-dynamic';
 // Get current draft state
 export async function GET(req: NextRequest, { params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
-  // Internal S2S bypass (prod guard handled by middleware)
-  const flag = (req.headers.get('x-internal-call') || '').toLowerCase();
-  const isOn = flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
-  const uidHeader = req.headers.get('x-user-id') || '';
-  const isInternal = isOn || !!uidHeader;
-  let userId: string;
-  if (isInternal) {
-    const uid = uidHeader;
-    if (!uid) {
-      return new Response(JSON.stringify({ error: 'Missing X-User-Id for internal request' }), { status: 400 });
-    }
-    userId = uid;
-  } else {
-    const session = await getServerAuthSession();
-    if (!session?.user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-    }
-    userId = session.user.id;
+
+  const userId = await resolveActorUserId(req);
+  if (!userId) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 
   try {

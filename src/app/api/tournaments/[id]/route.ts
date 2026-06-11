@@ -238,6 +238,13 @@ export async function DELETE(
       });
     }
 
+    if (tournament.creatorId !== session.user.id) {
+      return new Response(
+        JSON.stringify({ error: "Only the tournament creator can delete it" }),
+        { status: 403 },
+      );
+    }
+
     if (tournament.status !== "registering") {
       return new Response(
         JSON.stringify({ error: "Cannot delete tournament in progress" }),

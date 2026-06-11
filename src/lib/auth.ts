@@ -654,3 +654,40 @@ export async function getServerAuthSession(): Promise<AppSession> {
     return null;
   }
 }
+
+const TRUTHY_HEADER_VALUES = new Set(["1", "true", "yes", "on"]);
+
+/**
+ * Determine whether a request is a trusted server-to-server call.
+ *
+ * An internal call MUST present `x-internal-call` (truthy) AND an
+ * `x-internal-key` that matches `process.env.INTERNAL_API_KEY`. The presence
+ * of `x-user-id` alone is NOT sufficient — without the key check any client
+ * could impersonate any user by setting that header.
+ */
+export function isTrustedInternalRequest(headers: Headers): boolean {
+  const flag = (headers.get("x-internal-call") || "").toLowerCase();
+  if (!TRUTHY_HEADER_VALUES.has(flag)) return false;
+  const expectedKey = process.env.INTERNAL_API_KEY || "";
+  if (!expectedKey) return false;
+  const providedKey = headers.get("x-internal-key") || "";
+  return providedKey === expectedKey;
+}
+
+/**
+ * Resolve the acting user id for an API route.
+ *
+ * Trusted internal calls (validated key) act as the user named in `x-user-id`.
+ * All other requests must carry a valid NextAuth session. Returns `null` when
+ * neither path authenticates the request — callers should respond 401.
+ */
+export async function resolveActorUserId(
+  req: { headers: Headers },
+): Promise<string | null> {
+  if (isTrustedInternalRequest(req.headers)) {
+    const uid = req.headers.get("x-user-id") || "";
+    return uid || null;
+  }
+  const session = await getServerAuthSession();
+  return session?.user?.id ?? null;
+}

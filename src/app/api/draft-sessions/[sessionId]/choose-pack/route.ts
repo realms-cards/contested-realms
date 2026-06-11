@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getServerAuthSession } from '@/lib/auth';
+import { resolveActorUserId } from '@/lib/auth';
 import { TournamentDraftEngine } from '@/lib/services/tournament-draft-engine';
 
 export const dynamic = 'force-dynamic';
@@ -9,25 +9,9 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest, { params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
 
-  // Internal S2S bypass (prod guarded in middleware)
-  const flag = (req.headers.get('x-internal-call') || '').toLowerCase();
-  const isOn = flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
-  const uidHeader = req.headers.get('x-user-id') || '';
-  const isInternal = isOn || !!uidHeader;
-
-  let userId: string;
-  if (isInternal) {
-    const uid = uidHeader;
-    if (!uid) {
-      return new Response(JSON.stringify({ error: 'Missing X-User-Id for internal request' }), { status: 400 });
-    }
-    userId = uid;
-  } else {
-    const session = await getServerAuthSession();
-    if (!session?.user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-    }
-    userId = session.user.id;
+  const userId = await resolveActorUserId(req);
+  if (!userId) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 
   try {
