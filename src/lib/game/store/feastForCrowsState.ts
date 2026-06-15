@@ -7,6 +7,7 @@ import type {
   Zones,
 } from "./types";
 import { getHaystackLimit, opponentSeat } from "./utils/boardHelpers";
+import { getAuthoritativeZones } from "./utils/revealZones";
 
 function newFeastId() {
   return `ffc_${Date.now().toString(36)}_${Math.random()
@@ -73,7 +74,7 @@ export const createFeastForCrowsSlice: StateCreator<
     );
   },
 
-  nameFeastForCrows: (cardName: string, cardSlug: string) => {
+  nameFeastForCrows: async (cardName: string, cardSlug: string) => {
     const pending = get().pendingFeastForCrows;
     if (!pending || pending.phase !== "naming") return;
 
@@ -81,9 +82,14 @@ export const createFeastForCrowsSlice: StateCreator<
     const victimSeat = pending.victimSeat;
     const zones = get().zones;
 
-    // Get opponent's zones
-    const victimHand = [...(zones[victimSeat]?.hand || [])];
-    const fullSpellbook = [...(zones[victimSeat]?.spellbook || [])];
+    // Get opponent's zones — hand/spellbook are hidden and must be revealed
+    // authoritatively (server-mediated under projection); graveyard is public.
+    const revealed = await getAuthoritativeZones(get, victimSeat, [
+      "hand",
+      "spellbook",
+    ]);
+    const victimHand = [...(revealed.hand ?? [])];
+    const fullSpellbook = [...(revealed.spellbook ?? [])];
     const victimGraveyard = [...(zones[victimSeat]?.graveyard || [])];
 
     // Apply Haystack restriction to spellbook search

@@ -8,6 +8,7 @@ import type {
   MatchConsoleEvent,
   MatchPermanents,
 } from "./shared/match-helpers";
+import { validateZoneIntegrity } from "./zone-integrity";
 
 type Seat = "p1" | "p2";
 
@@ -288,6 +289,13 @@ interface MatchLeaderDeps {
   interactionKinds: Set<string>;
   interactionDecisions: Set<string>;
   isCpuPlayerId: (playerId: string) => boolean;
+  // Layer 0: when true, the server redacts each opponent's hidden zones
+  // (hand/spellbook/atlas) in outbound statePatch broadcasts instead of
+  // relying on the client UI to hide them. Dark-launched (default off).
+  zoneProjectionEnabled: boolean;
+  // Layer 1/2: enforcement mode for cross-seat zone-write authorization and
+  // card-conservation invariants. "off" | "warn" | "bot_only" | "all".
+  zoneIntegrityMode: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -614,6 +622,8 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     interactionKinds,
     interactionDecisions,
     isCpuPlayerId,
+    zoneProjectionEnabled,
+    zoneIntegrityMode,
   } = deps;
 
   /**
@@ -675,6 +685,29 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     }
     // Graveyard, banished, collection, battlefield are public - keep as-is
     return out;
+  }
+
+  // Layer 0: project an outbound patch for a specific seated viewer.
+  // The viewer sees their own zones in full and all public zones verbatim, but
+  // the OPPONENT's hidden zones (hand/spellbook/atlas) are redacted to
+  // count-preserving face-down placeholders. Only patches that actually carry
+  // the opponent's zones are rewritten; everything else passes through.
+  function projectPatchForViewer(
+    patch: MatchPatch | null | undefined,
+    viewerSeat: Seat,
+  ): MatchPatch | null {
+    if (!patch || typeof patch !== "object") return patch ?? null;
+    const record = patch as Record<string, unknown>;
+    if (!record.zones || typeof record.zones !== "object") return patch;
+    const zones = record.zones as ZonesState;
+    const opponentSeat: Seat = viewerSeat === "p1" ? "p2" : "p1";
+    if (!zones[opponentSeat]) return patch;
+    const out: Record<string, unknown> = { ...record };
+    out.zones = {
+      ...zones,
+      [opponentSeat]: sanitizePlayerZonesForSpectator(zones[opponentSeat]),
+    };
+    return out as MatchPatch;
   }
 
   function sanitizePatchForSpectator(
@@ -1321,16 +1354,38 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           };
         }
 
+        // Captured before the zone sanitizer strips the cross-seat flags, so the
+        // integrity validator (which runs after the merge) can still read it.
+        // Always patch-shaped so deriveCrossSeat() can parse it.
+        const capturedCrossSeat: Record<string, unknown> | null = (() => {
+          const rec = patchToApply as Record<string, unknown>;
+          if (rec.crossSeat) return { crossSeat: rec.crossSeat };
+          if (Array.isArray(rec.__allowZoneSeats))
+            return { __allowZoneSeats: rec.__allowZoneSeats };
+          return null;
+        })();
+
         if (patchToApply.zones && isRecord(patchToApply.zones)) {
           const incomingZones = patchToApply.zones as ZonesState;
           const sanitizedZones: Partial<ZonesState> = {};
 
-          // Check for __allowZoneSeats - allows actor to update opponent zones
-          // (used when destroying opponent cards, transferring control, etc.)
+          // Allows the actor to update the opponent's zones (destroying cards,
+          // transferring control, etc.). Prefer the typed `crossSeat` descriptor;
+          // fall back to the legacy `__allowZoneSeats` flag for un-migrated paths.
           const patchRecord = patchToApply as Record<string, unknown>;
-          const allowedZoneSeats = Array.isArray(patchRecord.__allowZoneSeats)
-            ? (patchRecord.__allowZoneSeats as string[])
-            : [];
+          const crossSeatSeats = (() => {
+            const cs = patchRecord.crossSeat;
+            if (cs && typeof cs === "object") {
+              const seats = (cs as Record<string, unknown>).seats;
+              if (Array.isArray(seats)) return seats as string[];
+            }
+            return null;
+          })();
+          const allowedZoneSeats =
+            crossSeatSeats ??
+            (Array.isArray(patchRecord.__allowZoneSeats)
+              ? (patchRecord.__allowZoneSeats as string[])
+              : []);
 
           debugLog("[match-leader] Zone update received:", {
             matchId,
@@ -1386,9 +1441,12 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               // ignore logging failures
             }
           }
-          // Remove __allowZoneSeats from patch before applying (internal flag only)
+          // Remove cross-seat authorization flags before applying (internal only)
           if (patchRecord.__allowZoneSeats) {
             delete patchRecord.__allowZoneSeats;
+          }
+          if (patchRecord.crossSeat) {
+            delete patchRecord.crossSeat;
           }
           const zoneKeys = Object.keys(sanitizedZones).filter(
             (key) => sanitizedZones[key as keyof ZonesState],
@@ -1439,6 +1497,58 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           patchToApply as Record<string, unknown>,
         );
         match.game = mergedGame as MatchGameState;
+
+        // Layers 1 & 2: card-conservation + cross-seat capability validation.
+        // Compares the authoritative pre-merge state (baseForMerge) against the
+        // just-merged client patch, before any server-derived transforms.
+        if (zoneIntegrityMode && zoneIntegrityMode !== "off") {
+          const integrity = validateZoneIntegrity(
+            baseForMerge,
+            match.game,
+            capturedCrossSeat,
+            actorSeat,
+          );
+          if (!integrity.ok) {
+            const summary = integrity.violations
+              .map((v) => `${v.code}: ${v.message}`)
+              .join("; ");
+            const enforce =
+              zoneIntegrityMode === "all" ||
+              (zoneIntegrityMode === "bot_only" && isCpuPlayerId(playerId));
+            try {
+              console.warn("[zone-integrity] violation", {
+                matchId,
+                playerId,
+                actorSeat,
+                enforce,
+                violations: integrity.violations,
+              });
+            } catch {
+              // ignore logging failures
+            }
+            if (enforce) {
+              // Revert to the pre-merge authoritative state and reject.
+              match.game = baseForMerge as MatchGameState;
+              emitToPlayer(
+                playerId,
+                "error",
+                {
+                  message: `Illegal zone modification: ${summary}`,
+                  code: "zone_integrity_violation",
+                },
+                actorSocketId,
+              );
+              return;
+            }
+            // warn / bot_only-for-humans: surface a non-fatal notice, keep going.
+            emitToPlayer(
+              playerId,
+              "integrityWarning",
+              { message: summary, violations: integrity.violations },
+              actorSocketId,
+            );
+          }
+        }
 
         if (patchToApply.zones) {
           type CardLike = { name?: string; cardId?: string };
@@ -1719,7 +1829,35 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           });
         }
 
-        if (senderSocketId) {
+        if (zoneProjectionEnabled && !d20OnlyPatch) {
+          // Layer 0: emit a per-seat projected patch to each player so neither
+          // can read the other's hidden zones off the wire. The acting player
+          // still gets an events-only echo (they already applied locally).
+          const seatPlayerIds: Array<{ seat: Seat; pid: string | undefined }> =
+            [
+              { seat: "p1", pid: match.playerIds?.[0] },
+              { seat: "p2", pid: match.playerIds?.[1] },
+            ];
+          for (const { seat, pid } of seatPlayerIds) {
+            if (!pid) continue;
+            if (pid === playerId) {
+              if (eventsForSender) {
+                io.to(`player:${pid}`).emit("statePatch", {
+                  patch: eventsForSender,
+                  t: now,
+                });
+              }
+            } else {
+              const projected =
+                projectPatchForViewer(enrichedPatchToApply, seat) ??
+                enrichedPatchToApply;
+              io.to(`player:${pid}`).emit("statePatch", {
+                patch: projected,
+                t: now,
+              });
+            }
+          }
+        } else if (senderSocketId) {
           if (d20OnlyPatch) {
             io.to(matchRoom).emit("statePatch", {
               patch: enrichedPatchToApply,

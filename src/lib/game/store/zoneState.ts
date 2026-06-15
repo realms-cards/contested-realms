@@ -16,6 +16,7 @@ import { newZoneCardInstanceId } from "./utils/idHelpers";
 import {
   createEmptyZonesRecord,
   createZonesPatchFor,
+  setCrossSeatAuth,
 } from "./utils/zoneHelpers";
 
 type ZoneSlice = Pick<
@@ -1069,7 +1070,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const patch = createZonesPatchFor(zonesNext as GameState["zones"], who);
       if (patch) {
         // Allow actor to update opponent's zones (e.g., banishing opponent's graveyard cards)
-        (patch as Record<string, unknown>).__allowZoneSeats = [who];
+        setCrossSeatAuth(patch, "banish_graveyard", who);
         get().trySendPatch(patch);
       }
       return {
@@ -1095,7 +1096,7 @@ export const createZoneSlice: StateCreator<GameState, [], [], ZoneSlice> = (
       const patch = createZonesPatchFor(zonesNext as GameState["zones"], who);
       if (patch) {
         // Allow actor to update opponent's zones (e.g., banishing opponent's graveyard)
-        (patch as Record<string, unknown>).__allowZoneSeats = [who];
+        setCrossSeatAuth(patch, "banish_graveyard", who);
         get().trySendPatch(patch);
       }
       return {

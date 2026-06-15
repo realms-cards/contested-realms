@@ -3662,7 +3662,29 @@ export type ServerPatchT = Partial<{
   __replaceKeys: string[];
   // Snapshot timestamp for replay truncation on undo
   __snapshotTs: number;
+  // Cross-seat zone-write authorization (Layer 2). Declares which card effect
+  // is writing the opponent's zones and which seats it targets, so the server
+  // can validate the write against that effect's capability envelope.
+  crossSeat: CrossSeatDescriptor;
+  // Legacy cross-seat flag — superseded by `crossSeat`, retained for transition.
+  __allowZoneSeats: PlayerKey[];
 }>;
+
+// Must stay in sync with the server's CrossSeatEffectId
+// (server/modules/zone-integrity.ts).
+export type CrossSeatEffectId =
+  | "infiltrate"
+  | "betrayal"
+  | "sea_raider"
+  | "site_destroy"
+  | "banish_graveyard"
+  | "permanent_move"
+  | "control_transfer";
+
+export interface CrossSeatDescriptor {
+  effect: CrossSeatEffectId;
+  seats: PlayerKey[];
+}
 
 export type BetrayalPhase = "selectingTarget" | "resolving";
 

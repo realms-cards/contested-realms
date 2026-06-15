@@ -358,6 +358,22 @@ const RULES_HELPERS_ENABLED = !(
   (process.env.RULES_HELPERS_ENABLED || "").toLowerCase() === "false"
 );
 
+// Layer 0: per-seat hidden-zone projection on outbound broadcasts.
+// Dark-launched (default off) — requires the online client reducer to tolerate
+// face-down placeholders for the opponent's hidden zones before enabling.
+const ZONE_PROJECTION_ENABLED =
+  process.env.ZONE_PROJECTION_ENABLED === "1" ||
+  (process.env.ZONE_PROJECTION_ENABLED || "").toLowerCase() === "true";
+
+// Layer 1/2: cross-seat zone-write authorization + card-conservation invariant.
+//  - off: no checks
+//  - warn: compute violations, log + attach a warning event, never reject
+//  - bot_only: enforce (reject) for CPU bots only, warn for humans
+//  - all: enforce (reject) for everyone
+const ZONE_INTEGRITY_MODE = (
+  process.env.ZONE_INTEGRITY_MODE || "off"
+).toLowerCase();
+
 // Persistence strategy: default to Redis write-behind to avoid DB pool pressure
 const PERSIST_STRATEGY = (
   process.env.PERSIST_STRATEGY || "write_behind"
@@ -796,6 +812,8 @@ const matchLeaderService: MatchLeaderService = createMatchLeaderService({
   interactionKinds: INTERACTION_REQUEST_KINDS,
   interactionDecisions: INTERACTION_DECISIONS,
   isCpuPlayerId,
+  zoneProjectionEnabled: ZONE_PROJECTION_ENABLED,
+  zoneIntegrityMode: ZONE_INTEGRITY_MODE,
 } as unknown as Parameters<typeof createMatchLeaderService>[0]);
 
 const {
@@ -3270,6 +3288,63 @@ io.on("connection", async (socket: SocketClient) => {
         try {
           io.to(`spectate:${matchId}`).emit("message", out);
         } catch {}
+      } catch {}
+    } else if (type === "revealZones") {
+      // Server-mediated reveal: an effect on the actor's client needs the
+      // authoritative contents of an opponent's hidden zone (hand/spellbook/
+      // atlas). With zone projection enabled the actor no longer holds the real
+      // cards locally, so it asks the server, which holds the truth. Only a
+      // seated player may request, and the result is returned to that player
+      // alone. (Residual: a seated player can still request the opponent's
+      // hidden zones at will — same ceiling as the cross-seat capability layer;
+      // requests are logged for audit and could be rate-limited later.)
+      try {
+        const match = await getOrLoadMatch(matchId);
+        const actorSeat = getSeatForPlayer(match, player.id);
+        if (!actorSeat) return;
+        const p = payload as {
+          requestId?: unknown;
+          targetSeat?: unknown;
+          zones?: unknown;
+        };
+        const requestId =
+          typeof p.requestId === "string" && p.requestId ? p.requestId : null;
+        const targetSeat =
+          p.targetSeat === "p1" || p.targetSeat === "p2" ? p.targetSeat : null;
+        const allowedZones = new Set(["hand", "spellbook", "atlas"]);
+        const zoneNames = Array.isArray(p.zones)
+          ? p.zones.filter(
+              (z): z is string =>
+                typeof z === "string" && allowedZones.has(z),
+            )
+          : [];
+        if (!requestId || !targetSeat || zoneNames.length === 0) return;
+        const gameZones =
+          (match?.game as { zones?: Record<string, Record<string, unknown>> })
+            ?.zones || {};
+        const seatZones = gameZones[targetSeat] || {};
+        const out: Record<string, unknown[]> = {};
+        for (const zn of zoneNames) {
+          out[zn] = Array.isArray(seatZones[zn])
+            ? (seatZones[zn] as unknown[])
+            : [];
+        }
+        try {
+          console.log("[reveal] revealZones", {
+            matchId,
+            playerId: player.id,
+            actorSeat,
+            targetSeat,
+            zones: zoneNames,
+          });
+        } catch {}
+        io.to(`player:${player.id}`).emit("message", {
+          type: "revealZonesResult",
+          requestId,
+          targetSeat,
+          zones: out,
+          ts: Date.now(),
+        });
       } catch {}
     } else if (type === "d20Roll") {
       try {

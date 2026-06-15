@@ -32,6 +32,7 @@ import {
   createEmptyPlayerZones,
   createZonesPatchFor,
   removeCardInstanceFromAllZones,
+  setCrossSeatAuth,
 } from "./utils/zoneHelpers";
 
 function newBetrayalId(): string {
@@ -306,7 +307,7 @@ export const createBetrayalSlice: StateCreator<
     const zonePatch = createZonesPatchFor(zones, seats);
     if (zonePatch?.zones) {
       patch.zones = zonePatch.zones;
-      (patch as Record<string, unknown>).__allowZoneSeats = seats;
+      setCrossSeatAuth(patch, "betrayal", seats);
     }
     get().trySendPatch(patch);
 
@@ -428,7 +429,7 @@ export const createBetrayalSlice: StateCreator<
       const zonePatch = createZonesPatchFor(zones, seats);
       if (zonePatch?.zones) {
         patch.zones = zonePatch.zones;
-        (patch as Record<string, unknown>).__allowZoneSeats = seats;
+        setCrossSeatAuth(patch, "betrayal", seats);
       }
       get().trySendPatch(patch);
     }

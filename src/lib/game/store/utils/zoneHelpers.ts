@@ -1,5 +1,6 @@
 import type {
   CardRef,
+  CrossSeatEffectId,
   GameState,
   PlayerKey,
   ServerPatchT,
@@ -205,6 +206,27 @@ export function removeCardInstanceFromAllZones(
   return changedSeats.length > 0
     ? { zones: result, seats: changedSeats }
     : null;
+}
+
+/**
+ * Stamp a cross-seat zone-write authorization onto an outbound patch (Layer 2).
+ *
+ * Sets the typed `crossSeat` descriptor the server validates against, and also
+ * mirrors the seats onto the legacy `__allowZoneSeats` flag so the server's
+ * transition-period fallback continues to authorize the write. Always use this
+ * instead of setting `__allowZoneSeats` directly.
+ */
+export function setCrossSeatAuth(
+  patch: ServerPatchT,
+  effect: CrossSeatEffectId,
+  seats: PlayerKey | PlayerKey[]
+): void {
+  const seatList = (Array.isArray(seats) ? seats : [seats]).filter(
+    (s): s is PlayerKey => s === "p1" || s === "p2"
+  );
+  const rec = patch as Record<string, unknown>;
+  rec.crossSeat = { effect, seats: seatList };
+  rec.__allowZoneSeats = seatList;
 }
 
 export function createZonesPatchFor(

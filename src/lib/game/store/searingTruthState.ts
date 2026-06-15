@@ -9,6 +9,7 @@ import type {
   ServerPatchT,
   Zones,
 } from "./types";
+import { getAuthoritativeZones } from "./utils/revealZones";
 
 function newSearingTruthId() {
   return `st_${Date.now().toString(36)}_${Math.random()
@@ -113,8 +114,14 @@ export const createSearingTruthSlice: StateCreator<
     }
 
     const zones = get().zones;
-    const spellbook = [...(zones[targetSeat]?.spellbook || [])];
-    const hand = [...(zones[targetSeat]?.hand || [])];
+    // Authoritative reveal — the caster builds the patch from the target's real
+    // hidden cards (server-mediated under projection; local for own seat).
+    const revealed = await getAuthoritativeZones(get, targetSeat, [
+      "spellbook",
+      "hand",
+    ]);
+    const spellbook = [...(revealed.spellbook ?? [])];
+    const hand = [...(revealed.hand ?? [])];
 
     // Draw up to 2 cards from the top of target's spellbook
     const cardsToDraw = Math.min(2, spellbook.length);

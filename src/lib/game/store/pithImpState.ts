@@ -10,6 +10,7 @@ import type {
   Zones,
 } from "./types";
 import { triggerCardResolvers } from "./utils/resolverTriggers";
+import { getAuthoritativeZones } from "./utils/revealZones";
 
 function newPithImpId() {
   return `pi_${Date.now().toString(36)}_${Math.random()
@@ -45,7 +46,7 @@ export const createPithImpSlice: StateCreator<
   stolenCards: [], // Legacy - kept for backwards compatibility
 
   // Register a Pith Imp when it enters play and steals a card
-  triggerPithImpGenesis: (input: {
+  triggerPithImpGenesis: async (input: {
     minion: {
       at: CellKey;
       index: number;
@@ -60,7 +61,10 @@ export const createPithImpSlice: StateCreator<
     const ownerSeat = input.ownerSeat;
     const victimSeat = ownerSeat === "p1" ? "p2" : "p1";
     const zones = get().zones;
-    const victimHand = zones[victimSeat]?.hand || [];
+    // Authoritative reveal — the owner steals a real card from the victim's hand
+    // (server-mediated under projection).
+    const revealedZones = await getAuthoritativeZones(get, victimSeat, ["hand"]);
+    const victimHand = revealedZones.hand ?? [];
 
     console.log(
       `[PithImp] Victim ${victimSeat} hand has ${victimHand.length} cards`,

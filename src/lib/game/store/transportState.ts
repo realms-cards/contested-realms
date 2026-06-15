@@ -4,6 +4,19 @@ import type { GameTransport, CustomMessage } from "@/lib/net/transport";
 import type { GameState, PlayerKey, ServerPatchT, Zones } from "./types";
 import { clonePatchForQueue } from "./utils/patchHelpers";
 
+// Which opponent seats a patch is authorized to write. Prefers the typed
+// `crossSeat` descriptor (Layer 2); falls back to the legacy `__allowZoneSeats`.
+function readCrossSeatSeats(patchRecord: Record<string, unknown>): string[] {
+  const cs = patchRecord.crossSeat;
+  if (cs && typeof cs === "object") {
+    const seats = (cs as Record<string, unknown>).seats;
+    if (Array.isArray(seats)) return seats as string[];
+  }
+  return Array.isArray(patchRecord.__allowZoneSeats)
+    ? (patchRecord.__allowZoneSeats as string[])
+    : [];
+}
+
 type TransportSlice = Pick<
   GameState,
   | "transport"
@@ -640,9 +653,7 @@ export const createTransportSlice: StateCreator<
           const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
           const outZ: Partial<Record<PlayerKey, Zones>> = {};
           const patchRecord = sanitized as Record<string, unknown>;
-          const allowedZoneSeats = Array.isArray(patchRecord.__allowZoneSeats)
-            ? (patchRecord.__allowZoneSeats as string[])
-            : [];
+          const allowedZoneSeats = readCrossSeatSeats(patchRecord);
           // Include actor's own zones
           if (actorKey && z[actorKey]) {
             outZ[actorKey] = z[actorKey] as Zones;
@@ -832,11 +843,7 @@ export const createTransportSlice: StateCreator<
               const z = sanitized.zones as Partial<Record<PlayerKey, Zones>>;
               const outZ: Partial<Record<PlayerKey, Zones>> = {};
               const patchRecord = sanitized as Record<string, unknown>;
-              const allowedZoneSeats = Array.isArray(
-                patchRecord.__allowZoneSeats,
-              )
-                ? (patchRecord.__allowZoneSeats as string[])
-                : [];
+              const allowedZoneSeats = readCrossSeatSeats(patchRecord);
               // Include actor's own zones
               if (z[actorKey as PlayerKey]) {
                 outZ[actorKey as PlayerKey] = z[actorKey as PlayerKey] as Zones;

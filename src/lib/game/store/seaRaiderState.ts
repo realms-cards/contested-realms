@@ -2,7 +2,8 @@ import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
 import type { CardRef, CellKey, GameState, PlayerKey } from "./types";
 import { opponentSeat } from "./utils/boardHelpers";
-import { createZonesPatchFor } from "./utils/zoneHelpers";
+import { getAuthoritativeZones } from "./utils/revealZones";
+import { createZonesPatchFor, setCrossSeatAuth } from "./utils/zoneHelpers";
 
 function newPiracyId() {
   return `piracy_${Date.now().toString(36)}_${Math.random()
@@ -62,7 +63,7 @@ export const createSeaRaiderSlice: StateCreator<
    * Discarded cards go to the defender's graveyard and are revealed
    * to both players. Casting them is handled manually by the players.
    */
-  triggerPiracy: (input: {
+  triggerPiracy: async (input: {
     source: {
       at: CellKey;
       index: number;
@@ -77,7 +78,12 @@ export const createSeaRaiderSlice: StateCreator<
     const { source, attackerSeat, discardCount } = input;
     const defenderSeat = opponentSeat(attackerSeat);
     const zones = get().zones;
-    const defenderSpellbook = [...(zones[defenderSeat]?.spellbook || [])];
+    // Authoritative spellbook — the attacker builds the discard patch from the
+    // defender's real cards (server-mediated when projection hides them).
+    const revealed = await getAuthoritativeZones(get, defenderSeat, [
+      "spellbook",
+    ]);
+    const defenderSpellbook = [...(revealed.spellbook ?? [])];
 
     // Take cards from top of spellbook
     const actualCount = Math.min(discardCount, defenderSpellbook.length);
@@ -124,7 +130,7 @@ export const createSeaRaiderSlice: StateCreator<
     // Send zone patch (include defender's zones with __allowZoneSeats)
     const zonePatch = createZonesPatchFor(zonesNext, defenderSeat);
     if (zonePatch) {
-      (zonePatch as Record<string, unknown>).__allowZoneSeats = [defenderSeat];
+      setCrossSeatAuth(zonePatch, "sea_raider", defenderSeat);
       get().trySendPatch(zonePatch);
     }
 

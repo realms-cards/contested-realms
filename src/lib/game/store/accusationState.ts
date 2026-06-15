@@ -3,6 +3,7 @@ import type { CustomMessage } from "@/lib/net/transport";
 import { findInquisitionInCards } from "./inquisitionSummonState";
 import type { CardRef, CellKey, GameState, PlayerKey, Zones } from "./types";
 import { opponentSeat } from "./utils/boardHelpers";
+import { getAuthoritativeZones } from "./utils/revealZones";
 
 function newAccusationId() {
   return `acc_${Date.now().toString(36)}_${Math.random()
@@ -61,8 +62,9 @@ export const createAccusationSlice: StateCreator<
     const id = newAccusationId();
     const casterSeat = input.casterSeat;
     const victimSeat = opponentSeat(casterSeat);
-    const zones = get().zones;
-    const victimHand = [...(zones[victimSeat]?.hand || [])];
+    // Authoritative reveal of the victim's hand (server-mediated under projection).
+    const revealed = await getAuthoritativeZones(get, victimSeat, ["hand"]);
+    const victimHand = [...(revealed.hand ?? [])];
 
     if (victimHand.length === 0) {
       get().log(

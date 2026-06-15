@@ -25,6 +25,7 @@ import { bumpPermanentVersion, randomTilt } from "./utils/permanentHelpers";
 import {
   createZonesPatchFor,
   removeCardInstanceFromAllZones,
+  setCrossSeatAuth,
 } from "./utils/zoneHelpers";
 
 export const createInitialBoard = (): GameState["board"] => ({
@@ -176,7 +177,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         };
         // Allow actor to update site owner's zones (e.g., when destroying opponent's site)
         if (zonePatch?.zones) {
-          (patch as Record<string, unknown>).__allowZoneSeats = [owner];
+          setCrossSeatAuth(patch, "site_destroy", owner);
         }
         console.log(
           "[moveSiteToZone] final patch zones keys:",
@@ -345,7 +346,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         };
         // Allow actor to update site owner's zones (e.g., when destroying opponent's site)
         if (zonePatch?.zones) {
-          (patch as Record<string, unknown>).__allowZoneSeats = [owner];
+          setCrossSeatAuth(patch, "site_destroy", owner);
         }
         get().trySendPatch(patch);
 
@@ -1012,7 +1013,7 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
           const affectedSeats = changedSeats.length
             ? changedSeats
             : [newOwnerSeat];
-          (patch as Record<string, unknown>).__allowZoneSeats = affectedSeats;
+          setCrossSeatAuth(patch, "control_transfer", affectedSeats);
         }
         get().trySendPatch(patch);
       }

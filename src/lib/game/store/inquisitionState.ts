@@ -3,6 +3,7 @@ import type { CustomMessage } from "@/lib/net/transport";
 import { findInquisitionInCards } from "./inquisitionSummonState";
 import type { GameState, PlayerKey, Zones } from "./types";
 import { opponentSeat } from "./utils/boardHelpers";
+import { getAuthoritativeZones } from "./utils/revealZones";
 
 function newInquisitionId() {
   return `inq_${Date.now().toString(36)}_${Math.random()
@@ -28,12 +29,14 @@ export const createInquisitionSlice: StateCreator<
 > = (set, get) => ({
   pendingInquisition: null,
 
-  beginInquisition: (input) => {
+  beginInquisition: async (input) => {
     const id = newInquisitionId();
     const casterSeat = input.casterSeat;
     const victimSeat = opponentSeat(casterSeat);
-    const zones = get().zones;
-    const victimHand = [...(zones[victimSeat]?.hand || [])];
+    // Reveal the victim's real hand authoritatively (server-mediated when zone
+    // projection hides it). The caster needs the real cards to choose one.
+    const revealed = await getAuthoritativeZones(get, victimSeat, ["hand"]);
+    const victimHand = revealed.hand ?? [];
 
     if (victimHand.length === 0) {
       get().log(

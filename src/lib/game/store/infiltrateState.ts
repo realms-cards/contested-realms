@@ -41,6 +41,7 @@ import {
   createEmptyPlayerZones,
   createZonesPatchFor,
   removeCardInstanceFromAllZones,
+  setCrossSeatAuth,
 } from "./utils/zoneHelpers";
 
 function newInfiltrateId(): string {
@@ -393,7 +394,7 @@ export const createInfiltrateSlice: StateCreator<
     const zonePatch = createZonesPatchFor(zones, seats);
     if (zonePatch?.zones) {
       patch.zones = zonePatch.zones;
-      (patch as Record<string, unknown>).__allowZoneSeats = seats;
+      setCrossSeatAuth(patch, "infiltrate", seats);
     }
     get().trySendPatch(patch);
 
@@ -566,7 +567,7 @@ export const createInfiltrateSlice: StateCreator<
       const zonePatch = createZonesPatchFor(zones, seats);
       if (zonePatch?.zones) {
         patch.zones = zonePatch.zones;
-        (patch as Record<string, unknown>).__allowZoneSeats = seats;
+        setCrossSeatAuth(patch, "infiltrate", seats);
       }
       get().trySendPatch(patch);
     }

@@ -38,6 +38,7 @@ import {
   createZonesPatchFor,
   removeCardInstanceFromAllZones,
   createEmptyPlayerZones,
+  setCrossSeatAuth,
 } from "../utils/zoneHelpers";
 
 export type PermanentMovementSlice = Pick<
@@ -710,8 +711,7 @@ export const createPermanentMovementSlice: StateCreator<
         // Include __allowZoneSeats to allow actor to update opponent zones
         // (e.g., when destroying opponent's cards)
         if (affectedSeats.size > 0) {
-          (patch as Record<string, unknown>).__allowZoneSeats =
-            Array.from(affectedSeats);
+          setCrossSeatAuth(patch, "permanent_move", Array.from(affectedSeats));
         }
       }
       // DEBUG: Log patch being sent for zone updates
@@ -955,7 +955,7 @@ export const createPermanentMovementSlice: StateCreator<
           seatsForZone,
         );
         if (zonePatch?.zones) {
-          (patch as Record<string, unknown>).__allowZoneSeats = seatsForZone;
+          setCrossSeatAuth(patch, "control_transfer", seatsForZone);
           patch.zones = zonePatch.zones;
         }
       }

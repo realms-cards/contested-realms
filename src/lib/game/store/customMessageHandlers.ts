@@ -21,6 +21,7 @@ import {
   seatFromOwner,
   toCellKey,
 } from "./utils/boardHelpers";
+import { resolveZoneReveal } from "./utils/revealZones";
 
 type StoreSet = Parameters<StateCreator<GameState>>[0];
 type StoreGet = Parameters<StateCreator<GameState>>[1];
@@ -33,6 +34,12 @@ export function handleCustomMessage(
   if (!msg || typeof msg !== "object") return;
   const t = (msg as { type?: unknown }).type;
   if (typeof t !== "string" || !t) return;
+  if (t === "revealZonesResult") {
+    // Authoritative hidden-zone contents returned by the server for a pending
+    // reveal request (see utils/revealZones.ts). Resolves the awaiting effect.
+    resolveZoneReveal(msg);
+    return;
+  }
   if (t === "boardPing") {
     const payload = msg as {
       id?: string;
