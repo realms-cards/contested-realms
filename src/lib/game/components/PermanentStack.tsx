@@ -557,8 +557,8 @@ export function PermanentStack({
           : isDisabledToken
             ? -CARD_SHORT * 0.3
             : 0;
-        const offXBase = baseOffX + tokenOffsetX;
-        const offZBase = baseOffZ;
+        const offX = baseOffX + tokenOffsetX;
+        const offZ = baseOffZ;
 
         // Use instanceId for stable position state lookup (prevents state leakage on card movement)
         const permId = (p.instanceId ?? `perm:${key}:${idx}`) as string;
@@ -574,34 +574,6 @@ export function PermanentStack({
           const pstate = permanentPositions[spInstanceId]?.state;
           return pstate === "burrowed" || pstate === "submerged";
         }).length;
-
-        // Submerged/burrowed cards skip the vertical stackLift below, so multiples
-        // on one tile would render on top of each other. Spread them in a centered
-        // horizontal row instead (e.g. Tadpole Pool's three frogs, or Atlantean Fate
-        // submerging a stack). Burrowed/submerged items sort to the front of the
-        // stack, so sortedIdx is the burrowed index. Spacing tightens as the count
-        // grows so a large group still fits beneath the tile's site card.
-        const burrowedSpacing = Math.min(
-          TILE_SIZE * 0.16,
-          (TILE_SIZE * 0.6) / Math.max(1, burrowedCount),
-        );
-        const burrowedSpreadX =
-          isBurrowed && burrowedCount > 1
-            ? (sortedIdx - (burrowedCount - 1) / 2) * burrowedSpacing
-            : 0;
-        const offX = offXBase + burrowedSpreadX;
-
-        // Small minion tokens (e.g. Tadpole Pool's frogs) are tiny enough to vanish
-        // completely beneath the tile's landscape site card when submerged. Push
-        // only those toward the owner's edge so they line up clearly in front of
-        // (below) the site. Normal portrait-sized cards already extend past the
-        // site and don't need this, so they're left untouched.
-        const isSmallToken = isToken && tokenDef?.size === "small";
-        const burrowedSiteOffsetZ =
-          isBurrowed && hasSite && isSmallToken
-            ? (owner === 1 ? 1 : -1) * TILE_SIZE * 0.4
-            : 0;
-        const offZ = offZBase + burrowedSiteOffsetZ;
 
         // Burrowed cards at ground level, non-burrowed cards elevated above them.
         // Cards no longer react to an avatar sharing their tile — the avatar tucks
@@ -1425,13 +1397,7 @@ export function PermanentStack({
                   const offX = wx - tileWorldX;
                   const offZ = wz - tileWorldZ - localZBase;
                   if (dragging.from === dropKey) {
-                    // Subtract the render-time burrowed spread/site offsets so the
-                    // stored offset round-trips to the same on-screen position
-                    // (no jump on drop).
-                    const newOffset: [number, number] = [
-                      offX - burrowedSpreadX,
-                      offZ - burrowedSiteOffsetZ,
-                    ];
+                    const newOffset: [number, number] = [offX, offZ];
                     dragTarget.current = null;
                     draggedBody.current = null;
                     if (useGhostOnlyBoardDrag) {

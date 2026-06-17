@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { TILE_SIZE } from "@/lib/game/constants";
 import {
   TOKEN_BY_NAME,
   newTokenInstanceId,
@@ -394,8 +395,10 @@ export const createAutoResolveSlice: StateCreator<
 
   // Tadpole Pool: "(W)(W)(W) — Genesis → Summon three submerged Frog tokens here."
   // Summons three Frog minion tokens onto the site's cell and submerges them.
-  // PermanentStack spreads multiple submerged/burrowed cards into a row, so the
-  // frogs line up neatly under the site without needing per-token offsets here.
+  // The frogs are given explicit per-token offsets — a tight row pushed toward the
+  // owner's edge — so they line up neatly in front of (below) the site card instead
+  // of vanishing beneath it. This is scoped to these specific tokens only; no
+  // generic submerged-card rendering is touched, so other tokens are unaffected.
   _executeTadpolePoolGenesis: (cellKey: CellKey, ownerSeat: PlayerKey) => {
     const state = get();
 
@@ -409,6 +412,12 @@ export const createAutoResolveSlice: StateCreator<
     const cellPerms: PermanentItem[] = [...(state.permanents[cellKey] || [])];
     const permanentPositionsNext = { ...state.permanentPositions };
     const permanentAbilitiesNext = { ...state.permanentAbilities };
+
+    // Row spacing in X, and a push toward the owner's edge in Z so the submerged
+    // frogs sit in front of the site card (owner 1 = +Z toward bottom edge).
+    const ownerSign = ownerNum === 1 ? 1 : -1;
+    const frogSpacingX = TILE_SIZE * 0.16;
+    const frogEdgeZ = ownerSign * TILE_SIZE * 0.4;
 
     for (let i = 0; i < 3; i++) {
       const frogCard = prepareCardForSeat(
@@ -427,7 +436,7 @@ export const createAutoResolveSlice: StateCreator<
       cellPerms.push({
         owner: ownerNum as 1 | 2,
         card: frogCard,
-        offset: null,
+        offset: [(i - 1) * frogSpacingX, frogEdgeZ],
         tilt: randomTilt(),
         tapVersion: 0,
         tapped: false,
