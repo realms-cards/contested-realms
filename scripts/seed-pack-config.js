@@ -43,14 +43,17 @@ async function main() {
     foilReplacesOrdinary: true,
   });
 
-  // Beta (11 Ordinary, 3 Exceptional, 1 Elite with Unique upgrade chance)
+  // Beta (10 Ordinary, 3 Exceptional, 1 Elite/Unique, 1 dedicated site/avatar slot)
+  // The site/avatar slot yields a basic site (Village/Desert/Tower/River) or,
+  // ~10% of the time, a common (Ordinary) avatar. Only Ordinary avatars are
+  // pulled from the regular rarity slots; Elite/Unique avatars stay by rarity.
   const beta = await upsertSet("Beta");
   await upsertPackConfig(beta.id, {
-    ordinaryCount: 11,
+    ordinaryCount: 10,
     exceptionalCount: 3,
     eliteOrUniqueCount: 1,
     uniqueChance: 0.125, // 1 in 8 packs has Unique instead of Elite
-    siteOrAvatarCount: 0,
+    siteOrAvatarCount: 1,
     foilChance: 0.25,
     foilUniqueWeight: 1,
     foilEliteWeight: 3,

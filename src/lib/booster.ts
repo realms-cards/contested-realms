@@ -74,6 +74,25 @@ function isAvatar(meta: CardMeta | undefined): boolean {
   return (meta?.type || "").toLowerCase().includes("avatar");
 }
 
+function isSite(meta: CardMeta | undefined): boolean {
+  return (meta?.type || "").toLowerCase().includes("site");
+}
+
+// Beta-only: a dedicated "site or avatar" slot. Usually yields a basic site
+// (Village/Desert/Tower/River, Ordinary rarity), occasionally a common
+// (Ordinary) avatar. Only Ordinary avatars are pulled out of Beta's regular
+// rarity slots — they appear ONLY here (~2 per 32 packs at this chance).
+// Elite/Unique Beta avatars stay in their normal rarity slots like any card,
+// adding ~1.5 more, for ~3-3.5 avatars per 32 Beta packs overall.
+const BETA_AVATAR_SLOT_CHANCE = 0.06;
+const BASIC_SITE_NAME = /\b(?:village|desert|tower|river)\b/i;
+
+function isBasicSite(name: string, meta: CardMeta | undefined): boolean {
+  return (
+    isSite(meta) && meta?.rarity === "Ordinary" && BASIC_SITE_NAME.test(name)
+  );
+}
+
 function pickUniqueFromWithAvatarLimit(
   pool: VariantSel[],
   used: Set<number>,
@@ -213,9 +232,14 @@ export async function generateBooster(
     Elite: [],
     Unique: [],
   };
+  // Beta keeps Ordinary (common) avatars OUT of the regular rarity slots; they
+  // appear only via the dedicated site/avatar slot below. Elite/Unique avatars
+  // stay in their rarity slots.
+  const isBeta = setName === "Beta";
   for (const v of variantsStd) {
     const meta = metaByCardId.get(v.cardId);
     if (!meta) continue;
+    if (isBeta && isAvatar(meta) && meta.rarity === "Ordinary") continue;
     stdByRarity[meta.rarity].push(v);
   }
 
@@ -228,6 +252,7 @@ export async function generateBooster(
   for (const v of variantsFoil) {
     const meta = metaByCardId.get(v.cardId);
     if (!meta) continue;
+    if (isBeta && isAvatar(meta) && meta.rarity === "Ordinary") continue;
     foilByRarity[meta.rarity].push(v);
   }
 
@@ -241,6 +266,19 @@ export async function generateBooster(
   const siteAvatarStd = variantsStd.filter((v) =>
     siteAvatarCardIds.includes(v.cardId)
   );
+
+  // Beta dedicated-slot pools: basic sites and common (Ordinary) avatars only.
+  const betaCommonAvatarStd = isBeta
+    ? variantsStd.filter((v) => {
+        const m = metaByCardId.get(v.cardId);
+        return isAvatar(m) && m?.rarity === "Ordinary";
+      })
+    : [];
+  const betaBasicSiteStd = isBeta
+    ? variantsStd.filter((v) =>
+        isBasicSite(nameByCardId.get(v.cardId) ?? "", metaByCardId.get(v.cardId))
+      )
+    : [];
 
   const picks: BoosterCard[] = [];
   const used = new Set<number>(); // track cardIds to prevent duplicates in a pack
@@ -304,14 +342,26 @@ export async function generateBooster(
     used.add(v.cardId);
   }
 
-  // Site/Avatar extra slot if configured
+  // Site/Avatar slot if configured. Beta: mostly a basic site, occasionally a
+  // common avatar. Other sets keep the legacy site-or-avatar behavior.
   for (let i = 0; i < cfg.siteOrAvatarCount; i++) {
-    const v =
-      pickUniqueFrom(siteAvatarStd, used) ||
-      pickUniqueFrom(stdByRarity.Ordinary, used);
+    let v: VariantSel | null;
+    if (isBeta) {
+      const rollAvatar =
+        betaCommonAvatarStd.length > 0 && Math.random() < BETA_AVATAR_SLOT_CHANCE;
+      v =
+        (rollAvatar ? pickUniqueFrom(betaCommonAvatarStd, used) : null) ||
+        pickUniqueFrom(betaBasicSiteStd, used) ||
+        pickUniqueFrom(stdByRarity.Ordinary, used);
+    } else {
+      v =
+        pickUniqueFrom(siteAvatarStd, used) ||
+        pickUniqueFrom(stdByRarity.Ordinary, used);
+    }
     if (!v) break;
     const meta = metaByCardId.get(v.cardId);
     if (!meta) continue;
+    if (isAvatar(meta)) avatarCount++;
     picks.push(toBoosterCard(v, meta));
     used.add(v.cardId);
   }
@@ -471,6 +521,10 @@ type BoosterGenCache = {
   foilByRarity: Record<Rarity, VariantSel[]>;
   siteAvatarStd: VariantSel[];
   nameById: Map<number, string>;
+  // Beta dedicated site/avatar slot
+  isBeta: boolean;
+  betaCommonAvatarStd: VariantSel[];
+  betaBasicSiteStd: VariantSel[];
   // For avatar replacement
   betaVariants?: VariantSel[];
   betaAvatars?: { id: number; name: string }[];
@@ -536,6 +590,9 @@ async function prefetchBoosterData(
       foilByRarity: { Ordinary: [], Exceptional: [], Elite: [], Unique: [] },
       siteAvatarStd: [],
       nameById,
+      isBeta: false,
+      betaCommonAvatarStd: [],
+      betaBasicSiteStd: [],
       fixedPackVariants,
     };
   }
@@ -572,9 +629,13 @@ async function prefetchBoosterData(
     Elite: [],
     Unique: [],
   };
+  // Beta keeps Ordinary (common) avatars OUT of the regular rarity slots; they
+  // appear only via the dedicated site/avatar slot. Elite/Unique avatars stay.
+  const isBeta = setName === "Beta";
   for (const v of variantsStd) {
     const meta = metaByCardId.get(v.cardId);
     if (!meta) continue;
+    if (isBeta && isAvatar(meta) && meta.rarity === "Ordinary") continue;
     stdByRarity[meta.rarity].push(v);
   }
 
@@ -587,6 +648,7 @@ async function prefetchBoosterData(
   for (const v of variantsFoil) {
     const meta = metaByCardId.get(v.cardId);
     if (!meta) continue;
+    if (isBeta && isAvatar(meta) && meta.rarity === "Ordinary") continue;
     foilByRarity[meta.rarity].push(v);
   }
 
@@ -609,6 +671,19 @@ async function prefetchBoosterData(
   });
   const nameById = new Map<number, string>();
   for (const c of cards) nameById.set(c.id, c.name);
+
+  // Beta dedicated-slot pools: basic sites and common (Ordinary) avatars only.
+  const betaCommonAvatarStd = isBeta
+    ? variantsStd.filter((v) => {
+        const m = metaByCardId.get(v.cardId);
+        return isAvatar(m) && m?.rarity === "Ordinary";
+      })
+    : [];
+  const betaBasicSiteStd = isBeta
+    ? variantsStd.filter((v) =>
+        isBasicSite(nameById.get(v.cardId) ?? "", metaByCardId.get(v.cardId))
+      )
+    : [];
 
   // Pre-fetch avatar replacement data if needed
   let betaVariants: VariantSel[] | undefined;
@@ -654,6 +729,9 @@ async function prefetchBoosterData(
     foilByRarity,
     siteAvatarStd,
     nameById,
+    isBeta,
+    betaCommonAvatarStd,
+    betaBasicSiteStd,
     betaVariants,
     betaAvatars,
   };
@@ -670,6 +748,9 @@ function generateBoosterFromCache(cache: BoosterGenCache): BoosterCard[] {
     foilByRarity,
     siteAvatarStd,
     nameById,
+    isBeta,
+    betaCommonAvatarStd,
+    betaBasicSiteStd,
   } = cache;
 
   // Handle fixed packs (mini-sets like Dragonlord)
@@ -747,14 +828,26 @@ function generateBoosterFromCache(cache: BoosterGenCache): BoosterCard[] {
     used.add(v.cardId);
   }
 
-  // Site/Avatar extra slot if configured
+  // Site/Avatar slot if configured. Beta: mostly a basic site, occasionally a
+  // common avatar. Other sets keep the legacy site-or-avatar behavior.
   for (let i = 0; i < cfg.siteOrAvatarCount; i++) {
-    const v =
-      pickUniqueFrom(siteAvatarStd, used) ||
-      pickUniqueFrom(stdByRarity.Ordinary, used);
+    let v: VariantSel | null;
+    if (isBeta) {
+      const rollAvatar =
+        betaCommonAvatarStd.length > 0 && Math.random() < BETA_AVATAR_SLOT_CHANCE;
+      v =
+        (rollAvatar ? pickUniqueFrom(betaCommonAvatarStd, used) : null) ||
+        pickUniqueFrom(betaBasicSiteStd, used) ||
+        pickUniqueFrom(stdByRarity.Ordinary, used);
+    } else {
+      v =
+        pickUniqueFrom(siteAvatarStd, used) ||
+        pickUniqueFrom(stdByRarity.Ordinary, used);
+    }
     if (!v) break;
     const meta = metaByCardId.get(v.cardId);
     if (!meta) continue;
+    if (isAvatar(meta)) avatarCount++;
     picks.push(toBoosterCard(v, meta));
     used.add(v.cardId);
   }
