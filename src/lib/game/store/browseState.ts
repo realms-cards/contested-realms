@@ -164,16 +164,9 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
 
     const casterSeat = pending.casterSeat;
 
-    // Check Garden of Eden draw limit
-    const canDraw = get().canDrawCard(casterSeat, 1);
-    if (!canDraw.allowed) {
-      get().log(
-        `[${casterSeat.toUpperCase()}] Garden of Eden prevents drawing more cards this turn (limit: 1)`,
-      );
-      // Cancel the Browse instead of resolving
-      get().cancelBrowse();
-      return;
-    }
+    // NOTE: Browse is NOT a draw. Its text reads "Put one in your hand and the
+    // rest on the bottom of your spellbook in any order." Garden of Eden only
+    // limits drawing spells, so it must not block or count against Browse.
 
     const zones = get().zones;
     const spellbook = [...(zones[casterSeat]?.spellbook || [])];
@@ -205,9 +198,6 @@ export const createBrowseSlice: StateCreator<GameState, [], [], BrowseSlice> = (
         hand,
       },
     };
-
-    // Increment cards drawn counter for Garden of Eden tracking
-    get().incrementCardsDrawn(casterSeat, 1);
 
     set({
       zones: zonesNext,
