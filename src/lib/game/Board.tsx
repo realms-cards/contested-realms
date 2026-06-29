@@ -1,6 +1,6 @@
 "use client";
 
-import { type ThreeEvent, useThree } from "@react-three/fiber";
+import { type ThreeEvent, useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Object3D } from "three";
 import { type StoreApi, type UseBoundStore } from "zustand";
@@ -524,6 +524,73 @@ export default function Board({
     snapBodyTo,
     lastDropAt,
   } = boardDragControls;
+
+  // --- Shadow map performance -------------------------------------------------
+  // The board's single shadow-casting directional light is world-fixed, so cast
+  // shadows only change when a caster (permanent, avatar or site) MOVES — never
+  // on camera orbit, hover or cosmetic pulses. Re-drawing every shadow caster
+  // into the shadow map on every frame is ~60% of the board's draw calls
+  // (measured 549 of 884) and is especially costly on Chrome/ANGLE.
+  //
+  // Strategy: freeze the shadow map (skip the shadow pass) on static frames, and
+  // keep it live only while a caster is actually moving — i.e. while dragging, or
+  // for a short window after board content changes (covers placement/settle
+  // animations). This keeps moving-card shadows correct while cutting the cost of
+  // the common camera/hover/idle frames.
+  const { gl: shadowGl, invalidate: shadowInvalidate } = useThree();
+  const shadowDirtyUntilRef = useRef(0);
+  const markShadowDirty = useCallback(
+    (durationMs: number) => {
+      shadowDirtyUntilRef.current = Math.max(
+        shadowDirtyUntilRef.current,
+        performance.now() + durationMs,
+      );
+      shadowGl.shadowMap.needsUpdate = true;
+      shadowInvalidate();
+    },
+    [shadowGl, shadowInvalidate],
+  );
+
+  // A caster is mid-motion while any drag is active.
+  const shadowMotionActive =
+    Boolean(dragging) ||
+    Boolean(dragAvatar) ||
+    Boolean(dragFromHand) ||
+    Boolean(dragFromPile) ||
+    Boolean(draggingSite);
+
+  // Warm up briefly so async-loaded models/textures bake in, then freeze.
+  useEffect(() => {
+    shadowGl.shadowMap.autoUpdate = true;
+    shadowGl.shadowMap.needsUpdate = true;
+    const timer = setTimeout(() => {
+      shadowGl.shadowMap.autoUpdate = false;
+      markShadowDirty(0);
+    }, 1500);
+    return () => {
+      clearTimeout(timer);
+      shadowGl.shadowMap.autoUpdate = true;
+    };
+  }, [shadowGl, markShadowDirty]);
+
+  // Re-bake when board content changes; the window covers settle animations.
+  useEffect(() => {
+    markShadowDirty(900);
+  }, [permanents, avatars, boardState.sites, markShadowDirty]);
+
+  // Re-bake when a drag starts/stops (and keep the window fresh during drags).
+  useEffect(() => {
+    if (shadowMotionActive) markShadowDirty(300);
+  }, [shadowMotionActive, markShadowDirty]);
+
+  // On every rendered frame, keep the shadow map live while a caster is moving or
+  // within the dirty window; otherwise the shadow pass is skipped entirely.
+  useFrame(() => {
+    if (shadowMotionActive || performance.now() < shadowDirtyUntilRef.current) {
+      shadowGl.shadowMap.needsUpdate = true;
+      shadowInvalidate();
+    }
+  });
 
   const { openAttachmentDialog, attachmentDialogNode } = useAttachmentDialog({
     setDragFromPile,
