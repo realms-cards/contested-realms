@@ -133,7 +133,7 @@ export default function Hand3D({
     });
   }, [hand, graphicsSettings.handSortOrder]);
   const rootRef = useRef<Group | null>(null);
-  const { camera, gl } = useThree();
+  const { camera, gl, size } = useThree();
   // Get mouse zone state from store
   const mouseInZone = useGameStore((s) => s.mouseInHandZone);
   // Get hover count state from store
@@ -787,7 +787,46 @@ export default function Hand3D({
     const maxSpacing = CARD_SHORT * 1.1; // Almost full card width visible
     const minSpacing = CARD_SHORT * 0.5; // Tighter for large hands
     const spacingFactor = Math.max(0, Math.min(1, (8 - n) / 5)); // 1 at n≤3, 0 at n≥8
-    const baseSpacing = minSpacing + (maxSpacing - minSpacing) * spacingFactor;
+    let baseSpacing = minSpacing + (maxSpacing - minSpacing) * spacingFactor;
+
+    // Fit-to-width clamp: hand size is unbounded in Sorcery (e.g. Seelie Court +
+    // fairies draws huge hands), so the fan can run past the screen edges and
+    // leave cards unreachable. Keep the fan inside the viewport using a hybrid
+    // strategy: first tighten overlap (cards stay full-size, read via hover/
+    // focus), then uniformly scale the whole fan down only as a last resort.
+    let fitScale = 1;
+    {
+      const cam = camera as PerspectiveCamera;
+      const fovRad = (((cam && cam.fov) || 50) * Math.PI) / 180;
+      const aspect = size.height > 0 ? size.width / size.height : 16 / 9;
+      // Visible world width at the hand's distance from the camera.
+      const worldW = 2 * Math.tan(fovRad / 2) * HAND_DIST * aspect;
+      const safety = 0.9; // gutter so outermost cards stay grabbable, not clipped
+      const maxWidth = worldW * safety;
+
+      // Only the card geometry is scaled by HAND_CARD_SCALE (* user setting) at
+      // render time; the per-card positions (and thus spacing) live in the
+      // unscaled parent space. So the on-screen fan width is the raw spacing
+      // span plus one scaled card width for the end overhang.
+      const baseCardScale = HAND_CARD_SCALE * (graphicsSettings.handCardScale ?? 1);
+      const cardVisualWidth = CARD_SHORT * baseCardScale;
+      // Tightest readable overlap: still shows ~22% sliver of each covered card.
+      const minOverlapSpacing = cardVisualWidth * 0.22;
+
+      const fanWidth = (sp: number) => (n - 1) * sp + cardVisualWidth;
+
+      if (n > 1 && fanWidth(baseSpacing) > maxWidth) {
+        // 1) Tighten spacing (more overlap) to try to fit at full size.
+        const neededSpacing = (maxWidth - cardVisualWidth) / (n - 1);
+        baseSpacing = Math.max(
+          minOverlapSpacing,
+          Math.min(baseSpacing, neededSpacing),
+        );
+        // 2) If even the tightest overlap overflows, scale the whole fan down.
+        const tightWidth = fanWidth(baseSpacing);
+        if (tightWidth > maxWidth) fitScale = maxWidth / tightWidth;
+      }
+    }
 
     const stepAngle = n > 1 ? maxAngle / (n - 1) : 0;
     const startAngle = -maxAngle / 2;
@@ -833,7 +872,7 @@ export default function Hand3D({
         arrivalX = slideAmount * (1 - slideEase);
       }
 
-      const x = baseX + arrivalX;
+      const x = (baseX + arrivalX) * fitScale;
 
       // Y position: arc + hover pop-up
       const arcY = -Math.abs(Math.sin(angle)) * HAND_FAN_ARC_Y * 1.5;
@@ -878,11 +917,11 @@ export default function Hand3D({
       const hoverForwardZ = hoverWeight * 0.03;
       const z = stackZ + hoverForwardZ;
 
-      // Scale: hovered card slightly bigger with smoother scaling
-      const scale = Math.max(
-        1 + 0.06 * w * revealAmount,
-        1.0 + 0.08 * hoverWeight,
-      );
+      // Scale: hovered card slightly bigger with smoother scaling.
+      // fitScale uniformly shrinks the fan when even tight overlap overflows.
+      const scale =
+        Math.max(1 + 0.06 * w * revealAmount, 1.0 + 0.08 * hoverWeight) *
+        fitScale;
 
       return {
         x,
@@ -904,7 +943,11 @@ export default function Hand3D({
     focusLerp,
     hoverLerp,
     graphicsSettings.handSortOrder,
+    graphicsSettings.handCardScale,
     arrivalSnapshot,
+    camera,
+    size.width,
+    size.height,
   ]);
 
   // Clamp focus to hand size changes
