@@ -279,39 +279,52 @@ export function BoardTile({
         castPlacementMode={castPlacementMode}
       />
 
-      {/* Portal overlay (Harbinger ability) - rendered under cards */}
-      <PortalOverlay tileX={tileX} tileY={tileY} portalState={portalState} />
+      {/* Portal overlay (Harbinger ability) - rendered under cards.
+          Only mount once portals are set up; otherwise every tile would
+          register an idle useFrame for the whole match (frameloop="demand"). */}
+      {portalState?.setupComplete ? (
+        <PortalOverlay tileX={tileX} tileY={tileY} portalState={portalState} />
+      ) : null}
 
       {/* Chaos Twister landing site overlay - rendered under cards */}
-      <ChaosTwisterLandingOverlay
-        tileX={tileX}
-        tileY={tileY}
-        pendingChaosTwister={chaosTwisterContext.pendingChaosTwister}
-      />
+      {chaosTwisterContext.pendingChaosTwister ? (
+        <ChaosTwisterLandingOverlay
+          tileX={tileX}
+          tileY={tileY}
+          pendingChaosTwister={chaosTwisterContext.pendingChaosTwister}
+        />
+      ) : null}
 
       {/* Atlantean Fate 2x2 area preview - rendered under cards */}
-      <AtlanteanFateAreaOverlay
-        tileX={tileX}
-        tileY={tileY}
-        pendingAtlanteanFate={atlanteanFateContext.pendingAtlanteanFate}
-        permanents={permanents}
-        boardWidth={boardSize.w}
-        boardHeight={boardSize.h}
-      />
+      {atlanteanFateContext.pendingAtlanteanFate ? (
+        <AtlanteanFateAreaOverlay
+          tileX={tileX}
+          tileY={tileY}
+          pendingAtlanteanFate={atlanteanFateContext.pendingAtlanteanFate}
+          permanents={permanents}
+          boardWidth={boardSize.w}
+          boardHeight={boardSize.h}
+        />
+      ) : null}
 
       {/* Earthquake 2x2 area highlight */}
-      <AreaSelectionOverlay3D
-        tileX={tileX}
-        tileY={tileY}
-        affectedCells={earthquakeContext.pendingEarthquake?.affectedCells || []}
-        color="#f59e0b"
-        active={
-          earthquakeContext.pendingEarthquake?.phase === "rearranging" ||
-          earthquakeContext.pendingEarthquake?.phase === "resolving"
-        }
-      />
+      {earthquakeContext.pendingEarthquake ? (
+        <AreaSelectionOverlay3D
+          tileX={tileX}
+          tileY={tileY}
+          affectedCells={
+            earthquakeContext.pendingEarthquake?.affectedCells || []
+          }
+          color="#f59e0b"
+          active={
+            earthquakeContext.pendingEarthquake?.phase === "rearranging" ||
+            earthquakeContext.pendingEarthquake?.phase === "resolving"
+          }
+        />
+      ) : null}
 
       {/* Corpse Explosion 2x2 area highlight */}
+      {corpseExplosionContext.pendingCorpseExplosion ? (
       <AreaSelectionOverlay3D
         tileX={tileX}
         tileY={tileY}
@@ -360,58 +373,72 @@ export function BoardTile({
           return a ? `ATK ${a.power}` : undefined;
         })()}
       />
+      ) : null}
 
       {/* Mephistopheles summon target overlay - rendered under cards */}
-      <MephistophelesSummonTargetOverlay
-        tileX={tileX}
-        tileY={tileY}
-        pendingMephistophelesSummon={
-          mephistophelesSummonContext.pendingMephistophelesSummon
-        }
-      />
+      {mephistophelesSummonContext.pendingMephistophelesSummon ? (
+        <MephistophelesSummonTargetOverlay
+          tileX={tileX}
+          tileY={tileY}
+          pendingMephistophelesSummon={
+            mephistophelesSummonContext.pendingMephistophelesSummon
+          }
+        />
+      ) : null}
 
       {/* Pathfinder target overlay - rendered under cards */}
-      <PathfinderTargetOverlay
-        tileX={tileX}
-        tileY={tileY}
-        pendingPathfinderPlay={pathfinderContext.pendingPathfinderPlay}
-      />
+      {pathfinderContext.pendingPathfinderPlay ? (
+        <PathfinderTargetOverlay
+          tileX={tileX}
+          tileY={tileY}
+          pendingPathfinderPlay={pathfinderContext.pendingPathfinderPlay}
+        />
+      ) : null}
 
       {/* Geomancer target overlay - rendered under cards */}
-      <GeomancerTargetOverlay
-        tileX={tileX}
-        tileY={tileY}
-        pendingGeomancerPlay={geomancerContext.pendingGeomancerPlay}
-        pendingGeomancerFill={geomancerContext.pendingGeomancerFill}
-      />
+      {geomancerContext.pendingGeomancerPlay ||
+      geomancerContext.pendingGeomancerFill ? (
+        <GeomancerTargetOverlay
+          tileX={tileX}
+          tileY={tileY}
+          pendingGeomancerPlay={geomancerContext.pendingGeomancerPlay}
+          pendingGeomancerFill={geomancerContext.pendingGeomancerFill}
+        />
+      ) : null}
 
       {/* Waveshaper flood target overlay - rendered under cards */}
-      <WaveshaperTargetOverlay
-        tileX={tileX}
-        tileY={tileY}
-        pendingWaveshaper={waveshaperContext.pendingWaveshaper}
-      />
+      {waveshaperContext.pendingWaveshaper ? (
+        <WaveshaperTargetOverlay
+          tileX={tileX}
+          tileY={tileY}
+          pendingWaveshaper={waveshaperContext.pendingWaveshaper}
+        />
+      ) : null}
 
       {/* Inquisition summon target overlay - rendered under cards */}
-      <InquisitionSummonTargetOverlay
-        tileX={tileX}
-        tileY={tileY}
-        pendingInquisitionSummon={
-          inquisitionSummonContext.pendingInquisitionSummon
-        }
-      />
+      {inquisitionSummonContext.pendingInquisitionSummon ? (
+        <InquisitionSummonTargetOverlay
+          tileX={tileX}
+          tileY={tileY}
+          pendingInquisitionSummon={
+            inquisitionSummonContext.pendingInquisitionSummon
+          }
+        />
+      ) : null}
 
       {/* Generic Aura spell 2x2 preview - only when Magic Interactions enabled */}
-      <AuraPreviewOverlay
-        tileX={tileX}
-        tileY={tileY}
-        pendingMagic={pendingMagic}
-        magicGuidesActive={magicGuidesActive}
-        metaByCardId={metaByCardId}
-        permanents={permanents}
-        boardWidth={boardSize.w}
-        boardHeight={boardSize.h}
-      />
+      {pendingMagic && magicGuidesActive ? (
+        <AuraPreviewOverlay
+          tileX={tileX}
+          tileY={tileY}
+          pendingMagic={pendingMagic}
+          magicGuidesActive={magicGuidesActive}
+          metaByCardId={metaByCardId}
+          permanents={permanents}
+          boardWidth={boardSize.w}
+          boardHeight={boardSize.h}
+        />
+      ) : null}
 
       {magicGuidesActive && (
         <MagicTargetOverlay

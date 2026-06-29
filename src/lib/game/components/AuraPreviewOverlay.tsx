@@ -1,9 +1,10 @@
 "use client";
 
-import { useFrame, invalidate } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { TILE_SIZE } from "@/lib/game/constants";
+import { requestCosmeticFrame } from "@/lib/game/render/cosmeticFrame";
 import { calculate2x2AreaWithOffset } from "@/lib/game/store/atlanteanFateState";
 import type {
   CellKey,
@@ -110,7 +111,7 @@ export function AuraPreviewOverlay({
       mat.opacity = 0.25 + Math.sin(t * 3) * 0.1;
       // Aura preview pulses only while this tile is actually highlighted
       // (this component is mounted for every tile; frameloop="demand").
-      invalidate();
+      requestCosmeticFrame();
     }
   });
 

@@ -196,18 +196,6 @@ export default function Board({
   const activePlaymatOwner = useScopedStore((s) => s.activePlaymatOwner);
   const setPlaymatUrl = useScopedStore((s) => s.setPlaymatUrl);
 
-  // Debug: log playmat state
-  useEffect(() => {
-    console.log("[Board] Playmat state:", {
-      playmatUrl,
-      playmatUrls,
-      activePlaymatOwner,
-      effectiveUrl:
-        activePlaymatOwner && playmatUrls[activePlaymatOwner]
-          ? playmatUrls[activePlaymatOwner]
-          : playmatUrl,
-    });
-  }, [playmatUrl, playmatUrls, activePlaymatOwner]);
   const allowSiteDrag = useScopedStore((s) => s.allowSiteDrag);
   const tapControlsMode = useScopedStore((s) => s.tapControlsMode);
   const showOwnershipOverlay = useScopedStore((s) => s.showOwnershipOverlay);

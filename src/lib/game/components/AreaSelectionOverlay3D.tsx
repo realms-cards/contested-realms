@@ -1,10 +1,11 @@
 "use client";
 
 import { Text } from "@react-three/drei";
-import { useFrame, invalidate } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { TILE_SIZE } from "@/lib/game/constants";
+import { requestCosmeticFrame } from "@/lib/game/render/cosmeticFrame";
 import type { CellKey } from "@/lib/game/store/types";
 
 const BASE_FONT = 0.07;
@@ -55,7 +56,7 @@ export function AreaSelectionOverlay3D({
     const mat = fillRef.current.material as THREE.MeshBasicMaterial;
     mat.opacity = 0.25 + Math.sin(t * 3) * 0.1;
     // Area highlight pulses while shown (frameloop="demand").
-    invalidate();
+    requestCosmeticFrame();
   });
 
   if (!isAffected) return null;

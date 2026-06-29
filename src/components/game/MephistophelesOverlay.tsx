@@ -19,11 +19,6 @@ export default function MephistophelesOverlay() {
   const cancel = useGameStore((s) => s.cancelMephistopheles);
   const avatars = useGameStore((s) => s.avatars);
 
-  // Debug: log pending state changes
-  React.useEffect(() => {
-    console.log("[MephistophelesOverlay] pending state:", pending);
-  }, [pending]);
-
   if (!pending) return null;
 
   const { phase, casterSeat } = pending;

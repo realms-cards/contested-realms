@@ -1,9 +1,10 @@
 "use client";
 
-import { useFrame, invalidate } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { TILE_SIZE } from "@/lib/game/constants";
+import { requestCosmeticFrame } from "@/lib/game/render/cosmeticFrame";
 import type { CellKey, PendingChaosTwister } from "@/lib/game/store/types";
 
 export type ChaosTwisterLandingOverlayProps = {
@@ -105,7 +106,7 @@ export function ChaosTwisterLandingOverlay({
       mat.opacity = 0.6 * (1 - ((t * 0.5) % 1));
     }
     // Only animates on highlighted tiles (early-returns above otherwise; frameloop="demand").
-    invalidate();
+    requestCosmeticFrame();
   });
 
   if (!highlightType) {

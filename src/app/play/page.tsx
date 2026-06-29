@@ -1366,6 +1366,7 @@ export default function PlayPage() {
       <ClientCanvas
         camera={{ position: [0, 10, 0], fov: 50 }}
         shadows
+        frameloop="demand"
         gl={{
           preserveDrawingBuffer: true,
           antialias: true,
@@ -1388,8 +1389,8 @@ export default function PlayPage() {
           position={[5, 12, 5]}
           intensity={1.6}
           castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
           shadow-camera-far={50}
           shadow-camera-left={-15}
           shadow-camera-right={15}

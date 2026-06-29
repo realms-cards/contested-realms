@@ -1,9 +1,10 @@
 "use client";
 
-import { useFrame, invalidate } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { TILE_SIZE } from "@/lib/game/constants";
+import { requestCosmeticFrame } from "@/lib/game/render/cosmeticFrame";
 import { calculate2x2AreaWithOffset } from "@/lib/game/store/atlanteanFateState";
 import type {
   CellKey,
@@ -91,7 +92,7 @@ export function AtlanteanFateAreaOverlay({
       // Pulse between 0.15 and 0.35 opacity
       mat.opacity = 0.25 + Math.sin(t * 3) * 0.1;
       // Pulses only on affected tiles (mounted for every tile; frameloop="demand").
-      invalidate();
+      requestCosmeticFrame();
     }
   });
 

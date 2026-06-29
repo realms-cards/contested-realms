@@ -71,7 +71,26 @@ function probeWebGL2(): GlStatus {
  * instead of a silently black canvas. GPUs that only fail because they reject MSAA
  * fall back to `antialias: false` so they keep working.
  */
-export function ClientCanvas({ children, gl, ...props }: ClientCanvasProps) {
+/**
+ * Default device-pixel-ratio clamp for every 3D surface.
+ *
+ * R3F's own default is `[1, 2]`, which means a Retina/4K/5K panel
+ * (devicePixelRatio 2) renders ~4x the pixels of a 1x display. Combined with the
+ * fixed per-frame cost of the board (shadow pass, HDRI/PBR materials, physics),
+ * that uncapped resolution is what saturates the GPU on high-end machines.
+ *
+ * Capping the upper bound to 1.5 keeps text/cards crisp while cutting fragment
+ * work by ~1.8x on high-DPI displays. Pages that need a different budget can
+ * still pass their own `dpr` prop, which overrides this default.
+ */
+const DEFAULT_DPR: [number, number] = [1, 1.5];
+
+export function ClientCanvas({
+  children,
+  gl,
+  dpr = DEFAULT_DPR,
+  ...props
+}: ClientCanvasProps) {
   const [status, setStatus] = useState<GlStatus>("pending");
 
   useEffect(() => {
@@ -128,7 +147,7 @@ export function ClientCanvas({ children, gl, ...props }: ClientCanvasProps) {
       : gl;
 
   return (
-    <Canvas {...props} gl={glConfig}>
+    <Canvas {...props} dpr={dpr} gl={glConfig}>
       {children}
     </Canvas>
   );

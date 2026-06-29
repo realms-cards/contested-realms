@@ -1,6 +1,7 @@
-import { useFrame, invalidate } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import { useRef } from "react";
 import * as THREE from "three";
+import { requestCosmeticFrame } from "@/lib/game/render/cosmeticFrame";
 
 type TargetBullseyeProps = {
   position: [number, number, number];
@@ -42,8 +43,9 @@ export function TargetBullseye({
         centerDotRef.current.material.opacity = 0.8 + Math.sin(time * 4) * 0.2;
       }
     }
-    // Bullseye pulses while shown (frameloop="demand").
-    invalidate();
+    // Bullseye pulses while shown — throttled so it can't peg the scene
+    // at full display refresh under frameloop="demand".
+    requestCosmeticFrame();
   });
 
   return (
