@@ -374,22 +374,39 @@ function cloneZones(zones: PlayerZones, seat: Seat): PlayerZones {
   };
 }
 
-function ensurePlayerZones(value: unknown, seat: Seat): PlayerZones {
+function ensurePlayerZones(
+  value: unknown,
+  seat: Seat,
+  fallback?: PlayerZones | undefined,
+): PlayerZones {
+  const fallbackArr = (prop: keyof PlayerZones): unknown[] => {
+    const fb = fallback?.[prop];
+    return Array.isArray(fb) ? fb : [];
+  };
   if (!isRecord(value)) {
+    // Whole seat object missing from the patch: preserve existing server-side
+    // zones rather than wiping them to empty arrays.
     return {
-      spellbook: [],
-      atlas: [],
-      hand: [],
-      graveyard: [],
-      battlefield: [],
-      collection: [],
-      banished: [],
+      spellbook: fallbackArr("spellbook"),
+      atlas: fallbackArr("atlas"),
+      hand: fallbackArr("hand"),
+      graveyard: fallbackArr("graveyard"),
+      battlefield: fallbackArr("battlefield"),
+      collection: fallbackArr("collection"),
+      banished: fallbackArr("banished"),
     };
   }
-  const arr = (prop: string): unknown[] =>
-    Array.isArray(value[prop])
-      ? normalizeZoneList(value[prop] as unknown[], seat)
-      : [];
+  // For each pile: honor the incoming value when present (even an explicit []),
+  // but when a pile is ABSENT from this patch fall back to the existing
+  // server-side pile. This prevents partial zone patches (e.g. a discard effect
+  // that only sends { hand, banished }) from wiping unrelated piles like atlas
+  // and spellbook — which previously left players with an empty Site deck after
+  // a reload/resync (private deck zones are client-owned; the server only holds
+  // what clients last sent).
+  const arr = (prop: keyof PlayerZones): unknown[] =>
+    Array.isArray(value[prop as string])
+      ? normalizeZoneList(value[prop as string] as unknown[], seat)
+      : fallbackArr(prop);
   return {
     spellbook: arr("spellbook"),
     atlas: arr("atlas"),
@@ -1208,10 +1225,10 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           const hasP1 = isRecord(incomingZones) && "p1" in incomingZones;
           const hasP2 = isRecord(incomingZones) && "p2" in incomingZones;
           const incomingP1 = hasP1
-            ? ensurePlayerZones(incomingZones.p1, "p1")
+            ? ensurePlayerZones(incomingZones.p1, "p1", normalizedPrevZones.p1)
             : null;
           const incomingP2 = hasP2
-            ? ensurePlayerZones(incomingZones.p2, "p2")
+            ? ensurePlayerZones(incomingZones.p2, "p2", normalizedPrevZones.p2)
             : null;
           const nextZones: ZonesState = {
             p1: incomingP1
@@ -1341,13 +1358,23 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             hasP2: "p2" in incomingZones,
           });
 
+          // Existing authoritative server zones, used as a fallback so that a
+          // partial zone patch (only some piles) doesn't wipe the others.
+          const baseZones = (baseForMerge as Record<string, unknown>)?.zones as
+            | Partial<Record<Seat, PlayerZones>>
+            | undefined;
+
           // Only allow actor to update their own zones, or zones explicitly allowed via __allowZoneSeats
           if (
             isRecord(incomingZones) &&
             "p1" in incomingZones &&
             (actorSeat === "p1" || allowedZoneSeats.includes("p1"))
           ) {
-            sanitizedZones.p1 = ensurePlayerZones(incomingZones.p1, "p1");
+            sanitizedZones.p1 = ensurePlayerZones(
+              incomingZones.p1,
+              "p1",
+              baseZones?.p1,
+            );
           } else if (
             isRecord(incomingZones) &&
             "p1" in incomingZones &&
@@ -1369,7 +1396,11 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             "p2" in incomingZones &&
             (actorSeat === "p2" || allowedZoneSeats.includes("p2"))
           ) {
-            sanitizedZones.p2 = ensurePlayerZones(incomingZones.p2, "p2");
+            sanitizedZones.p2 = ensurePlayerZones(
+              incomingZones.p2,
+              "p2",
+              baseZones?.p2,
+            );
           } else if (
             isRecord(incomingZones) &&
             "p2" in incomingZones &&
