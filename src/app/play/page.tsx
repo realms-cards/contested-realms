@@ -619,8 +619,9 @@ export default function PlayPage() {
     matW = baseGridH * MAT_RATIO;
   }
 
-  // Natural tilt angle for 2D mode (matches online play)
-  const naturalTiltAngle = useMemo(() => 0.14, []);
+  // Natural tilt angle for 2D mode (matches online play).
+  // Tiny epsilon, not exactly 0, to avoid gimbal lock in Chrome's OrbitControls.
+  const naturalTiltAngle = useMemo(() => 0.001, []);
 
   // Preserve camera zoom/tilt across turn switches in hotseat mode
   const savedCameraRef = useRef<{
