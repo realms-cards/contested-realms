@@ -2,7 +2,8 @@
 
 import { useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
-import { useMemo, useRef, useEffect } from "react";
+import { useMemo, useRef, useEffect, useLayoutEffect } from "react";
+import * as THREE from "three";
 import { cardbackAtlasUrl, cardbackSpellbookUrl } from "@/lib/assets";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { isMagician } from "@/lib/game/avatarAbilities";
@@ -18,6 +19,96 @@ import {
 } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
+import { useCardGeometry } from "./useCardGeometry";
+
+// Card-stock edge appearance — must match CardPlane's EDGE_COLOR / EDGE_ROUGHNESS.
+const PILE_EDGE_COLOR = "#e8e0d0";
+const PILE_EDGE_ROUGHNESS = 0.9;
+
+/**
+ * Renders the non-interactive face-down body cards of a deck pile (atlas /
+ * spellbook) as a single InstancedMesh instead of N separate CardPlane meshes.
+ *
+ * A 57-card deck previously rendered 57 individual meshes (+57 shadow casters)
+ * every frame; this collapses each pile to one instanced draw while preserving
+ * the exact stacked-edge look (same geometry, same per-card elevation, same
+ * cream edge material). Only the cream edges are ever visible between tightly
+ * stacked cards, so no per-card face texture is needed here.
+ */
+function PileBodies({
+  count,
+  stackSpacing,
+  width,
+  height,
+  rotationZ,
+}: {
+  count: number;
+  stackSpacing: number;
+  width: number;
+  height: number;
+  rotationZ: number;
+}) {
+  const ref = useRef<THREE.InstancedMesh>(null);
+  const { geometry: cardGeometry, thicknessRatio } = useCardGeometry();
+  const material = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: PILE_EDGE_COLOR,
+        roughness: PILE_EDGE_ROUGHNESS,
+        metalness: 0,
+        envMapIntensity: 0.3,
+      }),
+    [],
+  );
+
+  // Match CardPlane's transform exactly (see CardPlane render): the normalized
+  // (width=1, portrait) geometry is laid flat (rot-x -90°), rotated to the pile
+  // orientation, scaled to card size, and stacked in world-up Y.
+  const isLandscape = width > height;
+  const uniformScale = isLandscape ? height : width;
+  const scaleZ = CARD_THICK / thicknessRatio;
+  const geometryRotationZ = isLandscape ? Math.PI / 2 : 0;
+
+  useLayoutEffect(() => {
+    const mesh = ref.current;
+    if (!mesh || !cardGeometry || count <= 0) return;
+    const matrix = new THREE.Matrix4();
+    const quat = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(-Math.PI / 2, 0, rotationZ + geometryRotationZ, "XYZ"),
+    );
+    const scale = new THREE.Vector3(uniformScale, uniformScale, scaleZ);
+    const pos = new THREE.Vector3();
+    for (let i = 0; i < count; i++) {
+      pos.set(0, i * stackSpacing + CARD_THICK / 2, 0);
+      matrix.compose(pos, quat, scale);
+      mesh.setMatrixAt(i, matrix);
+    }
+    mesh.count = count;
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [
+    count,
+    stackSpacing,
+    uniformScale,
+    scaleZ,
+    rotationZ,
+    geometryRotationZ,
+    cardGeometry,
+  ]);
+
+  useEffect(() => () => material.dispose(), [material]);
+
+  if (!cardGeometry || count <= 0) return null;
+
+  return (
+    <instancedMesh
+      ref={ref}
+      args={[cardGeometry, material, count]}
+      castShadow
+      receiveShadow
+    />
+  );
+}
 
 export interface Piles3DProps {
   matW: number;
@@ -253,36 +344,51 @@ export default function Piles3D({
             {/* Stack visualization with realistic thickness */}
             {cards.length > 0 ? (
               <group>
-                {/* Bottom cards for stack depth (non-interactive) */}
-                {cards
-                  .slice(1)
-                  .map((card, stackIndex) =>
-                    presetId ? (
-                      <MaterialCardBack
-                        key={`stack-${stackIndex}-${card.slug || "card"}`}
-                        presetId={presetId}
-                        width={w}
-                        height={h}
-                        rotationZ={pileRotZ}
-                        depthWrite={true}
-                        interactive={false}
-                        elevation={stackIndex * stackSpacing}
-                      />
-                    ) : (
-                      <CardPlane
-                        key={`stack-${stackIndex}-${card.slug || "card"}`}
-                        slug={card.slug || ""}
-                        textureUrl={cardbackUrl}
-                        forceTextureUrl={!isCemetery}
-                        width={w}
-                        height={h}
-                        rotationZ={pileRotZ}
-                        depthWrite={true}
-                        interactive={false}
-                        elevation={stackIndex * stackSpacing}
-                      />
-                    ),
-                  )}
+                {/* Bottom cards for stack depth (non-interactive).
+                    Face-down deck piles (atlas/spellbook) show only cream card
+                    edges between tightly-stacked cards, so render the whole
+                    stack body as ONE InstancedMesh instead of N CardPlanes —
+                    a 57-card deck goes from 57 draw calls to 1. Cemetery /
+                    collection piles can reveal faces, so keep them as cards. */}
+                {!isCemetery && (isAtlas || key === "spellbook") ? (
+                  <PileBodies
+                    count={visibleStackCount}
+                    stackSpacing={stackSpacing}
+                    width={w}
+                    height={h}
+                    rotationZ={pileRotZ}
+                  />
+                ) : (
+                  cards
+                    .slice(1)
+                    .map((card, stackIndex) =>
+                      presetId ? (
+                        <MaterialCardBack
+                          key={`stack-${stackIndex}-${card.slug || "card"}`}
+                          presetId={presetId}
+                          width={w}
+                          height={h}
+                          rotationZ={pileRotZ}
+                          depthWrite={true}
+                          interactive={false}
+                          elevation={stackIndex * stackSpacing}
+                        />
+                      ) : (
+                        <CardPlane
+                          key={`stack-${stackIndex}-${card.slug || "card"}`}
+                          slug={card.slug || ""}
+                          textureUrl={cardbackUrl}
+                          forceTextureUrl={!isCemetery}
+                          width={w}
+                          height={h}
+                          rotationZ={pileRotZ}
+                          depthWrite={true}
+                          interactive={false}
+                          elevation={stackIndex * stackSpacing}
+                        />
+                      ),
+                    )
+                )}
 
                 {/* Top card (interactive) - add invisible mesh for reliable clicking */}
                 <group>
