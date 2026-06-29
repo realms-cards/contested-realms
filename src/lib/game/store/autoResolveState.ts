@@ -413,11 +413,13 @@ export const createAutoResolveSlice: StateCreator<
     const permanentPositionsNext = { ...state.permanentPositions };
     const permanentAbilitiesNext = { ...state.permanentAbilities };
 
-    // Row spacing in X, and a push toward the owner's edge in Z so the submerged
-    // frogs sit in front of the site card (owner 1 = +Z toward bottom edge).
+    // Row spacing in X, and a small push toward the owner's edge in Z so the
+    // submerged frogs sit at the bottom edge of the site card (owner 1 = +Z toward
+    // the bottom edge) — close enough to read as submerged in the pool, not shoved
+    // down into the next tile / hand. Value verified visually in-app.
     const ownerSign = ownerNum === 1 ? 1 : -1;
     const frogSpacingX = TILE_SIZE * 0.16;
-    const frogEdgeZ = ownerSign * TILE_SIZE * 0.4;
+    const frogEdgeZ = ownerSign * TILE_SIZE * -0.05;
 
     for (let i = 0; i < 3; i++) {
       const frogCard = prepareCardForSeat(
