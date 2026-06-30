@@ -18,6 +18,7 @@ import {
   THRESHOLD_GRANT_BY_NAME,
   VOID_MANA_PROVIDERS,
 } from "@/lib/game/mana-providers";
+import { isOrdinarySite } from "../atlanteanFateState";
 import { isBaseOfBabel, isTowerOfBabel } from "../babelTowerState";
 import { isPortalTile } from "../portalState";
 import { getAdjacentCells, parseCellKey } from "./boardHelpers";
@@ -275,13 +276,30 @@ export const auraHasSilencedToken = (
 };
 
 // Check if a site is flooded by Atlantean Fate
-// A silenced Atlantean Fate aura does NOT flood sites
+// A silenced Atlantean Fate aura does NOT flood sites.
+//
+// The aura's `floodedSites` list is captured once at cast time and is never
+// pruned when the underlying site leaves the tile. So we must re-validate that
+// the cell STILL holds a flood-eligible site (non-Ordinary and mana-providing)
+// before honoring it. Atlantean Fate only affects non-Ordinary sites, and a
+// destroyed site is replaced by Rubble (Ordinary, "provides no mana") which is
+// neutral/uncontrolled and must never be treated as flooded.
 const isSiteFloodedByAtlanteanFate = (
   cellKey: string,
+  siteCard: CardRef | null | undefined,
   specialSiteState?: SpecialSiteState | null,
   permanents?: Permanents,
 ): boolean => {
   if (!specialSiteState?.atlanteanFateAuras) return false;
+  // Only a non-Ordinary, mana-providing site can actually be flooded. This
+  // rejects stale entries pointing at Rubble (or any Ordinary site).
+  if (!siteCard) return false;
+  if (!siteProvidesMana(siteCard)) return false;
+  if (
+    isOrdinarySite(siteCard.name, (siteCard as { rarity?: string }).rarity)
+  ) {
+    return false;
+  }
   for (const aura of specialSiteState.atlanteanFateAuras) {
     if (aura.floodedSites.includes(cellKey)) {
       // Check if this aura is silenced - silenced auras don't apply their effect
@@ -372,6 +390,11 @@ export const computeThresholdTotals = (
   for (const [cellKey, tile] of Object.entries(board?.sites ?? {})) {
     // Check SHARED_MANA_SITES (Avalon) - provides threshold to BOTH players
     const siteName = String(tile?.card?.name || "").toLowerCase();
+
+    // Rubble is a neutral, uncontrolled site: it provides no mana and no
+    // threshold to anyone, even when overlaid by a (stale) Atlantean Fate flood.
+    if (siteName === "rubble") continue;
+
     const isShared = SHARED_MANA_SITES.has(siteName);
 
     // For non-shared sites, check ownership
@@ -385,7 +408,14 @@ export const computeThresholdTotals = (
 
     // Check if site is flooded by Atlantean Fate - flooded sites only provide water
     // A silenced Atlantean Fate aura does NOT flood sites
-    if (isSiteFloodedByAtlanteanFate(cellKey, specialSiteState, permanents)) {
+    if (
+      isSiteFloodedByAtlanteanFate(
+        cellKey,
+        tile?.card,
+        specialSiteState,
+        permanents,
+      )
+    ) {
       totals.water += 1;
       continue; // Skip normal threshold calculation for flooded sites
     }

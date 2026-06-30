@@ -38,6 +38,7 @@ import {
 import type {
   BoardState,
   CardRef,
+  CellKey,
   GameState,
   Permanents,
   PlayerKey,
@@ -269,6 +270,84 @@ describe("resourceHelpers", () => {
       ],
     };
     expect(computeAvailableMana(board, permanents, "p1")).toBe(2);
+  });
+
+  const makeSpecialSiteState = (
+    floodedSites: CellKey[],
+  ): GameState["specialSiteState"] => ({
+    valleyChoices: [],
+    bloomBonuses: [],
+    genesisMana: [],
+    pendingElementChoice: null,
+    realmFlooded: false,
+    atlanteanFateAuras: [
+      {
+        id: "aura-1",
+        cornerCell: "0,0",
+        coveredCells: ["0,0"],
+        owner: 1,
+        ownerSeat: "p1",
+        floodedSites,
+        permanentAt: "0,0",
+        permanentIndex: 0,
+        createdAt: 0,
+      },
+    ],
+    mismanagedMortuaries: [],
+  });
+
+  it("floods a genuine non-Ordinary site (water threshold only)", () => {
+    const board: BoardState = {
+      size: { w: 1, h: 1 },
+      sites: {
+        "0,0": {
+          owner: 1,
+          card: baseCard({
+            name: "Lord of the Void",
+            type: "Site",
+            thresholds: { fire: 1 },
+          }),
+        },
+      },
+    };
+    const totals = computeThresholdTotals(
+      board,
+      {},
+      "p1",
+      undefined,
+      makeSpecialSiteState(["0,0"]),
+    );
+    // Flooded site provides only Water, not its printed Fire threshold.
+    expect(totals.water).toBe(1);
+    expect(totals.fire).toBe(0);
+  });
+
+  it("does not grant threshold for a Rubble cell listed in a stale flood", () => {
+    // Regression: a site flooded by Atlantean Fate is later destroyed and
+    // replaced by Rubble. The cell remains in aura.floodedSites, but Rubble is
+    // a neutral, uncontrolled Ordinary site that must provide nothing.
+    const board: BoardState = {
+      size: { w: 1, h: 1 },
+      sites: {
+        "0,0": {
+          owner: 1,
+          card: baseCard({ name: "Rubble", type: "Site" }),
+        },
+      },
+    };
+    const totals = computeThresholdTotals(
+      board,
+      {},
+      "p1",
+      undefined,
+      makeSpecialSiteState(["0,0"]),
+    );
+    expect(totals.water).toBe(0);
+    expect(totals.air).toBe(0);
+    expect(totals.earth).toBe(0);
+    expect(totals.fire).toBe(0);
+    // And it provides no mana either.
+    expect(computeAvailableMana(board, {}, "p1")).toBe(0);
   });
 });
 
