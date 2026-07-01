@@ -1,4 +1,4 @@
-import type { Client, TextChannel } from "discord.js";
+import type { Client, Message, TextChannel } from "discord.js";
 import type { ChallengeManager } from "./challenge-manager.js";
 import type {
   QueueStatus,
@@ -14,6 +14,11 @@ interface ActiveDiscordQueueEntry {
   playerId: string;
   guildId: string;
   channelId: string;
+  // Tracks the most recent pending offer so we can detect when it expires
+  // and clear the now-stale "use /queue accept" announcement.
+  pendingLobbyId?: string | null;
+  pendingStatus?: "confirming" | "ready" | null;
+  announcementMessageId?: string | null;
 }
 
 interface QueueMatchInfo {
@@ -109,12 +114,77 @@ export class QueueManager {
     }
 
     if (!opts?.skipChannelAnnouncement) {
-      await this.postAnnouncement(
+      const posted = await this.postAnnouncement(
         entry.channelId,
         match.status === "confirming"
           ? `⚔️ **Match Ready to Confirm!** <@${entry.discordId}> vs **${match.opponentName}** — use \`/queue accept\` to lock it in.`
           : `⚔️ **Match Confirmed!** <@${entry.discordId}> vs **${match.opponentName}** — Constructed`,
       );
+      // Remember the confirming announcement so it can be updated if the
+      // offer later expires without both players confirming.
+      if (match.status === "confirming" && posted) {
+        const tracked = this.trackedEntries.get(entry.discordId);
+        if (tracked) tracked.announcementMessageId = posted.id;
+      }
+    }
+  }
+
+  private async notifyOfferExpired(
+    entry: ActiveDiscordQueueEntry,
+    stillQueued: boolean,
+  ): Promise<void> {
+    if (entry.announcementMessageId) {
+      try {
+        const channel = await this.client.channels.fetch(entry.channelId);
+        if (channel && "messages" in channel) {
+          const msg = await (channel as TextChannel).messages
+            .fetch(entry.announcementMessageId)
+            .catch(() => null);
+          await msg
+            ?.edit(
+              stillQueued
+                ? `⌛ Match offer expired — <@${entry.discordId}> is back in the queue searching.`
+                : `⌛ Match offer expired — <@${entry.discordId}> left the queue.`,
+            )
+            .catch(() => {});
+        }
+      } catch (err) {
+        console.error(
+          "[shared-queue-manager] Failed to update stale announcement:",
+          err,
+        );
+      }
+      entry.announcementMessageId = null;
+    }
+
+    try {
+      const user = await this.client.users.fetch(entry.discordId);
+      await user
+        .send(
+          stillQueued
+            ? "Your previous match offer expired before both players confirmed. You're back in the queue — I'll DM you when a new match is found."
+            : "Your match offer expired before both players confirmed, and you've been removed from the queue. Use `/queue join` to search again.",
+        )
+        .catch(() => {});
+    } catch (err) {
+      console.error("[shared-queue-manager] Failed to DM player:", err);
+    }
+  }
+
+  private async notifyQueueEnded(
+    entry: ActiveDiscordQueueEntry,
+  ): Promise<void> {
+    try {
+      const user = await this.client.users.fetch(entry.discordId);
+      await user
+        .send(
+          "Your matchmaking search ended — no opponent was found. Use `/queue join` to search again.",
+        )
+        .catch(() => {
+          console.log(`[shared-queue-manager] Could not DM ${entry.discordId}`);
+        });
+    } catch (err) {
+      console.error("[shared-queue-manager] Failed to DM player:", err);
     }
   }
 
@@ -127,11 +197,25 @@ export class QueueManager {
       if (status.pendingMatch) {
         const match = await this.resolveMatchInfo(status.pendingMatch);
         await this.notifyMatchUpdate(entry, match);
+        entry.pendingLobbyId = match.lobbyId;
+        entry.pendingStatus = match.status;
         if (match.status === "ready") {
           this.trackedEntries.delete(entry.discordId);
         }
       } else if (status.position === null) {
+        // Removed from the queue entirely (timeout or cancelled offer).
         this.trackedEntries.delete(entry.discordId);
+        if (entry.pendingLobbyId) {
+          await this.notifyOfferExpired(entry, false);
+        } else {
+          await this.notifyQueueEnded(entry);
+        }
+      } else if (entry.pendingLobbyId) {
+        // Still queued, but a previously offered match is gone — the offer
+        // expired (or was declined) and the player was re-queued.
+        await this.notifyOfferExpired(entry, true);
+        entry.pendingLobbyId = null;
+        entry.pendingStatus = null;
       }
     }
   }
@@ -293,15 +377,19 @@ export class QueueManager {
     return result.ok;
   }
 
-  async postAnnouncement(channelId: string, message: string): Promise<void> {
+  async postAnnouncement(
+    channelId: string,
+    message: string,
+  ): Promise<Message | null> {
     try {
       const channel = await this.client.channels.fetch(channelId);
       if (channel && "send" in channel) {
-        await (channel as TextChannel).send(message);
+        return await (channel as TextChannel).send(message);
       }
     } catch (err) {
       console.error("[shared-queue-manager] Failed to post announcement:", err);
     }
+    return null;
   }
 
   async cleanup(): Promise<void> {

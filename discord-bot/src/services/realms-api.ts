@@ -119,6 +119,7 @@ export class RealmsApiClient {
     method: string,
     path: string,
     body?: unknown,
+    options?: { acceptErrorStatuses?: number[] },
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const headers: Record<string, string> = {
@@ -134,6 +135,16 @@ export class RealmsApiClient {
 
     if (!res.ok) {
       const text = await res.text();
+      // Some endpoints return a structured JSON body on an expected error
+      // status (e.g. 409 no_pending_match). Surface that body instead of
+      // throwing so callers can handle it gracefully.
+      if (options?.acceptErrorStatuses?.includes(res.status)) {
+        try {
+          return JSON.parse(text) as T;
+        } catch {
+          // Body wasn't JSON — fall through to the generic error below.
+        }
+      }
       throw new Error(`API error ${res.status}: ${text}`);
     }
 
@@ -294,6 +305,7 @@ export class RealmsApiClient {
       "POST",
       "/api/bot/queue/constructed/accept",
       { playerId },
+      { acceptErrorStatuses: [409] },
     );
     return QueueConfirmationResponseSchema.parse(data);
   }
@@ -305,6 +317,7 @@ export class RealmsApiClient {
       "POST",
       "/api/bot/queue/constructed/decline",
       { playerId },
+      { acceptErrorStatuses: [409] },
     );
     return QueueConfirmationResponseSchema.parse(data);
   }

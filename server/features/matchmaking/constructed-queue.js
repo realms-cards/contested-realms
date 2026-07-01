@@ -36,8 +36,9 @@ function createMatchmakingFeature(deps) {
   const reservations = new Map();
 
   const MATCH_CHECK_INTERVAL = 2000;
-  const MATCH_CONFIRM_WINDOW_MS = 30000;
+  const MATCH_CONFIRM_WINDOW_MS = 120000;
   const LOBBY_SETTINGS_GRACE_PERIOD = 15000;
+  const QUEUE_MAX_WAIT_MS = 30 * 60 * 1000;
   let matchCheckTimer = null;
 
   function sortedQueueEntries() {
@@ -735,6 +736,22 @@ function createMatchmakingFeature(deps) {
     );
   }
 
+  async function expireStaleQueueEntries() {
+    const now = Date.now();
+    const stalePlayerIds = [];
+    for (const entry of queue.values()) {
+      if (now - (entry.joinedAt || now) >= QUEUE_MAX_WAIT_MS) {
+        stalePlayerIds.push(entry.playerId);
+      }
+    }
+    for (const playerId of stalePlayerIds) {
+      await leaveQueue(playerId, "timeout");
+      console.log(
+        `[Matchmaking] ${playerId.slice(-6)} removed from queue (no match after ${Math.round(QUEUE_MAX_WAIT_MS / 60000)}m)`,
+      );
+    }
+  }
+
   async function checkForMatches() {
     const leader = await getOrClaimLobbyLeader();
     if (leader !== INSTANCE_ID) {
@@ -742,6 +759,7 @@ function createMatchmakingFeature(deps) {
     }
 
     await expireReservations();
+    await expireStaleQueueEntries();
 
     const entries = sortedQueueEntries();
 
