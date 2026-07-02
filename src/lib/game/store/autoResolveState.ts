@@ -153,8 +153,18 @@ export const createAutoResolveSlice: StateCreator<
         break;
       }
       case "tadpole_pool_genesis": {
-        // Summon three submerged Frog tokens at the Tadpole Pool's cell
-        const cellKey = callbackData.cellKey as CellKey;
+        // Summon three submerged Frog tokens at the Tadpole Pool's cell.
+        // Fall back to sourceLocation — callbackData can be empty if pending
+        // was rebuilt from a relayed message rather than set locally.
+        const cellKey = (callbackData.cellKey ?? pending.sourceLocation) as
+          | CellKey
+          | undefined;
+        if (!cellKey) {
+          get().log(
+            `[${ownerSeat.toUpperCase()}] Tadpole Pool Genesis: missing cell — cannot summon`,
+          );
+          break;
+        }
         get()._executeTadpolePoolGenesis(cellKey, ownerSeat);
         break;
       }

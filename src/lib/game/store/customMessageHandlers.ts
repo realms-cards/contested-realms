@@ -4748,12 +4748,21 @@ export function handleCustomMessage(
 
     if (!id || !kind || !ownerSeat || !sourceName) return;
 
+    // Skip if we're the owner — beginAutoResolve already set pendingAutoResolve
+    // locally WITH callbackData. The server relays this message back to the
+    // sender too; overwriting here would wipe callbackData (e.g. Tadpole Pool's
+    // cellKey) and make confirmAutoResolve silently no-op.
+    if (get().actorKey === ownerSeat) return;
+
+    const sourceLocation = (msg as { sourceLocation?: unknown })
+      .sourceLocation as CellKey | undefined;
     set({
       pendingAutoResolve: {
         id,
         kind: kind as import("./types").AutoResolveKind,
         ownerSeat,
         sourceName,
+        ...(sourceLocation ? { sourceLocation } : {}),
         effectDescription: effectDescription ?? "",
         callbackData: {},
         createdAt: Date.now(),
