@@ -6,8 +6,9 @@
  *
  * Flow:
  *   1. Right-click the Waveshaper avatar → "Flood Site" action (ContextMenu).
- *   2. beginWaveshaperFlood() computes valid target sites (sites at/adjacent to one of
- *      the caster's water sites — its "body of water") and enters selectingTarget phase.
+ *   2. beginWaveshaperFlood() computes valid target sites (sites at/adjacent to the
+ *      caster's body of water — the contiguous group of water sites, any owner,
+ *      containing at least one water site they own) and enters selectingTarget phase.
  *   3. The caster clicks a highlighted board tile (TileInteractionPlane → selectWaveshaperTarget).
  *   4. selectWaveshaperTarget() moves the flood (removes the previous Waveshaper flood),
  *      places a Flooded token, taps every minion there that lacks submerge, marks those
@@ -76,19 +77,12 @@ export function createInitialWaveshaperFloodCells(): Record<
 }
 
 /**
- * Whether the site at cellKey counts as part of `who`'s "body of water":
- * a site they own that provides water — either via its printed water threshold,
- * a Flooded token, or an Atlantean Fate flood.
+ * Whether the site at cellKey is a water site (any owner) — it provides water
+ * via its printed water threshold, a Flooded token, or an Atlantean Fate flood.
  */
-function isWaterSiteForSeat(
-  state: GameState,
-  cellKey: CellKey,
-  who: PlayerKey,
-): boolean {
+function isWaterSite(state: GameState, cellKey: CellKey): boolean {
   const tile = state.board.sites[cellKey];
   if (!tile || !tile.card) return false;
-  const ownerNum: 1 | 2 = who === "p1" ? 1 : 2;
-  if (tile.owner !== ownerNum) return false;
 
   // Printed water threshold
   const waterThreshold = tile.card.thresholds?.water ?? 0;
@@ -106,18 +100,47 @@ function isWaterSiteForSeat(
   return false;
 }
 
-/** All sites at/adjacent to one of the caster's water sites. */
+/**
+ * All sites at/adjacent to the caster's body of water.
+ *
+ * A body of water is a contiguous (orthogonally connected) group of water
+ * sites regardless of owner. "Your body of water" is any such group that
+ * contains at least one water site you own — so opponent water sites count
+ * when they are connected to yours.
+ */
 function computeFloodTargets(state: GameState, who: PlayerKey): CellKey[] {
   const board = state.board;
-  const waterSites: CellKey[] = [];
+  const ownerNum: 1 | 2 = who === "p1" ? 1 : 2;
+
+  // All water sites on the board, any owner
+  const waterSites = new Set<CellKey>();
   for (const cellKey of Object.keys(board.sites)) {
-    if (isWaterSiteForSeat(state, cellKey as CellKey, who)) {
-      waterSites.push(cellKey as CellKey);
+    if (isWaterSite(state, cellKey as CellKey)) {
+      waterSites.add(cellKey as CellKey);
+    }
+  }
+
+  // Flood-fill from the caster's own water sites across connected water sites
+  const bodyOfWater = new Set<CellKey>();
+  const queue: CellKey[] = [];
+  for (const cell of waterSites) {
+    if (board.sites[cell]?.owner === ownerNum) {
+      bodyOfWater.add(cell);
+      queue.push(cell);
+    }
+  }
+  while (queue.length > 0) {
+    const cell = queue.pop() as CellKey;
+    for (const adj of getAdjacentCells(cell, board.size.w, board.size.h)) {
+      if (waterSites.has(adj) && !bodyOfWater.has(adj)) {
+        bodyOfWater.add(adj);
+        queue.push(adj);
+      }
     }
   }
 
   const candidates = new Set<CellKey>();
-  for (const waterCell of waterSites) {
+  for (const waterCell of bodyOfWater) {
     candidates.add(waterCell);
     for (const adj of getAdjacentCells(waterCell, board.size.w, board.size.h)) {
       candidates.add(adj);
@@ -136,13 +159,23 @@ function computeFloodTargets(state: GameState, who: PlayerKey): CellKey[] {
  * source for the keyword; we fall back to the name-based heuristic (which also
  * consults the ability cache) and the live submerged position state.
  */
-function minionHasSubmerge(state: GameState, perm: PermanentItem): boolean {
+function minionHasSubmerge(
+  state: GameState,
+  perm: PermanentItem,
+  cellKey: CellKey,
+  index: number,
+): boolean {
   const text = (perm.card?.text || "").toLowerCase();
   if (text.includes("submerge")) return true;
   const name = perm.card?.name || "";
   if (detectBurrowSubmergeAbilitiesSync(name).canSubmerge) return true;
-  const id = perm.instanceId || perm.card?.instanceId || "";
-  if (id) {
+  // Position/ability state is keyed by instanceId, falling back to the same
+  // `perm:${cell}:${index}` key the board UI uses for id-less permanents.
+  const ids = [
+    perm.instanceId || perm.card?.instanceId || "",
+    perm.instanceId ? "" : `perm:${cellKey}:${index}`,
+  ].filter(Boolean);
+  for (const id of ids) {
     // Registered submerge ability (e.g. Frog tokens from Tadpole Pool,
     // Atlantean Fate forced-submerge). Tokens carry no rules text, so this is
     // the authoritative source for them.
@@ -287,7 +320,7 @@ export const createWaveshaperSlice: StateCreator<
     for (let i = 0; i < targetArr.length; i++) {
       const perm = targetArr[i];
       if (!perm || !isMinionPermanent(perm)) continue;
-      if (minionHasSubmerge(state, perm)) continue;
+      if (minionHasSubmerge(state, perm, targetCell, i)) continue;
       targetArr[i] = {
         ...perm,
         tapped: true,
