@@ -1551,16 +1551,19 @@ function detectWinCondition(state, seat) {
   // Check if opponent is at death's door (life = 0)
   const oppAtDeathsDoor = oppLife <= 0;
 
-  // Check if we can deal damage for lethal (simplified: check if we have any threats)
+  // Check if we can actually deliver damage: an untapped attacker within one
+  // move of the opponent avatar (attacks are one-cell moves onto the target)
   const per = (state && state.permanents) || {};
   const myNum = seatNum(seat);
+  const oppAvatarPos = getAvatarPos(state, opp);
   let canDealDamage = false;
 
   for (const cellKey of Object.keys(per)) {
+    const pos = parseCellKey(cellKey);
+    if (!pos || manhattan([pos.x, pos.y], oppAvatarPos) > 1) continue;
     const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
     for (const p of arr) {
       if (p && Number(p.owner) === myNum && !p.tapped) {
-        // Has untapped unit that could attack
         const atk = Number(p.card && p.card.attack) || 0;
         if (atk > 0) {
           canDealDamage = true;
@@ -1569,6 +1572,21 @@ function detectWinCondition(state, seat) {
       }
     }
     if (canDealDamage) break;
+  }
+
+  // Our avatar can also deliver the kill if adjacent and untapped
+  if (!canDealDamage) {
+    const avatars = (state && state.avatars) || {};
+    const myAv = avatars[seat] || {};
+    const myAtk = Number(myAv.card && myAv.card.attack) || 0;
+    const myPos = getAvatarPos(state, seat);
+    if (
+      myAv.tapped !== true &&
+      myAtk > 0 &&
+      manhattan(myPos, oppAvatarPos) <= 1
+    ) {
+      canDealDamage = true;
+    }
   }
 
   return {
@@ -1777,6 +1795,52 @@ function extractLifePressure(state, seat) {
   }
 
   return pressure;
+}
+
+// Board stat sums: printed ATK and remaining HP (defence minus marked damage)
+function sumBoardStats(state, seat) {
+  const myNum = seatNum(seat);
+  const per = (state && state.permanents) || {};
+  let atk = 0;
+  let hp = 0;
+  for (const cellKey of Object.keys(per)) {
+    const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
+    for (const p of arr) {
+      if (!p || Number(p.owner) !== myNum || !p.card) continue;
+      atk += Number(p.card.attack) || 0;
+      const def = Number(p.card.defence || p.card.defense) || 0;
+      hp += Math.max(0, def - (Number(p.damage) || 0));
+    }
+  }
+  return { atk, hp };
+}
+
+// Damage the opponent could deliver to our avatar on their next turn:
+// their units within one move of our avatar (tapped or not — they untap at
+// the start of their turn) plus their avatar if it is adjacent.
+function estimateOppReachableDamage(state, seat) {
+  const opp = otherSeat(seat);
+  const oppNum = seatNum(opp);
+  const myPos = getAvatarPos(state, seat);
+  const per = (state && state.permanents) || {};
+  let dmg = 0;
+  for (const cellKey of Object.keys(per)) {
+    const pos = parseCellKey(cellKey);
+    if (!pos) continue;
+    if (manhattan([pos.x, pos.y], myPos) > 1) continue;
+    const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
+    for (const p of arr) {
+      if (!p || Number(p.owner) !== oppNum) continue;
+      dmg += Number(p.card && p.card.attack) || 0;
+    }
+  }
+  const oppAvatarPos = getOpponentAvatarPos(state, seat);
+  if (manhattan(oppAvatarPos, myPos) <= 1) {
+    const avatars = (state && state.avatars) || {};
+    const av = avatars[opp] || {};
+    dmg += Number(av.card && av.card.attack) || 0;
+  }
+  return dmg;
 }
 
 // T008: Anti-Pattern Penalties - detect degenerate behaviors
@@ -2316,6 +2380,11 @@ function extractFeatures(prevState, nextState, seat) {
   const threatDeployment = extractThreatDeployment(nextState, me);
   const lifePressure = extractLifePressure(nextState, me);
   const winCond = detectWinCondition(nextState, me);
+  const myStats = sumBoardStats(nextState, me);
+  const oppStats = sumBoardStats(nextState, opp);
+  // Lethal threat: at death's door (life <= 0) any reachable damage kills
+  const oppReachable = estimateOppReachableDamage(nextState, me);
+  const oppLethalNext = oppReachable >= Math.max(1, lifeMy) ? 1 : 0;
 
   return {
     life_my: lifeMy,
@@ -2324,15 +2393,15 @@ function extractFeatures(prevState, nextState, seat) {
     hand_opp: handOpp,
     threats_my: tMy,
     threats_opp: tOpp,
-    atk_my: 0,
-    atk_opp: 0,
-    hp_my: 0,
-    hp_opp: 0,
+    atk_my: myStats.atk,
+    atk_opp: oppStats.atk,
+    hp_my: myStats.hp,
+    hp_opp: oppStats.hp,
     mana_avail: available,
     mana_wasted: manaWasted,
     on_curve: onCurve,
     lethal_now: winCond.canDealLethal ? 1 : 0,
-    opp_lethal_next: 0,
+    opp_lethal_next: oppLethalNext,
     removal_in_hand: 0,
     engines_online: 0,
     sweeper_risk: 0,
