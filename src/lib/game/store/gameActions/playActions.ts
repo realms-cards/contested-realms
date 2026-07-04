@@ -63,7 +63,9 @@ const countPlayerSitesByName = (
 };
 
 // Detect and trigger special site Genesis abilities
-const triggerSiteGenesis = (
+// Exported so alternate site-play paths (e.g. Pathfinder's tap ability)
+// fire the same Genesis effects as a normal site play.
+export const triggerSiteGenesis = (
   siteName: string,
   cellKey: CellKey,
   owner: 1 | 2,

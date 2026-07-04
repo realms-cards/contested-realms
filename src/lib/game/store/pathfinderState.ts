@@ -13,6 +13,7 @@
 
 import type { StateCreator } from "zustand";
 import { isPathfinder } from "@/lib/game/avatarAbilities";
+import { triggerSiteGenesis } from "@/lib/game/store/gameActions/playActions";
 import type {
   CellKey,
   GameState,
@@ -386,6 +387,12 @@ export const createPathfinderSlice: StateCreator<
       };
     }
     get().trySendPatch(patch);
+
+    // Fire Genesis effects (Observatory, river sites, Tadpole Pool, etc.)
+    // just like a normal site play — deferred so the placement state settles
+    setTimeout(() => {
+      triggerSiteGenesis(topSite.name, targetCell, ownerNum, get);
+    }, 0);
 
     const actionDesc = isReplacingRubble
       ? `replaces Rubble with ${topSite.name}`
