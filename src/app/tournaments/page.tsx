@@ -97,6 +97,9 @@ export default function TournamentsPage() {
   const [hostOnlyMode, setHostOnlyMode] = useState(false);
   // Round time limit in minutes
   const [roundTimeLimit, setRoundTimeLimit] = useState(45);
+  // Timer warning threshold (minutes remaining) and tiebreak extra turns
+  const [timerWarningMinutes, setTimerWarningMinutes] = useState(10);
+  const [tiebreakExtraTurns, setTiebreakExtraTurns] = useState(5);
 
   // Fetch available sets from the database
   const { setNames: availableSetNames } = useAvailableSets();
@@ -275,7 +278,8 @@ export default function TournamentsPage() {
         creatorParticipates: !hostOnlyMode,
         // Tiebreaker settings for tournament matches
         tiebreakerSettings: {
-          extraTurns: 5, // 5 extra turns after time expires
+          extraTurns: tiebreakExtraTurns, // Extra turns after time expires
+          warningMinutes: timerWarningMinutes, // Timer warning threshold
           preventForcedDraws: true, // No simultaneous death
           allowDrawAgreement: false, // No draw agreements
         },
@@ -1009,6 +1013,43 @@ export default function TournamentsPage() {
                         { value: "90", label: "90 min" },
                       ]}
                     />
+                  </div>
+                </div>
+
+                {/* Timer warning + tiebreak extra turns */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 text-sm font-medium mb-1">
+                      Timer Warning At
+                    </label>
+                    <CustomSelect
+                      value={String(timerWarningMinutes)}
+                      onChange={(v) => setTimerWarningMinutes(parseInt(v))}
+                      options={[
+                        { value: "5", label: "5 min left" },
+                        { value: "10", label: "10 min left" },
+                        { value: "15", label: "15 min left" },
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 text-sm font-medium mb-1">
+                      Extra Turns (Tiebreak)
+                    </label>
+                    <CustomSelect
+                      value={String(tiebreakExtraTurns)}
+                      onChange={(v) => setTiebreakExtraTurns(parseInt(v))}
+                      options={[
+                        { value: "0", label: "None" },
+                        { value: "3", label: "3 turns" },
+                        { value: "5", label: "5 turns" },
+                        { value: "10", label: "10 turns" },
+                      ]}
+                    />
+                    <p className="text-slate-400 text-xs mt-1">
+                      Played after time expires, then the tiebreaker decides
+                      the match.
+                    </p>
                   </div>
                 </div>
 

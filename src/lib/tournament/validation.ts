@@ -56,6 +56,7 @@ export const TournamentSettingsSchema = z.object({
   tiebreakerSettings: z
     .object({
       extraTurns: z.number().min(0).max(10).default(5), // 5 extra turns after time
+      warningMinutes: z.number().min(1).max(60).default(10), // Timer warning threshold
       preventForcedDraws: z.boolean().default(true), // Prevent simultaneous death
       allowDrawAgreement: z.boolean().default(false), // No draw agreements allowed
     })

@@ -1923,6 +1923,16 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
     })
     .filter(Boolean);
 
+  const tiebreakerSettingsRaw = match.tiebreakerSettings;
+  const tiebreakerSettings =
+    tiebreakerSettingsRaw && typeof tiebreakerSettingsRaw === "object"
+      ? (tiebreakerSettingsRaw as {
+          extraTurns?: number;
+          warningMinutes?: number;
+          enforceResult?: boolean;
+        })
+      : null;
+
   return {
     id: match.id,
     lobbyId: match.lobbyId || undefined,
@@ -1936,6 +1946,27 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
         ? match.matchTimeMinutes
         : undefined,
     timedMatch: Boolean(match.tournamentId) || Boolean(match.timedMatch),
+    timerWarningMinutes:
+      typeof tiebreakerSettings?.warningMinutes === "number"
+        ? tiebreakerSettings.warningMinutes
+        : undefined,
+    tiebreakExtraTurns:
+      typeof tiebreakerSettings?.extraTurns === "number"
+        ? tiebreakerSettings.extraTurns
+        : undefined,
+    tiebreakEnforced: match.tournamentId
+      ? tiebreakerSettings?.enforceResult !== false
+      : tiebreakerSettings?.enforceResult === true,
+    timeExpired: match.timeExpired === true ? true : undefined,
+    extraTurnsMode: match.extraTurnsMode === true ? true : undefined,
+    extraTurnsUsed:
+      typeof match.extraTurnsUsed === "number"
+        ? match.extraTurnsUsed
+        : undefined,
+    extraTurnsRemaining:
+      typeof match.extraTurnsRemaining === "number"
+        ? match.extraTurnsRemaining
+        : undefined,
     players: playersWithSeat,
     playerIds,
     status: match.status,
@@ -1998,8 +2029,13 @@ async function hydrateMatchFromDatabase(
           match.startedAt = new Date(dbMatch.startedAt).getTime();
         }
       } catch {}
-      // Hydrate tournament round time limit (used by client-side TournamentMatchTimer)
-      if (match.tournamentId && typeof match.matchTimeMinutes !== "number") {
+      // Hydrate tournament round time limit and tiebreaker settings
+      // (used by the client-side match timer and server-side tiebreak enforcement)
+      if (
+        match.tournamentId &&
+        (typeof match.matchTimeMinutes !== "number" ||
+          !match.tiebreakerSettings)
+      ) {
         try {
           const tournament = await prisma.tournament.findUnique({
             where: { id: match.tournamentId },
@@ -2016,6 +2052,26 @@ async function hydrateMatchFromDatabase(
                 ? settings.matchTimeLimit
                 : 45;
           match.matchTimeMinutes = limit;
+          const tiebreakerRaw =
+            settings.tiebreakerSettings &&
+            typeof settings.tiebreakerSettings === "object"
+              ? (settings.tiebreakerSettings as Record<string, unknown>)
+              : {};
+          match.tiebreakerSettings = {
+            extraTurns:
+              typeof tiebreakerRaw.extraTurns === "number"
+                ? tiebreakerRaw.extraTurns
+                : 5,
+            warningMinutes:
+              typeof tiebreakerRaw.warningMinutes === "number"
+                ? tiebreakerRaw.warningMinutes
+                : 10,
+            enforceResult: true,
+          };
+          // Flat mirrors so raw `{ ...match }` broadcasts carry them too
+          match.timerWarningMinutes = match.tiebreakerSettings.warningMinutes;
+          match.tiebreakExtraTurns = match.tiebreakerSettings.extraTurns;
+          match.tiebreakEnforced = true;
         } catch {}
       }
       if (dbMatch.playerDecks && typeof dbMatch.playerDecks === "object") {

@@ -42,6 +42,14 @@ interface OnlineStatusBarProps {
   matchTimeMinutes?: number | null;
   /** Whether this is a timed/tournament match */
   isTimedMatch?: boolean;
+  /** Minutes remaining at which the timer switches to warning colors */
+  timerWarningMinutes?: number | null;
+  /** Whether the match is in post-expiry extra turns */
+  extraTurnsMode?: boolean;
+  /** 1-based index of the extra turn currently being played */
+  extraTurnsUsed?: number | null;
+  /** Total extra turns granted after time expires */
+  tiebreakExtraTurns?: number | null;
 }
 
 export default function OnlineStatusBar({
@@ -56,6 +64,10 @@ export default function OnlineStatusBar({
   matchStartedAt = null,
   matchTimeMinutes = null,
   isTimedMatch = false,
+  timerWarningMinutes = null,
+  extraTurnsMode = false,
+  extraTurnsUsed = null,
+  tiebreakExtraTurns = null,
 }: OnlineStatusBarProps) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const requestEndTurn = useGameStore((s) => s.requestEndTurn);
@@ -146,13 +158,23 @@ export default function OnlineStatusBar({
         </span>
 
         {/* Tournament/Timed Match Timer */}
-        {isTimedMatch && matchStartedAt && (
+        {isTimedMatch && (matchStartedAt || extraTurnsMode) && (
           <TournamentMatchTimer
             matchStartedAt={matchStartedAt}
             roundTimeMinutes={
               typeof matchTimeMinutes === "number" ? matchTimeMinutes : 45
             }
             isTournamentMatch={true}
+            warningMinutes={
+              typeof timerWarningMinutes === "number" ? timerWarningMinutes : 15
+            }
+            extraTurnsMode={extraTurnsMode}
+            extraTurnsUsed={
+              typeof extraTurnsUsed === "number" ? extraTurnsUsed : 1
+            }
+            extraTurnsTotal={
+              typeof tiebreakExtraTurns === "number" ? tiebreakExtraTurns : 5
+            }
           />
         )}
 

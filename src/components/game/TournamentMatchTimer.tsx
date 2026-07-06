@@ -10,9 +10,14 @@ interface TournamentMatchTimerProps {
   roundTimeMinutes?: number;
   /** Whether this is a tournament match */
   isTournamentMatch?: boolean;
+  /** Minutes remaining at which the timer switches to warning colors (default 15) */
+  warningMinutes?: number;
   /** Current extra turns state */
   extraTurnsMode?: boolean;
-  extraTurnsRemaining?: number;
+  /** 1-based index of the extra turn currently being played */
+  extraTurnsUsed?: number;
+  /** Total number of extra turns granted after time */
+  extraTurnsTotal?: number;
   /** Callback when time expires */
   onTimeExpired?: () => void;
 }
@@ -21,8 +26,10 @@ export function TournamentMatchTimer({
   matchStartedAt,
   roundTimeMinutes = 45,
   isTournamentMatch = false,
+  warningMinutes = 15,
   extraTurnsMode = false,
-  extraTurnsRemaining = 5,
+  extraTurnsUsed = 1,
+  extraTurnsTotal = 5,
   onTimeExpired,
 }: TournamentMatchTimerProps) {
   const [now, setNow] = useState(Date.now());
@@ -60,15 +67,16 @@ export function TournamentMatchTimer({
     const seconds = totalSeconds % 60;
     const formatted = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 
-    // Determine urgency level
+    // Determine urgency level; critical kicks in at 5 minutes (or earlier
+    // when the configured warning threshold is below that).
+    const warningMs = Math.max(1, warningMinutes) * 60 * 1000;
+    const criticalMs = Math.min(5 * 60 * 1000, warningMs);
     let urgencyLevel: "normal" | "warning" | "critical" | "expired" = "normal";
     if (expired) {
       urgencyLevel = "expired";
-    } else if (remaining < 5 * 60 * 1000) {
-      // Less than 5 minutes
+    } else if (remaining < criticalMs) {
       urgencyLevel = "critical";
-    } else if (remaining < 15 * 60 * 1000) {
-      // Less than 15 minutes
+    } else if (remaining < warningMs) {
       urgencyLevel = "warning";
     }
 
@@ -78,7 +86,7 @@ export function TournamentMatchTimer({
       formattedTime: formatted,
       urgency: urgencyLevel,
     };
-  }, [matchStartedAt, roundTimeMinutes, now, isTournamentMatch]);
+  }, [matchStartedAt, roundTimeMinutes, warningMinutes, now, isTournamentMatch]);
 
   // Trigger callback when time expires
   useEffect(() => {
@@ -100,12 +108,16 @@ export function TournamentMatchTimer({
 
   return (
     <div
-      className={`flex items-center gap-2 rounded-full px-3 py-1 text-sm font-mono shadow-lg ${urgencyClasses[urgency]}`}
+      className={`flex items-center gap-2 rounded-full px-3 py-1 text-sm font-mono shadow-lg ${
+        extraTurnsMode ? urgencyClasses.expired : urgencyClasses[urgency]
+      }`}
     >
       {extraTurnsMode ? (
         <>
           <AlertTriangle className="w-4 h-4" />
-          <span>Extra Turns: {extraTurnsRemaining}</span>
+          <span>
+            Extra Turn {extraTurnsUsed}/{extraTurnsTotal}
+          </span>
         </>
       ) : (
         <>

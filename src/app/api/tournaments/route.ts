@@ -436,14 +436,22 @@ export async function POST(req: NextRequest) {
         : null;
     const totalRounds = clientTotalRounds ?? 3; // Default 3 rounds for Swiss
 
+    // Round time limit: honor the creator's choice (clamped), default 45 min
+    const clientRoundTimeLimit =
+      typeof incomingSettings.roundTimeLimit === "number" &&
+      Number.isFinite(incomingSettings.roundTimeLimit)
+        ? Math.max(5, Math.min(180, Math.floor(incomingSettings.roundTimeLimit)))
+        : null;
+    const roundTimeLimit = clientRoundTimeLimit ?? 45;
+
     // Merge provided arbitrary settings while enforcing server-calculated fields
     // Tournament pairing format is always Swiss
     const settingsOut: Record<string, unknown> = {
       ...incomingSettings,
       pairingFormat: "swiss",
       totalRounds,
-      roundTimeLimit: 50,
-      matchTimeLimit: 60,
+      roundTimeLimit,
+      matchTimeLimit: roundTimeLimit,
       sealedConfig,
       draftConfig,
       registration: {

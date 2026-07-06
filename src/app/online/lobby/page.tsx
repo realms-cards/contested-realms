@@ -39,6 +39,7 @@ import type {
   PlayerStanding,
   TournamentRound,
 } from "@/lib/net/protocol";
+import type { MatchTimerConfig } from "@/lib/net/transport";
 
 // Map context TournamentInfo to protocol TournamentInfo
 function mapToProtocolTournament(tournament: {
@@ -405,6 +406,32 @@ function LobbyPageContent({
   const [matchType, setMatchType] = useState<
     "constructed" | "sealed" | "draft" | "precon"
   >("constructed");
+
+  // Match timer configuration (optional, host-selected)
+  const [timerEnabled, setTimerEnabled] = useState(false);
+  const [timerMinutes, setTimerMinutes] = useState(30);
+  const [timerWarningMinutes, setTimerWarningMinutes] = useState(10);
+  const [tiebreakEnabled, setTiebreakEnabled] = useState(true);
+  const [tiebreakExtraTurns, setTiebreakExtraTurns] = useState(5);
+  const timerPayload = useMemo<MatchTimerConfig | undefined>(
+    () =>
+      timerEnabled
+        ? {
+            enabled: true,
+            matchTimeMinutes: timerMinutes,
+            warningMinutes: timerWarningMinutes,
+            tiebreakEnabled,
+            tiebreakExtraTurns,
+          }
+        : undefined,
+    [
+      timerEnabled,
+      timerMinutes,
+      timerWarningMinutes,
+      tiebreakEnabled,
+      tiebreakExtraTurns,
+    ],
+  );
 
   // Fetch available sets from the database
   const { setNames: availableSetNames, loading: setsLoading } =
@@ -1104,7 +1131,11 @@ function LobbyPageContent({
     const soatcPayload = lobby?.soatcLeagueMatch || null;
 
     if (matchType === "constructed" || matchType === "precon") {
-      startMatch({ matchType, soatcLeagueMatch: soatcPayload });
+      startMatch({
+        matchType,
+        soatcLeagueMatch: soatcPayload,
+        timerConfig: timerPayload,
+      });
       return;
     }
 
@@ -1120,6 +1151,7 @@ function LobbyPageContent({
         matchType: "draft",
         draftConfig: payload,
         soatcLeagueMatch: soatcPayload,
+        timerConfig: timerPayload,
       });
       return;
     }
@@ -1148,6 +1180,7 @@ function LobbyPageContent({
       matchType: "sealed",
       sealedConfig: legacySealedConfig,
       soatcLeagueMatch: soatcPayload,
+      timerConfig: timerPayload,
     });
   }, [
     isHost,
@@ -1162,6 +1195,7 @@ function LobbyPageContent({
     sealedConfig,
     sealedValid,
     draftValid,
+    timerPayload,
   ]);
 
   // Planned match summary (client-side, only reliable for host)
@@ -2351,6 +2385,93 @@ function LobbyPageContent({
                   </>
                 )}
 
+                {/* Match timer + tiebreak options (applies to all match types) */}
+                <div className="mt-4 pt-4 border-t border-slate-700">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={timerEnabled}
+                      onChange={(e) => setTimerEnabled(e.target.checked)}
+                      className="rounded"
+                    />
+                    <span>Timed match</span>
+                  </label>
+                  {timerEnabled && (
+                    <div className="mt-3 space-y-3 pl-6">
+                      <div className="flex flex-wrap items-end gap-4">
+                        <div>
+                          <label className="block text-xs font-medium mb-1">
+                            Match time (minutes)
+                          </label>
+                          <CustomSelect
+                            value={String(timerMinutes)}
+                            onChange={(v) => setTimerMinutes(parseInt(v))}
+                            options={[
+                              { value: "15", label: "15 min" },
+                              { value: "30", label: "30 min" },
+                              { value: "45", label: "45 min" },
+                              { value: "60", label: "60 min" },
+                              { value: "90", label: "90 min" },
+                            ]}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium mb-1">
+                            Warning at (minutes left)
+                          </label>
+                          <CustomSelect
+                            value={String(timerWarningMinutes)}
+                            onChange={(v) =>
+                              setTimerWarningMinutes(parseInt(v))
+                            }
+                            options={[
+                              { value: "5", label: "5 min" },
+                              { value: "10", label: "10 min" },
+                              { value: "15", label: "15 min" },
+                            ]}
+                          />
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={tiebreakEnabled}
+                          onChange={(e) => setTiebreakEnabled(e.target.checked)}
+                          className="rounded"
+                        />
+                        <span>Tiebreak when time expires</span>
+                      </label>
+                      {tiebreakEnabled ? (
+                        <div>
+                          <label className="block text-xs font-medium mb-1">
+                            Extra turns after time
+                          </label>
+                          <CustomSelect
+                            value={String(tiebreakExtraTurns)}
+                            onChange={(v) => setTiebreakExtraTurns(parseInt(v))}
+                            options={[
+                              { value: "0", label: "None" },
+                              { value: "3", label: "3 turns" },
+                              { value: "5", label: "5 turns" },
+                              { value: "10", label: "10 turns" },
+                            ]}
+                          />
+                          <p className="text-xs opacity-60 mt-1">
+                            After the extra turns a winner is decided by
+                            Death&apos;s Door, then life, then spellbook size,
+                            then a coin flip.
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-xs opacity-60">
+                          Timer is informational only — the match continues
+                          when time runs out.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {/* SOATC League Match option - show when both players are in same tournament */}
                 {sharedTournament?.shared && (
                   <div className="mt-4 pt-4 border-t border-slate-700">
@@ -2409,6 +2530,7 @@ function LobbyPageContent({
                         startMatch({
                           matchType: "constructed",
                           soatcLeagueMatch: soatcPayload,
+                          timerConfig: timerPayload,
                         });
                         setConfigOpen(false);
                         return;
@@ -2444,6 +2566,7 @@ function LobbyPageContent({
                           matchType: "draft",
                           draftConfig: payload,
                           soatcLeagueMatch: soatcPayload,
+                          timerConfig: timerPayload,
                         });
                         setConfigOpen(false);
                         return;
@@ -2473,6 +2596,7 @@ function LobbyPageContent({
                           matchType: "sealed",
                           sealedConfig: cubeSealedConfig,
                           soatcLeagueMatch: soatcPayload,
+                          timerConfig: timerPayload,
                         });
                         setConfigOpen(false);
                         return;
@@ -2510,6 +2634,7 @@ function LobbyPageContent({
                         matchType: "sealed",
                         sealedConfig: legacySealedConfig,
                         soatcLeagueMatch: soatcPayload,
+                        timerConfig: timerPayload,
                       });
                       setConfigOpen(false);
                     }}

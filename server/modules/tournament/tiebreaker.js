@@ -110,17 +110,20 @@ function useExtraTurn(match) {
 function determineTiebreakerWinner(match, game) {
   const p1Life = game?.players?.p1?.life ?? game?.p1?.life ?? 20;
   const p2Life = game?.players?.p2?.life ?? game?.p2?.life ?? 20;
-  
+
   const p1Spellbook = getSpellbookCount(game, 'p1');
   const p2Spellbook = getSpellbookCount(game, 'p2');
-  
+
   const p1Id = match?.playerIds?.[0] || match?.p1?.id;
   const p2Id = match?.playerIds?.[1] || match?.p2?.id;
-  
-  // Death's Door is typically 0 or 1 life in Sorcery TCG
+
+  // Death's Door: prefer the explicit lifeState flag ('dd'), fall back to
+  // low life totals (typically 0 or 1 life in Sorcery TCG)
   const DD_THRESHOLD = 1;
-  const p1AtDD = p1Life <= DD_THRESHOLD;
-  const p2AtDD = p2Life <= DD_THRESHOLD;
+  const p1LifeState = game?.players?.p1?.lifeState ?? game?.p1?.lifeState;
+  const p2LifeState = game?.players?.p2?.lifeState ?? game?.p2?.lifeState;
+  const p1AtDD = p1LifeState === 'dd' || p1Life <= DD_THRESHOLD;
+  const p2AtDD = p2LifeState === 'dd' || p2Life <= DD_THRESHOLD;
   
   // Rule 2: First player at Death's Door loses
   // If one is at DD and the other isn't, the one at DD loses
@@ -245,16 +248,20 @@ function performCoinFlip(match) {
  */
 function getSpellbookCount(game, seat) {
   if (!game) return 0;
-  
-  // Try different possible locations for spellbook/library
+
+  // Zones are the canonical location in this codebase (zones.p1.spellbook)
+  const zoneSpellbook = game.zones?.[seat]?.spellbook;
+  if (Array.isArray(zoneSpellbook)) return zoneSpellbook.length;
+
+  // Fall back to other possible locations for spellbook/library
   const player = game.players?.[seat] || game[seat];
   if (!player) return 0;
-  
+
   // Spellbook might be called library, deck, or spellbook
   const spellbook = player.spellbook || player.library || player.deck;
   if (Array.isArray(spellbook)) return spellbook.length;
   if (typeof spellbook === 'number') return spellbook;
-  
+
   return 0;
 }
 

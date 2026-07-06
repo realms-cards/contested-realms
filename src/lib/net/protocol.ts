@@ -250,6 +250,16 @@ export const MatchInfoSchema = z.object({
     .optional(),
   // Match start timestamp
   startedAt: z.number().nullable().optional(),
+  // Timed match / tiebreak state (tournament matches and timed lobby matches)
+  timedMatch: z.boolean().optional(),
+  matchTimeMinutes: z.number().nullable().optional(),
+  timerWarningMinutes: z.number().nullable().optional(),
+  tiebreakExtraTurns: z.number().nullable().optional(),
+  tiebreakEnforced: z.boolean().optional(),
+  timeExpired: z.boolean().optional(),
+  extraTurnsMode: z.boolean().optional(),
+  extraTurnsUsed: z.number().optional(),
+  extraTurnsRemaining: z.number().optional(),
 });
 export type MatchInfo = z.infer<typeof MatchInfoSchema>;
 

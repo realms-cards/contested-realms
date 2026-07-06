@@ -8,8 +8,35 @@ import type {
   MatchConsoleEvent,
   MatchPermanents,
 } from "./shared/match-helpers";
+import tiebreakerModule from "./tournament/tiebreaker";
 
 type Seat = "p1" | "p2";
+
+interface TiebreakerResult {
+  winnerId: string | null;
+  winnerSeat: Seat | null;
+  loserId: string | null;
+  loserSeat: Seat | null;
+  reason: string;
+  description: string;
+  needsHostDecision?: boolean;
+}
+
+interface TiebreakerApi {
+  determineTiebreakerWinner: (
+    match: unknown,
+    game: unknown,
+  ) => TiebreakerResult;
+  performCoinFlip: (match: unknown) => TiebreakerResult;
+}
+
+const tiebreaker = tiebreakerModule as unknown as TiebreakerApi;
+
+interface TiebreakerSettings {
+  extraTurns?: number;
+  warningMinutes?: number;
+  enforceResult?: boolean;
+}
 
 interface PlayerState {
   id: string;
@@ -125,6 +152,13 @@ interface MatchState {
   tournamentId?: string | null;
   startedAt?: number;
   matchTimeMinutes?: number;
+  timedMatch?: boolean;
+  tiebreakerSettings?: TiebreakerSettings | null;
+  timeExpired?: boolean;
+  timeExpiredAt?: number;
+  extraTurnsMode?: boolean;
+  extraTurnsUsed?: number;
+  extraTurnsRemaining?: number;
   lastTs?: number;
   game?: MatchGameState;
   draftState?: Record<string, unknown>;
@@ -632,6 +666,99 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     interactionDecisions,
     isCpuPlayerId,
   } = deps;
+
+  /**
+   * Timed-match tiebreak enforcement, evaluated whenever a new turn begins.
+   * When the round clock has expired: grant the configured number of extra
+   * turns, then decide the match via the tournament tiebreaker cascade
+   * (Death's Door -> life -> spellbook -> coin flip).
+   */
+  function applyTimedMatchTurnChange(match: MatchState): {
+    events: MatchEvent[];
+    finalize: Record<string, unknown> | null;
+  } | null {
+    const isTimed = Boolean(match.timedMatch) || Boolean(match.tournamentId);
+    if (!isTimed || typeof match.startedAt !== "number") return null;
+    const settings =
+      match.tiebreakerSettings && typeof match.tiebreakerSettings === "object"
+        ? match.tiebreakerSettings
+        : {};
+    // Tournament matches always enforce a result; lobby matches only when the
+    // host enabled the tiebreak option (otherwise the timer is informational).
+    const enforced = match.tournamentId
+      ? settings.enforceResult !== false
+      : settings.enforceResult === true;
+    if (!enforced) return null;
+
+    const minutes =
+      typeof match.matchTimeMinutes === "number" && match.matchTimeMinutes > 0
+        ? match.matchTimeMinutes
+        : 45;
+    const extraTurns =
+      typeof settings.extraTurns === "number"
+        ? Math.max(0, Math.min(10, Math.floor(settings.extraTurns)))
+        : 5;
+
+    const now = Date.now();
+    const events: MatchEvent[] = [];
+
+    if (!match.timeExpired) {
+      if (now < match.startedAt + minutes * 60 * 1000) return null;
+      match.timeExpired = true;
+      match.timeExpiredAt = now;
+      match.extraTurnsUsed = 0;
+      match.extraTurnsRemaining = extraTurns;
+      if (extraTurns > 0) {
+        // The turn that is starting right now is the first extra turn.
+        match.extraTurnsMode = true;
+        match.extraTurnsUsed = 1;
+        match.extraTurnsRemaining = extraTurns - 1;
+        events.push({
+          id: 0,
+          ts: now,
+          text: `⏰ Time has expired — ${extraTurns} extra turn${
+            extraTurns === 1 ? "" : "s"
+          } will be played (extra turn 1/${extraTurns}).`,
+        });
+        return { events, finalize: null };
+      }
+      // No extra turns configured: resolve the tiebreaker immediately.
+    } else if (match.extraTurnsMode) {
+      if ((match.extraTurnsRemaining ?? 0) > 0) {
+        match.extraTurnsUsed = (match.extraTurnsUsed ?? 0) + 1;
+        match.extraTurnsRemaining = (match.extraTurnsRemaining ?? 1) - 1;
+        events.push({
+          id: 0,
+          ts: now,
+          text: `⏰ Extra turn ${match.extraTurnsUsed}/${extraTurns}.`,
+        });
+        return { events, finalize: null };
+      }
+      // All extra turns played: resolve the tiebreaker.
+      match.extraTurnsMode = false;
+    } else {
+      // Already resolved (or resolving) — nothing to do.
+      return null;
+    }
+
+    let result = tiebreaker.determineTiebreakerWinner(match, match.game ?? {});
+    if (result.needsHostDecision || (!result.winnerSeat && !result.winnerId)) {
+      result = tiebreaker.performCoinFlip(match);
+    }
+    events.push({
+      id: 0,
+      ts: now,
+      text: `🏁 Time tiebreaker: ${result.description}.`,
+    });
+    const finalize: Record<string, unknown> = {
+      reason: result.reason,
+    };
+    if (result.winnerSeat) finalize.winnerSeat = result.winnerSeat;
+    if (result.loserSeat) finalize.loserSeat = result.loserSeat;
+    if (result.winnerId) finalize.winnerId = result.winnerId;
+    if (result.loserId) finalize.loserId = result.loserId;
+    return { events, finalize };
+  }
 
   /**
    * Emit an event to a player using their player room (cross-instance safe).
@@ -1503,11 +1630,12 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         // This ensures applyTurnStart can detect actual turn changes
         const prevCurrentPlayer = baseForMerge.currentPlayer;
         const nextCurrentPlayer = match.game?.currentPlayer;
-        if (
+        const turnJustChanged = Boolean(
           prevCurrentPlayer &&
-          nextCurrentPlayer &&
-          prevCurrentPlayer !== nextCurrentPlayer
-        ) {
+            nextCurrentPlayer &&
+            prevCurrentPlayer !== nextCurrentPlayer,
+        );
+        if (turnJustChanged) {
           const currentTurn = Number(match.game?.turn || 1);
           match.game = {
             ...match.game,
@@ -1517,6 +1645,54 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             ...patchToApply,
             turn: currentTurn + 1,
           };
+        }
+
+        // Timed-match tiebreak: check the round clock whenever a turn starts
+        if (
+          turnJustChanged &&
+          match.status === "in_progress" &&
+          !prevMatchEnded
+        ) {
+          const timerResult = applyTimedMatchTurnChange(match);
+          if (timerResult) {
+            if (timerResult.events.length > 0) {
+              const existingEvents = Array.isArray(patchToApply.events)
+                ? patchToApply.events
+                : [];
+              patchToApply = {
+                ...patchToApply,
+                events: [...existingEvents, ...timerResult.events],
+              };
+            }
+            if (timerResult.finalize) {
+              const winnerSeatValue = timerResult.finalize.winnerSeat;
+              const winnerSeatForGame =
+                winnerSeatValue === "p1" || winnerSeatValue === "p2"
+                  ? winnerSeatValue
+                  : null;
+              match.game = {
+                ...match.game,
+                matchEnded: true,
+                winner: winnerSeatForGame,
+              } as MatchGameState;
+              patchToApply = {
+                ...patchToApply,
+                matchEnded: true,
+                ...(winnerSeatForGame ? { winner: winnerSeatForGame } : {}),
+              };
+              shouldFinalizeMatch = true;
+              finalizeOptions = timerResult.finalize;
+            } else {
+              // Extra-turns state changed: refresh match info on all clients
+              try {
+                io.to(matchRoom).emit("matchStarted", {
+                  match: getMatchInfo(match),
+                });
+              } catch {
+                // ignore broadcast failures
+              }
+            }
+          }
         }
 
         const turnStartPatch = applyTurnStart(match.game);
@@ -1615,7 +1791,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         }
 
         const nextMatchEnded = Boolean(match.game && match.game.matchEnded);
-        if (!prevMatchEnded && nextMatchEnded) {
+        if (!prevMatchEnded && nextMatchEnded && !shouldFinalizeMatch) {
           const winnerSeat =
             patchToApply.winner === "p1" || patchToApply.winner === "p2"
               ? patchToApply.winner

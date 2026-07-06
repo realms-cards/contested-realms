@@ -123,6 +123,18 @@ export type StartMatchConfig = {
   };
   draftConfig?: DraftConfig;
   soatcLeagueMatch?: SoatcLeagueMatchInfo;
+  /** Optional match timer + tiebreak settings chosen by the lobby host */
+  timerConfig?: MatchTimerConfig;
+};
+
+export type MatchTimerConfig = {
+  enabled: boolean;
+  matchTimeMinutes: number;
+  /** Minutes remaining at which the timer switches to warning display */
+  warningMinutes?: number;
+  /** When true the server enforces extra turns + tiebreaker at expiry */
+  tiebreakEnabled?: boolean;
+  tiebreakExtraTurns?: number;
 };
 
 export interface GameTransport {

@@ -798,12 +798,32 @@ function createLobbyFeature(deps) {
     broadcastLobbies();
   }
 
+  /**
+   * Normalize the optional timed-match config sent by the lobby host.
+   * Returns null when timers are disabled, otherwise clamped values.
+   */
+  function normalizeTimerConfig(timerConfig) {
+    if (!timerConfig || typeof timerConfig !== "object") return null;
+    if (timerConfig.enabled !== true) return null;
+    const clamp = (value, min, max, fallback) =>
+      typeof value === "number" && Number.isFinite(value)
+        ? Math.max(min, Math.min(max, Math.floor(value)))
+        : fallback;
+    return {
+      matchTimeMinutes: clamp(timerConfig.matchTimeMinutes, 5, 180, 30),
+      warningMinutes: clamp(timerConfig.warningMinutes, 1, 60, 10),
+      tiebreakEnabled: timerConfig.tiebreakEnabled === true,
+      tiebreakExtraTurns: clamp(timerConfig.tiebreakExtraTurns, 0, 10, 5),
+    };
+  }
+
   async function startMatchFromLobby(
     requestingPlayer,
     matchType = "constructed",
     sealedConfig = null,
     draftConfig = null,
     soatcLeagueMatch = null,
+    timerConfig = null,
   ) {
     console.log(
       `[Match] Starting match requested by ${requestingPlayer?.displayName}, type: ${matchType}`,
@@ -821,10 +841,24 @@ function createLobbyFeature(deps) {
         return { ok: false, error: "All players must be ready" };
     }
 
+    const timer = normalizeTimerConfig(timerConfig);
     const match = {
       id: rid("match"),
       lobbyId: lobby.id,
       lobbyName: lobby.name || null,
+      timedMatch: Boolean(timer),
+      matchTimeMinutes: timer ? timer.matchTimeMinutes : undefined,
+      // Flat mirrors so raw `{ ...match }` broadcasts carry them too
+      timerWarningMinutes: timer ? timer.warningMinutes : undefined,
+      tiebreakExtraTurns: timer ? timer.tiebreakExtraTurns : undefined,
+      tiebreakEnforced: timer ? timer.tiebreakEnabled : undefined,
+      tiebreakerSettings: timer
+        ? {
+            extraTurns: timer.tiebreakExtraTurns,
+            warningMinutes: timer.warningMinutes,
+            enforceResult: timer.tiebreakEnabled,
+          }
+        : null,
       playerIds: Array.from(lobby.playerIds),
       status:
         matchType === "sealed"
@@ -1469,6 +1503,7 @@ function createLobbyFeature(deps) {
         sealedConfig,
         draftConfig,
         soatcLeagueMatch,
+        timerConfig,
       } = msg;
       const p = await ensurePlayerCached(playerId);
       const lobby = findLobbyForPlayer(playerId, p.lobbyId);
@@ -1482,6 +1517,7 @@ function createLobbyFeature(deps) {
         sealedConfig || null,
         draftConfig || null,
         soatcLeagueMatch || null,
+        timerConfig || null,
       );
       if (lobby && lobbies.has(lobby.id)) {
         await publishLobbyState(lobbies.get(lobby.id));
@@ -2295,6 +2331,7 @@ function createLobbyFeature(deps) {
         sealedConfig: payload?.sealedConfig || null,
         draftConfig: payload?.draftConfig || null,
         soatcLeagueMatch: payload?.soatcLeagueMatch || null,
+        timerConfig: payload?.timerConfig || null,
       };
       try {
         const leader = await getOrClaimLobbyLeader();

@@ -46,6 +46,22 @@ export interface ServerMatchState extends AnyRecord {
   turn?: string | null;
   lastTs?: number;
   tournamentId?: string | null;
+  startedAt?: number;
+  matchTimeMinutes?: number;
+  timedMatch?: boolean;
+  timerWarningMinutes?: number;
+  tiebreakExtraTurns?: number;
+  tiebreakEnforced?: boolean;
+  tiebreakerSettings?: {
+    extraTurns?: number;
+    warningMinutes?: number;
+    enforceResult?: boolean;
+  } | null;
+  timeExpired?: boolean;
+  timeExpiredAt?: number;
+  extraTurnsMode?: boolean;
+  extraTurnsUsed?: number;
+  extraTurnsRemaining?: number;
   winnerId?: string | null;
   loserId?: string | null;
   _finalized?: boolean;
