@@ -322,6 +322,67 @@ describe("resourceHelpers", () => {
     expect(totals.fire).toBe(0);
   });
 
+  const makeRealmFloodedState = (): GameState["specialSiteState"] => ({
+    valleyChoices: [],
+    bloomBonuses: [],
+    genesisMana: [],
+    pendingElementChoice: null,
+    realmFlooded: true,
+    atlanteanFateAuras: [],
+    mismanagedMortuaries: [],
+  });
+
+  it("realm flood adds water threshold to land sites", () => {
+    const board: BoardState = {
+      size: { w: 1, h: 1 },
+      sites: {
+        "0,0": {
+          owner: 1,
+          card: baseCard({
+            name: "Bedrock",
+            type: "Site",
+            thresholds: { earth: 1 },
+          }),
+        },
+      },
+    };
+    const totals = computeThresholdTotals(
+      board,
+      {},
+      "p1",
+      undefined,
+      makeRealmFloodedState(),
+    );
+    expect(totals.earth).toBe(1);
+    expect(totals.water).toBe(1);
+  });
+
+  it("realm flood does not double water threshold on water sites", () => {
+    // Regression: Great Old One's genesis floods the realm; water sites were
+    // granted the flood water bonus on top of their printed water threshold.
+    const board: BoardState = {
+      size: { w: 1, h: 1 },
+      sites: {
+        "0,0": {
+          owner: 1,
+          card: baseCard({
+            name: "Spring River",
+            type: "Site",
+            thresholds: { water: 1 },
+          }),
+        },
+      },
+    };
+    const totals = computeThresholdTotals(
+      board,
+      {},
+      "p1",
+      undefined,
+      makeRealmFloodedState(),
+    );
+    expect(totals.water).toBe(1);
+  });
+
   it("does not grant threshold for a Rubble cell listed in a stale flood", () => {
     // Regression: a site flooded by Atlantean Fate is later destroyed and
     // replaced by Rubble. The cell remains in aura.floodedSites, but Rubble is

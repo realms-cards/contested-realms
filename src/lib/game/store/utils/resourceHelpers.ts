@@ -422,9 +422,18 @@ export const computeThresholdTotals = (
 
     // Check if site has the Flooded ability - adds water threshold
     if (siteHasFloodedAbility(cellKey, permanents, specialSiteState)) {
-      totals.water += 1;
-      // Flooded sites still provide their normal threshold, plus the water bonus
-      // So we don't continue here - let it fall through to normal calculation
+      // Flooding turns land sites into water sites; a site that already
+      // provides water threshold is unchanged (no double water bonus).
+      // MULTI_THRESHOLD_SITES is checked too because card.thresholds may be
+      // null for those sites (their thresholds are hardcoded below).
+      const printedWater =
+        (tile?.card?.thresholds?.water ?? 0) +
+        (MULTI_THRESHOLD_SITES[siteName]?.water ?? 0);
+      if (printedWater <= 0) {
+        totals.water += 1;
+      }
+      // Flooded land sites still provide their normal threshold, plus the
+      // water bonus - so we don't continue here; fall through to normal calc
     }
 
     // Check back-row-only sites
