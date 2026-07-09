@@ -895,6 +895,30 @@ function LobbyPageContent({
     lobby?.soatcLeagueMatch,
   ]);
 
+  // Advertise planned match settings (timer, Second Player Seer) on the lobby
+  // so prospective joiners see them in the lobby list before joining
+  useEffect(() => {
+    if (!isHost || !transport) return;
+    const plannedSeer =
+      matchType === "sealed"
+        ? sealedConfig.enableSeer
+        : matchType === "draft"
+          ? draftConfig.enableSeer
+          : seerEnabled;
+    transport.emit("setLobbyMatchSettings", {
+      timerConfig: timerPayload ?? null,
+      enableSeer: plannedSeer,
+    });
+  }, [
+    isHost,
+    transport,
+    timerPayload,
+    seerEnabled,
+    matchType,
+    sealedConfig.enableSeer,
+    draftConfig.enableSeer,
+  ]);
+
   // Auto-set league match on lobby when both players have auto-detect enabled
   useEffect(() => {
     if (

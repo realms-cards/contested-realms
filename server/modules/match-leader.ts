@@ -913,8 +913,15 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         if (typeof match.startedAt !== "number") {
           match.startedAt = Date.now();
         }
+        // Use getMatchInfo for a sanitized, serializable payload (the raw
+        // match object holds Maps/Sets/timer handles and lacks `players`);
+        // keep `game` for consumers that read it from this event.
+        const startedInfo = getMatchInfo(match);
         io.to(matchRoom).emit("matchStarted", {
-          match: { ...match, game: match.game },
+          match: {
+            ...(isRecord(startedInfo) ? startedInfo : {}),
+            game: match.game,
+          },
         });
         if (match.tournamentId) {
           try {
@@ -2371,8 +2378,23 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
 
     game.phase = "Main";
     match.status = "in_progress";
+    // Stamp the match clock: this is the normal path into the Main phase, so
+    // the waiting->in_progress transition in the patch handler never runs.
+    if (typeof match.startedAt !== "number") {
+      match.startedAt = Date.now();
+    }
     if (typeof patch.currentPlayer === "number") {
       game.currentPlayer = patch.currentPlayer;
+    }
+    if (match.tournamentId) {
+      try {
+        await prisma.match.updateMany({
+          where: { id: match.id, status: { in: ["pending", "active"] } },
+          data: { status: "active", startedAt: new Date() },
+        });
+      } catch {
+        // ignore
+      }
     }
 
     try {

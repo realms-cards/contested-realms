@@ -73,6 +73,28 @@ select,
   user-select: text;
 }
 
+/* Seven-segment LCD digits for match timers (DSEG7 Classic, SIL OFL 1.1 —
+   see /public/fonts/DSEG-LICENSE.txt). Digits, colon and space only. */
+@font-face {
+  font-family: "DSEG7";
+  src: url("/fonts/DSEG7Classic-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+.font-lcd {
+  font-family:
+    "DSEG7",
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+  letter-spacing: 0.08em;
+}
+
 .font-fantaisie {
   font-family:
     var(--font-fantaisie),

@@ -930,6 +930,29 @@ export default function LobbiesCentral({
                         {l.plannedMatchType}
                       </span>
                     )}
+                    {l.plannedTimer && (
+                      <span
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-sky-600/15 text-sky-200 ring-1 ring-sky-500/30 whitespace-nowrap"
+                        title={`Timed match: ${l.plannedTimer.matchTimeMinutes} minutes${
+                          l.plannedTimer.tiebreakEnabled
+                            ? ` — tiebreak after ${
+                                l.plannedTimer.tiebreakExtraTurns ?? 5
+                              } extra turns`
+                            : " — timer is informational only"
+                        }`}
+                      >
+                        ⏱ {l.plannedTimer.matchTimeMinutes}m
+                        {l.plannedTimer.tiebreakEnabled ? " • TB" : ""}
+                      </span>
+                    )}
+                    {l.plannedEnableSeer && (
+                      <span
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-violet-600/15 text-violet-200 ring-1 ring-violet-500/30 whitespace-nowrap"
+                        title="Second Player Seer: the second player scries 1 before the game starts"
+                      >
+                        👁 Seer
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-xs opacity-70">
                     {l.status !== "open" && (

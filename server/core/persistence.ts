@@ -88,6 +88,34 @@ const createPersistenceLayerInternal = ({
     return Object.fromEntries(playerDecks);
   }
 
+  /**
+   * Timer/tiebreak state persisted alongside the session in Redis only
+   * (the OnlineMatchSession table has no columns for these). Without this,
+   * a server restart mid-match silently drops the match clock.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function matchTimerSessionFields(match: Record<string, any>) {
+    const out: Record<string, unknown> = {};
+    if (typeof match.startedAt === "number") out.startedAt = match.startedAt;
+    if (typeof match.timedMatch === "boolean")
+      out.timedMatch = match.timedMatch;
+    if (typeof match.matchTimeMinutes === "number")
+      out.matchTimeMinutes = match.matchTimeMinutes;
+    if (match.tiebreakerSettings && typeof match.tiebreakerSettings === "object")
+      out.tiebreakerSettings = match.tiebreakerSettings;
+    if (typeof match.timeExpired === "boolean")
+      out.timeExpired = match.timeExpired;
+    if (typeof match.timeExpiredAt === "number")
+      out.timeExpiredAt = match.timeExpiredAt;
+    if (typeof match.extraTurnsMode === "boolean")
+      out.extraTurnsMode = match.extraTurnsMode;
+    if (typeof match.extraTurnsUsed === "number")
+      out.extraTurnsUsed = match.extraTurnsUsed;
+    if (typeof match.extraTurnsRemaining === "number")
+      out.extraTurnsRemaining = match.extraTurnsRemaining;
+    return out;
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function matchToSessionUpsertData(match: Record<string, any>) {
     return {
@@ -321,7 +349,11 @@ const createPersistenceLayerInternal = ({
   async function persistMatchCreated(match: Record<string, any>) {
     try {
       const data = matchToSessionUpsertData(match);
-      await cacheSessionToRedis({ ...data, id: match.id });
+      await cacheSessionToRedis({
+        ...data,
+        ...matchTimerSessionFields(match),
+        id: match.id,
+      });
       try {
         metricsInc("persist.created", 1);
       } catch {}
@@ -357,7 +389,11 @@ const createPersistenceLayerInternal = ({
   ) {
     try {
       const data = matchToSessionUpsertData(match);
-      await cacheSessionToRedis({ ...data, id: match.id });
+      await cacheSessionToRedis({
+        ...data,
+        ...matchTimerSessionFields(match),
+        id: match.id,
+      });
       try {
         metricsInc("persist.update", 1);
         if (patch) metricsInc("persist.update.withPatch", 1);
@@ -556,6 +592,8 @@ const createPersistenceLayerInternal = ({
         draftState: row.draftState || null,
         game: row.game || {},
         lastTs: Number(row.lastTs || 0) || 0,
+        // Timer/tiebreak state (present in Redis session payloads only)
+        ...matchTimerSessionFields(row),
       };
       return m;
     } catch (e) {

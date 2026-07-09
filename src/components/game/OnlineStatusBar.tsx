@@ -157,14 +157,15 @@ export default function OnlineStatusBar({
           {currentPlayerName}&apos;s Turn
         </span>
 
-        {/* Tournament/Timed Match Timer */}
-        {isTimedMatch && (matchStartedAt || extraTurnsMode) && (
+        {/* Match clock: countdown for timed matches, elapsed time otherwise */}
+        {(matchStartedAt || (isTimedMatch && extraTurnsMode)) && (
           <TournamentMatchTimer
             matchStartedAt={matchStartedAt}
             roundTimeMinutes={
               typeof matchTimeMinutes === "number" ? matchTimeMinutes : 45
             }
             isTournamentMatch={true}
+            mode={isTimedMatch || extraTurnsMode ? "countdown" : "elapsed"}
             warningMinutes={
               typeof timerWarningMinutes === "number" ? timerWarningMinutes : 15
             }

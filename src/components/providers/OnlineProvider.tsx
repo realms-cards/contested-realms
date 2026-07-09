@@ -1142,6 +1142,15 @@ export default function OnlineProvider({
 
         setMatch(p.match);
 
+        // Dev handle for inspecting the latest match info from the console
+        if (process.env.NODE_ENV !== "production") {
+          try {
+            (
+              window as unknown as { __onlineMatch?: unknown }
+            ).__onlineMatch = p.match;
+          } catch {}
+        }
+
         setMatchmakingStatus("idle");
         setMatchmakingPreferences(null);
         setMatchmakingQueuePosition(null);

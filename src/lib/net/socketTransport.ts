@@ -741,10 +741,15 @@ export class SocketTransport implements GameTransport {
       );
       socket.on("matchStarted", (payload) => {
         const fixed = normalizeMatchStartedPayload(payload);
-        this.dispatch(
-          "matchStarted",
-          Protocol.MatchStartedPayload.parse(fixed),
-        );
+        try {
+          this.dispatch(
+            "matchStarted",
+            Protocol.MatchStartedPayload.parse(fixed),
+          );
+        } catch (err) {
+          // A schema mismatch must not silently drop match state updates
+          console.error("[Transport] matchStarted payload failed to parse", err);
+        }
       });
       socket.on("statePatch", (payload) =>
         this.dispatch("statePatch", Protocol.StatePatchPayload.parse(payload)),

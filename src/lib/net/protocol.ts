@@ -120,6 +120,17 @@ export const LobbyInfoSchema = z.object({
     .optional(),
   // Tournament lobbies: host must "open" lobby before others can join
   hostReady: z.boolean().optional(),
+  // Planned match settings advertised to prospective joiners (host-controlled)
+  plannedTimer: z
+    .object({
+      matchTimeMinutes: z.number(),
+      warningMinutes: z.number().optional(),
+      tiebreakEnabled: z.boolean().optional(),
+      tiebreakExtraTurns: z.number().optional(),
+    })
+    .nullable()
+    .optional(),
+  plannedEnableSeer: z.boolean().optional(),
 });
 export type LobbyInfo = z.infer<typeof LobbyInfoSchema>;
 
@@ -227,7 +238,9 @@ export const MatchInfoSchema = z.object({
   deckSubmissions: z.array(z.string()).optional(),
   playerDecks: z.record(z.string(), z.unknown()).optional(),
   sealedPacks: z.record(z.string(), z.array(SealedPackSchema)).optional(),
-  draftState: DraftStateSchema.optional(),
+  // Nullable: lobby-created matches carry draftState: null; a bare .optional()
+  // made the whole matchStarted payload fail parsing (dropping the event)
+  draftState: DraftStateSchema.nullable().optional(),
   // Multi-player support
   playerIds: z.array(z.string()).optional(),
   maxPlayers: z.number().int().min(2).max(8).default(2),

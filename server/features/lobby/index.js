@@ -99,6 +99,8 @@ function createLobbyFeature(deps) {
         hostReady: lobby.hostReady !== false,
         playerIds: Array.from(lobby.playerIds || []),
         ready: Array.from(lobby.ready || []),
+        plannedTimer: lobby.plannedTimer ?? null,
+        plannedEnableSeer: lobby.plannedEnableSeer === true,
       });
     } catch (err) {
       console.error(
@@ -165,6 +167,8 @@ function createLobbyFeature(deps) {
       lastActive: lobby.lastActive,
       playerIds: Array.from(lobby.playerIds || []),
       ready: Array.from(lobby.ready || []),
+      plannedTimer: lobby.plannedTimer || null,
+      plannedEnableSeer: lobby.plannedEnableSeer === true,
     };
   }
 
@@ -200,6 +204,9 @@ function createLobbyFeature(deps) {
     if ("createdAt" in obj) lb.createdAt = obj.createdAt ?? lb.createdAt;
     if ("allowSpectators" in obj) lb.allowSpectators = !!obj.allowSpectators;
     if ("hostReady" in obj) lb.hostReady = obj.hostReady !== false;
+    if ("plannedTimer" in obj) lb.plannedTimer = obj.plannedTimer ?? null;
+    if ("plannedEnableSeer" in obj)
+      lb.plannedEnableSeer = obj.plannedEnableSeer === true;
     lb.lastActive = obj.lastActive || Date.now();
     lb.playerIds = new Set(Array.isArray(obj.playerIds) ? obj.playerIds : []);
     lb.ready = new Set(Array.isArray(obj.ready) ? obj.ready : []);
@@ -269,6 +276,9 @@ function createLobbyFeature(deps) {
       soatcLeagueMatch: lobby.soatcLeagueMatch || null,
       allowSpectators: lobby.allowSpectators || false,
       hostReady: lobby.hostReady !== false, // Default to true for backward compatibility
+      // Planned match settings advertised to prospective joiners
+      plannedTimer: lobby.plannedTimer || null,
+      plannedEnableSeer: lobby.plannedEnableSeer === true,
     };
   }
 
@@ -847,6 +857,9 @@ function createLobbyFeature(deps) {
     }
 
     const timer = normalizeTimerConfig(timerConfig);
+    console.log(
+      `[Match] Timer config: ${timer ? JSON.stringify(timer) : "untimed"}`,
+    );
     // Second Player Seer: opt-in at match creation (host checkbox for
     // constructed/precon, sealed/draft carry it inside their configs)
     const seerEnabled =
@@ -1677,6 +1690,29 @@ function createLobbyFeature(deps) {
 
       // Update the lobby's SOATC league match status
       lobby.soatcLeagueMatch = payload?.soatcLeagueMatch || null;
+      markLobbyActive(lobby);
+
+      const info = getLobbyInfo(lobby);
+      io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: info });
+      broadcastLobbies();
+
+      try {
+        await publishLobbyState(lobby);
+      } catch {}
+    });
+
+    // Host advertises planned match settings (timer, Second Player Seer) so
+    // players can see them in the lobby list before joining
+    socket.on("setLobbyMatchSettings", async (payload = {}) => {
+      if (!isAuthed()) return;
+      const player = getPlayerBySocket(socket);
+      if (!player || !player.lobbyId) return;
+      const lobby = lobbies.get(player.lobbyId);
+      if (!lobby) return;
+      if (lobby.hostId !== player.id) return;
+
+      lobby.plannedTimer = normalizeTimerConfig(payload?.timerConfig);
+      lobby.plannedEnableSeer = payload?.enableSeer === true;
       markLobbyActive(lobby);
 
       const info = getLobbyInfo(lobby);
