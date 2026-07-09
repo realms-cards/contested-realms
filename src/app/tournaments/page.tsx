@@ -95,6 +95,8 @@ export default function TournamentsPage() {
 
   // Host-only mode (creator doesn't play)
   const [hostOnlyMode, setHostOnlyMode] = useState(false);
+  // Second Player Seer (2nd player scries 1 before game start), off by default
+  const [enableSeer, setEnableSeer] = useState(false);
   // Round time limit in minutes
   const [roundTimeLimit, setRoundTimeLimit] = useState(45);
   // Timer warning threshold (minutes remaining) and tiebreak extra turns
@@ -276,6 +278,8 @@ export default function TournamentsPage() {
         matchTimeLimit: roundTimeLimit,
         // Host-only mode (creator doesn't play, just manages)
         creatorParticipates: !hostOnlyMode,
+        // Second Player Seer (2nd player scries 1 before game start)
+        enableSeer,
         // Tiebreaker settings for tournament matches
         tiebreakerSettings: {
           extraTurns: tiebreakExtraTurns, // Extra turns after time expires
@@ -367,6 +371,7 @@ export default function TournamentsPage() {
       setSealedBoosters(Array(6).fill(defaultSetName));
       setDraftBoosterCount(3);
       setDraftBoosters(Array(3).fill(defaultSetName));
+      setEnableSeer(false);
       setUseCube(false);
       if (cubes.length > 0) {
         setCubeId(cubes[0].id);
@@ -1069,6 +1074,26 @@ export default function TournamentsPage() {
                       <p className="text-slate-400 text-xs mt-0.5">
                         You will manage the tournament but not participate as a
                         player.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Second Player Seer */}
+                <div className="bg-slate-700/50 rounded-lg p-3 border border-slate-600">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={enableSeer}
+                      onChange={(e) => setEnableSeer(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                    />
+                    <div>
+                      <span className="text-slate-200 text-sm font-medium">
+                        Enable Second Seer
+                      </span>
+                      <p className="text-slate-400 text-xs mt-0.5">
+                        The second player scries 1 before each game starts.
                       </p>
                     </div>
                   </label>

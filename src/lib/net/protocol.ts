@@ -220,6 +220,8 @@ export const MatchInfoSchema = z.object({
   endReason: z.string().optional(),
   result: z.enum(["win", "loss", "draw"]).nullable().optional(),
   matchType: z.enum(["constructed", "sealed", "draft", "precon"]).optional(),
+  // Second Player Seer (2nd player scries 1 before game start); off unless enabled at creation
+  enableSeer: z.boolean().optional(),
   sealedConfig: SealedConfigSchema.nullable().optional(),
   draftConfig: DraftConfigSchema.nullable().optional(),
   deckSubmissions: z.array(z.string()).optional(),

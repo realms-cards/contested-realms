@@ -286,6 +286,7 @@ function createLobbyFeature(deps) {
           ? config.packCounts
           : null,
       replaceAvatars: !!config.replaceAvatars,
+      enableSeer: !!config.enableSeer,
     };
   }
 
@@ -383,6 +384,9 @@ function createLobbyFeature(deps) {
     if (cubeName) normalized.cubeName = cubeName;
     if (asObj.includeCubeSideboardInStandard === true) {
       normalized.includeCubeSideboardInStandard = true;
+    }
+    if (asObj.enableSeer === true) {
+      normalized.enableSeer = true;
     }
 
     if (Object.keys(packCounts).length > 0) {
@@ -824,6 +828,7 @@ function createLobbyFeature(deps) {
     draftConfig = null,
     soatcLeagueMatch = null,
     timerConfig = null,
+    enableSeer = false,
   ) {
     console.log(
       `[Match] Starting match requested by ${requestingPlayer?.displayName}, type: ${matchType}`,
@@ -842,10 +847,17 @@ function createLobbyFeature(deps) {
     }
 
     const timer = normalizeTimerConfig(timerConfig);
+    // Second Player Seer: opt-in at match creation (host checkbox for
+    // constructed/precon, sealed/draft carry it inside their configs)
+    const seerEnabled =
+      enableSeer === true ||
+      (matchType === "sealed" && sealedConfig?.enableSeer === true) ||
+      (matchType === "draft" && draftConfig?.enableSeer === true);
     const match = {
       id: rid("match"),
       lobbyId: lobby.id,
       lobbyName: lobby.name || null,
+      enableSeer: seerEnabled,
       timedMatch: Boolean(timer),
       matchTimeMinutes: timer ? timer.matchTimeMinutes : undefined,
       // Flat mirrors so raw `{ ...match }` broadcasts carry them too
@@ -886,6 +898,8 @@ function createLobbyFeature(deps) {
         mulligans: { p1: 1, p2: 1 },
         d20Rolls: { p1: null, p2: null },
         setupWinner: null,
+        // Persisted with the session so the flat flag can be restored on recovery
+        enableSeer: seerEnabled,
       },
       lastTs: 0,
       interactionRequests: new Map(),
@@ -1504,6 +1518,7 @@ function createLobbyFeature(deps) {
         draftConfig,
         soatcLeagueMatch,
         timerConfig,
+        enableSeer,
       } = msg;
       const p = await ensurePlayerCached(playerId);
       const lobby = findLobbyForPlayer(playerId, p.lobbyId);
@@ -1518,6 +1533,7 @@ function createLobbyFeature(deps) {
         draftConfig || null,
         soatcLeagueMatch || null,
         timerConfig || null,
+        enableSeer === true,
       );
       if (lobby && lobbies.has(lobby.id)) {
         await publishLobbyState(lobbies.get(lobby.id));
@@ -2332,6 +2348,7 @@ function createLobbyFeature(deps) {
         draftConfig: payload?.draftConfig || null,
         soatcLeagueMatch: payload?.soatcLeagueMatch || null,
         timerConfig: payload?.timerConfig || null,
+        enableSeer: payload?.enableSeer === true,
       };
       try {
         const leader = await getOrClaimLobbyLeader();

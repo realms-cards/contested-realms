@@ -1001,15 +1001,14 @@ export default function OnlineMatchPage() {
     }
   }, [portalState, portalSetupComplete]);
 
-  // Determine if seer phase is needed for this match type
-  // Seer is always enabled for constructed and precon matches
-  // For sealed/draft, it's enabled only if enableSeer is set in the config
+  // Determine if seer phase is needed for this match
+  // Second Seer is opt-in at match/tournament creation (flat enableSeer flag);
+  // sealed/draft configs are honored as a fallback for older matches
   const needsSeerPhase =
-    match?.matchType === "constructed" ||
-    match?.matchType === "precon" ||
-    !match?.matchType ||
-    (match?.matchType === "sealed" && match?.sealedConfig?.enableSeer) ||
-    (match?.matchType === "draft" && match?.draftConfig?.enableSeer);
+    match?.enableSeer === true ||
+    (match?.matchType === "sealed" &&
+      match?.sealedConfig?.enableSeer === true) ||
+    (match?.matchType === "draft" && match?.draftConfig?.enableSeer === true);
 
   // Debug logging for seer phase
   useEffect(() => {
@@ -1017,6 +1016,7 @@ export default function OnlineMatchPage() {
       matchType: match?.matchType,
       needsSeerPhase,
       mulliganReady,
+      enableSeer: match?.enableSeer,
       sealedEnableSeer: match?.sealedConfig?.enableSeer,
       draftEnableSeer: match?.draftConfig?.enableSeer,
     });
@@ -1024,6 +1024,7 @@ export default function OnlineMatchPage() {
     match?.matchType,
     needsSeerPhase,
     mulliganReady,
+    match?.enableSeer,
     match?.sealedConfig?.enableSeer,
     match?.draftConfig?.enableSeer,
   ]);

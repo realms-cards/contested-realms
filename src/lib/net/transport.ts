@@ -125,6 +125,8 @@ export type StartMatchConfig = {
   soatcLeagueMatch?: SoatcLeagueMatchInfo;
   /** Optional match timer + tiebreak settings chosen by the lobby host */
   timerConfig?: MatchTimerConfig;
+  /** Second Player Seer (2nd player scries 1 before game start); off by default */
+  enableSeer?: boolean;
 };
 
 export type MatchTimerConfig = {

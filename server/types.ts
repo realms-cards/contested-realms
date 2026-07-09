@@ -49,6 +49,7 @@ export interface ServerMatchState extends AnyRecord {
   startedAt?: number;
   matchTimeMinutes?: number;
   timedMatch?: boolean;
+  enableSeer?: boolean;
   timerWarningMinutes?: number;
   tiebreakExtraTurns?: number;
   tiebreakEnforced?: boolean;

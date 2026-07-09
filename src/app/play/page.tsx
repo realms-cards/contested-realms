@@ -257,10 +257,12 @@ export default function PlayPage() {
   // Harbinger portal phase state (Gothic expansion)
   // Portal phase happens AFTER deck selection, before mulligan
   const [mulliganComplete, setMulliganComplete] = useState<boolean>(false);
+  // Second Player Seer: opt-in via the deck selection screen, off by default
+  const [seerEnabled, setSeerEnabled] = useState<boolean>(false);
   // Seer state from game store (synced)
   const seerState = useGameStore((s) => s.seerState);
-  // Second player seer phase - derived from synced seerState
-  const seerComplete = seerState?.setupComplete ?? false;
+  // Second player seer phase - derived from synced seerState (or skipped when disabled)
+  const seerComplete = !seerEnabled || (seerState?.setupComplete ?? false);
   const [needsPortalPhase, setNeedsPortalPhase] = useState<boolean>(false);
   const [portalSetupComplete, setPortalSetupComplete] =
     useState<boolean>(false);
@@ -963,9 +965,10 @@ export default function PlayPage() {
         <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
           {!prepared ? (
             <DeckSelector
-              onPrepareComplete={() => {
+              onPrepareComplete={({ enableSeer }) => {
                 // Clear any old saved game when starting fresh through deck selection
                 clearHotseatGame();
+                setSeerEnabled(enableSeer);
                 setPrepared(true);
               }}
             />

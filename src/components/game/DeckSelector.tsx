@@ -20,7 +20,7 @@ type PublicDeckInfo = {
 };
 
 interface DeckSelectorProps {
-  onPrepareComplete: () => void;
+  onPrepareComplete: (options: { enableSeer: boolean }) => void;
 }
 
 export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
@@ -30,6 +30,10 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
     if (typeof window === "undefined") return true;
     const stored = localStorage.getItem("sorcery:includePublicDecks");
     return stored === null ? true : stored === "1";
+  });
+  const [enableSeer, setEnableSeer] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("sorcery:enableSecondSeer") === "1";
   });
   const [deckIdP1, setDeckIdP1] = useState<string>("");
   const [deckIdP2, setDeckIdP2] = useState<string>("");
@@ -83,7 +87,7 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
 
     if (ok1 && ok2) {
       useGameStore.getState().setPhase("Start");
-      onPrepareComplete();
+      onPrepareComplete({ enableSeer });
     }
   };
 
@@ -188,8 +192,28 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
       </div>
 
       <div className="md:col-span-2 flex items-center justify-between pt-2">
-        <div className="opacity-80 text-sm">
-          Select both decks, then prepare opening hands.
+        <div className="flex items-center gap-4">
+          <div className="opacity-80 text-sm">
+            Select both decks, then prepare opening hands.
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="rounded"
+              checked={enableSeer}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setEnableSeer(next);
+                try {
+                  localStorage.setItem(
+                    "sorcery:enableSecondSeer",
+                    next ? "1" : "0"
+                  );
+                } catch {}
+              }}
+            />
+            Enable Second Seer (2nd player scries 1)
+          </label>
         </div>
         <div className="flex items-center gap-3">
           <button

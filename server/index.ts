@@ -1978,6 +1978,7 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
         ? (match as AnyRecord).endReason
         : undefined,
     matchType: match.matchType || "constructed",
+    enableSeer: match.enableSeer === true,
     sealedConfig: match.sealedConfig
       ? normalizeSealedConfig(match.sealedConfig)
       : null,
@@ -2034,7 +2035,8 @@ async function hydrateMatchFromDatabase(
       if (
         match.tournamentId &&
         (typeof match.matchTimeMinutes !== "number" ||
-          !match.tiebreakerSettings)
+          !match.tiebreakerSettings ||
+          typeof match.enableSeer !== "boolean")
       ) {
         try {
           const tournament = await prisma.tournament.findUnique({
@@ -2072,6 +2074,24 @@ async function hydrateMatchFromDatabase(
           match.timerWarningMinutes = match.tiebreakerSettings.warningMinutes;
           match.tiebreakExtraTurns = match.tiebreakerSettings.extraTurns;
           match.tiebreakEnforced = true;
+          // Second Player Seer: opt-in via tournament settings (flat flag or
+          // inside sealedConfig/draftConfig), off by default
+          if (typeof match.enableSeer !== "boolean") {
+            const sealedSeer = Boolean(
+              settings.sealedConfig &&
+                typeof settings.sealedConfig === "object" &&
+                (settings.sealedConfig as Record<string, unknown>)
+                  .enableSeer === true,
+            );
+            const draftSeer = Boolean(
+              settings.draftConfig &&
+                typeof settings.draftConfig === "object" &&
+                (settings.draftConfig as Record<string, unknown>)
+                  .enableSeer === true,
+            );
+            match.enableSeer =
+              settings.enableSeer === true || sealedSeer || draftSeer;
+          }
         } catch {}
       }
       if (dbMatch.playerDecks && typeof dbMatch.playerDecks === "object") {
@@ -2086,6 +2106,15 @@ async function hydrateMatchFromDatabase(
     }
     if (!match.playerDecks || !(match.playerDecks instanceof Map)) {
       match.playerDecks = new Map();
+    }
+    // Restore Second Seer opt-in for recovered non-tournament matches
+    // (persisted inside the game JSON; tournament matches were handled above)
+    if (typeof match.enableSeer !== "boolean") {
+      const game =
+        match.game && typeof match.game === "object"
+          ? (match.game as AnyRecord)
+          : null;
+      match.enableSeer = game?.enableSeer === true;
     }
     if (!match.sealedConfig && match.matchType === "sealed") {
       match.sealedConfig = normalizeSealedConfig({

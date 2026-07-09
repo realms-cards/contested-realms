@@ -407,6 +407,10 @@ function LobbyPageContent({
     "constructed" | "sealed" | "draft" | "precon"
   >("constructed");
 
+  // Second Player Seer for constructed/precon matches (opt-in, host-selected).
+  // Sealed/draft carry their own enableSeer flag inside their configs.
+  const [seerEnabled, setSeerEnabled] = useState(false);
+
   // Match timer configuration (optional, host-selected)
   const [timerEnabled, setTimerEnabled] = useState(false);
   const [timerMinutes, setTimerMinutes] = useState(30);
@@ -458,7 +462,7 @@ function LobbyPageContent({
     cubeId: null,
     cubeName: null,
     includeCubeSideboardInStandard: false,
-    enableSeer: true,
+    enableSeer: false,
     freeAvatars: false,
   }));
   const [sealedUseCube, setSealedUseCube] = useState(false);
@@ -483,7 +487,7 @@ function LobbyPageContent({
     cubeName: null,
     includeCubeSideboardInStandard: false,
     allowDragonlordChampion: true,
-    enableSeer: true,
+    enableSeer: false,
     freeAvatars: false,
   }));
 
@@ -1135,6 +1139,7 @@ function LobbyPageContent({
         matchType,
         soatcLeagueMatch: soatcPayload,
         timerConfig: timerPayload,
+        enableSeer: seerEnabled,
       });
       return;
     }
@@ -1196,6 +1201,7 @@ function LobbyPageContent({
     sealedValid,
     draftValid,
     timerPayload,
+    seerEnabled,
   ]);
 
   // Planned match summary (client-side, only reliable for host)
@@ -2385,6 +2391,21 @@ function LobbyPageContent({
                   </>
                 )}
 
+                {/* Second Player Seer (sealed/draft have their own toggle in their config sections) */}
+                {(matchType === "constructed" || matchType === "precon") && (
+                  <div className="mt-4 pt-4 border-t border-slate-700">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={seerEnabled}
+                        onChange={(e) => setSeerEnabled(e.target.checked)}
+                        className="rounded"
+                      />
+                      <span>Enable Second Seer (2nd player scries 1)</span>
+                    </label>
+                  </div>
+                )}
+
                 {/* Match timer + tiebreak options (applies to all match types) */}
                 <div className="mt-4 pt-4 border-t border-slate-700">
                   <label className="flex items-center gap-2 text-sm">
@@ -2526,11 +2547,15 @@ function LobbyPageContent({
                       // Use lobby's soatcLeagueMatch flag (set via auto-detect or manually)
                       const soatcPayload = lobby?.soatcLeagueMatch || null;
 
-                      if (matchType === "constructed") {
+                      if (
+                        matchType === "constructed" ||
+                        matchType === "precon"
+                      ) {
                         startMatch({
-                          matchType: "constructed",
+                          matchType,
                           soatcLeagueMatch: soatcPayload,
                           timerConfig: timerPayload,
+                          enableSeer: seerEnabled,
                         });
                         setConfigOpen(false);
                         return;
