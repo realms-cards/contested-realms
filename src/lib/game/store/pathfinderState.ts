@@ -14,6 +14,7 @@
 import type { StateCreator } from "zustand";
 import { isPathfinder } from "@/lib/game/avatarAbilities";
 import { triggerSiteGenesis } from "@/lib/game/store/gameActions/playActions";
+import { ensureFloodedTokenAtSite } from "@/lib/game/store/realmFloodState";
 import type {
   CellKey,
   GameState,
@@ -320,10 +321,35 @@ export const createPathfinderSlice: StateCreator<
     const isCrossTileMove = oldKey && oldKey !== targetCell;
 
     let permanents = state.permanents;
+
+    // Banish any Rubble tokens on the target tile (Rubble is a permanent
+    // token, not a site) and add a Flooded token if the realm is flooded —
+    // same as a normal site play
+    const targetPermsBase = permanents[targetCell] || [];
+    const removedRubble = targetPermsBase.filter(
+      (p) => (p.card?.name || "").toLowerCase() === "rubble",
+    );
+    let targetPerms =
+      removedRubble.length > 0
+        ? targetPermsBase.filter(
+            (p) => (p.card?.name || "").toLowerCase() !== "rubble",
+          )
+        : targetPermsBase;
+    if (state.specialSiteState.realmFlooded) {
+      targetPerms = ensureFloodedTokenAtSite(targetPerms, ownerNum);
+    }
+    const targetTileChanged = targetPerms !== targetPermsBase;
+    if (targetTileChanged) {
+      permanents = { ...permanents, [targetCell]: targetPerms };
+    }
+    if (removedRubble.length > 0) {
+      get().log(`Rubble at ${targetCell} is banished`);
+    }
+
     let movedArtifactIds: string[] = [];
     if (isCrossTileMove) {
       const result = moveAvatarAttachedArtifacts(
-        state.permanents,
+        permanents,
         oldKey as CellKey,
         targetCell,
         ownerNum,
@@ -373,6 +399,12 @@ export const createPathfinderSlice: StateCreator<
       avatars: patchAvatars,
       pathfinderUsed: updatedUsed,
     };
+    // Target-cell patch carries __remove markers for banished Rubble so the
+    // opponent's merge actually drops it (base items absent from a patch are kept)
+    const targetTilePatch = [
+      ...(permanents[targetCell] || []),
+      ...removedRubble.map((p) => ({ ...p, __remove: true })),
+    ];
     if (isCrossTileMove) {
       const oldTilePatch = [
         ...(permanents[oldKey as CellKey] || []),
@@ -383,8 +415,10 @@ export const createPathfinderSlice: StateCreator<
       ];
       patch.permanents = {
         [oldKey as CellKey]: oldTilePatch,
-        [targetCell]: permanents[targetCell] || [],
+        [targetCell]: targetTilePatch,
       };
+    } else if (targetTileChanged) {
+      patch.permanents = { [targetCell]: targetTilePatch };
     }
     get().trySendPatch(patch);
 
@@ -393,6 +427,16 @@ export const createPathfinderSlice: StateCreator<
     setTimeout(() => {
       triggerSiteGenesis(topSite.name, targetCell, ownerNum, get);
     }, 0);
+
+    // Mirror Realm enters the realm as a copy of a nearby site — fire the copy flow
+    if (topSite.name?.toLowerCase().includes("mirror realm")) {
+      setTimeout(() => {
+        get().beginMirrorRealm({
+          mirrorRealmCell: targetCell,
+          casterSeat: who,
+        });
+      }, 0);
+    }
 
     const actionDesc = isReplacingRubble
       ? `replaces Rubble with ${topSite.name}`

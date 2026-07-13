@@ -16,6 +16,7 @@ import type {
   ServerPatchT,
   Zones,
 } from "./types";
+import { getNearbyCells } from "./utils/boardHelpers";
 import { prepareCardForSeat } from "./utils/cardHelpers";
 import { newPermanentInstanceId } from "./utils/idHelpers";
 import { randomTilt } from "./utils/permanentHelpers";
@@ -38,6 +39,7 @@ export type AutoResolveSlice = Pick<
   | "_executePithImpStealEffect"
   | "_executeLilithRevealEffect"
   | "_executeTadpolePoolGenesis"
+  | "_executeBreakWardsGenesis"
 >;
 
 export const createAutoResolveSlice: StateCreator<
@@ -166,6 +168,22 @@ export const createAutoResolveSlice: StateCreator<
           break;
         }
         get()._executeTadpolePoolGenesis(cellKey, ownerSeat);
+        break;
+      }
+      case "break_wards_genesis": {
+        // Break all Ward tokens nearby the site's cell.
+        // Fall back to sourceLocation — callbackData can be empty if pending
+        // was rebuilt from a relayed message rather than set locally.
+        const cellKey = (callbackData.cellKey ?? pending.sourceLocation) as
+          | CellKey
+          | undefined;
+        if (!cellKey) {
+          get().log(
+            `[${ownerSeat.toUpperCase()}] ${sourceName} Genesis: missing cell — cannot break Wards`,
+          );
+          break;
+        }
+        get()._executeBreakWardsGenesis(cellKey, ownerSeat, sourceName);
         break;
       }
     }
@@ -501,6 +519,73 @@ export const createAutoResolveSlice: StateCreator<
         transport.sendMessage({
           type: "toast",
           text: `[p${playerNum}:PLAYER] summons three submerged [p${playerNum}card:Frog] tokens (Tadpole Pool)`,
+          cellKey,
+          seat: ownerSeat,
+        } as unknown as CustomMessage);
+      } catch {}
+    }
+  },
+
+  // Accursed Tower / Accursed Desert: "Genesis → Break nearby Wards."
+  // Removes every Ward token on the 8 surrounding cells, regardless of owner.
+  // Ward tokens are permanents (card name "Ward"); broken tokens cease to exist.
+  _executeBreakWardsGenesis: (
+    cellKey: CellKey,
+    ownerSeat: PlayerKey,
+    sourceName: string,
+  ) => {
+    const state = get();
+    const board = state.board;
+    const nearbyCells = getNearbyCells(cellKey, board.size.w, board.size.h);
+
+    const isWard = (p: PermanentItem) =>
+      (p.card?.name || "").toLowerCase() === "ward";
+
+    const permanentsNext = { ...state.permanents };
+    // Patch carries only changed cells, with __remove markers so the
+    // opponent's merge actually drops the broken Wards
+    const permanentsPatch: GameState["permanents"] = {};
+    let broken = 0;
+
+    for (const cell of nearbyCells) {
+      const perms = permanentsNext[cell] || [];
+      const wards = perms.filter(isWard);
+      if (wards.length === 0) continue;
+      const remaining = perms.filter((p) => !isWard(p));
+      permanentsNext[cell] = remaining;
+      permanentsPatch[cell] = [
+        ...remaining,
+        ...wards.map((p) => ({ ...p, __remove: true })),
+      ];
+      broken += wards.length;
+    }
+
+    if (broken === 0) {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] ${sourceName} Genesis: no nearby Wards to break`,
+      );
+      return;
+    }
+
+    set({ permanents: permanentsNext } as Partial<GameState> as GameState);
+
+    get().log(
+      `[${ownerSeat.toUpperCase()}] ${sourceName} Genesis: breaks ${broken} nearby Ward${broken === 1 ? "" : "s"}`,
+    );
+
+    const patch: ServerPatchT = {
+      permanents: permanentsPatch as GameState["permanents"],
+    };
+    get().trySendPatch(patch);
+
+    // Toast so the opponent sees why the Wards vanished
+    const transport = get().transport;
+    if (transport?.sendMessage) {
+      const playerNum = ownerSeat === "p1" ? "1" : "2";
+      try {
+        transport.sendMessage({
+          type: "toast",
+          text: `[p${playerNum}:PLAYER]'s [p${playerNum}card:${sourceName}] breaks ${broken} nearby Ward${broken === 1 ? "" : "s"}`,
           cellKey,
           seat: ownerSeat,
         } as unknown as CustomMessage);

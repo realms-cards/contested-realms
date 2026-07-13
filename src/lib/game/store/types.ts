@@ -1513,7 +1513,8 @@ export type AutoResolveKind =
   | "headless_haunt_move" // Start of turn: random movement
   | "pith_imp_steal" // Genesis: steal random card
   | "lilith_reveal" // End of turn: reveal opponent's top spell
-  | "tadpole_pool_genesis"; // Genesis: summon three submerged Frog tokens
+  | "tadpole_pool_genesis" // Genesis: summon three submerged Frog tokens
+  | "break_wards_genesis"; // Genesis: break nearby Wards (Accursed Tower/Desert)
 
 export type PendingAutoResolve = {
   id: string;
@@ -2721,6 +2722,11 @@ export type GameState = {
     ownerSeat: PlayerKey,
   ) => void;
   _executeTadpolePoolGenesis: (cellKey: CellKey, ownerSeat: PlayerKey) => void;
+  _executeBreakWardsGenesis: (
+    cellKey: CellKey,
+    ownerSeat: PlayerKey,
+    sourceName: string,
+  ) => void;
   // Dhol Chants (tap N allies, reveal N spells, cast one free)
   pendingDholChants: PendingDholChants | null;
   beginDholChants: (input: {

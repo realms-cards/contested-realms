@@ -2,6 +2,7 @@ import type { StateCreator } from "zustand";
 import { isAnimist, isGeomancer } from "@/lib/game/avatarAbilities";
 import {
   BEACON_GENESIS_SITES,
+  BREAK_WARDS_GENESIS_SITES,
   ELEMENT_CHOICE_SITES,
   GENESIS_BLOOM_SITES,
   GENESIS_MANA_SITES,
@@ -113,6 +114,38 @@ export const triggerSiteGenesis = (
         `${siteName} Genesis: You control ${towerCount} copies - no bonus`,
       );
     }
+    return;
+  }
+
+  // Accursed Tower / Accursed Desert - Genesis → Break nearby Wards.
+  // Runs through the auto-resolve confirmation so the owner can decline
+  // (e.g. when the site enters silenced).
+  if (BREAK_WARDS_GENESIS_SITES.has(lc)) {
+    const ownerSeat = owner === 1 ? "p1" : "p2";
+    if (state.resolversDisabled) return;
+    // Only prompt when there is actually a nearby Ward to break
+    const nearbyCells = getNearbyCells(
+      cellKey,
+      state.board.size.w,
+      state.board.size.h,
+    );
+    const hasNearbyWard = nearbyCells.some((cell) =>
+      (state.permanents[cell] || []).some(
+        (p) => (p.card?.name || "").toLowerCase() === "ward",
+      ),
+    );
+    if (!hasNearbyWard) {
+      state.log(`${siteName} Genesis: No nearby Wards to break`);
+      return;
+    }
+    state.beginAutoResolve({
+      kind: "break_wards_genesis",
+      ownerSeat,
+      sourceName: siteName,
+      sourceLocation: cellKey,
+      effectDescription: "Break nearby Wards.",
+      callbackData: { cellKey },
+    });
     return;
   }
 
@@ -1940,13 +1973,27 @@ export const createPlayActionsSlice: StateCreator<
           },
         };
         let pileSitePermanents = state.permanents;
+        // Auto-banish Rubble tokens on the target tile (same as hand play)
+        const pileCellPerms = state.permanents[key] || [];
+        const pileRubbleRemoved = pileCellPerms.filter(
+          (perm) => (perm.card?.name || "").toLowerCase() === "rubble",
+        );
+        if (pileRubbleRemoved.length > 0) {
+          pileSitePermanents = {
+            ...state.permanents,
+            [key]: pileCellPerms.filter(
+              (perm) => (perm.card?.name || "").toLowerCase() !== "rubble",
+            ),
+          };
+          get().log(`Rubble at #${cellNo} is banished`);
+        }
         if (state.specialSiteState.realmFlooded) {
           const floodedCell = ensureFloodedTokenAtSite(
             pileSitePermanents[key],
             ownerFromSeat(who),
           );
           if (floodedCell !== pileSitePermanents[key]) {
-            pileSitePermanents = { ...state.permanents, [key]: floodedCell };
+            pileSitePermanents = { ...pileSitePermanents, [key]: floodedCell };
           }
         }
 
@@ -2003,8 +2050,16 @@ export const createPlayActionsSlice: StateCreator<
             } as GameState["board"],
             ...(pileSitePermanents !== state.permanents
               ? {
+                  // Include __remove markers for banished Rubble so the
+                  // opponent's merge actually drops it
                   permanents: {
-                    [key]: pileSitePermanents[key] || [],
+                    [key]: [
+                      ...(pileSitePermanents[key] || []),
+                      ...pileRubbleRemoved.map((perm) => ({
+                        ...perm,
+                        __remove: true,
+                      })),
+                    ],
                   } as ServerPatchT["permanents"],
                 }
               : {}),
@@ -2023,6 +2078,27 @@ export const createPlayActionsSlice: StateCreator<
         setTimeout(() => {
           triggerSiteGenesis(card.name, key, ownerFromSeat(who), get);
         }, 0);
+
+        // Trigger Mirror Realm transformation (Gothic expansion)
+        // "When played, choose a nearby site to copy. Transform into that site."
+        if (card.name?.toLowerCase().includes("mirror realm")) {
+          setTimeout(() => {
+            get().beginMirrorRealm({
+              mirrorRealmCell: key,
+              casterSeat: who,
+            });
+          }, 0);
+        }
+
+        // Geomancer ability 1: "If you played an earth site, fill a void adjacent to you with Rubble."
+        if (isGeomancer(get().avatars[who]?.card?.name)) {
+          const earthThreshold = Number(card.thresholds?.earth ?? 0);
+          if (earthThreshold > 0) {
+            setTimeout(() => {
+              get().beginGeomancerFill(who);
+            }, 100); // Slight delay to let site placement state settle
+          }
+        }
         return {
           zones: zonesNext,
           board: { ...state.board, sites },

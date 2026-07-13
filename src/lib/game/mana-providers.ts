@@ -58,18 +58,25 @@ export const GENESIS_MANA_SITES: Record<string, number> = {
 };
 
 // Tower sites that provide +1 mana on genesis if you control only one copy
-// "Dark Tower", "Lone Tower", "Gothic Tower", "Accursed Tower"
+// "Dark Tower", "Lone Tower", "Gothic Tower"
 // Genesis → If you control only one [Tower Name], gain (1) this turn.
+// Note: "Accursed Tower" is NOT here — its genesis is "Break nearby Wards" (no mana bonus).
 export const TOWER_GENESIS_SITES = new Set<string>([
   "dark tower",
   "lone tower",
   "gothic tower",
-  "accursed tower",
 ]);
 
 // Sites with genesis effects that depend on nearby enemy units
 // "Beacon" - Genesis → Gain (1) for each nearby site with an enemy atop it.
 export const BEACON_GENESIS_SITES = new Set<string>(["beacon"]);
+
+// Sites whose Genesis breaks nearby Wards (runs through auto-resolve confirmation)
+// "Accursed Tower", "Accursed Desert" - Genesis → Break nearby Wards.
+export const BREAK_WARDS_GENESIS_SITES = new Set<string>([
+  "accursed tower",
+  "accursed desert",
+]);
 
 // Sites with conditional threshold based on nearby units/state
 // These need special runtime checks

@@ -15,12 +15,14 @@
  */
 
 import type { StateCreator } from "zustand";
+import { triggerSiteGenesis } from "@/lib/game/store/gameActions/playActions";
 import {
   TOKEN_BY_NAME,
   newTokenInstanceId,
   tokenSlug,
 } from "@/lib/game/tokens";
 import type { CustomMessage } from "@/lib/net/transport";
+import { ensureFloodedTokenAtSite } from "./realmFloodState";
 import type {
   CellKey,
   GameState,
@@ -246,10 +248,14 @@ export const createGeomancerSlice: StateCreator<
     const newAtlas = atlas.slice(1);
 
     // Remove Rubble permanent from the target cell (tokens are banished, not graveyarded)
-    const cellPerms = [...(state.permanents[targetCell] || [])];
+    let cellPerms = [...(state.permanents[targetCell] || [])];
     const rubbleIdx = findRubbleIndex(cellPerms);
     if (rubbleIdx >= 0) {
       cellPerms.splice(rubbleIdx, 1);
+    }
+    // Realm Flood: sites entering the realm while flooded get a Flooded token
+    if (state.specialSiteState.realmFlooded) {
+      cellPerms = ensureFloodedTokenAtSite(cellPerms, ownerNum);
     }
     const permanentsNext = {
       ...state.permanents,
@@ -331,6 +337,22 @@ export const createGeomancerSlice: StateCreator<
     };
 
     get().trySendPatch(patches);
+
+    // Fire Genesis effects (bloom thresholds, tower mana, Observatory, etc.)
+    // just like a normal site play — deferred so the placement state settles
+    setTimeout(() => {
+      triggerSiteGenesis(topSite.name, targetCell, ownerNum, get);
+    }, 0);
+
+    // Mirror Realm enters the realm as a copy of a nearby site — fire the copy flow
+    if (topSite.name?.toLowerCase().includes("mirror realm")) {
+      setTimeout(() => {
+        get().beginMirrorRealm({
+          mirrorRealmCell: targetCell,
+          casterSeat: who,
+        });
+      }, 0);
+    }
 
     get().log(
       `[${who.toUpperCase()}] Geomancer replaces Rubble with ${topSite.name} at ${targetCell}`,
