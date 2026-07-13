@@ -60,7 +60,8 @@ export const GENESIS_MANA_SITES: Record<string, number> = {
 // Tower sites that provide +1 mana on genesis if you control only one copy
 // "Dark Tower", "Lone Tower", "Gothic Tower"
 // Genesis → If you control only one [Tower Name], gain (1) this turn.
-// Note: "Accursed Tower" is NOT here — its genesis is "Break nearby Wards" (no mana bonus).
+// Note: "Accursed Tower" is NOT here — its genesis is "Break nearby Wards"
+// (no mana bonus); see BREAK_WARDS_GENESIS_SITES below.
 export const TOWER_GENESIS_SITES = new Set<string>([
   "dark tower",
   "lone tower",

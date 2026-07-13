@@ -12,6 +12,7 @@ import type {
   PendingBabelPlacement,
   PlayerKey,
   ServerPatchT,
+  Zones,
 } from "./types";
 import {
   parseCellKey,
@@ -190,6 +191,7 @@ export const createBabelTowerSlice: StateCreator<
     apexCard: CardRef,
     casterSeat: PlayerKey,
     handIndex: number,
+    sourcePile: keyof Zones = "hand",
   ) => {
     const state = get();
     const board = state.board;
@@ -207,9 +209,11 @@ export const createBabelTowerSlice: StateCreator<
 
     get().pushHistory();
 
-    // Remove Apex from hand
-    const hand = [...(zones[casterSeat]?.hand || [])];
-    const removedApex = hand.splice(handIndex, 1)[0];
+    // Remove Apex from its source pile (hand for hand plays, atlas etc. for pile drags)
+    const sourceCards = [
+      ...((zones[casterSeat]?.[sourcePile] as CardRef[]) || []),
+    ];
+    const removedApex = sourceCards.splice(handIndex, 1)[0];
     if (!removedApex) return;
 
     // Tower of Babel is a CONCEPT - Base stays as site.card, Apex is tracked for stacking
@@ -232,7 +236,7 @@ export const createBabelTowerSlice: StateCreator<
       ...zones,
       [casterSeat]: {
         ...zones[casterSeat],
-        hand,
+        [sourcePile]: sourceCards,
       },
     };
 

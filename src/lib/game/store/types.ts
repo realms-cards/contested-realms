@@ -3258,11 +3258,13 @@ export type GameState = {
   // Cancel the placement flow
   cancelBabelPlacement: () => void;
   // Merge Apex onto Base to create Tower
+  // sourcePile defaults to "hand"; pile drags (e.g. atlas) pass their pile
   mergeBabelTower: (
     targetCell: CellKey,
     apexCard: CardRef,
     casterSeat: PlayerKey,
     handIndex: number,
+    sourcePile?: keyof Zones,
   ) => void;
   // Handle Tower destruction (both cards to graveyard, optionally place Rubble)
   destroyBabelTower: (cellKey: CellKey, placeRubble?: boolean) => boolean;

@@ -33,6 +33,8 @@ export default function AutoResolveConfirmOverlay() {
         return "pink";
       case "tadpole_pool_genesis":
         return "blue";
+      case "break_wards_genesis":
+        return "red";
       default:
         return "yellow";
     }

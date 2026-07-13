@@ -733,34 +733,9 @@ export const createPlayActionsSlice: StateCreator<
               banished: [...(state.zones[who].banished || [])],
             },
           } as GameState["zones"];
-          // Add banished rubble to the appropriate owners' zones
-          rubbleBanished.forEach((rb) => {
-            const rbOwnerSeat = seatFromOwner(rb.owner);
-            if (!zonesNext[rbOwnerSeat]) {
-              zonesNext[rbOwnerSeat] = { ...state.zones[rbOwnerSeat] };
-            }
-            zonesNext[rbOwnerSeat] = {
-              ...zonesNext[rbOwnerSeat],
-              banished: [...(zonesNext[rbOwnerSeat].banished || []), rb.card],
-            };
-          });
+          // Banished Rubble tokens cease to exist — they are NOT added to any
+          // zone (matches token handling in permanentMovement.ts)
           const zonePatch = createZonesPatchFor(zonesNext, who);
-          // Also include opponent zones if rubble was banished from them
-          const affectedSeats = new Set([who]);
-          rubbleBanished.forEach((rb) =>
-            affectedSeats.add(seatFromOwner(rb.owner)),
-          );
-          let combinedZonePatch = zonePatch;
-          affectedSeats.forEach((seat) => {
-            if (seat !== who) {
-              const otherPatch = createZonesPatchFor(zonesNext, seat);
-              if (otherPatch?.zones) {
-                combinedZonePatch = {
-                  zones: { ...combinedZonePatch?.zones, ...otherPatch.zones },
-                };
-              }
-            }
-          });
           // Build permanents patch using delta removal for rubble
           let permanentsPatch: ServerPatchT["permanents"] | undefined;
           if (rubbleBanished.length > 0) {
@@ -794,9 +769,7 @@ export const createPlayActionsSlice: StateCreator<
             [key]: sites[key] ?? null,
           };
           const patch: ServerPatchT = {
-            ...(combinedZonePatch?.zones
-              ? { zones: combinedZonePatch.zones }
-              : {}),
+            ...(zonePatch?.zones ? { zones: zonePatch.zones } : {}),
             board: {
               ...state.board,
               sites: sitesPatch as GameState["board"]["sites"],
@@ -849,7 +822,8 @@ export const createPlayActionsSlice: StateCreator<
           state,
           consumeInstantId,
         );
-        // Build final zones with rubble banishment
+        // Build final zones (played card removed from hand). Banished Rubble
+        // tokens cease to exist and are not added to any zone.
         const finalZones = {
           ...state.zones,
           [who]: {
@@ -862,17 +836,6 @@ export const createPlayActionsSlice: StateCreator<
             banished: [...(state.zones[who].banished || [])],
           },
         } as GameState["zones"];
-        // Add banished rubble to the appropriate owners' zones
-        rubbleBanished.forEach((rb) => {
-          const rbOwnerSeat = seatFromOwner(rb.owner);
-          if (!finalZones[rbOwnerSeat]) {
-            finalZones[rbOwnerSeat] = { ...state.zones[rbOwnerSeat] };
-          }
-          finalZones[rbOwnerSeat] = {
-            ...finalZones[rbOwnerSeat],
-            banished: [...(finalZones[rbOwnerSeat].banished || []), rb.card],
-          };
-        });
         return {
           zones: finalZones,
           board: { ...state.board, sites },
@@ -1954,6 +1917,38 @@ export const createPlayActionsSlice: StateCreator<
       }
       if (type.includes("site")) {
         if (state.board.sites[key]) {
+          // Apex of Babel dropped onto own Base of Babel — merge into the
+          // Tower of Babel instead of rejecting the cell as occupied
+          // (mirrors the hand-play path). mergeBabelTower removes the Apex
+          // from the source pile itself, so return without committing zones.
+          const babelTarget = state.board.sites[key];
+          if (
+            pileName !== null &&
+            isApexOfBabel(card.name) &&
+            babelTarget?.owner === ownerFromSeat(who) &&
+            isBaseOfBabel(babelTarget.card?.name)
+          ) {
+            const sourcePile = pileName;
+            const sourceCards = state.zones[who][sourcePile] as CardRef[];
+            let apexIndex = sourceCards.findIndex((c) => c === card);
+            if (apexIndex < 0) {
+              apexIndex = sourceCards.findIndex(
+                (c) =>
+                  c.cardId === card.cardId &&
+                  c.variantId === card.variantId &&
+                  c.name === card.name,
+              );
+            }
+            if (apexIndex >= 0) {
+              setTimeout(() => {
+                get().mergeBabelTower(key, card, who, apexIndex, sourcePile);
+              }, 0);
+              return {
+                dragFromPile: null,
+                dragFromHand: false,
+              } as Partial<GameState> as GameState;
+            }
+          }
           get().log(
             `Cannot play site '${card.name}': #${cellNo} already occupied`,
           );
