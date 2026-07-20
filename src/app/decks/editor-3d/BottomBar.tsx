@@ -691,6 +691,7 @@ export default function BottomBar(props: BottomBarProps) {
                         { value: "Beta", label: "Beta" },
                         { value: "Arthurian Legends", label: "Arthurian Legends" },
                         { value: "Dragonlord", label: "Dragonlord" },
+                        { value: "Promotional", label: "Promotional" },
                       ]}
                     />
                     {/* Zoom slider */}

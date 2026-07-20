@@ -96,6 +96,7 @@ const SETS = [
   "Arthurian Legends",
   "Dragonlord",
   "Gothic",
+  "Promotional",
 ] as const;
 
 interface CardBrowserProps {

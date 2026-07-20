@@ -689,6 +689,7 @@ export default function DeckEditorPage() {
               { value: "Beta", label: "Beta" },
               { value: "Arthurian Legends", label: "Arthurian Legends" },
               { value: "Dragonlord", label: "Dragonlord" },
+              { value: "Promotional", label: "Promotional" },
             ]}
           />
         </label>
