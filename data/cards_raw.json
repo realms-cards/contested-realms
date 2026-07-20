@@ -81864,5 +81864,241 @@
         ]
       }
     ]
+  },
+  {
+    "name": "Overflowing Court",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Site",
+      "rulesText": "Genesis → Other Courts are disabled until your next turn.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 1
+      }
+    },
+    "elements": "Water",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Promotional",
+        "releasedAt": "2025-11-20T22:09:50.983Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Genesis → Other Courts are disabled until your next turn.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "pro-overflowing_court-d-s",
+            "finish": "Standard",
+            "product": "Dust",
+            "artist": "Juan Machuca",
+            "flavorText": "",
+            "typeText": "An Elite Site sentences you to paartay!"
+          },
+          {
+            "slug": "pro-overflowing_court-d-f",
+            "finish": "Foil",
+            "product": "Dust",
+            "artist": "Juan Machuca",
+            "flavorText": "",
+            "typeText": "An Elite Site sentences you to paartay!"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Court of Equity",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Site",
+      "rulesText": "Elite spells cost an additional (1) to cast, and Uniques (2).",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 1,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Promotional",
+        "releasedAt": "2025-11-20T22:09:50.983Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Elite spells cost an additional (1) to cast, and Uniques (2).",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "pro-court_of_equity-d-s",
+            "finish": "Standard",
+            "product": "Dust",
+            "artist": "Emil Idzikowski",
+            "flavorText": "",
+            "typeText": "An Elite Site restores the balance"
+          },
+          {
+            "slug": "pro-court_of_equity-d-f",
+            "finish": "Foil",
+            "product": "Dust",
+            "artist": "Emil Idzikowski",
+            "flavorText": "",
+            "typeText": "An Elite Site restores the balance"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Mobbed Court",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Site",
+      "rulesText": "Players lose 1 life whenever they cast an Elite spell, and 2 for Uniques.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 1,
+        "water": 0
+      }
+    },
+    "elements": "Fire",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Promotional",
+        "releasedAt": "2025-11-20T22:09:50.983Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Players lose 1 life whenever they cast an Elite spell, and 2 for Uniques.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "pro-mobbed_court-d-s",
+            "finish": "Standard",
+            "product": "Dust",
+            "artist": "Vincent Pompetti",
+            "flavorText": "",
+            "typeText": "An Elite Site of riotous revolution"
+          },
+          {
+            "slug": "pro-mobbed_court-d-f",
+            "finish": "Foil",
+            "product": "Dust",
+            "artist": "Vincent Pompetti",
+            "flavorText": "",
+            "typeText": "An Elite Site of riotous revolution"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Mock Court",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Site",
+      "rulesText": "Ordinary minions cost an additional (1) to summon.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 1,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Promotional",
+        "releasedAt": "2025-11-20T22:09:50.983Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Ordinary minions cost an additional (1) to summon.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "pro-mock_court-d-s",
+            "finish": "Standard",
+            "product": "Dust",
+            "artist": "Franck Pawlowski",
+            "flavorText": "",
+            "typeText": "An Elite Site sides with privilege"
+          },
+          {
+            "slug": "pro-mock_court-d-f",
+            "finish": "Foil",
+            "product": "Dust",
+            "artist": "Franck Pawlowski",
+            "flavorText": "",
+            "typeText": "An Elite Site sides with privilege"
+          }
+        ]
+      }
+    ]
   }
 ]
