@@ -21,6 +21,46 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+/** A card variant candidate used to recover an image slug when the stored one is missing. */
+interface FallbackVariant {
+  slug: string;
+  finish: Finish;
+  setId: number | null;
+  product: string;
+  set: { name: string } | null;
+}
+
+/**
+ * Pick the best variant to represent a collection row whose stored variant is
+ * null. Prefers the same set + finish, then a Booster printing (which has real
+ * card art) matching the finish, then any matching finish, then any Booster,
+ * then the first available variant.
+ */
+function pickFallbackVariant(
+  variants: FallbackVariant[],
+  setId: number | null,
+  finish: Finish,
+): FallbackVariant | null {
+  if (variants.length === 0) return null;
+  if (setId != null) {
+    const sameSetAndFinish = variants.find(
+      (v) => v.setId === setId && v.finish === finish,
+    );
+    if (sameSetAndFinish) return sameSetAndFinish;
+    const sameSet = variants.find((v) => v.setId === setId);
+    if (sameSet) return sameSet;
+  }
+  const boosterFinish = variants.find(
+    (v) => v.product === "Booster" && v.finish === finish,
+  );
+  if (boosterFinish) return boosterFinish;
+  const anyFinish = variants.find((v) => v.finish === finish);
+  if (anyFinish) return anyFinish;
+  const booster = variants.find((v) => v.product === "Booster");
+  if (booster) return booster;
+  return variants[0];
+}
+
 // GET /api/collection
 // Query params: page, limit, setId, element, type, rarity, search, sort, order
 export async function GET(req: NextRequest) {
@@ -111,7 +151,23 @@ export async function GET(req: NextRequest) {
         // Only paginate at DB level if NOT filtering/sorting by metadata fields
         ...(needsAllCards ? {} : { skip: (page - 1) * limit, take: limit }),
         include: {
-          card: true,
+          card: {
+            include: {
+              // Fetch all variants so we can recover a real variant slug/set
+              // when a collection row's stored variantId is null (e.g. rows
+              // orphaned by a re-ingest, or added without variant resolution).
+              variants: {
+                select: {
+                  id: true,
+                  slug: true,
+                  finish: true,
+                  setId: true,
+                  product: true,
+                  set: { select: { name: true } },
+                },
+              },
+            },
+          },
           variant: {
             include: { set: true },
           },
@@ -201,10 +257,31 @@ export async function GET(req: NextRequest) {
       ? filteredCards.slice((page - 1) * limit, page * limit)
       : filteredCards;
 
+    // Resolve a variant for each row, falling back to a real card variant when
+    // the stored variantId is null so images and set names still resolve.
+    const resolvedVariantByRow = new Map<number, FallbackVariant | null>();
+    for (const c of paginatedCards) {
+      const stored: FallbackVariant | null = c.variant
+        ? {
+            slug: c.variant.slug,
+            finish: c.variant.finish,
+            setId: c.variant.setId,
+            product: c.variant.product,
+            set: c.variant.set ? { name: c.variant.set.name } : null,
+          }
+        : null;
+      resolvedVariantByRow.set(
+        c.id,
+        stored ?? pickFallbackVariant(c.card.variants, c.setId, c.finish),
+      );
+    }
+
     // Fetch prices for the page of cards
     const priceInputs = paginatedCards
       .map((c) => {
-        const setName = c.set?.name ?? c.variant?.set?.name;
+        const resolved = resolvedVariantByRow.get(c.id) ?? null;
+        const setName =
+          c.set?.name ?? c.variant?.set?.name ?? resolved?.set?.name;
         if (!setName) return null;
         return { cardName: c.card.name, setName, finish: c.finish };
       })
@@ -218,7 +295,12 @@ export async function GET(req: NextRequest) {
     let totalValue: number | null = null;
     const response: CollectionListResponse = {
       cards: paginatedCards.map((c) => {
-        const setName = c.set?.name ?? c.variant?.set?.name ?? null;
+        const resolvedVariant = resolvedVariantByRow.get(c.id) ?? null;
+        const setName =
+          c.set?.name ??
+          c.variant?.set?.name ??
+          resolvedVariant?.set?.name ??
+          null;
         let price = null;
         if (setName) {
           const key = buildLookupKey(c.card.name, setName, c.finish);
@@ -240,18 +322,14 @@ export async function GET(req: NextRequest) {
             elements: c.card.elements,
             subTypes: c.card.subTypes,
           },
-          variant: c.variant
+          variant: resolvedVariant
             ? {
-                slug: c.variant.slug,
-                finish: c.variant.finish,
-                product: c.variant.product,
+                slug: resolvedVariant.slug,
+                finish: resolvedVariant.finish,
+                product: resolvedVariant.product,
               }
             : null,
-          set: c.set
-            ? { name: c.set.name }
-            : c.variant?.set
-              ? { name: c.variant.set.name }
-              : null,
+          set: setName ? { name: setName } : null,
           meta: (() => {
             const meta = getMetaForCard(c);
             if (!meta) return null;
