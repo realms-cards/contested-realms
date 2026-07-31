@@ -1,5 +1,11 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
+import {
+  formatValidationErrors,
+  normalizeFormat,
+  validateDeck,
+  type DeckFormat,
+} from "@/lib/deck/validation-rules";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -307,14 +313,15 @@ export async function PUT(
       setId = set.id;
     }
 
-    // Helper to validate constructed composition from a flat list
-    async function validateConstructedOrThrow(
+    // Helper to validate deck composition for a format from a flat list
+    async function validateFormatOrThrow(
       flat: Array<{
         cardId: number;
         setId: number | null;
         zone: string;
         count: number;
-      }>
+      }>,
+      deckFormat: DeckFormat
     ) {
       const pairs = Array.from(
         new Set(
@@ -338,23 +345,57 @@ export async function PUT(
       let avatarCount = 0;
       let spellbook = 0;
       let atlas = 0;
+      let collection = 0;
+      const avatarCardIds: number[] = [];
       for (const it of flat) {
         if (it.zone === "Spellbook") spellbook += it.count;
         if (it.zone === "Atlas") atlas += it.count;
+        if (it.zone === "Collection") collection += it.count;
         const type = (
           it.setId != null ? metaMap.get(`${it.cardId}:${it.setId}`) || "" : ""
         ).toLowerCase();
-        if (type.includes("avatar")) avatarCount += it.count;
+        // Avatars in the Collection zone are spares for Imposter, not the deck's avatar
+        if (type.includes("avatar") && it.zone !== "Collection") {
+          avatarCount += it.count;
+          avatarCardIds.push(it.cardId);
+        }
       }
-      if (!(avatarCount === 1 && spellbook >= 60 && atlas >= 30)) {
+
+      // The avatar sits in the Spellbook zone but doesn't count toward its minimum
+      const spellbookNonAvatar = spellbook - avatarCount;
+
+      // Avatar name drives deckbuilding exceptions (Magician has no atlas)
+      const avatarCards = avatarCardIds.length
+        ? await prisma.card.findMany({
+            where: { id: { in: avatarCardIds } },
+            select: { name: true },
+          })
+        : [];
+      const avatarName = avatarCards[0]?.name ?? null;
+
+      const validation = validateDeck(
+        {
+          spellbookCount: spellbookNonAvatar,
+          atlasCount: atlas,
+          collectionCount: collection,
+          avatarCount,
+        },
+        deckFormat,
+        avatarName
+      );
+      if (!validation.isValid) {
         throw new Error(
-          `Constructed deck invalid: requires exactly 1 Avatar, >=60 Spellbook, >=30 Atlas (avatar=${avatarCount}, spellbook=${spellbook}, atlas=${atlas}).`
+          `${
+            deckFormat === "constructed" ? "Constructed" : "Limited"
+          } deck invalid: ${formatValidationErrors(validation)}`
         );
       }
     }
 
-    // If target format is or becomes 'constructed', validate rules against the proposed state
-    const targetFormat = (format ?? deck.format)?.toLowerCase();
+    // Validate the proposed state against the deck's target format. Only
+    // constructed decks are gated here — limited decks (sealed/draft imports,
+    // works in progress) stay saveable while still incomplete.
+    const targetFormat = normalizeFormat(format ?? deck.format);
     const needsConstructedValidation = targetFormat === "constructed";
 
     // If updating cards: validate (if needed) then replace
@@ -437,7 +478,7 @@ export async function PUT(
           })
         );
         try {
-          await validateConstructedOrThrow(flat);
+          await validateFormatOrThrow(flat, targetFormat);
         } catch (e) {
           const message =
             e instanceof Error ? e.message : "Invalid constructed deck";
@@ -483,7 +524,7 @@ export async function PUT(
         count: dc.count,
       }));
       try {
-        await validateConstructedOrThrow(flat);
+        await validateFormatOrThrow(flat, targetFormat);
       } catch (e) {
         const message =
           e instanceof Error ? e.message : "Invalid constructed deck";

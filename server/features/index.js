@@ -83,7 +83,7 @@ function registerFeatures(container, deps) {
       getOrClaimLobbyLeader: lobby.getOrClaimLobbyLeader,
       handleLobbyControlAsLeader: lobby.handleLobbyControlAsLeader,
       ensurePlayerCached: deps.ensurePlayerCached,
-      matchmakingChannel: "matchmaking:control",
+      matchmakingChannel: deps.matchmakingChannel || "matchmaking:control",
       lobbies: lobby.lobbies,
       reservePrivateLobby: lobby.reservePrivateLobby,
       setMatchmakingLobbyConfirmationRequired:

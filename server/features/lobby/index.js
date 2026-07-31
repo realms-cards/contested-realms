@@ -91,6 +91,7 @@ function createLobbyFeature(deps) {
         isMatchmakingLobby: lobby.isMatchmakingLobby || false,
         matchmakingRequiresAcceptance:
           lobby.matchmakingRequiresAcceptance === true,
+        reservationExpiresAt: lobby.reservationExpiresAt ?? null,
         soatcLeagueMatch: lobby.soatcLeagueMatch ?? null,
         matchId: lobby.matchId ?? null,
         lastActive: lobby.lastActive || Date.now(),
@@ -159,6 +160,7 @@ function createLobbyFeature(deps) {
       isMatchmakingLobby: lobby.isMatchmakingLobby || false,
       matchmakingRequiresAcceptance:
         lobby.matchmakingRequiresAcceptance === true,
+      reservationExpiresAt: lobby.reservationExpiresAt ?? null,
       soatcLeagueMatch: lobby.soatcLeagueMatch || null,
       matchId: lobby.matchId ?? null,
       createdAt: lobby.createdAt ?? null,
@@ -207,6 +209,8 @@ function createLobbyFeature(deps) {
     if ("plannedTimer" in obj) lb.plannedTimer = obj.plannedTimer ?? null;
     if ("plannedEnableSeer" in obj)
       lb.plannedEnableSeer = obj.plannedEnableSeer === true;
+    if ("reservationExpiresAt" in obj)
+      lb.reservationExpiresAt = obj.reservationExpiresAt ?? null;
     lb.lastActive = obj.lastActive || Date.now();
     lb.playerIds = new Set(Array.isArray(obj.playerIds) ? obj.playerIds : []);
     lb.ready = new Set(Array.isArray(obj.ready) ? obj.ready : []);
@@ -530,9 +534,17 @@ function createLobbyFeature(deps) {
       isMatchmakingLobby: true,
       matchmakingRequiresAcceptance:
         opts.matchmakingRequiresAcceptance === true,
+      // Tells the maintenance reaper how long this (intentionally empty) lobby
+      // must be left alone while the matched players decide.
+      reservationExpiresAt:
+        typeof opts.reservationExpiresAt === "number"
+          ? opts.reservationExpiresAt
+          : null,
     };
     lobbies.set(lobby.id, lobby);
-    persistLobbyToRedis(lobby).catch(() => {});
+    // Publish, not just persist: peer instances need this in their in-memory
+    // map or getPendingMatch() will treat the reservation as dead.
+    publishLobbyState(lobby).catch(() => {});
     return lobby;
   }
 
@@ -1091,6 +1103,7 @@ function createLobbyFeature(deps) {
       isMatchmakingLobby: redisLobby.isMatchmakingLobby,
       matchmakingRequiresAcceptance:
         redisLobby.matchmakingRequiresAcceptance === true,
+      reservationExpiresAt: redisLobby.reservationExpiresAt ?? null,
       soatcLeagueMatch: redisLobby.soatcLeagueMatch,
       matchId: redisLobby.matchId,
       lastActive: redisLobby.lastActive,
@@ -1115,8 +1128,15 @@ function createLobbyFeature(deps) {
           STALE_MATCH_DISPLAY_MS,
         );
         for (const redisLobby of redisLobbies) {
-          const lobby = redisLobbyToInternal(redisLobby);
-          // Update local cache
+          const fromRedis = redisLobbyToInternal(redisLobby);
+          // Merge into the existing entry rather than replacing it: Redis only
+          // round-trips a subset of the lobby shape, so a blind overwrite drops
+          // local-only fields (reservationExpiresAt, plannedTimer,
+          // plannedEnableSeer, ...) and breaks in-flight matchmaking.
+          const existing = lobbies.get(fromRedis.id);
+          const lobby = existing
+            ? Object.assign(existing, fromRedis)
+            : fromRedis;
           lobbies.set(lobby.id, lobby);
           allLobbies.push(lobby);
         }
@@ -1309,8 +1329,22 @@ function createLobbyFeature(deps) {
     if (msg.type === "join") {
       const { playerId, socketId, lobbyId } = msg;
       let lobby = null;
-      if (lobbyId && lobbies.has(lobbyId)) lobby = lobbies.get(lobbyId);
-      else lobby = findOpenLobby() || createLobby(playerId);
+      if (lobbyId) {
+        // An explicit target that no longer exists must fail loudly. Silently
+        // redirecting to findOpenLobby() dropped matchmade players into a
+        // stranger's lobby (or a fresh empty one) instead of their own match.
+        if (!lobbies.has(lobbyId)) {
+          if (socketId)
+            io.to(socketId).emit("error", {
+              message: "That lobby no longer exists",
+              code: "lobby_not_found",
+            });
+          return;
+        }
+        lobby = lobbies.get(lobbyId);
+      } else {
+        lobby = findOpenLobby() || createLobby(playerId);
+      }
       if (!lobby) lobby = createLobby(playerId);
       if (lobby.status !== "open") {
         if (socketId)

@@ -28,18 +28,29 @@ function createMatchmakingFeature(deps) {
   const cancelReservedLobby = deps.cancelReservedLobby;
   const addLobbyInvite = deps.addLobbyInvite;
 
-  /** @type {Map<string, { playerId: string, socketId: string | null, joinedAt: number, source: "web" | "discord", discordId: string | null, guildId: string | null, channelId: string | null }>} */
+  /** @type {Map<string, { playerId: string, socketId: string | null, joinedAt: number, disconnectedAt: number | null, source: "web" | "discord", discordId: string | null, guildId: string | null, channelId: string | null }>} */
   const queue = new Map();
   /** @type {Map<string, { lobbyId: string, opponentPlayerId: string, opponentPlayerName: string | null, matchType: "constructed", isHost: boolean, createdAt: number, status: "confirming" | "ready", confirmExpiresAt: number | null, youAccepted: boolean }>} */
   const pendingMatches = new Map();
-  /** @type {Map<string, { lobbyId: string, hostPlayerId: string, guestPlayerId: string, hostEntry: { playerId: string, socketId: string | null, joinedAt: number, source: "web" | "discord", discordId: string | null, guildId: string | null, channelId: string | null }, guestEntry: { playerId: string, socketId: string | null, joinedAt: number, source: "web" | "discord", discordId: string | null, guildId: string | null, channelId: string | null }, createdAt: number, expiresAt: number | null, acceptedPlayerIds: Set<string>, status: "confirming" | "ready", matchType: "constructed" }>} */
+  /** @type {Map<string, { lobbyId: string, hostPlayerId: string, guestPlayerId: string, hostEntry: { playerId: string, socketId: string | null, joinedAt: number, disconnectedAt: number | null, source: "web" | "discord", discordId: string | null, guildId: string | null, channelId: string | null }, guestEntry: { playerId: string, socketId: string | null, joinedAt: number, disconnectedAt: number | null, source: "web" | "discord", discordId: string | null, guildId: string | null, channelId: string | null }, createdAt: number, expiresAt: number | null, acceptedPlayerIds: Set<string>, status: "confirming" | "ready", matchType: "constructed" }>} */
   const reservations = new Map();
 
   const MATCH_CHECK_INTERVAL = 2000;
   const MATCH_CONFIRM_WINDOW_MS = 120000;
   const LOBBY_SETTINGS_GRACE_PERIOD = 15000;
   const QUEUE_MAX_WAIT_MS = 30 * 60 * 1000;
+  // How long a queued player keeps their slot after their socket drops, so a
+  // transient reconnect doesn't silently eject them from the queue.
+  const QUEUE_DISCONNECT_GRACE_MS = 90 * 1000;
   let matchCheckTimer = null;
+
+  // Discord entries have no socket by design; web entries without one are
+  // mid-reconnect and must not be paired until they are back.
+  function isMatchable(entry) {
+    if (!entry) return false;
+    if (entry.source === "discord") return true;
+    return !!entry.socketId;
+  }
 
   function sortedQueueEntries() {
     return Array.from(queue.values()).sort((a, b) => a.joinedAt - b.joinedAt);
@@ -50,6 +61,7 @@ function createMatchmakingFeature(deps) {
       playerId: entry.playerId,
       socketId: entry.socketId,
       joinedAt: entry.joinedAt,
+      disconnectedAt: entry.disconnectedAt ?? null,
       source: entry.source,
       discordId: entry.discordId,
       guildId: entry.guildId,
@@ -148,11 +160,27 @@ function createMatchmakingFeature(deps) {
     const pending = pendingMatches.get(playerId) || null;
     if (!pending) return null;
     const lobby = lobbies?.get(pending.lobbyId);
-    if (!lobby || lobby.matchId || lobby.status !== "open") {
-      pendingMatches.delete(playerId);
-      return null;
+    if (lobby) {
+      if (lobby.matchId || lobby.status !== "open") {
+        pendingMatches.delete(playerId);
+        return null;
+      }
+      return pending;
     }
-    return pending;
+    // Lobby missing from this instance's map. Do NOT destroy the pending match
+    // on a lookup miss — it may have been reserved on a peer instance, or not
+    // yet rehydrated from Redis. Dropping it here makes the player's Accept
+    // fail silently and they get ghosted. Only give up once the reservation is
+    // gone AND the confirm window has lapsed.
+    if (reservations.has(pending.lobbyId)) return pending;
+    if (
+      typeof pending.confirmExpiresAt === "number" &&
+      Date.now() < pending.confirmExpiresAt
+    ) {
+      return pending;
+    }
+    pendingMatches.delete(playerId);
+    return null;
   }
 
   function setPendingMatch(playerId, match) {
@@ -316,6 +344,11 @@ function createMatchmakingFeature(deps) {
 
   async function joinReadyMatchmakingLobby(playerId, socketId, pending) {
     if (!socketId || !pending) return false;
+    // handleLobbyControlAsLeader mutates lobby state directly, so it may only
+    // run on the leader. Off-leader it would also miss the reserved lobby and
+    // fall through to "join some other open lobby", stranding the player.
+    const leader = await getOrClaimLobbyLeader();
+    if (leader !== INSTANCE_ID) return false;
     try {
       await handleLobbyControlAsLeader({
         type: "join",
@@ -334,6 +367,7 @@ function createMatchmakingFeature(deps) {
     const existing = queue.get(playerId);
     if (existing) {
       existing.socketId = socketId ?? existing.socketId;
+      if (socketId) existing.disconnectedAt = null;
       existing.source = options.source || existing.source;
       existing.discordId = options.discordId ?? existing.discordId;
       existing.guildId = options.guildId ?? existing.guildId;
@@ -343,6 +377,7 @@ function createMatchmakingFeature(deps) {
         playerId,
         socketId: socketId ?? null,
         joinedAt: Date.now(),
+        disconnectedAt: null,
         source: options.source === "discord" ? "discord" : "web",
         discordId: options.discordId ?? null,
         guildId: options.guildId ?? null,
@@ -645,10 +680,13 @@ function createMatchmakingFeature(deps) {
     await removeQueueEntry(guest.playerId, "matched", false);
     broadcastQueueSize();
 
+    const confirmExpiresAt = Date.now() + MATCH_CONFIRM_WINDOW_MS;
+
     const lobby = reservePrivateLobby(host.playerId, {
       name: "Quick Constructed",
       plannedMatchType: "constructed",
       matchmakingRequiresAcceptance: true,
+      reservationExpiresAt: confirmExpiresAt,
     });
 
     addLobbyInvite(lobby.id, host.playerId);
@@ -656,7 +694,6 @@ function createMatchmakingFeature(deps) {
 
     const hostPlayer = await ensurePlayerCached(host.playerId);
     const guestPlayer = await ensurePlayerCached(guest.playerId);
-    const confirmExpiresAt = Date.now() + MATCH_CONFIRM_WINDOW_MS;
 
     upsertReservation({
       lobbyId: lobby.id,
@@ -739,10 +776,25 @@ function createMatchmakingFeature(deps) {
   async function expireStaleQueueEntries() {
     const now = Date.now();
     const stalePlayerIds = [];
+    const abandonedPlayerIds = [];
     for (const entry of queue.values()) {
+      if (
+        entry.source !== "discord" &&
+        typeof entry.disconnectedAt === "number" &&
+        now - entry.disconnectedAt >= QUEUE_DISCONNECT_GRACE_MS
+      ) {
+        abandonedPlayerIds.push(entry.playerId);
+        continue;
+      }
       if (now - (entry.joinedAt || now) >= QUEUE_MAX_WAIT_MS) {
         stalePlayerIds.push(entry.playerId);
       }
+    }
+    for (const playerId of abandonedPlayerIds) {
+      await leaveQueue(playerId, "disconnected");
+      console.log(
+        `[Matchmaking] ${playerId.slice(-6)} removed from queue (did not reconnect within ${Math.round(QUEUE_DISCONNECT_GRACE_MS / 1000)}s)`,
+      );
     }
     for (const playerId of stalePlayerIds) {
       await leaveQueue(playerId, "timeout");
@@ -761,7 +813,7 @@ function createMatchmakingFeature(deps) {
     await expireReservations();
     await expireStaleQueueEntries();
 
-    const entries = sortedQueueEntries();
+    const entries = sortedQueueEntries().filter(isMatchable);
 
     for (const entry of entries) {
       const lobby = findMatchingLobby();
@@ -843,6 +895,8 @@ function createMatchmakingFeature(deps) {
         playerId: entry.playerId,
         socketId: typeof entry.socketId === "string" ? entry.socketId : null,
         joinedAt: entry.joinedAt,
+        disconnectedAt:
+          typeof entry.disconnectedAt === "number" ? entry.disconnectedAt : null,
         source: entry.source === "discord" ? "discord" : "web",
         discordId: entry.discordId ?? null,
         guildId: entry.guildId ?? null,
@@ -981,6 +1035,9 @@ function createMatchmakingFeature(deps) {
       const queued = queue.get(msg.playerId);
       if (queued) {
         queued.socketId = nextSocketId;
+        queued.disconnectedAt = nextSocketId
+          ? null
+          : (queued.disconnectedAt ?? Date.now());
       }
       const player = await ensurePlayerCached(msg.playerId);
       if (player) {
@@ -993,16 +1050,36 @@ function createMatchmakingFeature(deps) {
     checkForMatches().catch(() => {});
   }
 
-  function handleDisconnect(playerId) {
-    if (queue.has(playerId)) {
-      leaveQueue(playerId, "disconnected").catch(() => {});
-    }
+  /**
+   * @param {string} playerId
+   * @param {string | null} [socketId] - the socket that dropped, when known
+   */
+  function handleDisconnect(playerId, socketId = null) {
+    const entry = queue.get(playerId);
+    if (!entry) return;
+    // Reconnect-race guard, same as the player record: a superseded socket
+    // closing must not clear the slot the live one just claimed.
+    if (socketId && entry.socketId && entry.socketId !== socketId) return;
+    // A dropped socket is usually a transient reconnect (mobile handoff,
+    // sleep/wake, proxy idle timeout). Evicting immediately removed the player
+    // from the queue while their UI still showed "Searching…" forever, because
+    // the resulting "idle" update was emitted to the socket that just died.
+    // Hold the slot instead; expireStaleQueueEntries drops it if they stay away.
+    entry.socketId = null;
+    entry.disconnectedAt = Date.now();
+    publishControlMessage({
+      type: "player_socket",
+      instanceId: INSTANCE_ID,
+      playerId,
+      socketId: null,
+    }).catch(() => {});
   }
 
   async function handlePlayerHello(playerId, socketId) {
     const queued = queue.get(playerId);
     if (queued) {
       queued.socketId = socketId;
+      queued.disconnectedAt = null;
       await publishControlMessage({
         type: "player_socket",
         instanceId: INSTANCE_ID,
@@ -1096,7 +1173,21 @@ function createMatchmakingFeature(deps) {
       const player = getPlayerBySocket(socket);
       if (!player) return;
       const decision = payload?.decision === "decline" ? "decline" : "accept";
-      await respondToMatchmaking(player.id, decision);
+      const result = await respondToMatchmaking(player.id, decision);
+      if (result && result.ok === false) {
+        // Never leave the client sitting on a confirm dialog that can no longer
+        // resolve — tell it why and reset it to idle.
+        try {
+          socket.emit("error", {
+            message:
+              result.code === "reservation_missing"
+                ? "That match is no longer available."
+                : "You have no match awaiting confirmation.",
+            code: result.code || "matchmaking_response_failed",
+          });
+        } catch {}
+        sendStatusUpdate(player.id, socket.id, "idle");
+      }
     });
   }
 

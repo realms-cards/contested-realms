@@ -1,6 +1,10 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
 import { invalidateCache, CacheKeys } from "@/lib/cache/redis-cache";
+import {
+  formatValidationErrors,
+  resolveImportFormat,
+} from "@/lib/deck/validation-rules";
 import { resolveCardNames } from "@/lib/decks/card-resolver";
 import { prisma } from "@/lib/prisma";
 import {
@@ -58,6 +62,8 @@ export async function POST(req: NextRequest) {
     const rawUrl = String(body?.url || "").trim();
     const overrideName = body?.name ? String(body.name).trim() : "";
     const rawTts: unknown = body?.tts ?? body?.ttsJson ?? null;
+    // Optional: force a format instead of inferring it from the decklist
+    const requestedFormat = body?.format ? String(body.format).trim() : null;
 
     if (!rawUrl && rawTts == null) {
       return new Response(
@@ -158,7 +164,8 @@ export async function POST(req: NextRequest) {
           trpcData.avatarName,
           session.user.id,
           finalName,
-          deckId // Pass curiosaSourceId for sync functionality
+          deckId, // Pass curiosaSourceId for sync functionality
+          requestedFormat
         );
         if (importResult.error || !importResult.deck) {
           return new Response(
@@ -298,25 +305,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const avatarCards = avatars.reduce((a, b) => a + b.count, 0);
+    const avatarName = avatars[0]?.name ?? null;
     const atlasCount = zoneItems
       .filter((z) => z.zone === "Atlas")
       .reduce((a, b) => a + b.count, 0);
     const spellbookCount =
       zoneItems
         .filter((z) => z.zone === "Spellbook")
-        .reduce((a, b) => a + b.count, 0) -
-      avatars.reduce((a, b) => a + b.count, 0);
+        .reduce((a, b) => a + b.count, 0) - avatarCards;
 
-    if (atlasCount < 12) {
-      return new Response(
-        JSON.stringify({ error: "Atlas needs at least 12 sites" }),
-        { status: 400 }
-      );
-    }
-    if (spellbookCount < 24) {
+    // Store the format the list actually qualifies for so a later edit or
+    // publish doesn't fail a gate the import never applied
+    const resolvedFormat = resolveImportFormat(
+      { spellbookCount, atlasCount, avatarCount: avatarCards },
+      avatarName,
+      requestedFormat
+    );
+    if (!resolvedFormat.validation.isValid) {
       return new Response(
         JSON.stringify({
-          error: "Spellbook needs at least 24 cards (excluding Avatar)",
+          error: formatValidationErrors(resolvedFormat.validation),
         }),
         { status: 400 }
       );
@@ -339,7 +348,7 @@ export async function POST(req: NextRequest) {
     const deck = await prisma.deck.create({
       data: {
         name: deckName,
-        format: "Constructed",
+        format: resolvedFormat.label,
         imported: true,
         curiosaSourceId, // Store for sync functionality
         user: { connect: { id: session.user.id } },
@@ -543,7 +552,8 @@ async function importFromTrpcData(
   avatarName: string | null,
   userId: string,
   deckName: string,
-  curiosaSourceId: string | null = null
+  curiosaSourceId: string | null = null,
+  requestedFormat: string | null = null
 ): Promise<{
   error?: string;
   unresolved?: { name: string; count: number }[];
@@ -780,20 +790,22 @@ async function importFromTrpcData(
       .filter((m) => m.zone === "Spellbook")
       .reduce((a, b) => a + b.count, 0) - 1; // minus avatar
 
-  if (atlasCount < 12) {
-    return { error: `Atlas needs at least 12 sites (found ${atlasCount})` };
-  }
-  if (spellbookCount < 24) {
-    return {
-      error: `Spellbook needs at least 24 cards excluding Avatar (found ${spellbookCount})`,
-    };
+  // Store the format the list actually qualifies for so a later edit or
+  // publish doesn't fail a gate the import never applied
+  const resolvedFormat = resolveImportFormat(
+    { spellbookCount, atlasCount, avatarCount: 1 },
+    avatarName,
+    requestedFormat
+  );
+  if (!resolvedFormat.validation.isValid) {
+    return { error: formatValidationErrors(resolvedFormat.validation) };
   }
 
   // Create deck
   const deck = await prisma.deck.create({
     data: {
       name: deckName,
-      format: "Constructed",
+      format: resolvedFormat.label,
       imported: true,
       curiosaSourceId, // Store for sync functionality
       user: { connect: { id: userId } },

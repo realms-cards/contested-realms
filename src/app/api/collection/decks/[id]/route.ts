@@ -2,7 +2,9 @@ import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
 import { validateOwnership } from "@/lib/collection/validation";
 import {
-  CONSTRUCTED_REQUIREMENTS,
+  getRequirements,
+  normalizeFormat,
+  validateDeck,
   type ValidationError,
 } from "@/lib/deck/validation-rules";
 import { prisma } from "@/lib/prisma";
@@ -118,15 +120,21 @@ export async function GET(
       };
     });
 
-    // Count avatars properly
-    const avatarCount = deck.cards
-      .filter((c) => c.card.meta[0]?.type?.toLowerCase().includes("avatar"))
-      .reduce((sum, c) => sum + c.count, 0);
+    // Count avatars properly — avatars in the Collection zone are Imposter spares
+    const avatarCards = deck.cards.filter(
+      (c) =>
+        c.card.meta[0]?.type?.toLowerCase().includes("avatar") &&
+        c.zone !== "Collection"
+    );
+    const avatarCount = avatarCards.reduce((sum, c) => sum + c.count, 0);
+    const avatarName = avatarCards[0]?.card.name ?? null;
 
-    // Deck stats
-    const spellbookCount = deck.cards
-      .filter((c) => c.zone === "Spellbook")
-      .reduce((sum, c) => sum + c.count, 0);
+    // Deck stats — the avatar sits in the Spellbook zone but doesn't count
+    // toward its minimum
+    const spellbookCount =
+      deck.cards
+        .filter((c) => c.zone === "Spellbook")
+        .reduce((sum, c) => sum + c.count, 0) - avatarCount;
     const atlasCount = deck.cards
       .filter((c) => c.zone === "Atlas")
       .reduce((sum, c) => sum + c.count, 0);
@@ -137,41 +145,22 @@ export async function GET(
       .filter((c) => c.zone === "Sideboard")
       .reduce((sum, c) => sum + c.count, 0);
 
-    // Validation using constructed rules (collection decks are for constructed play)
-    const reqs = CONSTRUCTED_REQUIREMENTS;
-    const errors: ValidationError[] = [];
-
-    // Avatar validation
-    if (avatarCount !== reqs.avatarCount) {
-      errors.push({
-        code: "AVATAR_COUNT",
-        message: `Deck must have exactly ${reqs.avatarCount} avatar (has ${avatarCount})`,
-      });
-    }
-
-    // Spellbook validation
-    if (spellbookCount < reqs.minSpellbook) {
-      errors.push({
-        code: "SPELLBOOK_MIN",
-        message: `Spellbook needs at least ${reqs.minSpellbook} cards (has ${spellbookCount})`,
-      });
-    }
-
-    // Atlas validation
-    if (atlasCount < reqs.minAtlas) {
-      errors.push({
-        code: "ATLAS_MIN",
-        message: `Atlas needs at least ${reqs.minAtlas} sites (has ${atlasCount})`,
-      });
-    }
-
-    // Collection validation (null = unlimited, e.g. limited format)
-    if (reqs.maxCollection !== null && collectionCount > reqs.maxCollection) {
-      errors.push({
-        code: "COLLECTION_MAX",
-        message: `Collection cannot exceed ${reqs.maxCollection} cards (has ${collectionCount})`,
-      });
-    }
+    // Zone/avatar rules for the deck's format (collection decks default to
+    // constructed play); handles avatar exceptions such as Magician
+    const deckFormat = normalizeFormat(deck.format ?? "Constructed");
+    const reqs = getRequirements(deckFormat, avatarName);
+    const validation = validateDeck(
+      {
+        spellbookCount,
+        atlasCount,
+        collectionCount,
+        sideboardCount,
+        avatarCount,
+      },
+      deckFormat,
+      avatarName
+    );
+    const errors: ValidationError[] = [...validation.errors];
 
     // Check ownership violations
     for (const c of cardsWithAvailability) {
@@ -193,7 +182,7 @@ export async function GET(
       validation: {
         isValid: errors.length === 0,
         errors,
-        warnings: [],
+        warnings: validation.warnings,
       },
       stats: {
         spellbookCount,
@@ -208,6 +197,8 @@ export async function GET(
         minAtlas: reqs.minAtlas,
         maxCollection: reqs.maxCollection,
         avatarCount: reqs.avatarCount,
+        // Magician and friends: sites live in the spellbook, no atlas minimum
+        sitesInSpellbook: reqs.sitesInSpellbook,
       },
     };
 

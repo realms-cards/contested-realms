@@ -13,6 +13,7 @@ export interface PubSubListenerDeps {
     lobbyControl: string;
     lobbyState: string;
     draftState: string;
+    matchmakingControl: string;
   };
   isClusterReady: () => boolean;
   safeErrorMessage: (err: unknown) => unknown;
@@ -76,6 +77,7 @@ export interface PubSubListenerDeps {
   handleLobbyControlAsLeader: (payload: AnyRecord) => Promise<void>;
   upsertLobbyFromSerialized: (payload: AnyRecord) => void;
   lobbies: Map<string, LobbyState>;
+  handleMatchmakingControl: (payload: AnyRecord) => Promise<void>;
 }
 
 export function registerPubSubListeners({
@@ -102,10 +104,17 @@ export function registerPubSubListeners({
   handleLobbyControlAsLeader,
   upsertLobbyFromSerialized,
   lobbies,
+  handleMatchmakingControl,
 }: PubSubListenerDeps): void {
   if (!subscriber) return;
 
-  const { matchControl, lobbyControl, lobbyState, draftState } = channels;
+  const {
+    matchControl,
+    lobbyControl,
+    lobbyState,
+    draftState,
+    matchmakingControl,
+  } = channels;
 
   const logSubscribeError =
     (channel: string) =>
@@ -126,6 +135,10 @@ export function registerPubSubListeners({
     subscriber.subscribe(lobbyControl, logSubscribeError(lobbyControl));
     subscriber.subscribe(lobbyState, logSubscribeError(lobbyState));
     subscriber.subscribe(draftState, logSubscribeError(draftState));
+    subscriber.subscribe(
+      matchmakingControl,
+      logSubscribeError(matchmakingControl)
+    );
   } catch {
     // Ignore subscription errors at bootstrap; message handler will guard on readiness.
   }
@@ -332,6 +345,24 @@ export function registerPubSubListeners({
           lobbies.delete(String(lobbyId));
         } catch {
           // Ignore deletion failures
+        }
+      }
+    }
+
+    if (channel === matchmakingControl) {
+      const msg = payload as AnyRecord;
+      if (!msg || typeof msg !== "object") return;
+      // The feature ignores its own instanceId, so this is a no-op single-node.
+      try {
+        await handleMatchmakingControl(msg);
+      } catch (err) {
+        try {
+          console.warn(
+            "[matchmaking] control message failed:",
+            safeErrorMessage(err)
+          );
+        } catch {
+          // Ignore logging errors
         }
       }
     }

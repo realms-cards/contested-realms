@@ -28,6 +28,12 @@ import KeyboardShortcutsHelp, {
   useHelpShortcut,
 } from "@/components/ui/KeyboardShortcutsHelp";
 import { useCardSearch } from "@/lib/collection/useCardSearch";
+import {
+  formatValidationErrors,
+  getRequirements,
+  validateDeck,
+  type DeckFormat,
+} from "@/lib/deck/validation-rules";
 import { SearchResult, SearchType, searchCards } from "@/lib/deckEditor/search";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import {
@@ -294,6 +300,11 @@ function AuthenticatedDeckEditor() {
   const [freeValidationMode, setFreeValidationMode] = useState<
     "constructed" | "sealed"
   >("constructed");
+  // Limited (sealed / draft / free-mode sealed validation) vs constructed
+  const deckFormat: DeckFormat =
+    isSealed || isDraftMode || (isFreeMode && freeValidationMode === "sealed")
+      ? "limited"
+      : "constructed";
   // Track if cube boosters have been opened (for showing cube extras)
   // This is set when opening cube boosters in free mode OR when draft mode is initialized
   const [cubeBoostersOpened, setCubeBoostersOpened] = useState(false);
@@ -2767,27 +2778,31 @@ function AuthenticatedDeckEditor() {
       let avatar = 0;
       let atlas = 0;
       let spellbookNonAvatar = 0;
+      let saveAvatarName: string | null = null;
       for (const p of pick3D) {
         if (p.zone !== "Deck") continue; // only deck zone
         // Use resolved type from metaByCardId if card type is missing
         const meta = metaByCardId[p.card.cardId];
         const t = (p.card.type || meta?.type || "").toLowerCase();
-        if (t.includes("avatar")) avatar += 1;
-        else if (t.includes("site")) atlas += 1;
+        if (t.includes("avatar")) {
+          avatar += 1;
+          if (!saveAvatarName) saveAvatarName = p.card.cardName || null;
+        } else if (t.includes("site")) atlas += 1;
         else spellbookNonAvatar += 1;
       }
-      // Compute minimums based on mode (mirror validationMinimums above)
-      const isLimitedMode =
-        isSealed ||
-        isDraftMode ||
-        (isFreeMode && freeValidationMode === "sealed");
-      const minAtlas = isLimitedMode ? 12 : 30;
-      const minSpellbook = isLimitedMode ? 24 : 60;
-      const isValid =
-        avatar === 1 && atlas >= minAtlas && spellbookNonAvatar >= minSpellbook;
-      if (!isValid && !isFreeMode) {
+      // Same rules as validationMinimums above (format + avatar exceptions)
+      const saveValidation = validateDeck(
+        {
+          spellbookCount: spellbookNonAvatar,
+          atlasCount: atlas,
+          avatarCount: avatar,
+        },
+        deckFormat,
+        saveAvatarName,
+      );
+      if (!saveValidation.isValid && !isFreeMode) {
         throw new Error(
-          `Deck invalid. Require: 1 Avatar, Atlas >= ${minAtlas}, Spellbook >= ${minSpellbook} (excl. Avatar)`,
+          `Deck invalid. ${formatValidationErrors(saveValidation)}`,
         );
       }
 
@@ -2913,9 +2928,11 @@ function AuthenticatedDeckEditor() {
         setDeckId(data.id);
         setDeckName(data.name); // Use the name returned by the server
         // Show warning if deck is incomplete in free mode
-        if (isFreeMode && !isValid) {
+        if (isFreeMode && !saveValidation.isValid) {
           setSaveMsg(
-            `Saved draft: ${data.name} (incomplete deck - ${avatar} avatar, ${atlas}/${minAtlas} sites, ${spellbookNonAvatar}/${minSpellbook} spells)`,
+            `Saved draft: ${data.name} (incomplete deck - ${formatValidationErrors(
+              saveValidation,
+            )})`,
           );
         } else {
           setSaveMsg(`Saved deck ${data.name}`);
@@ -2948,7 +2965,7 @@ function AuthenticatedDeckEditor() {
     status,
     searchParams,
     isFreeMode,
-    freeValidationMode,
+    deckFormat,
     championCardId,
     hasDragonlordAvatar,
     metaByCardId,
@@ -2986,18 +3003,21 @@ function AuthenticatedDeckEditor() {
       setError(null);
       setSaveMsg(null);
 
-      // Validate minimum deck requirements for sealed (Limited rules)
-      // Limited: exactly 1 Avatar, Atlas >= 12, Spellbook >= 24
+      // Validate minimum deck requirements for sealed (Limited rules),
+      // including avatar exceptions such as Magician's sites-in-spellbook
       let avatar = 0;
       let atlas = 0;
       let spellbookNonAvatar = 0;
+      let sealedAvatarName: string | null = null;
       for (const p of pick3D) {
         if (p.zone !== "Deck") continue; // only deck zone
         // Use resolved type from metaByCardId if card type is missing
         const meta = metaByCardId[p.card.cardId];
         const t = (p.card.type || meta?.type || "").toLowerCase();
-        if (t.includes("avatar")) avatar += 1;
-        else if (t.includes("site")) atlas += 1;
+        if (t.includes("avatar")) {
+          avatar += 1;
+          if (!sealedAvatarName) sealedAvatarName = p.card.cardName || null;
+        } else if (t.includes("site")) atlas += 1;
         else spellbookNonAvatar += 1;
       }
 
@@ -3010,10 +3030,18 @@ function AuthenticatedDeckEditor() {
         deckZoneCards: pick3D.filter((p) => p.zone === "Deck").length,
       });
 
-      // Sealed validation: 1 Avatar, 12+ sites, 24+ spells
-      if (!(avatar === 1 && atlas >= 12 && spellbookNonAvatar >= 24)) {
+      const sealedValidation = validateDeck(
+        {
+          spellbookCount: spellbookNonAvatar,
+          atlasCount: atlas,
+          avatarCount: avatar,
+        },
+        "limited",
+        sealedAvatarName,
+      );
+      if (!sealedValidation.isValid) {
         throw new Error(
-          `Deck invalid. Current: ${avatar} Avatar, ${atlas} Atlas, ${spellbookNonAvatar} Spellbook. Required: 1 Avatar, Atlas >= 12, Spellbook >= 24.`,
+          `Deck invalid. ${formatValidationErrors(sealedValidation)}`,
         );
       }
 
@@ -4729,29 +4757,48 @@ function AuthenticatedDeckEditor() {
     return n;
   }, [pick3D, metaByCardId]);
 
-  // Determine required minimums based on mode
-  const validationMinimums = useMemo(() => {
-    // Limited (sealed / draft / free-mode sealed validation): 24 spells, 12 sites
-    const isLimitedMode =
-      isSealed ||
-      isDraftMode ||
-      (isFreeMode && freeValidationMode === "sealed");
-
-    if (isLimitedMode) {
-      return { atlas: 12, spellbook: 24 };
+  // Name of the avatar in the deck zone — drives avatar deckbuilding
+  // exceptions (Magician has no atlas; its sites count as spellbook cards)
+  const avatarName = useMemo(() => {
+    for (const pick of pick3D) {
+      if (pick.zone !== "Deck") continue;
+      const meta = metaByCardId[pick.card.cardId];
+      const t = (pick.card.type || meta?.type || "").toLowerCase();
+      const name = pick.card.cardName || "";
+      if (t.includes("avatar") || (!t && KNOWN_AVATARS.includes(name.toLowerCase()))) {
+        return name;
+      }
     }
+    return null;
+  }, [pick3D, metaByCardId]);
 
-    // Constructed: 60 spells, 30 sites
-    return { atlas: 30, spellbook: 60 };
-  }, [isSealed, isDraftMode, isFreeMode, freeValidationMode]);
+  // Determine required minimums based on mode and avatar
+  const validationMinimums = useMemo(() => {
+    const reqs = getRequirements(deckFormat, avatarName);
+    return {
+      atlas: reqs.minAtlas,
+      spellbook: reqs.minSpellbook,
+      sitesInSpellbook: reqs.sitesInSpellbook,
+    };
+  }, [deckFormat, avatarName]);
 
   const validation = useMemo(() => {
+    const result = validateDeck(
+      {
+        spellbookCount: spellbookNonAvatar,
+        atlasCount,
+        avatarCount,
+      },
+      deckFormat,
+      avatarName
+    );
+    const failed = new Set(result.errors.map((e) => e.code));
     return {
-      avatar: avatarCount === 1,
-      atlas: atlasCount >= validationMinimums.atlas,
-      spellbook: spellbookNonAvatar >= validationMinimums.spellbook,
+      avatar: !failed.has("AVATAR_COUNT"),
+      atlas: !failed.has("ATLAS_MIN") && !failed.has("ATLAS_MAX"),
+      spellbook: !failed.has("SPELLBOOK_MIN") && !failed.has("SPELLBOOK_MAX"),
     };
-  }, [avatarCount, atlasCount, spellbookNonAvatar, validationMinimums]);
+  }, [avatarCount, atlasCount, spellbookNonAvatar, deckFormat, avatarName]);
 
   // (Removed unused canModifyCard callback)
 

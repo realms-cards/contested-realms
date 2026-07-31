@@ -1,6 +1,10 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
-import { CONSTRUCTED_REQUIREMENTS } from "@/lib/deck/validation-rules";
+import {
+  CONSTRUCTED_REQUIREMENTS,
+  formatValidationErrors,
+  validateDeck,
+} from "@/lib/deck/validation-rules";
 import { prisma } from "@/lib/prisma";
 import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
 import {
@@ -185,7 +189,7 @@ export async function GET(
         atlas: number;
         collection: number;
         hasDragonlordAvatar: boolean;
-        hasMagicianAvatar: boolean;
+        avatarName: string | null;
         valid: boolean;
       }
     >();
@@ -199,7 +203,7 @@ export async function GET(
           atlas: 0,
           collection: 0,
           hasDragonlordAvatar: false,
-          hasMagicianAvatar: false,
+          avatarName: null,
           valid: false,
         };
         constructedValidityByDeck.set(key, agg);
@@ -225,12 +229,10 @@ export async function GET(
           qty,
         });
         agg.avatarCount += qty;
-        const cardName = dc.card?.name?.toLowerCase() || "";
-        if (cardName === "dragonlord") {
+        const cardName = dc.card?.name || "";
+        if (!agg.avatarName) agg.avatarName = cardName;
+        if (cardName.toLowerCase() === "dragonlord") {
           agg.hasDragonlordAvatar = true;
-        }
-        if (cardName.includes("magician")) {
-          agg.hasMagicianAvatar = true;
         }
       }
     }
@@ -271,14 +273,18 @@ export async function GET(
 
     // Finalize validity
     for (const [deckId, agg] of constructedValidityByDeck) {
-      // Magician has no atlas — sites live in the spellbook and count toward it
-      const zoneCountsOk = agg.hasMagicianAvatar
-        ? agg.spellbook + agg.atlas >= minSpellbook
-        : agg.spellbook >= minSpellbook && agg.atlas >= minAtlas;
-      const meetsCounts =
-        agg.avatarCount === requiredAvatars &&
-        zoneCountsOk &&
-        (maxCollection == null || agg.collection <= maxCollection);
+      // The avatar sits in the Spellbook zone but doesn't count toward its minimum
+      const validation = validateDeck(
+        {
+          spellbookCount: agg.spellbook - agg.avatarCount,
+          atlasCount: agg.atlas,
+          collectionCount: agg.collection,
+          avatarCount: agg.avatarCount,
+        },
+        "constructed",
+        agg.avatarName
+      );
+      const meetsCounts = validation.isValid;
 
       const championCardId = championByDeckId.get(deckId) ?? null;
       const needsChampion = agg.hasDragonlordAvatar;
@@ -472,30 +478,39 @@ export async function POST(
     let avatarCount = 0;
     let spellbook = 0;
     let atlas = 0;
-    let hasMagicianAvatar = false;
+    let collection = 0;
+    let selectedAvatarName: string | null = null;
     for (const c of deckFull.cards) {
       const qty = Number(c.count || 0);
       if (c.zone === "Spellbook") spellbook += qty;
       if (c.zone === "Atlas") atlas += qty;
+      if (c.zone === "Collection") collection += qty;
       // Use metadata.type from CardSetMetadata (not typeText which is flavor text)
       const type = (
         c.setId != null ? metaSel.get(`${c.cardId}:${c.setId}`) || "" : ""
       ).toLowerCase();
       if (type.includes("avatar")) {
         avatarCount += qty;
-        if ((c.card?.name || "").toLowerCase().includes("magician")) {
-          hasMagicianAvatar = true;
-        }
+        if (!selectedAvatarName) selectedAvatarName = c.card?.name || null;
       }
     }
-    // Magician has no atlas — sites live in the spellbook and count toward it
-    const isConstructedValid = hasMagicianAvatar
-      ? avatarCount === 1 && spellbook + atlas >= 60
-      : avatarCount === 1 && spellbook >= 60 && atlas >= 30;
-    if (!isConstructedValid) {
+    // The avatar sits in the Spellbook zone but doesn't count toward its minimum
+    const selectionValidation = validateDeck(
+      {
+        spellbookCount: spellbook - avatarCount,
+        atlasCount: atlas,
+        collectionCount: collection,
+        avatarCount,
+      },
+      "constructed",
+      selectedAvatarName
+    );
+    if (!selectionValidation.isValid) {
       return new Response(
         JSON.stringify({
-          error: `Deck does not meet constructed rules (avatar=${avatarCount}, spellbook=${spellbook}, atlas=${atlas}).`,
+          error: `Deck does not meet constructed rules: ${formatValidationErrors(
+            selectionValidation
+          )}`,
         }),
         { status: 400 }
       );

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
+import { normalizeFormat, validateDeck } from "@/lib/deck/validation-rules";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -46,20 +47,33 @@ export async function GET() {
           c.card.meta[0]?.type?.toLowerCase().includes("avatar")
         );
 
-        // Count cards by zone
-        const spellbookCount = deck.cards
-          .filter((c) => c.zone === "Spellbook")
+        // Count cards by zone. The avatar sits in the Spellbook zone but
+        // doesn't count toward its minimum.
+        const avatarCount = deck.cards
+          .filter(
+            (c) =>
+              c.card.meta[0]?.type?.toLowerCase().includes("avatar") &&
+              c.zone !== "Collection"
+          )
           .reduce((sum, c) => sum + c.count, 0);
+        const spellbookCount =
+          deck.cards
+            .filter((c) => c.zone === "Spellbook")
+            .reduce((sum, c) => sum + c.count, 0) - avatarCount;
         const atlasCount = deck.cards
           .filter((c) => c.zone === "Atlas")
           .reduce((sum, c) => sum + c.count, 0);
+        const collectionCount = deck.cards
+          .filter((c) => c.zone === "Collection")
+          .reduce((sum, c) => sum + c.count, 0);
 
-        // Basic validation
-        const validationErrors: string[] = [];
-        if (!avatarCard) validationErrors.push("Missing avatar");
-        if (spellbookCount < 40)
-          validationErrors.push("Spellbook needs 40+ cards");
-        if (atlasCount < 12) validationErrors.push("Atlas needs 12+ sites");
+        // Format + avatar aware validation (Magician has no atlas)
+        const validation = validateDeck(
+          { spellbookCount, atlasCount, collectionCount, avatarCount },
+          normalizeFormat(deck.format ?? "Constructed"),
+          avatarCard?.card.name ?? null
+        );
+        const validationErrors = validation.errors.map((e) => e.message);
 
         return {
           id: deck.id,

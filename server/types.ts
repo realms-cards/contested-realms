@@ -84,7 +84,13 @@ export interface LobbyState extends AnyRecord {
   visibility: "open" | "private" | "tournament";
   plannedMatchType?: string | null;
   lastActive: number;
+  createdAt?: number;
   allowSpectators?: boolean;
+  isMatchmakingLobby?: boolean;
+  /** Set while a matchmade pair still has to accept; blocks the empty-lobby reaper. */
+  matchmakingRequiresAcceptance?: boolean;
+  /** Wall-clock deadline for the acceptance window above. */
+  reservationExpiresAt?: number | null;
 }
 
 export interface VoiceParticipant {

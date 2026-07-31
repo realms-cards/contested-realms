@@ -1,6 +1,10 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
 import { withCache, CacheKeys } from "@/lib/cache/redis-cache";
+import {
+  formatValidationErrors,
+  validateDeck,
+} from "@/lib/deck/validation-rules";
 import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
 
@@ -443,18 +447,50 @@ export async function POST(req: NextRequest) {
       let avatarCount = 0;
       let spellbook = 0;
       let atlas = 0;
+      let collection = 0;
+      const avatarCardIds: number[] = [];
       for (const it of flat) {
         if (it.zone === "Spellbook") spellbook += it.count;
         if (it.zone === "Atlas") atlas += it.count;
+        if (it.zone === "Collection") collection += it.count;
         const type = (
           it.setId != null ? metaMap.get(`${it.cardId}:${it.setId}`) || "" : ""
         ).toLowerCase();
-        if (type.includes("avatar")) avatarCount += it.count;
+        // Avatars in the Collection zone are spares for Imposter, not the deck's avatar
+        if (type.includes("avatar") && it.zone !== "Collection") {
+          avatarCount += it.count;
+          avatarCardIds.push(it.cardId);
+        }
       }
-      if (!(avatarCount === 1 && spellbook >= 60 && atlas >= 30)) {
+
+      // The avatar sits in the Spellbook zone but doesn't count toward its minimum
+      const spellbookNonAvatar = spellbook - avatarCount;
+
+      // Avatar name drives deckbuilding exceptions (Magician has no atlas)
+      const avatarCards = avatarCardIds.length
+        ? await prisma.card.findMany({
+            where: { id: { in: avatarCardIds } },
+            select: { name: true },
+          })
+        : [];
+      const avatarName = avatarCards[0]?.name ?? null;
+
+      const validation = validateDeck(
+        {
+          spellbookCount: spellbookNonAvatar,
+          atlasCount: atlas,
+          collectionCount: collection,
+          avatarCount,
+        },
+        "constructed",
+        avatarName
+      );
+      if (!validation.isValid) {
         return new Response(
           JSON.stringify({
-            error: `Constructed deck invalid: requires exactly 1 Avatar, >=60 Spellbook, >=30 Atlas (avatar=${avatarCount}, spellbook=${spellbook}, atlas=${atlas}).`,
+            error: `Constructed deck invalid: ${formatValidationErrors(
+              validation
+            )}`,
           }),
           { status: 400 }
         );

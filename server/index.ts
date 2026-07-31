@@ -562,6 +562,7 @@ const STALE_MATCH_BOT_MS = Number(
 ); // 1 hour default
 const LOBBY_CONTROL_CHANNEL = "lobby:control";
 const LOBBY_STATE_CHANNEL = "lobby:state";
+const MATCHMAKING_CONTROL_CHANNEL = "matchmaking:control";
 let clusterStateReady = false; // flip after maps are initialized
 
 // Basic health endpoints (liveness/readiness) and lightweight HTTP API
@@ -882,6 +883,7 @@ const {
   hydrateMatchFromDatabase,
   lobbyControlChannel: LOBBY_CONTROL_CHANNEL,
   lobbyStateChannel: LOBBY_STATE_CHANNEL,
+  matchmakingChannel: MATCHMAKING_CONTROL_CHANNEL,
   cpuBotsEnabled: CPU_BOTS_ENABLED,
   loadBotClientCtor,
   loadBotCardIdMapFn,
@@ -919,6 +921,7 @@ registerPubSubListeners({
     lobbyControl: LOBBY_CONTROL_CHANNEL,
     lobbyState: LOBBY_STATE_CHANNEL,
     draftState: DRAFT_STATE_CHANNEL,
+    matchmakingControl: MATCHMAKING_CONTROL_CHANNEL,
   },
   isClusterReady: () => clusterStateReady,
   safeErrorMessage,
@@ -939,6 +942,7 @@ registerPubSubListeners({
   handleLobbyControlAsLeader,
   upsertLobbyFromSerialized,
   lobbies,
+  handleMatchmakingControl: matchmakingFeature.handleMatchmakingControl,
 });
 
 const {
@@ -5747,7 +5751,7 @@ io.on("connection", async (socket: SocketClient) => {
     // Remove player from matchmaking queue on disconnect
     if (pid) {
       try {
-        matchmakingFeature.handleDisconnect(pid);
+        matchmakingFeature.handleDisconnect(pid, socket.id);
       } catch {}
     }
 

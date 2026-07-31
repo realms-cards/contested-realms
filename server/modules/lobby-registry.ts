@@ -31,6 +31,8 @@ export interface LobbyRecord {
   visibility: "open" | "private" | "tournament";
   plannedMatchType: string | null;
   isMatchmakingLobby: boolean;
+  matchmakingRequiresAcceptance?: boolean;
+  reservationExpiresAt?: number | null;
   soatcLeagueMatch: SoatcLeagueMatchInfo | null;
   matchId: string | null;
   lastActive: number;
@@ -75,6 +77,9 @@ export function createLobbyRegistry(config: LobbyRegistryConfig) {
       visibility: lobby.visibility,
       plannedMatchType: lobby.plannedMatchType,
       isMatchmakingLobby: lobby.isMatchmakingLobby,
+      matchmakingRequiresAcceptance:
+        lobby.matchmakingRequiresAcceptance === true,
+      reservationExpiresAt: lobby.reservationExpiresAt ?? null,
       soatcLeagueMatch: lobby.soatcLeagueMatch,
       matchId: lobby.matchId ?? null,
       lastActive: lobby.lastActive,
@@ -101,6 +106,9 @@ export function createLobbyRegistry(config: LobbyRegistryConfig) {
       visibility: redisLobby.visibility,
       plannedMatchType: redisLobby.plannedMatchType,
       isMatchmakingLobby: redisLobby.isMatchmakingLobby,
+      matchmakingRequiresAcceptance:
+        redisLobby.matchmakingRequiresAcceptance === true,
+      reservationExpiresAt: redisLobby.reservationExpiresAt ?? null,
       soatcLeagueMatch: redisLobby.soatcLeagueMatch,
       matchId: redisLobby.matchId,
       lastActive: redisLobby.lastActive,

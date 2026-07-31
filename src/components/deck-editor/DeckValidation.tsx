@@ -13,6 +13,8 @@ interface DeckValidationProps {
   validation: ValidationState;
   minAtlas?: number;
   minSpellbook?: number;
+  /** Magician: sites live in the spellbook, so they count toward its minimum */
+  sitesInSpellbook?: boolean;
 }
 
 export default function DeckValidation({
@@ -22,9 +24,13 @@ export default function DeckValidation({
   validation,
   minAtlas,
   minSpellbook,
+  sitesInSpellbook = false,
 }: DeckValidationProps) {
   const atlasTarget = typeof minAtlas === "number" ? minAtlas : 12;
   const spellbookTarget = typeof minSpellbook === "number" ? minSpellbook : 24;
+  const spellbookTotal = sitesInSpellbook
+    ? spellbookCount + atlasCount
+    : spellbookCount;
 
   return (
     <div className="flex items-center gap-6 text-sm">
@@ -40,18 +46,29 @@ export default function DeckValidation({
         />
         Avatar: {avatarCount} / 1
       </div>
-      <div
-        className={`flex items-center gap-2 transition-colors ${
-          validation.atlas ? "text-green-400" : "text-red-400"
-        }`}
-      >
+      {sitesInSpellbook ? (
+        // No atlas for this avatar — sites are shuffled into the spellbook
         <div
-          className={`w-2 h-2 rounded-full ${
-            validation.atlas ? "bg-green-400" : "bg-red-400"
+          className="flex items-center gap-2 text-white/60"
+          title="This avatar has no atlas: its sites go in the spellbook"
+        >
+          <div className="w-2 h-2 rounded-full bg-white/40" />
+          Sites: {atlasCount} (in spellbook)
+        </div>
+      ) : (
+        <div
+          className={`flex items-center gap-2 transition-colors ${
+            validation.atlas ? "text-green-400" : "text-red-400"
           }`}
-        />
-        Atlas: {atlasCount} / {atlasTarget}+
-      </div>
+        >
+          <div
+            className={`w-2 h-2 rounded-full ${
+              validation.atlas ? "bg-green-400" : "bg-red-400"
+            }`}
+          />
+          Atlas: {atlasCount} / {atlasTarget}+
+        </div>
+      )}
       <div
         className={`flex items-center gap-2 transition-colors ${
           validation.spellbook ? "text-green-400" : "text-red-400"
@@ -62,7 +79,8 @@ export default function DeckValidation({
             validation.spellbook ? "bg-green-400" : "bg-red-400"
           }`}
         />
-        Spellbook: {spellbookCount} / {spellbookTarget}+
+        Spellbook: {spellbookTotal} / {spellbookTarget}+
+        {sitesInSpellbook ? " (incl. sites)" : ""}
       </div>
     </div>
   );

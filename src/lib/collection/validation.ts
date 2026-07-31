@@ -4,7 +4,6 @@
  */
 
 import type { Finish } from "@prisma/client";
-import type { CollectionDeckCard, CollectionDeckValidation } from "./types";
 
 // ============================================================================
 // Constants
@@ -13,8 +12,9 @@ import type { CollectionDeckCard, CollectionDeckValidation } from "./types";
 export const MIN_QUANTITY = 1;
 export const MAX_QUANTITY = 99;
 
-export const MIN_SPELLBOOK_CARDS = 40;
-export const MIN_ATLAS_SITES = 12;
+// Deck zone/size legality lives in `@/lib/deck/validation-rules` — it is
+// format- and avatar-aware. This module only covers collection quantities
+// and ownership.
 
 // ============================================================================
 // Quantity Validation
@@ -193,91 +193,4 @@ export function validateBulkOwnership(
   }
 
   return { valid: errors.length === 0, errors };
-}
-
-// ============================================================================
-// Deck Validation
-// ============================================================================
-
-/**
- * Validate collection deck rules
- */
-export function validateDeckRules(
-  cards: CollectionDeckCard[],
-  hasAvatar: boolean
-): CollectionDeckValidation {
-  const errors: CollectionDeckValidation["errors"] = [];
-  const warnings: string[] = [];
-
-  // Count cards by zone
-  const spellbookCount = cards
-    .filter((c) => c.zone === "Spellbook")
-    .reduce((sum, c) => sum + c.count, 0);
-
-  const atlasCount = cards
-    .filter((c) => c.zone === "Atlas")
-    .reduce((sum, c) => sum + c.count, 0);
-
-  // Avatar check
-  if (!hasAvatar) {
-    errors.push({
-      code: "MISSING_AVATAR",
-      message: "Deck must have exactly 1 avatar",
-    });
-  }
-
-  // Spellbook minimum
-  if (spellbookCount < MIN_SPELLBOOK_CARDS) {
-    errors.push({
-      code: "SPELLBOOK_MIN",
-      message: `Spellbook needs at least ${MIN_SPELLBOOK_CARDS} cards (has ${spellbookCount})`,
-    });
-  }
-
-  // Atlas minimum
-  if (atlasCount < MIN_ATLAS_SITES) {
-    errors.push({
-      code: "ATLAS_MIN",
-      message: `Atlas needs at least ${MIN_ATLAS_SITES} sites (has ${atlasCount})`,
-    });
-  }
-
-  // Check for duplicates (same card appearing twice)
-  const cardCounts = new Map<string, number>();
-  for (const card of cards) {
-    const key = `${card.cardId}:${card.variantId ?? "any"}`;
-    const existing = cardCounts.get(key) || 0;
-    if (existing > 0) {
-      errors.push({
-        code: "DUPLICATE_ENTRY",
-        message: "Same card appears multiple times in deck list",
-        cardId: card.cardId,
-      });
-    }
-    cardCounts.set(key, existing + card.count);
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-    warnings,
-  };
-}
-
-/**
- * Get deck statistics
- */
-export function getDeckStats(cards: CollectionDeckCard[], hasAvatar: boolean) {
-  return {
-    spellbookCount: cards
-      .filter((c) => c.zone === "Spellbook")
-      .reduce((sum, c) => sum + c.count, 0),
-    atlasCount: cards
-      .filter((c) => c.zone === "Atlas")
-      .reduce((sum, c) => sum + c.count, 0),
-    sideboardCount: cards
-      .filter((c) => c.zone === "Sideboard")
-      .reduce((sum, c) => sum + c.count, 0),
-    hasAvatar,
-  };
 }

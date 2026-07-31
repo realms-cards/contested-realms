@@ -57,7 +57,11 @@ type DeckPanelsProps = {
   // Free mode validation toggle
   freeValidationMode?: "constructed" | "sealed";
   onFreeValidationModeChange?: (mode: "constructed" | "sealed") => void;
-  validationMinimums?: { atlas: number; spellbook: number };
+  validationMinimums?: {
+    atlas: number;
+    spellbook: number;
+    sitesInSpellbook?: boolean;
+  };
   // Auto-save toggle
   autoSaveEnabled?: boolean;
   onToggleAutoSave?: (enabled: boolean) => void;
@@ -207,7 +211,7 @@ export default function DeckPanels(props: DeckPanelsProps) {
     isFreeMode = false,
     freeValidationMode = "constructed",
     onFreeValidationModeChange,
-    validationMinimums = { atlas: 12, spellbook: 24 },
+    validationMinimums = { atlas: 12, spellbook: 24, sitesInSpellbook: false },
     // Auto-save
     autoSaveEnabled = false,
     onToggleAutoSave,
@@ -458,6 +462,7 @@ export default function DeckPanels(props: DeckPanelsProps) {
             validation={validation}
             minAtlas={validationMinimums.atlas}
             minSpellbook={validationMinimums.spellbook}
+            sitesInSpellbook={validationMinimums.sitesInSpellbook}
           />
           {isSealed && (
             <button

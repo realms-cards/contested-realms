@@ -1,5 +1,9 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
+import {
+  formatValidationErrors,
+  resolveImportFormat,
+} from "@/lib/deck/validation-rules";
 import { resolveCardNames } from "@/lib/decks/card-resolver";
 import {
   parseSorceryDeckText,
@@ -54,6 +58,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({} as JSONObject));
     const rawText = String(body?.text || "");
     const overrideName = body?.name ? String(body.name).trim() : "";
+    // Optional: force a format instead of inferring it from the decklist
+    const requestedFormat = body?.format ? String(body.format).trim() : null;
 
     if (!rawText.trim()) {
       return new Response(JSON.stringify({ error: "Provide deck text" }), {
@@ -78,24 +84,34 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const avatarName = parsed.categories.Avatar[0]?.name ?? null;
     const atlasCount = zoneEntries
       .filter((z) => z.zone === "Atlas")
+      .reduce((a, b) => a + b.count, 0);
+    const collectionCount = zoneEntries
+      .filter((z) => z.zone === "Collection")
       .reduce((a, b) => a + b.count, 0);
     const spellbookCount =
       zoneEntries
         .filter((z) => z.zone === "Spellbook")
         .reduce((a, b) => a + b.count, 0) - parsed.totalByCategory.Avatar;
 
-    if (atlasCount < 12) {
-      return new Response(
-        JSON.stringify({ error: "Atlas needs at least 12 sites" }),
-        { status: 400 }
-      );
-    }
-    if (spellbookCount < 24) {
+    // Store the format the list actually qualifies for so a later edit or
+    // publish doesn't fail a gate the import never applied
+    const resolvedFormat = resolveImportFormat(
+      {
+        spellbookCount,
+        atlasCount,
+        collectionCount,
+        avatarCount: parsed.totalByCategory.Avatar,
+      },
+      avatarName,
+      requestedFormat
+    );
+    if (!resolvedFormat.validation.isValid) {
       return new Response(
         JSON.stringify({
-          error: "Spellbook needs at least 24 cards (excluding Avatar)",
+          error: formatValidationErrors(resolvedFormat.validation),
         }),
         { status: 400 }
       );
@@ -206,7 +222,7 @@ export async function POST(req: NextRequest) {
     const deck = await prisma.deck.create({
       data: {
         name: deckName,
-        format: "Constructed",
+        format: resolvedFormat.label,
         imported: true,
         user: { connect: { id: session.user.id } },
       },

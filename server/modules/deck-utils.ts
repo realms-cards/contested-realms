@@ -60,6 +60,10 @@ function isAvatarType(type: string | null | undefined): boolean {
 
 export type DeckRulesFormat = "constructed" | "limited";
 
+// Mirror of `src/lib/deck/validation-rules.ts`, which is the source of truth
+// for the Next.js side. The socket server cannot import it (server/tsconfig
+// rootDir is `server/`), so any rule change must be applied in both places.
+//
 // Official constructed rules require 60+ spellbook / 30+ atlas; sealed and
 // draft pools are smaller so limited play only needs 24/12.
 const DECK_MINIMUMS: Record<DeckRulesFormat, { sites: number; spells: number }> = {

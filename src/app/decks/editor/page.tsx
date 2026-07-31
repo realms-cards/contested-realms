@@ -5,6 +5,11 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TournamentControls } from "@/components/deck-editor";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import {
+  formatValidationErrors,
+  normalizeFormat,
+  validateDeck,
+} from "@/lib/deck/validation-rules";
 
 // Stable constant for standard site names
 const STANDARD_SITE_NAMES = ["Spire", "Stream", "Valley", "Wasteland"] as const;
@@ -416,13 +421,38 @@ export default function DeckEditorPage() {
     return n;
   }, [picks]);
 
+  // Avatar name drives deckbuilding exceptions (Magician has no atlas)
+  const avatarName = useMemo(() => {
+    for (const it of Object.values(picks)) {
+      if (it.zone === "Sideboard") continue;
+      const t = (it.type || "").toLowerCase();
+      if (t.includes("avatar")) return it.name;
+    }
+    return null;
+  }, [picks]);
+
+  const deckValidation = useMemo(
+    () =>
+      validateDeck(
+        {
+          spellbookCount: spellbookNonAvatar,
+          atlasCount: zoneCounts.Atlas,
+          avatarCount,
+        },
+        normalizeFormat(deckFormat),
+        avatarName
+      ),
+    [avatarCount, zoneCounts, spellbookNonAvatar, deckFormat, avatarName]
+  );
+
   const validation = useMemo(() => {
+    const failed = new Set(deckValidation.errors.map((e) => e.code));
     return {
-      avatar: avatarCount === 1,
-      atlas: zoneCounts.Atlas >= 12,
-      spellbook: spellbookNonAvatar >= 24,
+      avatar: !failed.has("AVATAR_COUNT"),
+      atlas: !failed.has("ATLAS_MIN") && !failed.has("ATLAS_MAX"),
+      spellbook: !failed.has("SPELLBOOK_MIN") && !failed.has("SPELLBOOK_MAX"),
     };
-  }, [avatarCount, zoneCounts, spellbookNonAvatar]);
+  }, [deckValidation]);
 
   // DnD helpers
   type DragPayload = {
@@ -526,10 +556,8 @@ export default function DeckEditorPage() {
       setError(null);
       setSaveMsg(null);
 
-      if (!validation.avatar || !validation.atlas || !validation.spellbook) {
-        throw new Error(
-          "Deck invalid. Require: 1 Avatar, Atlas >= 12, Spellbook >= 24 (excl. Avatar)"
-        );
+      if (!deckValidation.isValid) {
+        throw new Error(`Deck invalid. ${formatValidationErrors(deckValidation)}`);
       }
 
       const cards = Object.values(picks).map((p) => ({

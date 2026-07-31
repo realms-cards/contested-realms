@@ -83,6 +83,8 @@ export interface RedisFullLobbyState {
   visibility: "open" | "private" | "tournament";
   plannedMatchType: string | null;
   isMatchmakingLobby: boolean;
+  matchmakingRequiresAcceptance: boolean;
+  reservationExpiresAt: number | null;
   soatcLeagueMatch: SoatcLeagueMatchInfo | null;
   matchId: string | null;
   lastActive: number;
@@ -503,6 +505,13 @@ export function createRedisStateManager(config: RedisStateConfig) {
       visibility: lobby.visibility,
       plannedMatchType: lobby.plannedMatchType ?? "",
       isMatchmakingLobby: lobby.isMatchmakingLobby ? "1" : "0",
+      matchmakingRequiresAcceptance: lobby.matchmakingRequiresAcceptance
+        ? "1"
+        : "0",
+      reservationExpiresAt:
+        typeof lobby.reservationExpiresAt === "number"
+          ? String(lobby.reservationExpiresAt)
+          : "",
       // JSON stringify soatcLeagueMatch object for Redis storage
       soatcLeagueMatch: lobby.soatcLeagueMatch
         ? JSON.stringify(lobby.soatcLeagueMatch)
@@ -584,6 +593,10 @@ export function createRedisStateManager(config: RedisStateConfig) {
         (data.visibility as "open" | "private" | "tournament") || "open",
       plannedMatchType: data.plannedMatchType || null,
       isMatchmakingLobby: data.isMatchmakingLobby === "1",
+      matchmakingRequiresAcceptance: data.matchmakingRequiresAcceptance === "1",
+      reservationExpiresAt: data.reservationExpiresAt
+        ? parseInt(data.reservationExpiresAt, 10)
+        : null,
       soatcLeagueMatch,
       matchId: data.matchId || null,
       lastActive: data.lastActive ? parseInt(data.lastActive, 10) : 0,

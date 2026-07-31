@@ -1,3 +1,9 @@
+import {
+  formatValidationErrors,
+  getRequirements,
+  validateDeck,
+  type DeckFormat,
+} from "@/lib/deck/validation-rules";
 import { isDuplicator, isMagician } from "@/lib/game/avatarAbilities";
 import { enrichCardRefs } from "@/lib/game/cardMetadataLoader";
 import { getSpawnedCollectionCards } from "@/lib/game/collectionSpawners";
@@ -8,14 +14,12 @@ import { preCacheDeckFromResponse } from "@/lib/service-worker/registration";
 // Internal helper: extend CardRef with an optional classification zone
 type CardRefWithZone = CardRef & { __zone?: string | null };
 
-// Official constructed minimums — enforced only for tournament matches
-const CONSTRUCTED_MIN_SPELLS = 60;
-const CONSTRUCTED_MIN_SITES = 30;
-
-// Regular (non-tournament) matches use a lenient floor so precons and
-// learning decks stay playable; tournaments enforce full constructed rules
-const CASUAL_MIN_SPELLS = 24;
-const CASUAL_MIN_SITES = 12;
+// Regular (non-tournament) matches use the limited floor so precons and
+// learning decks stay playable; tournaments enforce full constructed rules.
+// Both sets of minimums (and avatar exceptions like Magician) live in
+// `@/lib/deck/validation-rules`.
+const CASUAL_FORMAT: DeckFormat = "limited";
+const TOURNAMENT_FORMAT: DeckFormat = "constructed";
 
 /**
  * Validate a Duplicator deck: spellbook and atlas can only contain matching pairs of Uniques.
@@ -161,26 +165,22 @@ export async function loadDeckFor(
         setError(validationResult.error || "Invalid Duplicator deck");
         return false;
       }
-    } else if (magicianDeck) {
-      // Magician: no atlas — sites live in the spellbook, so only the
-      // combined spellbook size is enforced
-      if (spellbook.length + rawAtlas.length < CASUAL_MIN_SPELLS) {
-        setError(
-          `Magician spellbook needs at least ${CASUAL_MIN_SPELLS} cards including sites (excluding Avatar)`,
-        );
-        return false;
-      }
     } else {
-      // Lenient validation for regular matches (precons stay playable)
-      if (rawAtlas.length < CASUAL_MIN_SITES) {
-        setError(`Atlas needs at least ${CASUAL_MIN_SITES} sites`);
-        return false;
-      }
-
-      if (spellbook.length < CASUAL_MIN_SPELLS) {
-        setError(
-          `Spellbook needs at least ${CASUAL_MIN_SPELLS} cards (excluding Avatar)`,
-        );
+      // Lenient validation for regular matches (precons stay playable).
+      // Avatar exceptions (Magician's sites-in-spellbook) are applied by the
+      // shared rules module.
+      const validationResult = validateDeck(
+        {
+          spellbookCount: spellbook.length,
+          atlasCount: rawAtlas.length,
+          collectionCount: collection.length,
+          avatarCount: avatars.length,
+        },
+        CASUAL_FORMAT,
+        avatarName,
+      );
+      if (!validationResult.isValid) {
+        setError(formatValidationErrors(validationResult));
         return false;
       }
     }
@@ -346,7 +346,15 @@ export async function loadSealedDeckFor(
       );
     }
 
-    if (rawAtlas.length < 12) {
+    // Sealed/draft minimums, adjusted for the avatar. Magician has no atlas —
+    // its sites live in the spellbook and count toward the spellbook minimum.
+    const sealedReqs = getRequirements(CASUAL_FORMAT, avatar?.name);
+    const sealedMagicianDeck = sealedReqs.sitesInSpellbook;
+    const sealedSpellbookTotal = sealedMagicianDeck
+      ? spellbook.length + rawAtlas.length
+      : spellbook.length;
+
+    if (rawAtlas.length < sealedReqs.minAtlas) {
       console.error("[loadSealedDeckFor] Validation failed: not enough sites", {
         atlasCount: rawAtlas.length,
         spellbookCount: spellbook.length,
@@ -366,11 +374,11 @@ export async function loadSealedDeckFor(
           __zone: (c as { __zone?: unknown }).__zone,
         })),
       });
-      setError("Sealed deck needs at least 12 sites");
+      setError(`Sealed deck needs at least ${sealedReqs.minAtlas} sites`);
       return false;
     }
 
-    if (spellbook.length < 24) {
+    if (sealedSpellbookTotal < sealedReqs.minSpellbook) {
       console.error(
         "[loadSealedDeckFor] Validation failed: not enough spells",
         {
@@ -380,7 +388,11 @@ export async function loadSealedDeckFor(
           totalCards: cards.length,
         },
       );
-      setError("Sealed deck needs at least 24 cards (excluding Avatar)");
+      setError(
+        `Sealed deck needs at least ${sealedReqs.minSpellbook} cards${
+          sealedMagicianDeck ? " including sites" : ""
+        } (excluding Avatar)`,
+      );
       return false;
     }
 
@@ -491,9 +503,16 @@ export async function loadSealedDeckFor(
       `[loadSealedDeckFor] Total collection: ${collection.length} cards (${submittedCollectionCards.length} from sideboard, ${spawnedCollection.length} from spawners)`,
     );
 
-    initLibraries(who, spellbook, rawAtlas, collection);
+    // Magician: merge atlas into spellbook (sites go in spellbook, no atlas)
+    const sealedSpellbookToUse = sealedMagicianDeck
+      ? [...spellbook, ...rawAtlas]
+      : spellbook;
+    const sealedAtlasToUse = sealedMagicianDeck ? [] : rawAtlas;
+    initLibraries(who, sealedSpellbookToUse, sealedAtlasToUse, collection);
     shuffleSpellbook(who);
-    shuffleAtlas(who);
+    if (!sealedMagicianDeck) {
+      shuffleAtlas(who);
+    }
 
     // Only set avatar if we have one (draft/sealed might not have avatar yet)
     // IMPORTANT: Check if player has an active Imposter mask - don't overwrite masked avatar
@@ -608,25 +627,20 @@ export async function loadTournamentConstructedDeck(
         setError(validationResult.error || "Invalid Duplicator deck");
         return false;
       }
-    } else if (magicianDeck) {
-      // Magician: no atlas — sites live in the spellbook, so only the
-      // combined spellbook size is enforced
-      if (spellbook.length + rawAtlas.length < CONSTRUCTED_MIN_SPELLS) {
-        setError(
-          `Magician spellbook needs at least ${CONSTRUCTED_MIN_SPELLS} cards including sites (excluding Avatar)`,
-        );
-        return false;
-      }
     } else {
-      if (rawAtlas.length < CONSTRUCTED_MIN_SITES) {
-        setError(`Atlas needs at least ${CONSTRUCTED_MIN_SITES} sites`);
-        return false;
-      }
-
-      if (spellbook.length < CONSTRUCTED_MIN_SPELLS) {
-        setError(
-          `Spellbook needs at least ${CONSTRUCTED_MIN_SPELLS} cards (excluding Avatar)`,
-        );
+      // Tournament matches enforce full constructed rules; avatar exceptions
+      // (Magician's sites-in-spellbook) are applied by the shared rules module
+      const validationResult = validateDeck(
+        {
+          spellbookCount: spellbook.length,
+          atlasCount: rawAtlas.length,
+          avatarCount: avatars.length,
+        },
+        TOURNAMENT_FORMAT,
+        avatar.name,
+      );
+      if (!validationResult.isValid) {
+        setError(formatValidationErrors(validationResult));
         return false;
       }
     }

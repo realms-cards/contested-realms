@@ -59,6 +59,11 @@ export function startMaintenanceTimers({
 }: MaintenanceTimerDeps): NodeJS.Timeout[] {
   const timers: NodeJS.Timeout[] = [];
 
+  // Fallback grace for a matchmaking reservation lobby that somehow lost its
+  // explicit expiry (e.g. rehydrated from Redis by an older instance). Must
+  // exceed MATCH_CONFIRM_WINDOW_MS in the matchmaking feature.
+  const RESERVATION_REAP_GRACE_MS = 3 * 60 * 1000;
+
   // Periodic player list heartbeat: reap stale entries then re-broadcast every 60s
   // so clients stay in sync even if they missed a connect/disconnect event.
   timers.push(
@@ -81,8 +86,25 @@ export function startMaintenanceTimers({
 
   timers.push(
     setInterval(() => {
+      const nowTs = Date.now();
       for (const lobby of lobbies.values()) {
         if (!lobby || lobby.status !== "open") continue;
+        // Matchmaking reservations are created empty and stay empty until both
+        // players accept. Reaping them mid-window silently kills the pending
+        // match on both sides, so leave them alone until the window lapses —
+        // the matchmaking feature cancels them itself on accept/decline/timeout.
+        if (
+          typeof lobby.reservationExpiresAt === "number" ||
+          lobby.matchmakingRequiresAcceptance === true
+        ) {
+          // Covers both halves of the window: waiting for accepts, and the gap
+          // between the second accept and both players actually being joined.
+          const reservedUntil =
+            typeof lobby.reservationExpiresAt === "number"
+              ? lobby.reservationExpiresAt
+              : (lobby.createdAt || nowTs) + RESERVATION_REAP_GRACE_MS;
+          if (nowTs < reservedUntil) continue;
+        }
         if (!lobbyHasHumanPlayers(lobby)) {
           lobby.status = "closed";
           try {
