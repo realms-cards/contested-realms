@@ -7,6 +7,8 @@ Discord bot for Realms.cards integration - match invitations, voice channels, an
 - **Match Challenges**: `/challenge @user [format]` - Challenge players to matches
 - **Account Linking**: `/link` - Link Discord account to Realms.cards
 - **Status**: `/status` - Check your status and see who's online
+- **Looking-for-game pings**: `/lfg-config` - Ping the Duelist role when a player queues up on Discord or the website
+- **Self-service role**: `/duelist join` / `/duelist leave` - Members opt in and out of match pings
 - **Voice Channels**: Automatic private voice channels for matches
 
 ## Setup
@@ -20,7 +22,7 @@ Discord bot for Realms.cards integration - match invitations, voice channels, an
 5. Enable "Server Members Intent" under Privileged Gateway Intents
 6. Go to "OAuth2" → "URL Generator"
 7. Select scopes: `bot`, `applications.commands`
-8. Select permissions: Send Messages, Embed Links, Use Slash Commands, Manage Channels, Connect, Speak, Move Members
+8. Select permissions: Send Messages, Embed Links, Use Slash Commands, Manage Channels, Manage Roles, Connect, Speak, Move Members
 9. Copy the generated URL and invite the bot to your server
 
 ### 2. Configure Environment
@@ -102,6 +104,54 @@ Subcommands:
 ### `/status`
 
 Shows your Realms.cards profile and online status.
+
+### `/duelist`
+
+Opt in and out of match pings by self-assigning the server's Duelist role.
+
+- `/duelist join` - Give yourself the role and start getting pinged
+- `/duelist leave` - Remove the role and stop
+- `/duelist status` - Check whether you currently have it
+
+Uses whichever role `/lfg-config set` chose (defaulting to a role named
+**Duelist**), so the pinged role and the self-assignable role are always the
+same. The bot needs the **Manage Roles** permission and its own role must sit
+**above** the Duelist role in Server Settings → Roles; `/lfg-config set` warns if
+that isn't the case.
+
+### `/lfg-config` (admins only)
+
+Controls looking-for-game pings for the server. Requires **Manage Server**.
+
+- `/lfg-config set channel:#channel [role:@role]` - Announce in `#channel` and ping `role` (defaults to a role named **Duelist**)
+- `/lfg-config show` - Show the current channel and role
+- `/lfg-config clear` - Stop announcements in this server
+
+Once configured, the bot posts a ping whenever a player starts looking for an
+opponent — whether they used `/queue join` here or joined the queue / opened a
+public lobby on the website. See [Looking-for-game announcements](#looking-for-game-announcements).
+
+## Looking-for-game announcements
+
+The socket server publishes an event on the `discord:notify` Redis channel when:
+
+- a player joins the constructed queue and is **not** paired immediately (web or Discord), or
+- a host opens a public lobby on the site.
+
+`LfgAnnouncer` subscribes to that channel and pings the configured role in every
+guild that ran `/lfg-config set`. This is why the bot and the socket server must
+share a Redis instance (`REDIS_URL`).
+
+Noise controls:
+
+- One announcement per player per 15 minutes.
+- Nothing is announced when the queue pairs a player instantly.
+- Events older than 60s are dropped, so a reconnect can't replay a backlog.
+- Announcements only mention the configured role — no `@everyone`/`@here`.
+
+If the role isn't mentionable, the bot needs the "Mention @everyone, @here, and
+All Roles" permission for the ping to notify anyone; `/lfg-config set` warns when
+that's the case.
 
 ## Development
 

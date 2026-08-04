@@ -563,6 +563,9 @@ const STALE_MATCH_BOT_MS = Number(
 const LOBBY_CONTROL_CHANNEL = "lobby:control";
 const LOBBY_STATE_CHANNEL = "lobby:state";
 const MATCHMAKING_CONTROL_CHANNEL = "matchmaking:control";
+// Fan-out channel for "player is looking for a match" events consumed by the
+// Discord bot (see discord-bot/src/services/lfg-announcer.ts).
+const DISCORD_NOTIFY_CHANNEL = "discord:notify";
 let clusterStateReady = false; // flip after maps are initialized
 
 // Basic health endpoints (liveness/readiness) and lightweight HTTP API
@@ -884,6 +887,7 @@ const {
   lobbyControlChannel: LOBBY_CONTROL_CHANNEL,
   lobbyStateChannel: LOBBY_STATE_CHANNEL,
   matchmakingChannel: MATCHMAKING_CONTROL_CHANNEL,
+  discordNotifyChannel: DISCORD_NOTIFY_CHANNEL,
   cpuBotsEnabled: CPU_BOTS_ENABLED,
   loadBotClientCtor,
   loadBotCardIdMapFn,

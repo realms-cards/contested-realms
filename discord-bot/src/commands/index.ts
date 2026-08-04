@@ -9,6 +9,8 @@ import {
   SlashCommandBuilder,
 } from "discord.js";
 import { challengeCommand } from "./challenge.js";
+import { duelistCommand } from "./duelist.js";
+import { lfgConfigCommand } from "./lfg-config.js";
 import { linkCommand } from "./link.js";
 import { queueCommand } from "./queue.js";
 import { statusCommand } from "./status.js";
@@ -21,6 +23,8 @@ export interface CommandModule {
 // All available commands
 export const commands = new Map<string, CommandModule>([
   ["challenge", challengeCommand],
+  ["duelist", duelistCommand],
+  ["lfg-config", lfgConfigCommand],
   ["link", linkCommand],
   ["queue", queueCommand],
   ["status", statusCommand],
