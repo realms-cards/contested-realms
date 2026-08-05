@@ -94,12 +94,15 @@ export default function DeckImportCuriosa() {
     }
   };
 
+  // Four Cores decks are fetched from a different host, so name it accurately
+  const sourceLabel = /(^|\.)fourcores\.xyz/i.test(url) ? "Four Cores" : "Curiosa";
+
   // Helper to get progress message
   const getProgressMessage = () => {
-    if (elapsedSeconds < 3) return "Connecting to Curiosa...";
+    if (elapsedSeconds < 3) return `Connecting to ${sourceLabel}...`;
     if (elapsedSeconds < 8) return "Fetching deck data...";
     if (elapsedSeconds < 15) return "Processing cards...";
-    return "Almost done... (Curiosa may be slow)";
+    return `Almost done... (${sourceLabel} may be slow)`;
   };
 
   if (!enabled) {
@@ -111,11 +114,16 @@ export default function DeckImportCuriosa() {
       onSubmit={onSubmit}
       className="w-full bg-zinc-900/70 ring-1 ring-white/10 rounded-xl p-4 space-y-3"
     >
-      <div className="text-sm font-medium">Import Curiosa Deck</div>
+      <div>
+        <div className="text-sm font-medium">Import Deck from URL</div>
+        <div className="text-xs opacity-70 mt-0.5">
+          Works with Curiosa and — new — Four Cores (fourcores.xyz).
+        </div>
+      </div>
       <div className="grid gap-2 sm:grid-cols-5">
         <input
           className="sm:col-span-3 w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
-          placeholder="Paste Curiosa deck URL (public)"
+          placeholder="Paste Curiosa or Four Cores deck URL (public)"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           disabled={loading}
@@ -130,7 +138,7 @@ export default function DeckImportCuriosa() {
       </div>
       <details className="bg-zinc-900/50 rounded ring-1 ring-zinc-700 p-3">
         <summary className="cursor-pointer text-sm font-medium">
-          Paste TTS JSON (fallback if the deck is private)
+          Paste Curiosa TTS JSON (fallback if the deck is private)
         </summary>
         <textarea
           className="mt-2 w-full h-28 bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white font-mono text-xs"

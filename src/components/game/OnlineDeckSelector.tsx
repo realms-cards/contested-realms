@@ -205,14 +205,16 @@ export default function OnlineDeckSelector({
       </div>
 
       <div className="space-y-4">
-        {/* Curiosa import inline panel - hidden for precon matches */}
+        {/* Deck URL import inline panel - hidden for precon matches */}
         {curiosaEnabled && !isPrecon && (
           <div className="bg-zinc-900/60 ring-1 ring-zinc-700 rounded p-3 space-y-2">
-            <div className="text-sm font-medium">Import from Curiosa</div>
+            <div className="text-sm font-medium">
+              Import from Curiosa or Four Cores
+            </div>
             <div className="grid gap-2 sm:grid-cols-5">
               <input
                 className="sm:col-span-3 w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
-                placeholder="Curiosa deck URL"
+                placeholder="Curiosa or Four Cores deck URL"
                 value={impUrl}
                 onChange={(e) => setImpUrl(e.target.value)}
                 disabled={impLoading || isLoading}
@@ -227,7 +229,7 @@ export default function OnlineDeckSelector({
             </div>
             <details className="bg-zinc-900/50 rounded ring-1 ring-zinc-700 p-2">
               <summary className="cursor-pointer text-xs font-medium">
-                Paste TTS JSON (fallback if the deck is private)
+                Paste Curiosa TTS JSON (fallback if the deck is private)
               </summary>
               <textarea
                 className="mt-2 w-full h-24 bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-2 py-2 text-white font-mono text-xs"

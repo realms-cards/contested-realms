@@ -13,6 +13,11 @@ import {
   extractDeckId,
   type CuriosatrpcDeck,
 } from "@/lib/services/curiosa-deck";
+import {
+  extractFourCoresDeckId,
+  fetchFourCoresDeck,
+  isFourCoresUrl,
+} from "@/lib/services/fourcores-deck";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +30,8 @@ interface JSONObject {
 
 // POST /api/decks/import/curiosa
 // Body: { url: string, name?: string }
-// - Fetches Curiosa TTS JSON, extracts card names+counts, maps to variants, creates a Constructed deck
+// - Accepts a Curiosa or Four Cores (fourcores.xyz) deck URL, or pasted Curiosa TTS JSON
+// - Fetches the decklist, extracts card names+counts, maps to variants, creates a Constructed deck
 // - Validates avatar/site/spellbook counts similar to game loader expectations
 export async function POST(req: NextRequest) {
   const session = await getServerAuthSession();
@@ -50,10 +56,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Feature toggle: disable Curiosa import globally unless explicitly enabled
+    // Feature toggle: disable deck URL import globally unless explicitly enabled
     if (process.env.NEXT_PUBLIC_ENABLE_CURIOSA_IMPORT !== "true") {
       return new Response(
-        JSON.stringify({ error: "Curiosa import is disabled" }),
+        JSON.stringify({ error: "Deck import is disabled" }),
         { status: 403, headers: { "content-type": "application/json" } }
       );
     }
@@ -68,9 +74,60 @@ export async function POST(req: NextRequest) {
     if (!rawUrl && rawTts == null) {
       return new Response(
         JSON.stringify({
-          error: "Provide a Curiosa deck URL or paste TTS JSON",
+          error:
+            "Provide a Curiosa or Four Cores deck URL, or paste Curiosa TTS JSON",
         }),
         { status: 400 }
+      );
+    }
+
+    // Four Cores decks come from a different host with their own list endpoint.
+    // Normalized into the Curiosa deck shape, they reuse the same import path.
+    if (rawTts == null && isFourCoresUrl(rawUrl)) {
+      const fourCoresId = extractFourCoresDeckId(rawUrl);
+      const fourCoresData = await fetchFourCoresDeck(rawUrl);
+      if (!fourCoresData) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "Failed to fetch Four Cores deck. Make sure the deck is public and the URL is correct.",
+          }),
+          { status: 400, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      const finalName =
+        overrideName ||
+        fourCoresData.deckName ||
+        `Four Cores Import ${fourCoresId ?? "Deck"}`;
+      const importResult = await importFromTrpcData(
+        fourCoresData.deckList,
+        fourCoresData.sideboardList,
+        fourCoresData.avatarName,
+        session.user.id,
+        finalName,
+        // Sync only supports Curiosa, so leave curiosaSourceId unset
+        null,
+        requestedFormat
+      );
+      if (importResult.error || !importResult.deck) {
+        return new Response(
+          JSON.stringify({
+            error: importResult.error ?? "Failed to create deck",
+            unresolved: importResult.unresolved,
+          }),
+          { status: 400, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      await invalidateCache(CacheKeys.decks.list(session.user.id));
+      return new Response(
+        JSON.stringify({
+          id: importResult.deck.id,
+          name: importResult.deck.name,
+          format: importResult.deck.format,
+        }),
+        { status: 201, headers: { "content-type": "application/json" } }
       );
     }
 
@@ -614,7 +671,7 @@ async function importFromTrpcData(
   }
 
   if (entries.length === 0) {
-    return { error: "No cards found in Curiosa deck" };
+    return { error: "No cards found in the imported deck" };
   }
 
   // Group by slug+zone and sum quantities (sideboard cards stay separate)
@@ -754,7 +811,7 @@ async function importFromTrpcData(
   // Handle avatar (from metadata, not in deck list)
   if (!avatarName) {
     return {
-      error: "Deck requires exactly 1 Avatar (none found in Curiosa deck)",
+      error: "Deck requires exactly 1 Avatar (none found in the imported deck)",
     };
   }
 
