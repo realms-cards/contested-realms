@@ -18,6 +18,7 @@ export default function FrontierSettlersOverlay() {
   const pending = useGameStore((s) => s.pendingFrontierSettlers);
   const actorKey = useGameStore((s) => s.actorKey);
   const board = useGameStore((s) => s.board);
+  const permanents = useGameStore((s) => s.permanents);
   const selectTarget = useGameStore((s) => s.selectFrontierSettlersTarget);
   const resolve = useGameStore((s) => s.resolveFrontierSettlers);
   const cancel = useGameStore((s) => s.cancelFrontierSettlers);
@@ -37,7 +38,8 @@ export default function FrontierSettlersOverlay() {
             Frontier Settlers
           </div>
           <div className="text-gray-400 text-[11px]">
-            {ownerSeat.toUpperCase()} is placing a site…
+            {ownerSeat.toUpperCase()} is placing{" "}
+            {revealedSite?.name || "a site"}…
           </div>
         </div>
       </div>
@@ -84,9 +86,12 @@ export default function FrontierSettlersOverlay() {
                 {validTargets.map((cellKey) => {
                   const { x, y } = parseCellKey(cellKey);
                   const cellNum = getCellNumber(x, y, board.size.w, board.size.h);
-                  const existingSite = board.sites[cellKey];
-                  const isRubble =
-                    existingSite?.card?.name?.toLowerCase() === "rubble";
+                  // Rubble is a permanent token on a site-less cell, not a
+                  // board.sites entry — that is what tells it apart from a void
+                  const isRubble = (permanents[cellKey] || []).some(
+                    (perm) =>
+                      (perm.card?.name || "").toLowerCase() === "rubble",
+                  );
                   const isSelected = selectedTarget === cellKey;
 
                   return (

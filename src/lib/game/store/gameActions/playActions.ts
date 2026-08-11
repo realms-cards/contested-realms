@@ -681,6 +681,7 @@ export const createPlayActionsSlice: StateCreator<
           const floodedCell = ensureFloodedTokenAtSite(
             permanentsNext[key],
             ownerFromSeat(who),
+            card,
           );
           if (floodedCell !== permanentsNext[key]) {
             permanentsNext =
@@ -1986,6 +1987,7 @@ export const createPlayActionsSlice: StateCreator<
           const floodedCell = ensureFloodedTokenAtSite(
             pileSitePermanents[key],
             ownerFromSeat(who),
+            card,
           );
           if (floodedCell !== pileSitePermanents[key]) {
             pileSitePermanents = { ...pileSitePermanents, [key]: floodedCell };

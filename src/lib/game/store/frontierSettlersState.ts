@@ -4,15 +4,29 @@ import type {
   CardRef,
   CellKey,
   GameState,
+  PermanentItem,
   PlayerKey,
   ServerPatchT,
 } from "./types";
-import { getAdjacentCells, seatFromOwner } from "./utils/boardHelpers";
+import { getAdjacentCells } from "./utils/boardHelpers";
 
 function newFrontierSettlersId() {
   return `frontier_settlers_${Date.now().toString(36)}_${Math.random()
     .toString(36)
     .slice(2, 6)}`;
+}
+
+/**
+ * Rubble is a siteReplacement permanent token living in `permanents[cellKey]`,
+ * not a `board.sites` entry (see geomancerState.ts) — so a cell holding Rubble
+ * looks site-less, and both voids and Rubble are simply cells with no site.
+ */
+function findRubblePermanent(
+  perms: PermanentItem[] | undefined,
+): PermanentItem | undefined {
+  return (perms || []).find(
+    (perm) => (perm.card?.name || "").toLowerCase() === "rubble",
+  );
 }
 
 export type FrontierSettlersPhase =
@@ -89,6 +103,14 @@ export const createFrontierSettlersSlice: StateCreator<
       return;
     }
 
+    // "Tap →" is the cost, so an already-tapped minion can't pay it
+    if ((get().permanents[minion.at] || [])[minion.index]?.tapped) {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Frontier Settlers is already tapped`,
+      );
+      return;
+    }
+
     const zones = get().zones;
     const atlas = zones[ownerSeat]?.atlas || [];
 
@@ -110,17 +132,12 @@ export const createFrontierSettlersSlice: StateCreator<
       board.size.h,
     );
 
-    const validTargets: CellKey[] = [];
-    for (const cellKey of adjacentCells) {
-      const site = board.sites[cellKey];
-      if (!site) {
-        // Void tile
-        validTargets.push(cellKey);
-      } else if (site.card?.name?.toLowerCase() === "rubble") {
-        // Rubble tile
-        validTargets.push(cellKey);
-      }
-    }
+    // A cell with no site is either a void or a Rubble tile (Rubble is a
+    // permanent token) — both are legal targets. Cells holding a real site
+    // are not.
+    const validTargets: CellKey[] = adjacentCells.filter(
+      (cellKey) => !board.sites[cellKey]?.card,
+    );
 
     if (validTargets.length === 0) {
       get().log(
@@ -194,6 +211,7 @@ export const createFrontierSettlersSlice: StateCreator<
         transport.sendMessage({
           type: "frontierSettlersSelectTarget",
           id: pending.id,
+          ownerSeat: pending.ownerSeat,
           targetCell,
           ts: Date.now(),
         } as unknown as CustomMessage);
@@ -218,29 +236,6 @@ export const createFrontierSettlersSlice: StateCreator<
     const zones = get().zones;
     const permanents = get().permanents;
 
-    // Check if target has Rubble - if so, remove it first
-    const targetSite = board.sites[selectedTarget];
-    if (targetSite && targetSite.card?.name?.toLowerCase() === "rubble") {
-      // Remove Rubble from board (it goes to its owner's graveyard)
-      const rubbleOwnerSeat = seatFromOwner(targetSite.owner);
-      const rubbleGraveyard = [...(zones[rubbleOwnerSeat]?.graveyard || [])];
-      rubbleGraveyard.push(targetSite.card);
-
-      const sitesNext = { ...board.sites };
-      delete sitesNext[selectedTarget];
-
-      set({
-        board: { ...board, sites: sitesNext },
-        zones: {
-          ...zones,
-          [rubbleOwnerSeat]: {
-            ...zones[rubbleOwnerSeat],
-            graveyard: rubbleGraveyard,
-          },
-        },
-      } as Partial<GameState> as GameState);
-    }
-
     // Remove site from atlas
     const atlas = [...(zones[ownerSeat]?.atlas || [])];
     const siteIndex = atlas.findIndex((c) => c.cardId === revealedSite.cardId);
@@ -250,9 +245,8 @@ export const createFrontierSettlersSlice: StateCreator<
 
     // Place site on board
     const ownerNum = ownerSeat === "p1" ? 1 : 2;
-    const boardAfter = get().board;
     const sitesNext = {
-      ...boardAfter.sites,
+      ...board.sites,
       [selectedTarget]: {
         owner: ownerNum as 1 | 2,
         card: revealedSite,
@@ -268,8 +262,15 @@ export const createFrontierSettlersSlice: StateCreator<
     // Remove from source
     sourcePerms.splice(minion.index, 1);
 
+    // The new site replaces any Rubble on the target tile. Rubble is a token,
+    // so it is banished rather than put into a graveyard.
+    const targetPermsBase = permanents[selectedTarget] || [];
+    const removedRubble = findRubblePermanent(targetPermsBase);
+    const targetPerms = removedRubble
+      ? targetPermsBase.filter((perm) => perm !== removedRubble)
+      : [...targetPermsBase];
+
     // Add to target
-    const targetPerms = [...(permanents[selectedTarget] || [])];
     targetPerms.push({ ...minionPerm, tapped: true }); // Tap as part of ability
 
     const permanentsNext = {
@@ -291,26 +292,40 @@ export const createFrontierSettlersSlice: StateCreator<
 
     // Update state
     set({
-      board: { ...boardAfter, sites: sitesNext },
+      board: { ...board, sites: sitesNext },
       zones: zonesNext,
       permanents: permanentsNext,
       frontierSettlersUsed: usedSet,
       pendingFrontierSettlers: { ...pending, phase: "complete" },
     } as Partial<GameState> as GameState);
 
-    // Send patches - send full zones for seat to prevent partial patch issues
+    // Send patches - send full zones for seat to prevent partial patch issues.
+    // Only the two affected permanents cells are sent. Both the minion leaving
+    // its old tile and the banished Rubble carry __remove: the merge keeps base
+    // items that are simply absent from the patch, so without the marker the
+    // opponent would keep a duplicate Frontier Settlers and the old Rubble.
     const sitesPatch: Record<string, unknown> = {
       [selectedTarget]: sitesNext[selectedTarget] ?? null,
     };
+    const removalMarker = (perm: PermanentItem): PermanentItem =>
+      ({ ...perm, __remove: true }) as unknown as PermanentItem;
     const patches: ServerPatchT = {
       board: { sites: sitesPatch } as unknown as ServerPatchT["board"],
       zones: {
         [ownerSeat]: zonesNext[ownerSeat],
       } as unknown as ServerPatchT["zones"],
-      permanents: permanentsNext,
+      permanents: {
+        [minion.at]: [...sourcePerms, removalMarker(minionPerm)],
+        [selectedTarget]: removedRubble
+          ? [...targetPerms, removalMarker(removedRubble)]
+          : targetPerms,
+      } as GameState["permanents"],
     };
     get().trySendPatch(patches);
 
+    if (removedRubble) {
+      get().log(`Rubble at ${selectedTarget} is banished`);
+    }
     get().log(
       `[${ownerSeat.toUpperCase()}] Frontier Settlers plays ${
         revealedSite.name || "site"
@@ -324,6 +339,11 @@ export const createFrontierSettlersSlice: StateCreator<
         transport.sendMessage({
           type: "frontierSettlersResolve",
           id: pending.id,
+          // ownerSeat and the minion id travel with the message: the server
+          // patch can clear `pending` before this arrives, so the handler must
+          // never read them off pendingFrontierSettlers
+          ownerSeat,
+          minionInstanceId: minion.instanceId,
           selectedTarget,
           revealedSiteName: revealedSite.name,
           ts: Date.now(),
@@ -359,6 +379,7 @@ export const createFrontierSettlersSlice: StateCreator<
         transport.sendMessage({
           type: "frontierSettlersCancel",
           id: pending.id,
+          ownerSeat: pending.ownerSeat,
           ts: Date.now(),
         } as unknown as CustomMessage);
       } catch {}

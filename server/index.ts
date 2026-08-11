@@ -4554,6 +4554,10 @@ io.on("connection", async (socket: SocketClient) => {
       type === "waveshaperBegin" ||
       type === "waveshaperResolve" ||
       type === "waveshaperCancel" ||
+      type === "frontierSettlersBegin" ||
+      type === "frontierSettlersSelectTarget" ||
+      type === "frontierSettlersResolve" ||
+      type === "frontierSettlersCancel" ||
       type === "autoResolveBegin" ||
       type === "autoResolveConfirm" ||
       type === "autoResolveCancel"

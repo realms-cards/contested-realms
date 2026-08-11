@@ -17,6 +17,11 @@
  * "until you do so again": waveshaperFloodCells tracks the single flooded cell per seat;
  * re-using the ability removes the prior Flooded token before placing the new one.
  *
+ * Rubble counts as a site (it is a permanent token, not a board.sites entry) and so
+ * can be flooded, and a flooded Rubble extends the body of water. Sites that can't be
+ * modified (Bedrock, Bluecap Knockers' site) stay targetable — their minions tap — but
+ * the flood never lands there, so the previous flood stays put.
+ *
  * The skipNextUntap flag is consumed by the untap step in coreState.ts (both
  * advancePhase and _executeTurnTransition).
  */
@@ -30,6 +35,7 @@ import {
   tokenSlug,
 } from "@/lib/game/tokens";
 import type { CustomMessage } from "@/lib/net/transport";
+import { siteIsAlreadyWater } from "./realmFloodState";
 import type {
   CellKey,
   GameState,
@@ -60,6 +66,52 @@ function isFloodedToken(perm: PermanentItem): boolean {
   return (perm.card?.name || "").toLowerCase() === "flooded";
 }
 
+/** A permanent is a Rubble token if its card name is "rubble". */
+function isRubblePermanent(perm: PermanentItem): boolean {
+  return (perm.card?.name || "").toLowerCase() === "rubble";
+}
+
+/**
+ * Whether the cell holds a site that can be flooded.
+ *
+ * Rubble is still a site, but it lives in `permanents[cellKey]` as a
+ * siteReplacement token rather than in `board.sites` (see geomancerState.ts),
+ * so a `board.sites` lookup alone would miss it.
+ */
+function hasSiteAt(state: GameState, cellKey: CellKey): boolean {
+  if (state.board.sites[cellKey]?.card) return true;
+  return (state.permanents[cellKey] || []).some(isRubblePermanent);
+}
+
+/** Owner of the site occupying a cell (site tile, or the Rubble token on it). */
+function siteOwnerAt(state: GameState, cellKey: CellKey): 1 | 2 | null {
+  const tile = state.board.sites[cellKey];
+  if (tile?.card) return tile.owner;
+  const rubble = (state.permanents[cellKey] || []).find(isRubblePermanent);
+  return rubble ? rubble.owner : null;
+}
+
+/**
+ * "Can't be modified" sites (Bedrock, a site occupied by Bluecap Knockers)
+ * can still be chosen as the target — the minions there are tapped — but the
+ * flood itself never applies, so no Flooded token is placed.
+ *
+ * Rules text is the authoritative signal; the name check is a fallback for
+ * board cards whose full text was not hydrated.
+ */
+function isFloodProtectedSite(state: GameState, cellKey: CellKey): boolean {
+  const siteCard = state.board.sites[cellKey]?.card;
+  const text = (siteCard?.text || "").toLowerCase().replace(/’/g, "'");
+  if (text.includes("can't be modified")) return true;
+  if (text.includes("destroyed, or modified")) return true;
+  if ((siteCard?.name || "").toLowerCase() === "bedrock") return true;
+
+  // "Bluecap Knockers' site can't be moved, destroyed, or modified."
+  return (state.permanents[cellKey] || []).some(
+    (perm) => (perm.card?.name || "").toLowerCase() === "bluecap knockers",
+  );
+}
+
 /**
  * A permanent is a minion if its card type contains "minion", or it is a minion
  * token (Skeleton, Foot Soldier, Frog, Bruin, Tawny) — those carry type "Token".
@@ -79,13 +131,16 @@ export function createInitialWaveshaperFloodCells(): Record<
 /**
  * Whether the site at cellKey is a water site (any owner) — it provides water
  * via its printed water threshold, a Flooded token, or an Atlantean Fate flood.
+ *
+ * A flooded Rubble counts too: it is a site (held as a permanent, not in
+ * `board.sites`) carrying a Flooded token, so it extends the body of water.
  */
 function isWaterSite(state: GameState, cellKey: CellKey): boolean {
-  const tile = state.board.sites[cellKey];
-  if (!tile || !tile.card) return false;
+  if (!hasSiteAt(state, cellKey)) return false;
 
   // Printed water threshold
-  const waterThreshold = tile.card.thresholds?.water ?? 0;
+  const waterThreshold =
+    state.board.sites[cellKey]?.card?.thresholds?.water ?? 0;
   if (waterThreshold > 0) return true;
 
   // Flooded token sitting on the site
@@ -112,19 +167,31 @@ function computeFloodTargets(state: GameState, who: PlayerKey): CellKey[] {
   const board = state.board;
   const ownerNum: 1 | 2 = who === "p1" ? 1 : 2;
 
-  // All water sites on the board, any owner
+  // All water sites on the board, any owner. Rubble sites live in `permanents`
+  // rather than `board.sites`, so both maps are scanned.
   const waterSites = new Set<CellKey>();
-  for (const cellKey of Object.keys(board.sites)) {
-    if (isWaterSite(state, cellKey as CellKey)) {
-      waterSites.add(cellKey as CellKey);
+  const occupiedCells = new Set<CellKey>([
+    ...(Object.keys(board.sites) as CellKey[]),
+    ...(Object.keys(state.permanents) as CellKey[]),
+  ]);
+  for (const cellKey of occupiedCells) {
+    if (isWaterSite(state, cellKey)) {
+      waterSites.add(cellKey);
     }
   }
 
-  // Flood-fill from the caster's own water sites across connected water sites
+  // Flood-fill from the caster's own water sites across connected water sites.
+  // A water site counts as "yours" when you own the site, or when the water
+  // itself is yours (your Flooded token on someone else's site or on Rubble).
   const bodyOfWater = new Set<CellKey>();
   const queue: CellKey[] = [];
   for (const cell of waterSites) {
-    if (board.sites[cell]?.owner === ownerNum) {
+    const ownsWater =
+      siteOwnerAt(state, cell) === ownerNum ||
+      (state.permanents[cell] || []).some(
+        (perm) => isFloodedToken(perm) && perm.owner === ownerNum,
+      );
+    if (ownsWater) {
       bodyOfWater.add(cell);
       queue.push(cell);
     }
@@ -147,8 +214,8 @@ function computeFloodTargets(state: GameState, who: PlayerKey): CellKey[] {
     }
   }
 
-  // Only sites can be flooded
-  return Array.from(candidates).filter((c) => !!board.sites[c]);
+  // Only sites can be flooded (Rubble included — it is a site)
+  return Array.from(candidates).filter((c) => hasSiteAt(state, c));
 }
 
 /**
@@ -277,8 +344,22 @@ export const createWaveshaperSlice: StateCreator<
     const permanentsNext = { ...state.permanents };
     const changedCells: CellKey[] = [];
 
+    // A site that can't be modified (Bedrock, Bluecap Knockers' site) or that
+    // is already water is still a legal target — the minions there tap — but
+    // the flood never lands, so the existing flood stays where it is
+    // ("until you do so again" never happens).
+    const blockReason = siteIsAlreadyWater(
+      state.board.sites[targetCell]?.card,
+      state.permanents[targetCell],
+    )
+      ? "is already a water site"
+      : isFloodProtectedSite(state, targetCell)
+        ? "can't be modified"
+        : null;
+    const floodBlocked = blockReason !== null;
+
     // ── 1. Remove the previous Waveshaper flood ("until you do so again") ──
-    const prevCell = state.waveshaperFloodCells[who];
+    const prevCell = floodBlocked ? null : state.waveshaperFloodCells[who];
     const removedFloodTokens: PermanentItem[] = [];
     if (prevCell) {
       const prevPerms = [...(permanentsNext[prevCell] || [])];
@@ -332,16 +413,18 @@ export const createWaveshaperSlice: StateCreator<
     }
 
     // Add the flood token after tapping so it isn't itself processed
-    targetArr.push({
-      owner: ownerNum,
-      card: floodedCard,
-      offset: null,
-      tilt: randomTilt(),
-      tapVersion: 0,
-      tapped: false,
-      version: 0,
-      instanceId: floodedCard.instanceId ?? newPermanentInstanceId(),
-    });
+    if (!floodBlocked) {
+      targetArr.push({
+        owner: ownerNum,
+        card: floodedCard,
+        offset: null,
+        tilt: randomTilt(),
+        tapVersion: 0,
+        tapped: false,
+        version: 0,
+        instanceId: floodedCard.instanceId ?? newPermanentInstanceId(),
+      });
+    }
     permanentsNext[targetCell] = targetArr;
     if (!changedCells.includes(targetCell)) changedCells.push(targetCell);
 
@@ -352,10 +435,12 @@ export const createWaveshaperSlice: StateCreator<
       [who]: tappedAvatar,
     } as GameState["avatars"];
 
-    const floodCellsNext = {
-      ...state.waveshaperFloodCells,
-      [who]: targetCell,
-    };
+    const floodCellsNext = floodBlocked
+      ? state.waveshaperFloodCells
+      : {
+          ...state.waveshaperFloodCells,
+          [who]: targetCell,
+        };
 
     set({
       permanents: permanentsNext,
@@ -389,11 +474,15 @@ export const createWaveshaperSlice: StateCreator<
 
     const [tx, ty] = targetCell.split(",").map(Number);
     const cellNo = getCellNumber(tx, ty, board.size.w, board.size.h);
+    const tappedSuffix =
+      tappedCount > 0
+        ? ` — ${tappedCount} minion${tappedCount !== 1 ? "s" : ""} tapped (won't untap next time)`
+        : "";
     get().log(
-      `[${who.toUpperCase()}] Waveshaper floods site at #${cellNo}` +
-        (tappedCount > 0
-          ? ` — ${tappedCount} minion${tappedCount !== 1 ? "s" : ""} tapped (won't untap next time)`
-          : ""),
+      (blockReason
+        ? `[${who.toUpperCase()}] Waveshaper: site at #${cellNo} ${blockReason}, so it isn't flooded`
+        : `[${who.toUpperCase()}] Waveshaper floods site at #${cellNo}`) +
+        tappedSuffix,
     );
 
     const transport = get().transport;
@@ -401,7 +490,9 @@ export const createWaveshaperSlice: StateCreator<
       try {
         transport.sendMessage({
           type: "toast",
-          text: `Waveshaper floods site at #${cellNo}`,
+          text: floodBlocked
+            ? `Waveshaper: site at #${cellNo} can't be flooded`
+            : `Waveshaper floods site at #${cellNo}`,
           seat: who,
           cellKey: targetCell,
         } as never);

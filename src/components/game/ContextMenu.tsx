@@ -40,6 +40,7 @@ import {
   isMonumentByName,
   isAutomatonByName,
 } from "@/lib/game/store/omphalosState";
+import { siteIsAlreadyWater } from "@/lib/game/store/realmFloodState";
 import {
   NECROMANCER_SKELETON_COST,
   SAVIOR_WARD_COST,
@@ -261,7 +262,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const triggerFrontierSettlersAbility = useGameStore(
     (s) => s.triggerFrontierSettlersAbility,
   );
-  const _hasFrontierSettlersAbility = useGameStore(
+  const hasFrontierSettlersAbility = useGameStore(
     (s) => s.hasFrontierSettlersAbility,
   );
   const interactionGuides = useGameStore((s) => s.interactionGuides);
@@ -799,8 +800,13 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       });
     }
 
-    // Flood - place a Flooded site token on top of this site
-    if (site && (isMine || isActingPlayer)) {
+    // Flood - place a Flooded site token on top of this site.
+    // Water sites (printed or already flooded) can't be flooded again.
+    if (
+      site &&
+      (isMine || isActingPlayer) &&
+      !siteIsAlreadyWater(site.card, permanents[`${t.x},${t.y}`])
+    ) {
       extraActions.push({
         actionId: "__flood_site__",
         displayText: "Flood",
@@ -1357,22 +1363,22 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         }
       }
 
-      // Frontier Settlers tap ability - DISABLED: easier to resolve manually by dragging from atlas
-      // const isFrontierSettlers =
-      //   (item?.card?.name || "").toLowerCase() === "frontier settlers";
-      // if (isFrontierSettlers && isMine && item?.instanceId) {
-      //   const hasAbility = hasFrontierSettlersAbility(item.instanceId);
-      //   const canUse = hasAbility && !tapped;
-      //   extraActions.push({
-      //     actionId: "__frontier_settlers_ability__",
-      //     displayText: `Play Top Site${!hasAbility ? " ✓" : ""}`,
-      //     isEnabled: canUse,
-      //     targetPermanentId: "",
-      //     description: hasAbility
-      //       ? "Tap to reveal and play your topmost site to an adjacent void or Rubble"
-      //       : "Ability already used",
-      //   });
-      // }
+      // Frontier Settlers tap ability
+      const isFrontierSettlers =
+        (item?.card?.name || "").toLowerCase() === "frontier settlers";
+      if (isFrontierSettlers && isMine && item?.instanceId) {
+        const hasAbility = hasFrontierSettlersAbility(item.instanceId);
+        const canUse = hasAbility && !tapped;
+        extraActions.push({
+          actionId: "__frontier_settlers_ability__",
+          displayText: `Play Top Site${!hasAbility ? " ✓" : ""}`,
+          isEnabled: canUse,
+          targetPermanentId: "",
+          description: hasAbility
+            ? "Tap to reveal and play your topmost site to an adjacent void or Rubble"
+            : "Ability already used",
+        });
+      }
     } catch {}
   } else if (t.kind === "avatar") {
     const a = avatars[t.who];

@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { MULTI_THRESHOLD_SITES } from "@/lib/game/mana-providers";
 import {
   newTokenInstanceId,
   TOKEN_BY_NAME,
@@ -6,6 +7,7 @@ import {
 } from "@/lib/game/tokens";
 import type { CustomMessage } from "@/lib/net/transport";
 import type {
+  CardRef,
   CellKey,
   GameState,
   PermanentItem,
@@ -29,12 +31,40 @@ function hasFloodedToken(items: PermanentItem[] | undefined): boolean {
   );
 }
 
+/**
+ * Flooding turns a land site into a water site, so it does nothing to a site
+ * that is already water — whether from its printed water threshold or from a
+ * flood already in place. Every flood effect checks this before placing a
+ * Flooded token, so tokens never stack and a redundant one is never created.
+ *
+ * MULTI_THRESHOLD_SITES is consulted because those sites carry a null
+ * `card.thresholds` and have their thresholds hardcoded instead.
+ */
+export function siteIsAlreadyWater(
+  siteCard: CardRef | null | undefined,
+  items: PermanentItem[] | undefined,
+): boolean {
+  if (hasFloodedToken(items)) return true;
+  if (!siteCard) return false;
+  const name = String(siteCard.name || "").toLowerCase();
+  const printedWater =
+    (siteCard.thresholds?.water ?? 0) +
+    (MULTI_THRESHOLD_SITES[name]?.water ?? 0);
+  return printedWater > 0;
+}
+
+/**
+ * Adds a Flooded token to a cell unless the site there is already water.
+ * Pass `siteCard` whenever it is known — without it only an existing Flooded
+ * token can be detected, not a printed water site.
+ */
 export function ensureFloodedTokenAtSite(
   items: PermanentItem[] | undefined,
   owner: 1 | 2,
+  siteCard?: CardRef | null,
 ): PermanentItem[] {
   const current = Array.isArray(items) ? items : [];
-  if (hasFloodedToken(current)) return current;
+  if (siteIsAlreadyWater(siteCard, current)) return current;
   const floodedDef = TOKEN_BY_NAME.flooded;
   if (!floodedDef) return current;
   const ownerSeat: PlayerKey = owner === 1 ? "p1" : "p2";
@@ -74,7 +104,7 @@ function buildRealmFloodPermanents(state: GameState): {
     if (!site) continue;
     const typedCellKey = cellKey as CellKey;
     const current = permanentsNext[typedCellKey];
-    const updated = ensureFloodedTokenAtSite(current, site.owner);
+    const updated = ensureFloodedTokenAtSite(current, site.owner, site.card);
     if (updated === current) continue;
     if (permanentsNext === state.permanents) {
       permanentsNext = { ...state.permanents };

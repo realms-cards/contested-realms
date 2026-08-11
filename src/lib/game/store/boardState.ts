@@ -5,6 +5,7 @@ import {
   newTokenInstanceId,
 } from "@/lib/game/tokens";
 import { isMergedTower } from "./babelTowerState";
+import { siteIsAlreadyWater } from "./realmFloodState";
 import type {
   CellKey,
   GameState,
@@ -522,6 +523,19 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         return state;
       }
 
+      // Flooding only turns land into water — an already-water or already-
+      // flooded site is left alone rather than collecting a second token.
+      if (siteIsAlreadyWater(site.card, state.permanents[key])) {
+        const cellNo = getCellNumber(
+          x,
+          y,
+          state.board.size.w,
+          state.board.size.h,
+        );
+        get().log(`Site at #${cellNo} is already a water site — not flooded`);
+        return state;
+      }
+
       // Ownership checks
       if (state.transport && state.actorKey) {
         const ownerKey = seatFromOwner(site.owner);
@@ -577,11 +591,12 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
         `[p${playerNum}:PLAYER] places [p${playerNum}card:Flooded] on site at #${cellNo}`,
       );
 
-      // Send patch
+      // Send patch — only the flooded cell, so concurrent changes on other
+      // tiles aren't overwritten
       const tr = get().transport;
       if (tr) {
         const patch: ServerPatchT = {
-          permanents: permanentsNext,
+          permanents: { [key]: arr } as GameState["permanents"],
         };
         get().trySendPatch(patch);
 

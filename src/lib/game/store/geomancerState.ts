@@ -255,7 +255,7 @@ export const createGeomancerSlice: StateCreator<
     }
     // Realm Flood: sites entering the realm while flooded get a Flooded token
     if (state.specialSiteState.realmFlooded) {
-      cellPerms = ensureFloodedTokenAtSite(cellPerms, ownerNum);
+      cellPerms = ensureFloodedTokenAtSite(cellPerms, ownerNum, topSite);
     }
     const permanentsNext = {
       ...state.permanents,

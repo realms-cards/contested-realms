@@ -425,6 +425,8 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingGeomancerFill: null,
         pendingWaveshaper: null,
         waveshaperFloodCells: createInitialWaveshaperFloodCells(),
+        pendingFrontierSettlers: null,
+        frontierSettlersUsed: new Set<string>(),
         babelTowers: createInitialBabelTowers(),
         pendingBabelPlacement: null,
         portalState: null,

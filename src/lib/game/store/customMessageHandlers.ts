@@ -7,6 +7,7 @@ import type {
   GameState,
   PlayerKey,
   CellKey,
+  PendingFrontierSettlers,
   Permanents,
   SiteTile,
   CardRef,
@@ -6724,6 +6725,128 @@ export function handleCustomMessage(
     try {
       get().log(
         `[${pending.ownerSeat.toUpperCase()}] Waveshaper flood cancelled`,
+      );
+    } catch {}
+    return;
+  }
+
+  // --- Frontier Settlers message handlers ---
+  // "Tap → Reveal and play your topmost site to an adjacent void or Rubble."
+  // The site placement, the banished Rubble and the minion's move all arrive
+  // via trySendPatch; these handlers mirror the reveal/selection UI, and carry
+  // the used-marker, which lives in a Set that no patch can transport.
+  if (t === "frontierSettlersBegin") {
+    const payload = msg as {
+      id?: unknown;
+      minion?: unknown;
+      ownerSeat?: unknown;
+      revealedSite?: unknown;
+      validTargets?: unknown;
+    };
+    const id = payload.id as string | undefined;
+    const ownerSeat = payload.ownerSeat as PlayerKey | undefined;
+    const minion = payload.minion as
+      | PendingFrontierSettlers["minion"]
+      | undefined;
+    const revealedSite = payload.revealedSite as CardRef | undefined;
+    const validTargets = Array.isArray(payload.validTargets)
+      ? (payload.validTargets as CellKey[])
+      : undefined;
+    if (!id || !ownerSeat || !minion || !validTargets) return;
+
+    // Skip if we're the owner — we already have the state locally
+    if (get().actorKey === ownerSeat) return;
+
+    set({
+      pendingFrontierSettlers: {
+        id,
+        minion,
+        ownerSeat,
+        // Straight to selecting_target: the caster's brief "revealing" phase is
+        // a local animation, and the opponent has no timer driving it forward
+        phase: "selecting_target",
+        revealedSite: revealedSite ?? null,
+        validTargets,
+        selectedTarget: null,
+        createdAt: Date.now(),
+      },
+    } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Frontier Settlers reveals ${
+          revealedSite?.name || "a site"
+        } from atlas`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "frontierSettlersSelectTarget") {
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const targetCell = (msg as { targetCell?: unknown }).targetCell as
+      | CellKey
+      | undefined;
+    if (!ownerSeat || !targetCell) return;
+    if (get().actorKey === ownerSeat) return;
+
+    const pending = get().pendingFrontierSettlers;
+    if (!pending) return;
+
+    set({
+      pendingFrontierSettlers: { ...pending, selectedTarget: targetCell },
+    } as Partial<GameState> as GameState);
+    return;
+  }
+
+  if (t === "frontierSettlersResolve") {
+    const payload = msg as {
+      ownerSeat?: unknown;
+      minionInstanceId?: unknown;
+      revealedSiteName?: unknown;
+    };
+    const ownerSeat = payload.ownerSeat as PlayerKey | undefined;
+    if (!ownerSeat) return;
+    if (get().actorKey === ownerSeat) return;
+
+    const minionInstanceId = payload.minionInstanceId as string | null;
+    const revealedSiteName = payload.revealedSiteName as string | undefined;
+
+    // The board/permanents/zones changes came through the state patch; mirror
+    // the once-per-minion marker, which is a Set and never travels in a patch
+    const update: Partial<GameState> = { pendingFrontierSettlers: null };
+    if (minionInstanceId) {
+      const usedSet = new Set(get().frontierSettlersUsed);
+      usedSet.add(minionInstanceId);
+      update.frontierSettlersUsed = usedSet;
+    }
+    set(update as GameState);
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] Frontier Settlers plays ${
+          revealedSiteName || "site"
+        } and moves there`,
+      );
+    } catch {}
+    return;
+  }
+
+  if (t === "frontierSettlersCancel") {
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    if (!ownerSeat) return;
+    if (get().actorKey === ownerSeat) return;
+    if (!get().pendingFrontierSettlers) return;
+
+    set({ pendingFrontierSettlers: null } as Partial<GameState> as GameState);
+
+    try {
+      get().log(
+        `[${ownerSeat.toUpperCase()}] cancels Frontier Settlers ability`,
       );
     } catch {}
     return;

@@ -336,7 +336,7 @@ export const createPathfinderSlice: StateCreator<
           )
         : targetPermsBase;
     if (state.specialSiteState.realmFlooded) {
-      targetPerms = ensureFloodedTokenAtSite(targetPerms, ownerNum);
+      targetPerms = ensureFloodedTokenAtSite(targetPerms, ownerNum, topSite);
     }
     const targetTileChanged = targetPerms !== targetPermsBase;
     if (targetTileChanged) {
