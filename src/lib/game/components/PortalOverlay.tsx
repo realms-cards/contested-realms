@@ -6,8 +6,8 @@ import { useMemo } from "react";
 import * as THREE from "three";
 import { TILE_SIZE } from "@/lib/game/constants";
 import { requestCosmeticFrame } from "@/lib/game/render/cosmeticFrame";
-import { isPortalTile } from "@/lib/game/store/portalState";
-import type { PortalState } from "@/lib/game/store/types";
+import { portalOwnersAt } from "@/lib/game/store/portalState";
+import type { PlayerKey, PortalState } from "@/lib/game/store/types";
 
 export type PortalOverlayProps = {
   tileX: number;
@@ -93,8 +93,49 @@ const PORTAL_COLORS = {
   p2: new THREE.Color("#ef4444"), // red-500
 } as const;
 
+type PortalSwirlProps = {
+  owner: PlayerKey;
+  size: number;
+  /** Lifts each swirl off the previous one so coplanar planes don't z-fight. */
+  height: number;
+};
+
+/**
+ * A single player's portal swirl. Kept as its own component so a square that is
+ * a portal for both players can mount one material and one animation loop each.
+ */
+function PortalSwirl({ owner, size, height }: PortalSwirlProps) {
+  const material = useMemo(() => {
+    const mat = new SwirlMaterial();
+    mat.transparent = true;
+    mat.depthWrite = false;
+    mat.side = THREE.DoubleSide;
+    mat.uniforms.uColor.value = PORTAL_COLORS[owner];
+    return mat;
+  }, [owner]);
+
+  // Animate the swirl (pulse is handled in shader)
+  useFrame(({ clock }) => {
+    material.uniforms.uTime.value = clock.getElapsedTime();
+    // Decorative shimmer — throttled; a portal can sit on the board all match
+    // and shouldn't drive full-scene re-renders every frame (frameloop="demand").
+    requestCosmeticFrame();
+  });
+
+  return (
+    <mesh position={[0, height, 0]} rotation-x={-Math.PI / 2}>
+      <planeGeometry args={[size, size]} />
+      <primitive object={material} attach="material" />
+    </mesh>
+  );
+}
+
 /**
  * Renders a swirling portal vortex effect on designated tiles.
+ *
+ * Both Harbingers roll their three squares independently, so a square can be a
+ * portal for both players. Each owner gets its own swirl, the second one drawn
+ * smaller and slightly higher so both colours stay readable when they overlap.
  */
 export function PortalOverlay({
   tileX,
@@ -102,44 +143,27 @@ export function PortalOverlay({
   portalState,
 }: PortalOverlayProps) {
   // Check if portal setup is complete and this tile is a portal
-  const { isPortal, owner } = useMemo(() => {
-    if (!portalState || !portalState.setupComplete) {
-      return { isPortal: false, owner: null };
-    }
-    return isPortalTile(tileX, tileY, portalState);
+  const owners = useMemo(() => {
+    if (!portalState || !portalState.setupComplete) return [];
+    return portalOwnersAt(tileX, tileY, portalState);
   }, [tileX, tileY, portalState]);
 
-  const color = owner === "p1" ? PORTAL_COLORS.p1 : PORTAL_COLORS.p2;
-  const size = TILE_SIZE * 0.9;
-
-  // Create material instance (must be before early return for hooks order)
-  const material = useMemo(() => {
-    if (!isPortal) return null;
-    const mat = new SwirlMaterial();
-    mat.transparent = true;
-    mat.depthWrite = false;
-    mat.side = THREE.DoubleSide;
-    mat.uniforms.uColor.value = color;
-    return mat;
-  }, [isPortal, color]);
-
-  // Animate the swirl (pulse is handled in shader)
-  useFrame(({ clock }) => {
-    if (!material || !isPortal) return;
-    material.uniforms.uTime.value = clock.getElapsedTime();
-    // Decorative shimmer — throttled; a portal can sit on the board all match
-    // and shouldn't drive full-scene re-renders every frame (frameloop="demand").
-    requestCosmeticFrame();
-  });
-
-  if (!isPortal || !owner || !material) {
+  if (owners.length === 0) {
     return null;
   }
 
+  const baseSize = TILE_SIZE * 0.9;
+
   return (
-    <mesh position={[0, 0.008, 0]} rotation-x={-Math.PI / 2}>
-      <planeGeometry args={[size, size]} />
-      <primitive object={material} attach="material" />
-    </mesh>
+    <>
+      {owners.map((owner, index) => (
+        <PortalSwirl
+          key={owner}
+          owner={owner}
+          size={baseSize * (index === 0 ? 1 : 0.6)}
+          height={0.008 + index * 0.002}
+        />
+      ))}
+    </>
   );
 }

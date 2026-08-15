@@ -400,35 +400,32 @@ export function tileNumberToCoords(
 }
 
 /**
- * Helper: Check if a cell coordinate is a portal for either player
+ * Helper: List every player holding a portal on a cell.
+ *
+ * Each Harbinger determines its own three squares ("On setup, determine three
+ * random squares"), so in a mirror match the same square can be a portal for
+ * both players at once. Returning a single owner hid the second player's portal
+ * and denied them their -1 discount on the shared square, so the result is
+ * always a list — empty when the cell is not a portal.
  */
-export function isPortalTile(
+export function portalOwnersAt(
   x: number,
   y: number,
   portalState: PortalState | null
-): { isPortal: boolean; owner: PlayerKey | null } {
-  if (!portalState) {
-    return { isPortal: false, owner: null };
-  }
+): PlayerKey[] {
+  if (!portalState) return [];
 
-  const checkPlayer = (seat: PlayerKey): boolean => {
+  const owners: PlayerKey[] = [];
+  for (const seat of ["p1", "p2"] as const) {
     const playerState = portalState[seat];
-    if (!playerState || playerState.tileNumbers.length === 0) {
-      return false;
-    }
+    if (!playerState || playerState.tileNumbers.length === 0) continue;
 
-    return playerState.tileNumbers.some((tileNum) => {
+    const holdsPortal = playerState.tileNumbers.some((tileNum) => {
       const [tx, ty] = tileNumberToCoords(tileNum);
       return tx === x && ty === y;
     });
-  };
-
-  if (checkPlayer("p1")) {
-    return { isPortal: true, owner: "p1" };
-  }
-  if (checkPlayer("p2")) {
-    return { isPortal: true, owner: "p2" };
+    if (holdsPortal) owners.push(seat);
   }
 
-  return { isPortal: false, owner: null };
+  return owners;
 }

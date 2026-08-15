@@ -4,6 +4,7 @@ import type {
   PlayerKey,
   SerializedGame,
   ServerPatchT,
+  SiteTile,
 } from "./types";
 import { saveHistoryToStorage } from "./utils/snapshotHelpers";
 
@@ -105,34 +106,90 @@ const buildPermanentsPatchForUndo = (
   return result;
 };
 
-const sanitizeBoardSitesForUndo = (
-  board: GameState["board"] | undefined,
-): GameState["board"] | undefined => {
-  if (!board || typeof board !== "object") return board;
-  const sitesPrev = board.sites;
-  if (!sitesPrev || typeof sitesPrev !== "object") return board;
-  let changed = false;
-  const sitesNext: typeof sitesPrev = {};
-  for (const key of Object.keys(sitesPrev)) {
-    const tile = sitesPrev[key];
-    if (
-      tile &&
-      typeof tile === "object" &&
-      Object.prototype.hasOwnProperty.call(tile, "tapped")
-    ) {
-      const cleaned = { ...(tile as Record<string, unknown>) };
-      delete cleaned.tapped;
-      sitesNext[key] = cleaned as (typeof sitesPrev)[typeof key];
-      changed = true;
-    } else {
-      sitesNext[key] = tile as (typeof sitesPrev)[typeof key];
+type SitesMap = GameState["board"]["sites"];
+type SitesPatch = Record<string, SiteTile | null>;
+
+// Identity of the site occupying a cell, so we can tell "same site, still here"
+// from "a different site now stands on this cell".
+const siteIdentity = (site: SiteTile | null): string | null => {
+  const card = site?.card;
+  if (!card) return null;
+  return card.instanceId ?? `card:${card.cardId}`;
+};
+
+// Build a board.sites patch for undo: restores only the cells this seat is
+// responsible for.
+// IMPORTANT: The opponent plays sites on their own turn, so any site that
+// entered the board after our last snapshot is simply absent from it. Replacing
+// the whole sites map (the old behaviour) deleted those sites outright — they
+// went nowhere, not to hand and not to the cemetery. We therefore only touch
+// cells we own now or owned at snapshot time and let the merge preserve the
+// rest.
+// A `null` value marks a cell for deletion (see deepMergeReplaceArrays).
+const buildSitesPatchForUndo = (
+  snapshotSites: SitesMap | undefined,
+  currentSites: SitesMap | undefined,
+  ownerNum: 1 | 2,
+): SitesPatch => {
+  const snapshot = snapshotSites ?? {};
+  const current = currentSites ?? {};
+  const patch: SitesPatch = {};
+  const cellKeys = new Set([
+    ...Object.keys(snapshot),
+    ...Object.keys(current),
+  ]);
+
+  for (const cellKey of cellKeys) {
+    const snapshotSite = snapshot[cellKey] ?? null;
+    const currentSite = current[cellKey] ?? null;
+    const mineNow = currentSite?.owner === ownerNum;
+    const mineThen = snapshotSite?.owner === ownerNum;
+
+    // Never ours on either side — the opponent's site, leave it untouched.
+    if (!mineNow && !mineThen) continue;
+    // The opponent replaced our site after the snapshot. Undoing our own turn
+    // must not roll back their play.
+    if (mineThen && !mineNow && currentSite) continue;
+
+    if (!snapshotSite) {
+      // We put this site here after the snapshot — remove it.
+      patch[cellKey] = null;
+      continue;
     }
+
+    const restored: SiteTile = { ...snapshotSite };
+    if (siteIdentity(snapshotSite) === siteIdentity(currentSite)) {
+      // Same site is still on the cell. Tapping is not what undo rewinds (and
+      // the opponent may have tapped it), so omit the key and let the merge
+      // keep the live value.
+      delete restored.tapped;
+    } else {
+      // A different site stands here now; the snapshot's own tapped state is
+      // the one that applies to the site we are putting back.
+      restored.tapped = snapshotSite.tapped ?? false;
+    }
+    patch[cellKey] = restored;
   }
-  if (!changed) return board;
-  return {
-    ...board,
-    sites: sitesNext,
-  };
+
+  return patch;
+};
+
+// Apply a sites patch the same way deepMergeReplaceArrays would, for the local
+// half of the undo (we don't wait for the server echo).
+const applySitesPatchLocally = (
+  currentSites: SitesMap | undefined,
+  patch: SitesPatch,
+): SitesMap => {
+  const next: SitesMap = { ...(currentSites ?? {}) };
+  for (const [cellKey, tile] of Object.entries(patch)) {
+    if (tile === null) {
+      delete next[cellKey];
+      continue;
+    }
+    const existing = next[cellKey];
+    next[cellKey] = existing ? { ...existing, ...tile } : { ...tile };
+  }
+  return next;
 };
 
 type HistoryDefaults = Pick<GameState, "history" | "historyByPlayer">;
@@ -327,13 +384,25 @@ export const createHistorySlice: StateCreator<
           0,
         );
 
-        const boardForUndo = sanitizeBoardSitesForUndo(prev.board);
-
         // CRITICAL FIX: Only restore our own seat's data in the patch.
         // We do NOT include opponent data and do NOT use __replaceKeys for
         // player-specific fields. This ensures opponent's state is preserved
         // via merge logic rather than being replaced with our stale view.
         const me = state.actorKey as PlayerKey;
+        const myOwnerNum: 1 | 2 = me === "p1" ? 1 : 2;
+
+        // CRITICAL FIX: Send only a board.sites delta for our own cells.
+        // "board" must stay out of __replaceKeys — replacing the whole board
+        // wiped sites the opponent played after our last snapshot.
+        const sitesForUndo = buildSitesPatchForUndo(
+          prev.board?.sites,
+          state.board?.sites,
+          myOwnerNum,
+        );
+        const boardForUndo = {
+          ...prev.board,
+          sites: sitesForUndo as SitesMap,
+        } as GameState["board"];
 
         // For player-specific data, we only send OUR seat's snapshot data.
         // The applyServerPatch merge logic will only update our seat.
@@ -355,11 +424,10 @@ export const createHistorySlice: StateCreator<
         // CRITICAL FIX: Build permanents patch with proper removal markers.
         // Only restore OWN permanents - opponent can act during our turn
         // (move/tap cards, response cards), so their state may have changed.
-        const myOwnerNum = me === "p1" ? 1 : 2;
         const permanentsForUndo = buildPermanentsPatchForUndo(
           prev.permanents,
           state.permanents,
-          myOwnerNum as 1 | 2,
+          myOwnerNum,
         );
 
         // CRITICAL: Do NOT include zones, avatars, mulligans, mulliganDrawn,
@@ -397,8 +465,6 @@ export const createHistorySlice: StateCreator<
             "phase",
             "d20Rolls",
             "setupWinner",
-            "board",
-            "sitePositions",
             "playerPositions",
             "events",
             "eventSeq",
@@ -406,6 +472,10 @@ export const createHistorySlice: StateCreator<
             // NOTE: zones, avatars, mulligans, mulliganDrawn, permanents,
             // permanentPositions, permanentAbilities are NOT here!
             // They contain player-specific data and will be MERGED to preserve opponent state.
+            // NOTE: board and sitePositions are NOT here either! Our snapshot
+            // predates any site the opponent played since, and replacing the
+            // board deleted those sites outright. board.sites is sent as a
+            // per-cell delta above and merged instead.
           ],
         } as ServerPatchT;
         try {
@@ -443,6 +513,19 @@ export const createHistorySlice: StateCreator<
         // Merge permanents: our snapshot permanents + opponent's current permanents.
         // Opponent can act during our turn, so we preserve their current state.
         const opponentOwnerNum = me === "p1" ? 2 : 1;
+
+        // Same treatment for the board: apply our sites delta on top of the
+        // live board so the opponent's sites survive our undo locally too.
+        const localBoard = {
+          ...state.board,
+          sites: applySitesPatchLocally(state.board?.sites, sitesForUndo),
+        } as GameState["board"];
+        // sitePositions merges rather than replaces, for the same reason.
+        const localSitePositions = {
+          ...state.sitePositions,
+          ...prev.sitePositions,
+        } as GameState["sitePositions"];
+
         const localPermanents: GameState["permanents"] = {};
         // Add our permanents from snapshot
         for (const [cellKey, items] of Object.entries(prev.permanents)) {
@@ -487,7 +570,7 @@ export const createHistorySlice: StateCreator<
           phase: prev.phase,
           d20Rolls: prev.d20Rolls,
           setupWinner: prev.setupWinner,
-          board: boardForUndo,
+          board: localBoard,
           zones: localZones,
           avatars: localAvatars,
           permanents: localPermanents,
@@ -495,7 +578,7 @@ export const createHistorySlice: StateCreator<
           mulliganDrawn: localMulliganDrawn,
           permanentPositions: prev.permanentPositions,
           permanentAbilities: prev.permanentAbilities,
-          sitePositions: prev.sitePositions,
+          sitePositions: localSitePositions,
           playerPositions: prev.playerPositions,
           events: prev.events,
           eventSeq: prev.eventSeq,

@@ -20,7 +20,7 @@ import {
 } from "@/lib/game/mana-providers";
 import { isOrdinarySite } from "../atlanteanFateState";
 import { isBaseOfBabel, isTowerOfBabel } from "../babelTowerState";
-import { isPortalTile } from "../portalState";
+import { portalOwnersAt } from "../portalState";
 import { getAdjacentCells, parseCellKey } from "./boardHelpers";
 import type {
   AvatarState,
@@ -126,13 +126,9 @@ export const getAvatarAdjustedManaCost = (input: {
     isHarbinger(effectiveAvatarName) &&
     !state.harbingerPortalDiscountUsed[who]
   ) {
-    const { isPortal, owner: portalOwner } = isPortalTile(
-      x,
-      y,
-      state.portalState,
-    );
-    const playerOwner = who === "p1" ? "p1" : "p2";
-    if (isPortal && portalOwner === playerOwner) {
+    // A square can be a portal for both players at once, so check membership
+    // rather than a single owner.
+    if (portalOwnersAt(x, y, state.portalState).includes(who)) {
       adjustedManaCost = Math.max(0, adjustedManaCost - 1);
       harbingerPortalDiscountApplied = true;
     }
