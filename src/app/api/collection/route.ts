@@ -13,6 +13,7 @@ import type {
   SortOrder,
 } from "@/lib/collection/types";
 import {
+  MAX_QUANTITY,
   validateCollectionCardInput,
   validateQuantity,
 } from "@/lib/collection/validation";
@@ -461,105 +462,158 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Single transaction for all DB operations
-    const results = await prisma.$transaction(async (tx) => {
-      // Batch verify: user exists + cards exist in single query
-      const [user, existingCards] = await Promise.all([
-        tx.user.findUnique({ where: { id: userId }, select: { id: true } }),
-        tx.card.findMany({
-          where: { id: { in: validInputs.map((c) => c.cardId) } },
-          select: { id: true },
-        }),
-      ]);
-
-      if (!user) {
-        throw new Error("USER_NOT_FOUND");
+    // Collapse duplicate rows in the payload (same card + variant + finish) so
+    // each unique entry costs one write instead of one per input row.
+    const byKey = new Map<string, (typeof validInputs)[number]>();
+    for (const input of validInputs) {
+      const key = `${input.cardId}:${input.variantId ?? ""}:${input.finish}`;
+      const merged = byKey.get(key);
+      if (merged) {
+        merged.quantity = Math.min(
+          MAX_QUANTITY,
+          merged.quantity + input.quantity,
+        );
+      } else {
+        byKey.set(key, { ...input });
       }
+    }
 
-      const existingCardIds = new Set(existingCards.map((c) => c.id));
-      const toProcess: typeof validInputs = [];
+    // Single transaction for all DB operations. Every step issues a bounded
+    // number of queries rather than one per card, so bulk adds (e.g. "add a
+    // whole card list to my collection") stay inside the transaction timeout.
+    const results = await prisma.$transaction(
+      async (tx) => {
+        // Batch verify: user exists + cards exist in single query
+        const [user, existingCards] = await Promise.all([
+          tx.user.findUnique({ where: { id: userId }, select: { id: true } }),
+          tx.card.findMany({
+            where: {
+              id: { in: Array.from(byKey.values(), (c) => c.cardId) },
+            },
+            select: { id: true },
+          }),
+        ]);
 
-      for (const input of validInputs) {
-        if (!existingCardIds.has(input.cardId)) {
-          response.errors.push({
-            cardId: input.cardId,
-            message: "Card not found",
-          });
-        } else {
-          toProcess.push(input);
+        if (!user) {
+          throw new Error("USER_NOT_FOUND");
         }
-      }
 
-      // Batch fetch existing collection entries
-      const existingEntries = await tx.collectionCard.findMany({
-        where: {
-          userId,
-          OR: toProcess.map((c) => ({
-            cardId: c.cardId,
-            variantId: c.variantId,
-            finish: c.finish,
-          })),
-        },
-      });
+        const existingCardIds = new Set(existingCards.map((c) => c.id));
+        const toProcess = new Map<string, (typeof validInputs)[number]>();
 
-      // Build lookup map: "cardId:variantId:finish" -> existing entry
-      const entryMap = new Map(
-        existingEntries.map((e) => [
-          `${e.cardId}:${e.variantId ?? ""}:${e.finish}`,
-          e,
-        ]),
-      );
+        for (const [key, input] of byKey) {
+          if (!existingCardIds.has(input.cardId)) {
+            response.errors.push({
+              cardId: input.cardId,
+              message: "Card not found",
+            });
+          } else {
+            toProcess.set(key, input);
+          }
+        }
 
-      const created: typeof response.added = [];
-      const updated: typeof response.updated = [];
+        if (toProcess.size === 0) {
+          return { created: [], updated: [] };
+        }
 
-      // Process all cards in parallel
-      await Promise.all(
-        toProcess.map(async (input) => {
-          const key = `${input.cardId}:${input.variantId ?? ""}:${
-            input.finish
-          }`;
+        // Batch fetch existing collection entries
+        const existingEntries = await tx.collectionCard.findMany({
+          where: {
+            userId,
+            OR: Array.from(toProcess.values(), (c) => ({
+              cardId: c.cardId,
+              variantId: c.variantId,
+              finish: c.finish,
+            })),
+          },
+          select: {
+            id: true,
+            cardId: true,
+            variantId: true,
+            finish: true,
+            quantity: true,
+          },
+        });
+
+        // Build lookup map: "cardId:variantId:finish" -> existing entry
+        const entryMap = new Map(
+          existingEntries.map((e) => [
+            `${e.cardId}:${e.variantId ?? ""}:${e.finish}`,
+            e,
+          ]),
+        );
+
+        const toCreate: Prisma.CollectionCardCreateManyInput[] = [];
+        const updated: typeof response.updated = [];
+        // Updates are grouped by their resulting quantity, so we run at most
+        // MAX_QUANTITY updateMany calls no matter how many rows are touched.
+        const idsByQuantity = new Map<number, number[]>();
+
+        for (const [key, input] of toProcess) {
           const existing = entryMap.get(key);
 
           if (existing) {
             const newQuantity = Math.min(
-              99,
+              MAX_QUANTITY,
               existing.quantity + input.quantity,
             );
-            const result = await tx.collectionCard.update({
-              where: { id: existing.id },
-              data: { quantity: newQuantity },
-            });
+            const ids = idsByQuantity.get(newQuantity);
+            if (ids) {
+              ids.push(existing.id);
+            } else {
+              idsByQuantity.set(newQuantity, [existing.id]);
+            }
             updated.push({
-              id: result.id,
-              cardId: result.cardId,
-              variantId: result.variantId,
-              quantity: result.quantity,
+              id: existing.id,
+              cardId: existing.cardId,
+              variantId: existing.variantId,
+              quantity: newQuantity,
             });
           } else {
-            const result = await tx.collectionCard.create({
-              data: {
-                userId,
-                cardId: input.cardId,
-                variantId: input.variantId,
-                setId: input.setId,
-                finish: input.finish,
-                quantity: input.quantity,
-              },
-            });
-            created.push({
-              id: result.id,
-              cardId: result.cardId,
-              variantId: result.variantId,
-              quantity: result.quantity,
-              isNew: true,
+            toCreate.push({
+              userId,
+              cardId: input.cardId,
+              variantId: input.variantId,
+              setId: input.setId,
+              finish: input.finish,
+              quantity: input.quantity,
             });
           }
-        }),
-      );
+        }
 
-      return { created, updated };
-    });
+        const createdRows =
+          toCreate.length > 0
+            ? await tx.collectionCard.createManyAndReturn({
+                data: toCreate,
+                select: {
+                  id: true,
+                  cardId: true,
+                  variantId: true,
+                  quantity: true,
+                },
+              })
+            : [];
+
+        for (const [quantity, ids] of idsByQuantity) {
+          await tx.collectionCard.updateMany({
+            where: { id: { in: ids } },
+            data: { quantity },
+          });
+        }
+
+        return {
+          created: createdRows.map((r) => ({
+            id: r.id,
+            cardId: r.cardId,
+            variantId: r.variantId,
+            quantity: r.quantity,
+            isNew: true,
+          })),
+          updated,
+        };
+      },
+      { timeout: 20_000, maxWait: 10_000 },
+    );
 
     response.added = results.created;
     response.updated = results.updated;
