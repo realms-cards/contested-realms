@@ -21,6 +21,7 @@ function createMatchmakingFeature(deps) {
   const handleLobbyControlAsLeader = deps.handleLobbyControlAsLeader;
   const ensurePlayerCached = deps.ensurePlayerCached;
   const MATCHMAKING_CHANNEL = deps.matchmakingChannel || "matchmaking:control";
+  const DISCORD_NOTIFY_CHANNEL = deps.discordNotifyChannel || "discord:notify";
   const lobbies = deps.lobbies;
   const reservePrivateLobby = deps.reservePrivateLobby;
   const setMatchmakingLobbyConfirmationRequired =
@@ -127,6 +128,33 @@ function createMatchmakingFeature(deps) {
     if (!storeRedis) return;
     try {
       await storeRedis.publish(MATCHMAKING_CHANNEL, JSON.stringify(msg));
+    } catch {}
+  }
+
+  // Tells the Discord bot a player is now waiting for an opponent so it can
+  // ping the Duelist role. Only the instance that owns the join publishes, so
+  // cross-instance replays of the same join don't double-announce.
+  async function publishDiscordLfgNotice(entry) {
+    if (!storeRedis) return;
+    let playerName = null;
+    try {
+      const player = await ensurePlayerCached(entry.playerId);
+      playerName = player?.displayName || null;
+    } catch {}
+    try {
+      await storeRedis.publish(
+        DISCORD_NOTIFY_CHANNEL,
+        JSON.stringify({
+          kind: "queue",
+          playerId: entry.playerId,
+          playerName,
+          source: entry.source,
+          discordId: entry.discordId ?? null,
+          matchType: "constructed",
+          queueSize: queue.size,
+          at: Date.now(),
+        }),
+      );
     } catch {}
   }
 
@@ -365,6 +393,7 @@ function createMatchmakingFeature(deps) {
 
   async function joinQueue(playerId, socketId, options = {}) {
     const existing = queue.get(playerId);
+    const isNewEntry = !existing;
     if (existing) {
       existing.socketId = socketId ?? existing.socketId;
       if (socketId) existing.disconnectedAt = null;
@@ -399,6 +428,13 @@ function createMatchmakingFeature(deps) {
 
     broadcastQueueSize();
     await checkForMatches();
+
+    // Announce only if they're still waiting — an instant pairing means there
+    // is nothing for Duelists to answer.
+    const stillWaiting = queue.get(playerId);
+    if (isNewEntry && stillWaiting && !getPendingMatch(playerId)) {
+      await publishDiscordLfgNotice(stillWaiting);
+    }
 
     console.log(`[Matchmaking] ${playerId.slice(-6)} joined constructed queue`);
   }

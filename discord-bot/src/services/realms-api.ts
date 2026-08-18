@@ -96,11 +96,26 @@ type LobbyUrlOptions = {
 
 export class RealmsApiClient {
   private baseUrl: string;
+  private publicUrl: string;
   private secret: string;
 
   constructor(baseUrl: string, secret: string) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
+    // Links handed to players must be reachable from a browser. In production
+    // REALMS_API_URL points at an internal host, so REALMS_PUBLIC_URL wins for
+    // anything user-facing.
+    this.publicUrl = (process.env.REALMS_PUBLIC_URL || baseUrl).replace(
+      /\/$/,
+      "",
+    );
     this.secret = secret;
+  }
+
+  /**
+   * Absolute, browser-reachable URL for a path on the site.
+   */
+  buildSiteUrl(path: string): string {
+    return new URL(path, this.publicUrl).toString();
   }
 
   buildLobbyUrl(lobbyId: string, options: LobbyUrlOptions = {}): string {
@@ -111,8 +126,7 @@ export class RealmsApiClient {
     if (options.tournamentId) {
       params.set("tournament", options.tournamentId);
     }
-    const url = new URL(`/online/lobby?${params.toString()}`, this.baseUrl);
-    return url.toString();
+    return this.buildSiteUrl(`/online/lobby?${params.toString()}`);
   }
 
   private async request<T>(

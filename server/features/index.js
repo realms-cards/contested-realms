@@ -42,6 +42,7 @@ function registerFeatures(container, deps) {
       hydrateMatchFromDatabase: deps.hydrateMatchFromDatabase,
       lobbyControlChannel: deps.lobbyControlChannel,
       lobbyStateChannel: deps.lobbyStateChannel,
+      discordNotifyChannel: deps.discordNotifyChannel,
       cpuBotsEnabled: deps.cpuBotsEnabled,
       loadBotClientCtor: deps.loadBotClientCtor,
       loadBotCardIdMapFn: deps.loadBotCardIdMapFn,
@@ -84,6 +85,7 @@ function registerFeatures(container, deps) {
       handleLobbyControlAsLeader: lobby.handleLobbyControlAsLeader,
       ensurePlayerCached: deps.ensurePlayerCached,
       matchmakingChannel: deps.matchmakingChannel || "matchmaking:control",
+      discordNotifyChannel: deps.discordNotifyChannel,
       lobbies: lobby.lobbies,
       reservePrivateLobby: lobby.reservePrivateLobby,
       setMatchmakingLobbyConfirmationRequired:

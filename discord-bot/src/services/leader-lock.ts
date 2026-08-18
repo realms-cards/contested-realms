@@ -3,7 +3,8 @@
  * This prevents duplicate Discord connections when scaling horizontally.
  */
 
-import { Redis } from "ioredis";
+import type { Redis } from "ioredis";
+import { getSharedRedis } from "./redis.js";
 
 const LOCK_KEY = "realms:discord-bot:leader";
 const LOCK_TTL_MS = 30_000; // 30 seconds
@@ -14,67 +15,10 @@ let redis: Redis | null = null;
 let heartbeatTimer: NodeJS.Timeout | null = null;
 let instanceId: string | null = null;
 let heartbeatFailures = 0;
-let isConnected = false;
 
 function getRedis(): Redis {
   if (!redis) {
-    const url = process.env.REDIS_URL || "redis://localhost:6379";
-
-    // Parse Redis URL to extract password if present
-    let redisConfig: string | { host: string; port: number; password: string } =
-      url;
-    try {
-      const parsedUrl = new URL(url);
-      if (parsedUrl.password) {
-        // Use object config instead of URL string to handle special chars in password
-        redisConfig = {
-          host: parsedUrl.hostname,
-          port: parseInt(parsedUrl.port || "6379"),
-          password: parsedUrl.password,
-        };
-      }
-    } catch (_err) {
-      // If URL parsing fails, fall back to string URL
-      console.warn("[leader-lock] Failed to parse REDIS_URL, using as-is");
-    }
-
-    const redisOptions = {
-      maxRetriesPerRequest: 3,
-      retryStrategy: (times: number) => {
-        if (times > 5) {
-          console.error(
-            "[leader-lock] Redis connection failed after 5 retries"
-          );
-          return null;
-        }
-        return Math.min(times * 200, 3000);
-      },
-      lazyConnect: false,
-    };
-
-    if (typeof redisConfig === "string") {
-      redis = new Redis(redisConfig, redisOptions);
-    } else {
-      redis = new Redis({ ...redisConfig, ...redisOptions });
-    }
-
-    redis.on("connect", () => {
-      console.log("[leader-lock] Redis connected");
-      isConnected = true;
-      heartbeatFailures = 0;
-    });
-
-    redis.on("close", () => {
-      console.log("[leader-lock] Redis connection closed");
-      isConnected = false;
-    });
-
-    redis.on("error", (err: Error) => {
-      // Only log if we were connected (avoid spam during reconnection)
-      if (isConnected) {
-        console.error("[leader-lock] Redis error:", err.message);
-      }
-    });
+    redis = getSharedRedis();
   }
   return redis;
 }
@@ -139,7 +83,7 @@ export async function releaseBotLock(): Promise<void> {
     console.error("[leader-lock] Failed to release lock:", err);
   }
 
-  await redis.quit();
+  // The connection is shared; index.ts closes it during shutdown.
   redis = null;
 }
 
@@ -153,7 +97,7 @@ function startHeartbeat(): void {
     if (!redis || !instanceId) return;
 
     // Skip heartbeat if not connected
-    if (!isConnected) {
+    if (redis.status !== "ready") {
       heartbeatFailures++;
       console.warn(
         `[leader-lock] Skipping heartbeat (disconnected), failures: ${heartbeatFailures}/${MAX_HEARTBEAT_FAILURES}`

@@ -122,6 +122,9 @@ services:
       - .env.production
     environment:
       - REALMS_API_URL=http://server1:3010
+      # Links the bot puts in Discord must be reachable from a browser, so they
+      # use the public site rather than the internal API host above.
+      - REALMS_PUBLIC_URL=${NEXTAUTH_URL:-https://realms.cards}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
     depends_on:
       redis:

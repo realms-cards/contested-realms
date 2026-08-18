@@ -7,7 +7,9 @@ import { handleVoiceStateUpdate } from "./events/voiceStateUpdate.js";
 import { ChallengeManager } from "./services/challenge-manager.js";
 import { setContext } from "./services/context.js";
 import { acquireBotLock, releaseBotLock } from "./services/leader-lock.js";
+import { LfgAnnouncer } from "./services/lfg-announcer.js";
 import { RealmsApiClient } from "./services/realms-api.js";
+import { closeRedisClients } from "./services/redis.js";
 import { QueueManager } from "./services/shared-queue-manager.js";
 import { VoiceCoordinator } from "./services/voice-coordinator.js";
 import { VoiceChannelManager } from "./services/voice-manager.js";
@@ -38,6 +40,7 @@ const client = new Client({
 let voiceManager: VoiceChannelManager;
 let voiceCoordinator: VoiceCoordinator;
 let queueManager: QueueManager;
+let lfgAnnouncer: LfgAnnouncer;
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`[bot] Logged in as ${readyClient.user.tag}`);
@@ -58,6 +61,8 @@ client.once(Events.ClientReady, async (readyClient) => {
     challengeManager,
     voiceCoordinator,
   );
+  lfgAnnouncer = new LfgAnnouncer(readyClient, realmsApi);
+  lfgAnnouncer.start();
 
   // Set context for command handlers
   setContext({
@@ -100,7 +105,11 @@ async function shutdown(signal: string) {
     if (queueManager) {
       await queueManager.cleanup();
     }
+    if (lfgAnnouncer) {
+      await lfgAnnouncer.cleanup();
+    }
     await releaseBotLock();
+    await closeRedisClients();
     client.destroy();
     console.log("[bot] Disconnected from Discord");
   } catch (err) {

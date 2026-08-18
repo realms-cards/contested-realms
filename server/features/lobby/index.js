@@ -45,6 +45,7 @@ function createLobbyFeature(deps) {
   const _hydrateMatchFromDatabase = deps.hydrateMatchFromDatabase;
   const LOBBY_CONTROL_CHANNEL = deps.lobbyControlChannel;
   const LOBBY_STATE_CHANNEL = deps.lobbyStateChannel;
+  const DISCORD_NOTIFY_CHANNEL = deps.discordNotifyChannel || "discord:notify";
   const CPU_BOTS_ENABLED = !!deps.cpuBotsEnabled;
   const loadBotClientCtor = deps.loadBotClientCtor;
   const loadBotCardIdMapFn = deps.loadBotCardIdMapFn || null;
@@ -125,6 +126,53 @@ function createLobbyFeature(deps) {
         err,
       );
     }
+  }
+
+  /** @type {Set<string>} lobbyIds already announced to Discord */
+  const discordAnnouncedLobbies = new Set();
+
+  /**
+   * Tell the Discord bot a public lobby is waiting for an opponent so it can
+   * ping the Duelist role. Announced once per lobby.
+   * @param {object} lobby
+   */
+  async function publishDiscordLfgNotice(lobby) {
+    if (!storeRedis || !lobby) return;
+    if (lobby.visibility !== "open") return;
+    if (lobby.status !== "open" || !lobby.hostReady) return;
+    if (lobby.isDiscordMatch) return;
+    if (!lobby.hostId || isCpuPlayerId?.(lobby.hostId)) return;
+    if (lobby.playerIds.size >= lobby.maxPlayers) return;
+    if (discordAnnouncedLobbies.has(lobby.id)) return;
+    // Drop ids for lobbies that no longer exist so the set can't grow forever.
+    for (const id of discordAnnouncedLobbies) {
+      if (!lobbies.has(id)) discordAnnouncedLobbies.delete(id);
+    }
+    discordAnnouncedLobbies.add(lobby.id);
+
+    let playerName = players.get(lobby.hostId)?.displayName || null;
+    if (!playerName) {
+      try {
+        const cached = await ensurePlayerCached(lobby.hostId);
+        playerName = cached?.displayName || null;
+      } catch {}
+    }
+
+    try {
+      await storeRedis.publish(
+        DISCORD_NOTIFY_CHANNEL,
+        JSON.stringify({
+          kind: "lobby",
+          playerId: lobby.hostId,
+          playerName,
+          source: "web",
+          lobbyId: lobby.id,
+          lobbyName: lobby.name || null,
+          matchType: lobby.plannedMatchType || "constructed",
+          at: Date.now(),
+        }),
+      );
+    } catch {}
   }
 
   async function getOrClaimLobbyLeader() {
@@ -1510,6 +1558,9 @@ function createLobbyFeature(deps) {
         if (leader === INSTANCE_ID)
           io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
       })();
+      // A lobby flipped to public after the host already opened it is just as
+      // joinable as one opened while public.
+      await publishDiscordLfgNotice(lobby);
       return;
     }
     if (msg.type === "plan") {
@@ -1785,6 +1836,7 @@ function createLobbyFeature(deps) {
       try {
         await publishLobbyState(lobby);
       } catch {}
+      await publishDiscordLfgNotice(lobby);
     });
 
     // Set player location for presence tracking
