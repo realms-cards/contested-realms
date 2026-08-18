@@ -45,8 +45,43 @@ Required variables:
 
 ```bash
 npm install
-npm run deploy-commands
+npm run deploy-commands                 # global - up to 1 HOUR to appear
+npm run deploy-commands -- --guild      # instant, DISCORD_GUILD_ID only
+npm run deploy-commands -- --list       # what Discord has registered right now
+npm run deploy-commands -- --clear-guild
 ```
+
+`deploy-commands` runs through `tsx`, a devDependency — it needs a full
+`npm install`. On a production host installed with `npm ci --omit=dev`, `tsx`
+and `typescript` aren't there, so run the compiled script inside the bot
+container instead (it already has `dist/`, the prod deps, and the env):
+
+```bash
+docker compose -f docker-compose.prod.yml exec discord-bot \
+  node dist/deploy-commands.js --guild <guild-id>
+```
+
+`npm run deploy-commands:dist -- --guild` does the same from any checkout that
+has already been built.
+
+Global commands reach every server but propagate slowly; guild commands appear
+immediately in one server, which is what you want while testing a new command.
+The bot also re-registers on every startup (global unless `NODE_ENV=development`),
+so a new command normally ships by restarting the bot — you just won't see it for
+up to an hour.
+
+A guild-scoped command **shadows** the global one of the same name in that
+server, so run `--clear-guild` once the global deploy has propagated. `--list`
+flags any name registered in both scopes.
+
+**A new command isn't showing up?** In order:
+
+1. `npm run deploy-commands -- --list` — if the name isn't there, it was never published.
+2. Make sure the running bot has the new code. The Docker image bakes `dist/` at
+   build time, so production needs a rebuild, not just a restart:
+   `docker compose -f docker-compose.prod.yml up -d --build discord-bot`
+3. `npm run deploy-commands -- --guild` for an instant deploy to your own server.
+4. Reload the Discord client (Ctrl/Cmd+R) — it caches the command list.
 
 ### 4. Run the Bot
 
