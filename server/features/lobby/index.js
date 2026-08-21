@@ -25,6 +25,7 @@
  * @param {(id: string) => boolean} deps.isCpuPlayerId
  * @param {import('../../core/redis-state').RedisStateManager} [deps.redisState] - Redis state manager for horizontal scaling
  * @param {{ migrateToMatch: (lobbyId: string, matchId: string, playerIds: string[]) => void }} [deps.rtcMigration] - RTC migration helper for voice persistence
+ * @param {(playerId: string, info: { lobbyId?: string | null, matchStarted?: boolean, reason?: string }) => Promise<unknown>} [deps.onPlayerEnteredGame] - notified when a player joins a lobby or a match, so matchmaking can drop their queue slot
  */
 function createLobbyFeature(deps) {
   const io = deps.io;
@@ -54,6 +55,25 @@ function createLobbyFeature(deps) {
   const isCpuPlayerId = deps.isCpuPlayerId;
   const _rtcMigration = deps.rtcMigration || null;
   const botInternalSecret = deps.botInternalSecret || null;
+  const onPlayerEnteredGame =
+    typeof deps.onPlayerEnteredGame === "function"
+      ? deps.onPlayerEnteredGame
+      : null;
+
+  /**
+   * Fire-and-forget notification that a player is now in a lobby/match, so the
+   * matchmaking queue can release them. Never let it break the join it follows.
+   */
+  function notifyPlayerEnteredGame(playerId, info) {
+    if (!onPlayerEnteredGame || !playerId) return;
+    try {
+      Promise.resolve(onPlayerEnteredGame(playerId, info)).catch((err) => {
+        console.warn("[lobby] onPlayerEnteredGame failed:", err);
+      });
+    } catch (err) {
+      console.warn("[lobby] onPlayerEnteredGame failed:", err);
+    }
+  }
 
   console.log(
     `[Lobby] CPU bots feature: enabled=${CPU_BOTS_ENABLED}, hasBotSecret=${!!botInternalSecret}, port=${PORT}`,
@@ -793,6 +813,10 @@ function createLobbyFeature(deps) {
     lobby.playerIds.add(player.id);
     lobby.ready.add(player.id);
     player.lobbyId = lobby.id;
+    notifyPlayerEnteredGame(player.id, {
+      lobbyId: lobby.id,
+      reason: "joined_lobby",
+    });
     socket.join(`lobby:${lobby.id}`);
 
     markLobbyActive(lobby);
@@ -1021,6 +1045,11 @@ function createLobbyFeature(deps) {
         } catch {}
       }
       p.matchId = match.id;
+      notifyPlayerEnteredGame(pid, {
+        lobbyId: lobby.id,
+        matchStarted: true,
+        reason: "match_started",
+      });
     }
 
     // NOTE: For lobby-based matches, we do NOT migrate RTC participants.
@@ -1357,6 +1386,10 @@ function createLobbyFeature(deps) {
       try {
         p.lobbyId = lobby.id;
       } catch {}
+      notifyPlayerEnteredGame(hostId, {
+        lobbyId: lobby.id,
+        reason: "created_lobby",
+      });
       const info = getLobbyInfo(lobby);
       if (socketId)
         try {
@@ -1416,6 +1449,10 @@ function createLobbyFeature(deps) {
       try {
         p.lobbyId = lobby.id;
       } catch {}
+      notifyPlayerEnteredGame(playerId, {
+        lobbyId: lobby.id,
+        reason: "joined_lobby",
+      });
       if (socketId) {
         try {
           await io.in(socketId).socketsJoin(`lobby:${lobby.id}`);
@@ -2212,6 +2249,10 @@ function createLobbyFeature(deps) {
         host.lobbyId = lobby.id;
         lobby.playerIds.add(host.id);
         lobby.ready.add(host.id);
+        notifyPlayerEnteredGame(host.id, {
+          lobbyId: lobby.id,
+          reason: "cpu_match",
+        });
         try {
           await io.in(socket.id).socketsJoin(`lobby:${lobby.id}`);
         } catch {}

@@ -8,6 +8,7 @@
  * @param {() => Promise<string>} deps.getOrClaimLobbyLeader
  * @param {(msg: object) => Promise<void>} deps.handleLobbyControlAsLeader
  * @param {(playerId: string) => Promise<any>} deps.ensurePlayerCached
+ * @param {Map<string, any>} [deps.players]
  * @param {string} deps.matchmakingChannel
  * @param {Map} deps.lobbies
  * @param {(hostId: string, opts?: object) => any} deps.reservePrivateLobby
@@ -20,6 +21,7 @@ function createMatchmakingFeature(deps) {
   const getOrClaimLobbyLeader = deps.getOrClaimLobbyLeader;
   const handleLobbyControlAsLeader = deps.handleLobbyControlAsLeader;
   const ensurePlayerCached = deps.ensurePlayerCached;
+  const players = deps.players || null;
   const MATCHMAKING_CHANNEL = deps.matchmakingChannel || "matchmaking:control";
   const DISCORD_NOTIFY_CHANNEL = deps.discordNotifyChannel || "discord:notify";
   const lobbies = deps.lobbies;
@@ -45,10 +47,20 @@ function createMatchmakingFeature(deps) {
   const QUEUE_DISCONNECT_GRACE_MS = 90 * 1000;
   let matchCheckTimer = null;
 
+  // A queued player who is already sitting in a lobby or a running match must
+  // never be paired: doing so force-joins them into a second game and orphans
+  // the one they are playing.
+  function isPlayerBusy(playerId) {
+    const player = players ? players.get(playerId) : null;
+    if (!player) return false;
+    return !!(player.lobbyId || player.matchId);
+  }
+
   // Discord entries have no socket by design; web entries without one are
   // mid-reconnect and must not be paired until they are back.
   function isMatchable(entry) {
     if (!entry) return false;
+    if (isPlayerBusy(entry.playerId)) return false;
     if (entry.source === "discord") return true;
     return !!entry.socketId;
   }
@@ -448,6 +460,58 @@ function createMatchmakingFeature(deps) {
     return true;
   }
 
+  /**
+   * A player entered a lobby or a match through some route other than the
+   * queue (friend invite, direct lobby join, tournament pairing, rematch).
+   * Their queue slot has to go: leaving it behind lets checkForMatches pair
+   * them again and force-join them into a second game, which yanks them out of
+   * the one they are playing and leaves them unable to get back to it.
+   *
+   * @param {string} playerId
+   * @param {{ lobbyId?: string | null, matchStarted?: boolean, reason?: string }} [options]
+   * @returns {Promise<boolean>} whether anything was dropped
+   */
+  async function handlePlayerEnteredGame(playerId, options = {}) {
+    if (!playerId) return false;
+    const {
+      lobbyId = null,
+      matchStarted = false,
+      reason = "joined_game",
+    } = options;
+    const pending = getPendingMatch(playerId);
+    if (!pending && !queue.has(playerId)) return false;
+
+    // Landing in your own matchmade lobby is the queue working as intended,
+    // not the player wandering off — leave the pending match alone until the
+    // match actually starts, at which point it is fulfilled.
+    if (pending && lobbyId && pending.lobbyId === lobbyId) {
+      if (!matchStarted) return false;
+      clearPendingMatch(playerId);
+      return true;
+    }
+
+    // Mirrors the "leaveMatchmaking" handler: releasing the reservation gets
+    // the opponent requeued instead of staring at a confirm dialog nobody on
+    // the other side can answer any more.
+    if (pending && pending.status === "confirming") {
+      await respondToMatchmaking(playerId, "decline");
+    }
+    await leaveQueue(playerId, reason);
+    console.log(
+      `[Matchmaking] ${playerId.slice(-6)} dropped from queue (${reason})`,
+    );
+    return true;
+  }
+
+  // Safety net for anything that puts a player in a game without going through
+  // onPlayerEnteredGame (server restart recovery, cross-instance handoff).
+  async function purgeBusyQueueEntries() {
+    for (const entry of sortedQueueEntries()) {
+      if (!isPlayerBusy(entry.playerId)) continue;
+      await handlePlayerEnteredGame(entry.playerId, { reason: "in_game" });
+    }
+  }
+
   function findMatchingLobby() {
     if (!lobbies) return null;
     const now = Date.now();
@@ -467,6 +531,12 @@ function createMatchmakingFeature(deps) {
   }
 
   async function joinExistingLobby(entry, lobby) {
+    // Last check before we force a socket into someone else's lobby: a player
+    // who slipped into a game since the queue scan must be released, not moved.
+    if (isPlayerBusy(entry.playerId)) {
+      await handlePlayerEnteredGame(entry.playerId, { reason: "in_game" });
+      return;
+    }
     await removeQueueEntry(entry.playerId, "matched", false);
     broadcastQueueSize();
 
@@ -712,6 +782,12 @@ function createMatchmakingFeature(deps) {
     const host = entry1;
     const guest = entry2;
 
+    for (const entry of [host, guest]) {
+      if (!isPlayerBusy(entry.playerId)) continue;
+      await handlePlayerEnteredGame(entry.playerId, { reason: "in_game" });
+      return;
+    }
+
     await removeQueueEntry(host.playerId, "matched", false);
     await removeQueueEntry(guest.playerId, "matched", false);
     broadcastQueueSize();
@@ -848,6 +924,7 @@ function createMatchmakingFeature(deps) {
 
     await expireReservations();
     await expireStaleQueueEntries();
+    await purgeBusyQueueEntries();
 
     const entries = sortedQueueEntries().filter(isMatchable);
 
@@ -864,6 +941,14 @@ function createMatchmakingFeature(deps) {
   }
 
   async function joinExternalQueue(playerId, options = {}) {
+    if (isPlayerBusy(playerId)) {
+      return {
+        status: "already_in_game",
+        queueSize: queue.size,
+        pendingMatch: null,
+      };
+    }
+
     const existingPending = getPendingMatch(playerId);
     if (existingPending) {
       return {
@@ -1113,6 +1198,10 @@ function createMatchmakingFeature(deps) {
 
   async function handlePlayerHello(playerId, socketId) {
     const queued = queue.get(playerId);
+    if (queued && isPlayerBusy(playerId)) {
+      await handlePlayerEnteredGame(playerId, { reason: "in_game" });
+      return;
+    }
     if (queued) {
       queued.socketId = socketId;
       queued.disconnectedAt = null;
@@ -1256,6 +1345,7 @@ function createMatchmakingFeature(deps) {
     getPendingMatch,
     checkForMatches,
     handleMatchmakingControl,
+    handlePlayerEnteredGame,
     handlePlayerHello,
     handleDisconnect,
     getQueueStats,

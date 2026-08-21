@@ -18,6 +18,7 @@
  * @param {(match: any) => void} deps.startMatchRecording
  * @param {(match: any) => any} deps.getMatchInfo
  * @param {import('../../modules/tournament/broadcast')} deps.tournamentBroadcast
+ * @param {(playerId: string, info: { lobbyId?: string | null, matchStarted?: boolean, reason?: string }) => Promise<unknown>} [deps.onPlayerEnteredGame] - notified when a player is put into a match, so matchmaking can drop their queue slot
  */
 function createTournamentFeature(deps) {
   const io = deps.io;
@@ -35,6 +36,10 @@ function createTournamentFeature(deps) {
   const startMatchRecording = deps.startMatchRecording;
   const getMatchInfo = deps.getMatchInfo;
   const tournamentBroadcast = deps.tournamentBroadcast;
+  const onPlayerEnteredGame =
+    typeof deps.onPlayerEnteredGame === "function"
+      ? deps.onPlayerEnteredGame
+      : null;
   const EVENT_NAME_ALIASES = {
     "tournament:updated": "TOURNAMENT_UPDATED",
     "tournament:phase:changed": "PHASE_CHANGED",
@@ -602,6 +607,16 @@ function createTournamentFeature(deps) {
         const p = players.get(pid);
         if (!p) continue;
         p.matchId = match.id;
+        if (onPlayerEnteredGame) {
+          // A tournament pairing pulls the player into a match; their queue
+          // slot must not survive it and pair them into a second game.
+          Promise.resolve(
+            onPlayerEnteredGame(pid, {
+              matchStarted: true,
+              reason: "tournament_match",
+            }),
+          ).catch(() => {});
+        }
         const sid = p.socketId || null;
         if (sid) {
           try {

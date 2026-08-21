@@ -12,6 +12,15 @@ const { createRtcMigrationHelper } = require("../socket/rtc-migration");
  * @param {object} deps
  */
 function registerFeatures(container, deps) {
+  // matchmaking is built after lobby (it needs lobby's helpers), so both other
+  // features reach it through this late-bound ref rather than a direct dep.
+  /** @type {{ handlePlayerEnteredGame: Function } | null} */
+  let matchmakingRef = null;
+  const onPlayerEnteredGame = (playerId, info) =>
+    matchmakingRef
+      ? matchmakingRef.handlePlayerEnteredGame(playerId, info)
+      : Promise.resolve(false);
+
   // Create RTC migration helper for lobby-to-match voice persistence
   const rtcMigration = deps.rtcParticipants
     ? createRtcMigrationHelper({
@@ -52,6 +61,7 @@ function registerFeatures(container, deps) {
       botInternalSecret: deps.botInternalSecret,
       redisState: deps.redisState, // For horizontal scaling - cross-instance lobby visibility
       rtcMigration, // For preserving voice connections from lobby to match
+      onPlayerEnteredGame, // Drop a player's matchmaking queue slot when they enter a lobby/match
     }),
   );
 
@@ -73,6 +83,7 @@ function registerFeatures(container, deps) {
       startMatchRecording: deps.startMatchRecording,
       getMatchInfo: deps.getMatchInfo,
       tournamentBroadcast: deps.tournamentBroadcast,
+      onPlayerEnteredGame,
     }),
   );
 
@@ -84,6 +95,7 @@ function registerFeatures(container, deps) {
       getOrClaimLobbyLeader: lobby.getOrClaimLobbyLeader,
       handleLobbyControlAsLeader: lobby.handleLobbyControlAsLeader,
       ensurePlayerCached: deps.ensurePlayerCached,
+      players: deps.players,
       matchmakingChannel: deps.matchmakingChannel || "matchmaking:control",
       discordNotifyChannel: deps.discordNotifyChannel,
       lobbies: lobby.lobbies,
@@ -94,6 +106,8 @@ function registerFeatures(container, deps) {
       addLobbyInvite: lobby.addLobbyInvite,
     }),
   );
+
+  matchmakingRef = matchmaking;
 
   return { lobby, tournament, matchmaking };
 }
