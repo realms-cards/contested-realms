@@ -499,20 +499,49 @@ model LeaderboardEntry {
   @@index([rank])
 }
 
+/// All-time per-card outcome counters from completed human-vs-human matches.
+/// `plays` counts matches where the card hit the board at least once (deduped
+/// per match); `inDeck` counts matches where it sat in the submitted maindeck.
+/// Play rate = plays/inDeck, win rate when played = wins/(wins+losses).
 model HumanCardStats {
-  id        String     @id @default(cuid())
-  cardId    Int
-  format    GameFormat
-  plays     Int        @default(0)
-  wins      Int        @default(0)
-  losses    Int        @default(0)
-  draws     Int        @default(0)
-  updatedAt DateTime   @updatedAt
+  id           String     @id @default(cuid())
+  cardId       Int
+  format       GameFormat
+  plays        Int        @default(0)
+  wins         Int        @default(0)
+  losses       Int        @default(0)
+  draws        Int        @default(0)
+  inDeck       Int        @default(0)
+  inDeckWins   Int        @default(0)
+  inDeckLosses Int        @default(0)
+  inDeckDraws  Int        @default(0)
+  updatedAt    DateTime   @updatedAt
 
   @@unique([cardId, format])
   @@index([cardId])
   @@index([format, plays])
-  @@index([format, cardId])
+}
+
+/// Same counters as HumanCardStats, bucketed by calendar month ("YYYY-MM", UTC)
+/// so the meta can be read per window ("since Gothic released") instead of only
+/// all-time. Bounded at cards x formats x months (~4.5k rows/month worst case).
+model HumanCardStatsPeriod {
+  id           String     @id @default(cuid())
+  cardId       Int
+  format       GameFormat
+  period       String // "YYYY-MM" (UTC); zero-padded so string compare sorts
+  plays        Int        @default(0)
+  wins         Int        @default(0)
+  losses       Int        @default(0)
+  draws        Int        @default(0)
+  inDeck       Int        @default(0)
+  inDeckWins   Int        @default(0)
+  inDeckLosses Int        @default(0)
+  inDeckDraws  Int        @default(0)
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([cardId, format, period])
+  @@index([format, period])
 }
 
 model OnlineMatchSession {
