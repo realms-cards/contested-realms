@@ -1338,7 +1338,13 @@ async function finalizeMatch(
                 where: { name: { in: allNames } },
                 select: { id: true, name: true },
               });
-              const idByName = new Map(cardRows.map((c) => [c.name, c.id]));
+              // Explicit types: the Docker server build runs tsc without a
+              // generated Prisma client, so query results are untyped there
+              const idByName = new Map<string, number>(
+                (cardRows as Array<{ id: number; name: string }>).map(
+                  (c): [string, number] => [c.name, c.id],
+                ),
+              );
               for (const seatKey of ["p1", "p2"] as const) {
                 for (const name of nameSets[seatKey]) {
                   const id = idByName.get(name);
