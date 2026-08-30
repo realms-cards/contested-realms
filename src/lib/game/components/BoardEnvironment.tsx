@@ -193,7 +193,9 @@ export function BoardEnvironment({
     setPlaymatFailed(true);
   }, []);
 
-  const shouldShowOverlay = !showPlaymat || playmatFailed;
+  // `showOverlay` is a hard gate: scenes that want no grid at all (e.g. the deck
+  // editor) pass false, and the playmat-failed fallback must not override it.
+  const shouldShowOverlay = showOverlay && (!showPlaymat || playmatFailed);
 
   return (
     <>
