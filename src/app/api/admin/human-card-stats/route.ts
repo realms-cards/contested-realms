@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/admin/auth";
+import { deriveCardRates } from "@/lib/meta/stats";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -34,8 +35,25 @@ function matchesCategory(type: string | undefined, category: CardCategory): bool
   return lower !== "avatar" && !lower.includes("site");
 }
 
-type HumanCardStatRow = { cardId: number; plays: number; wins: number; losses: number; draws: number };
-type HumanCardStatOut = HumanCardStatRow & { name: string; winRate: number; type: string | null };
+type HumanCardStatRow = {
+  cardId: number;
+  plays: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  inDeck: number;
+  inDeckWins: number;
+  inDeckLosses: number;
+  inDeckDraws: number;
+};
+type HumanCardStatOut = HumanCardStatRow & {
+  name: string;
+  winRate: number;
+  winRateLB: number;
+  playRate: number | null;
+  winRateInDeck: number | null;
+  type: string | null;
+};
 
 export async function GET(request: Request): Promise<NextResponse> {
   try {
@@ -63,7 +81,17 @@ export async function GET(request: Request): Promise<NextResponse> {
       where: { format },
       take: fetchLimit,
       orderBy: order === "plays" ? { plays: "desc" } : order === "wins" ? { wins: "desc" } : { plays: "desc" },
-      select: { cardId: true, plays: true, wins: true, losses: true, draws: true },
+      select: {
+        cardId: true,
+        plays: true,
+        wins: true,
+        losses: true,
+        draws: true,
+        inDeck: true,
+        inDeckWins: true,
+        inDeckLosses: true,
+        inDeckDraws: true,
+      },
     });
 
     // Filter out cardId 0 (invalid/placeholder)
@@ -91,22 +119,15 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const stats: HumanCardStatOut[] = validRows
       .filter((r) => matchesCategory(typeMap.get(r.cardId), category))
-      .map((r: HumanCardStatRow): HumanCardStatOut => {
-        const denom = r.wins + r.losses;
-        const winRate = denom > 0 ? r.wins / denom : 0;
-        return {
-          cardId: r.cardId,
-          name: nameMap.get(r.cardId) || String(r.cardId),
-          plays: r.plays,
-          wins: r.wins,
-          losses: r.losses,
-          draws: r.draws,
-          winRate,
-          type: typeMap.get(r.cardId) || null,
-        };
-      })
+      .map((r: HumanCardStatRow): HumanCardStatOut => ({
+        ...r,
+        name: nameMap.get(r.cardId) || String(r.cardId),
+        ...deriveCardRates(r),
+        type: typeMap.get(r.cardId) || null,
+      }))
       .sort((a: HumanCardStatOut, b: HumanCardStatOut) => {
-        if (order === "winRate") return b.winRate - a.winRate || b.plays - a.plays;
+        // Wilson lower bound keeps 2-0 flukes below proven performers
+        if (order === "winRate") return b.winRateLB - a.winRateLB || b.plays - a.plays;
         if (order === "wins") return b.wins - a.wins || b.plays - a.plays;
         return b.plays - a.plays;
       })

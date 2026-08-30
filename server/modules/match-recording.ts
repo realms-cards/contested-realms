@@ -33,6 +33,10 @@ interface MatchRecordingDeps {
   redisState?: RedisStateManager | null;
 }
 
+// NOTE: `owner` is the seat controlling the card at the moment it is played.
+// A stolen card (e.g. via Infiltrate) is credited to the thief's seat - the
+// player who actually deployed it - which is the intended semantic for the
+// cardPlays win/loss attribution in HumanCardStats.
 const seatFromOwner = (owner: 1 | 2): "p1" | "p2" =>
   owner === 1 ? "p1" : "p2";
 

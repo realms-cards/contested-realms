@@ -38,11 +38,63 @@ const SPELLBOOK_PREVIEW_H = 210;
 const ATLAS_PREVIEW_W = 210;
 const ATLAS_PREVIEW_H = 150;
 
+// Must match MAX_BYTES_PER_IMAGE in /api/users/me/cardbacks
+const MAX_UPLOAD_BYTES = 500_000;
+const MAX_SCALE = 20;
+
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
 
-function toBase64Png(blob: Blob): Promise<string> {
+// Editor state for a single cardback type
+type EditorState = {
+  img: HTMLImageElement | null;
+  scale: number;
+  offset: { x: number; y: number };
+};
+
+// Keep the image covering the whole frame: never zoom out past "cover" and
+// never pan so far that the frame background shows through.
+function clampEditorState(
+  state: EditorState,
+  frameW: number,
+  frameH: number
+): EditorState {
+  if (!state.img) return state;
+  const minScale = Math.max(
+    frameW / state.img.naturalWidth,
+    frameH / state.img.naturalHeight
+  );
+  const scale = clamp(state.scale, minScale, Math.max(MAX_SCALE, minScale));
+  const w = state.img.naturalWidth * scale;
+  const h = state.img.naturalHeight * scale;
+  return {
+    img: state.img,
+    scale,
+    offset: {
+      x: clamp(state.offset.x, frameW - w, 0),
+      y: clamp(state.offset.y, frameH - h, 0),
+    },
+  };
+}
+
+// Export a canvas as JPEG, lowering quality until it fits the server limit.
+async function exportCanvasUnderLimit(
+  canvas: HTMLCanvasElement,
+  maxBytes: number,
+  label: string
+): Promise<Blob> {
+  for (const quality of [0.92, 0.85, 0.75, 0.65, 0.5]) {
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", quality)
+    );
+    if (!blob) throw new Error(`Failed to export ${label}`);
+    if (blob.size <= maxBytes) return blob;
+  }
+  throw new Error(`${label} image is too detailed to fit the size limit`);
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("Failed to read file"));
@@ -55,13 +107,6 @@ function toBase64Png(blob: Blob): Promise<string> {
     reader.readAsDataURL(blob);
   });
 }
-
-// Editor state for a single cardback type
-type EditorState = {
-  img: HTMLImageElement | null;
-  scale: number;
-  offset: { x: number; y: number };
-};
 
 export default function CardbackSettingsPage() {
   // Feature gate - redirect if card sleeves feature is disabled
@@ -505,13 +550,16 @@ export default function CardbackSettingsPage() {
       const dx = p.x - spellbookDragStartRef.current.x;
       const dy = p.y - spellbookDragStartRef.current.y;
       const dragStart = spellbookDragStartRef.current;
-      setSpellbookEditor((prev) => ({
-        ...prev,
-        offset: {
-          x: dragStart.ox + dx,
-          y: dragStart.oy + dy,
-        },
-      }));
+      setSpellbookEditor((prev) =>
+        clampEditorState(
+          {
+            ...prev,
+            offset: { x: dragStart.ox + dx, y: dragStart.oy + dy },
+          },
+          SPELLBOOK_PREVIEW_W,
+          SPELLBOOK_PREVIEW_H
+        )
+      );
     },
     [spellbookEditor.img, pointerToSpellbookCanvas]
   );
@@ -538,16 +586,22 @@ export default function CardbackSettingsPage() {
       const y = e.clientY - rect.top;
 
       const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-      const nextScale = clamp(spellbookEditor.scale * zoomFactor, 0.05, 20);
+      const nextScale = spellbookEditor.scale * zoomFactor;
 
       const imgX = (x - spellbookEditor.offset.x) / spellbookEditor.scale;
       const imgY = (y - spellbookEditor.offset.y) / spellbookEditor.scale;
 
-      setSpellbookEditor((prev) => ({
-        ...prev,
-        scale: nextScale,
-        offset: { x: x - imgX * nextScale, y: y - imgY * nextScale },
-      }));
+      setSpellbookEditor((prev) =>
+        clampEditorState(
+          {
+            ...prev,
+            scale: nextScale,
+            offset: { x: x - imgX * nextScale, y: y - imgY * nextScale },
+          },
+          SPELLBOOK_PREVIEW_W,
+          SPELLBOOK_PREVIEW_H
+        )
+      );
     },
     [spellbookEditor]
   );
@@ -585,13 +639,16 @@ export default function CardbackSettingsPage() {
       const dx = p.x - atlasDragStartRef.current.x;
       const dy = p.y - atlasDragStartRef.current.y;
       const dragStart = atlasDragStartRef.current;
-      setAtlasEditor((prev) => ({
-        ...prev,
-        offset: {
-          x: dragStart.ox + dx,
-          y: dragStart.oy + dy,
-        },
-      }));
+      setAtlasEditor((prev) =>
+        clampEditorState(
+          {
+            ...prev,
+            offset: { x: dragStart.ox + dx, y: dragStart.oy + dy },
+          },
+          ATLAS_PREVIEW_W,
+          ATLAS_PREVIEW_H
+        )
+      );
     },
     [atlasEditor.img, pointerToAtlasCanvas]
   );
@@ -618,16 +675,22 @@ export default function CardbackSettingsPage() {
       const y = e.clientY - rect.top;
 
       const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-      const nextScale = clamp(atlasEditor.scale * zoomFactor, 0.05, 20);
+      const nextScale = atlasEditor.scale * zoomFactor;
 
       const imgX = (x - atlasEditor.offset.x) / atlasEditor.scale;
       const imgY = (y - atlasEditor.offset.y) / atlasEditor.scale;
 
-      setAtlasEditor((prev) => ({
-        ...prev,
-        scale: nextScale,
-        offset: { x: x - imgX * nextScale, y: y - imgY * nextScale },
-      }));
+      setAtlasEditor((prev) =>
+        clampEditorState(
+          {
+            ...prev,
+            scale: nextScale,
+            offset: { x: x - imgX * nextScale, y: y - imgY * nextScale },
+          },
+          ATLAS_PREVIEW_W,
+          ATLAS_PREVIEW_H
+        )
+      );
     },
     [atlasEditor]
   );
@@ -637,16 +700,22 @@ export default function CardbackSettingsPage() {
     (direction: "in" | "out") => {
       if (!spellbookEditor.img) return;
       const zoomFactor = direction === "in" ? 1.15 : 0.85;
-      const nextScale = clamp(spellbookEditor.scale * zoomFactor, 0.05, 20);
+      const nextScale = spellbookEditor.scale * zoomFactor;
       const cx = SPELLBOOK_PREVIEW_W / 2;
       const cy = SPELLBOOK_PREVIEW_H / 2;
       const imgX = (cx - spellbookEditor.offset.x) / spellbookEditor.scale;
       const imgY = (cy - spellbookEditor.offset.y) / spellbookEditor.scale;
-      setSpellbookEditor((prev) => ({
-        ...prev,
-        scale: nextScale,
-        offset: { x: cx - imgX * nextScale, y: cy - imgY * nextScale },
-      }));
+      setSpellbookEditor((prev) =>
+        clampEditorState(
+          {
+            ...prev,
+            scale: nextScale,
+            offset: { x: cx - imgX * nextScale, y: cy - imgY * nextScale },
+          },
+          SPELLBOOK_PREVIEW_W,
+          SPELLBOOK_PREVIEW_H
+        )
+      );
     },
     [spellbookEditor]
   );
@@ -655,16 +724,22 @@ export default function CardbackSettingsPage() {
     (direction: "in" | "out") => {
       if (!atlasEditor.img) return;
       const zoomFactor = direction === "in" ? 1.15 : 0.85;
-      const nextScale = clamp(atlasEditor.scale * zoomFactor, 0.05, 20);
+      const nextScale = atlasEditor.scale * zoomFactor;
       const cx = ATLAS_PREVIEW_W / 2;
       const cy = ATLAS_PREVIEW_H / 2;
       const imgX = (cx - atlasEditor.offset.x) / atlasEditor.scale;
       const imgY = (cy - atlasEditor.offset.y) / atlasEditor.scale;
-      setAtlasEditor((prev) => ({
-        ...prev,
-        scale: nextScale,
-        offset: { x: cx - imgX * nextScale, y: cy - imgY * nextScale },
-      }));
+      setAtlasEditor((prev) =>
+        clampEditorState(
+          {
+            ...prev,
+            scale: nextScale,
+            offset: { x: cx - imgX * nextScale, y: cy - imgY * nextScale },
+          },
+          ATLAS_PREVIEW_W,
+          ATLAS_PREVIEW_H
+        )
+      );
     },
     [atlasEditor]
   );
@@ -782,27 +857,16 @@ export default function CardbackSettingsPage() {
       const atY = atlasEditor.offset.y * atlasScaleFactor;
       atlasCtx.drawImage(atlasEditor.img, atX, atY, atW, atH);
 
-      // Convert to base64
+      // Export as JPEG so photos stay under the server's per-image limit
+      // (PNG exports of photos routinely exceed it and get rejected).
       const [spellbookBlob, atlasBlob] = await Promise.all([
-        new Promise<Blob>((resolve, reject) =>
-          spellbookOut.toBlob(
-            (b) =>
-              b ? resolve(b) : reject(new Error("Failed to export spellbook")),
-            "image/png"
-          )
-        ),
-        new Promise<Blob>((resolve, reject) =>
-          atlasOut.toBlob(
-            (b) =>
-              b ? resolve(b) : reject(new Error("Failed to export atlas")),
-            "image/png"
-          )
-        ),
+        exportCanvasUnderLimit(spellbookOut, MAX_UPLOAD_BYTES, "Spellbook"),
+        exportCanvasUnderLimit(atlasOut, MAX_UPLOAD_BYTES, "Atlas"),
       ]);
 
       const [spellbookBase64, atlasBase64] = await Promise.all([
-        toBase64Png(spellbookBlob),
-        toBase64Png(atlasBlob),
+        blobToBase64(spellbookBlob),
+        blobToBase64(atlasBlob),
       ]);
 
       const res = await fetch("/api/users/me/cardbacks", {
@@ -1278,6 +1342,12 @@ export default function CardbackSettingsPage() {
                       placeholder="My Sleeves"
                     />
                   </div>
+
+                  {uploadError && (
+                    <div className="mt-3 text-sm text-rose-300">
+                      {uploadError}
+                    </div>
+                  )}
 
                   <button
                     type="button"

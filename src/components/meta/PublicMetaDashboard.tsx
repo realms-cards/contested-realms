@@ -14,9 +14,21 @@ type CardStat = {
   losses: number;
   draws: number;
   winRate: number;
+  /** Wilson lower bound of winRate (absent on snapshots from before it existed) */
+  winRateLB?: number;
+  /** plays / matches with the card in the maindeck; null until deck data accrues */
+  playRate?: number | null;
+  inDeck?: number;
   slug: string | null;
   type: string | null;
 };
+
+type MetaWindow = "all" | "month" | "3m";
+const WINDOW_OPTIONS: ReadonlyArray<{ value: MetaWindow; label: string; title: string }> = [
+  { value: "all", label: "All time", title: "Every recorded match" },
+  { value: "month", label: "This month", title: "Matches in the current calendar month (UTC)" },
+  { value: "3m", label: "3 months", title: "Current and previous two calendar months" },
+];
 
 type ElementStat = {
   element: string;
@@ -411,7 +423,7 @@ function CardStatsTable({
   onRowClick?: (cardName: string) => void;
 }) {
   const [search, setSearch] = useState("");
-  const colCount = showType ? 7 : 6;
+  const colCount = showType ? 8 : 7;
   const filteredStats = search.trim()
     ? stats.filter((s) => s.name.toLowerCase().includes(search.trim().toLowerCase()))
     : stats;
@@ -482,7 +494,12 @@ function CardStatsTable({
               <th className="px-3 py-2">Wins</th>
               <th className="px-3 py-2">Losses</th>
               <th className="px-3 py-2">Draws</th>
-              <th className="px-3 py-2">Win Rate</th>
+              <th className="px-3 py-2" title="Share of matches where the card hit the board, out of matches it was brought in the maindeck">
+                Play Rate
+              </th>
+              <th className="px-3 py-2" title="Wins / (wins + losses) when played. The smaller figure is the 95% lower bound the win-rate ordering uses.">
+                Win Rate
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -521,8 +538,21 @@ function CardStatsTable({
                       <td className="px-3 py-2">{row.wins}</td>
                       <td className="px-3 py-2">{row.losses}</td>
                       <td className="px-3 py-2">{row.draws}</td>
+                      <td className="px-3 py-2 text-slate-300">
+                        {typeof row.playRate === "number"
+                          ? `${(row.playRate * 100).toFixed(0)}%`
+                          : "–"}
+                      </td>
                       <td className="px-3 py-2">
                         {(row.winRate * 100).toFixed(1)}%
+                        {typeof row.winRateLB === "number" && (
+                          <span
+                            className="ml-1 text-[10px] text-slate-500"
+                            title="95% Wilson lower bound"
+                          >
+                            ≥{(row.winRateLB * 100).toFixed(0)}%
+                          </span>
+                        )}
                       </td>
                     </tr>
                     {isExpanded && (
@@ -597,6 +627,7 @@ function CardStatsTable({
 }
 
 export default function PublicMetaDashboard() {
+  const [metaWindow, setMetaWindow] = useState<MetaWindow>("all");
   const [format, setFormat] = useState<"constructed" | "sealed" | "draft">(
     "constructed",
   );
@@ -698,6 +729,7 @@ export default function PublicMetaDashboard() {
       params.set("order", order);
       params.set("limit", String(limit));
       params.set("category", category);
+      params.set("window", metaWindow);
       const response = await fetch(`/api/meta/cards?${params.toString()}`, {
         method: "GET",
         cache: "no-store",
@@ -711,7 +743,7 @@ export default function PublicMetaDashboard() {
       const payload = (await response.json()) as { stats: CardStat[] };
       return payload.stats || [];
     },
-    [format],
+    [format, metaWindow],
   );
 
   const refreshAvatarStats = useCallback(async () => {
@@ -765,7 +797,7 @@ export default function PublicMetaDashboard() {
   const refreshElementStats = useCallback(async () => {
     setElementStatsLoading(true);
     try {
-      const response = await fetch(`/api/meta/elements?format=${format}`, {
+      const response = await fetch(`/api/meta/elements?format=${format}&window=${metaWindow}`, {
         cache: "no-store",
       });
       if (response.ok) {
@@ -776,12 +808,12 @@ export default function PublicMetaDashboard() {
     } finally {
       setElementStatsLoading(false);
     }
-  }, [format]);
+  }, [format, metaWindow]);
 
   const refreshTypeStats = useCallback(async () => {
     setTypeStatsLoading(true);
     try {
-      const response = await fetch(`/api/meta/types?format=${format}`, {
+      const response = await fetch(`/api/meta/types?format=${format}&window=${metaWindow}`, {
         cache: "no-store",
       });
       if (response.ok) {
@@ -795,12 +827,12 @@ export default function PublicMetaDashboard() {
     } finally {
       setTypeStatsLoading(false);
     }
-  }, [format]);
+  }, [format, metaWindow]);
 
   const refreshCostStats = useCallback(async () => {
     setCostStatsLoading(true);
     try {
-      const response = await fetch(`/api/meta/costs?format=${format}`, {
+      const response = await fetch(`/api/meta/costs?format=${format}&window=${metaWindow}`, {
         cache: "no-store",
       });
       if (response.ok) {
@@ -810,7 +842,7 @@ export default function PublicMetaDashboard() {
     } finally {
       setCostStatsLoading(false);
     }
-  }, [format]);
+  }, [format, metaWindow]);
 
   const refreshMatchStats = useCallback(async () => {
     setMatchStatsLoading(true);
@@ -830,7 +862,7 @@ export default function PublicMetaDashboard() {
   const refreshRarityStats = useCallback(async () => {
     setRarityStatsLoading(true);
     try {
-      const response = await fetch(`/api/meta/rarity?format=${format}`, {
+      const response = await fetch(`/api/meta/rarity?format=${format}&window=${metaWindow}`, {
         cache: "no-store",
       });
       if (response.ok) {
@@ -840,7 +872,7 @@ export default function PublicMetaDashboard() {
     } finally {
       setRarityStatsLoading(false);
     }
-  }, [format]);
+  }, [format, metaWindow]);
 
   const refreshDeckArchetypes = useCallback(async () => {
     setDeckArchetypesLoading(true);
@@ -1086,6 +1118,22 @@ export default function PublicMetaDashboard() {
               )}
             >
               {f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+          <span className="ml-4 text-sm text-slate-300">Period:</span>
+          {WINDOW_OPTIONS.map((w) => (
+            <button
+              key={w.value}
+              onClick={() => setMetaWindow(w.value)}
+              title={w.title}
+              className={clsx(
+                "rounded px-3 py-1.5 text-sm font-medium transition",
+                metaWindow === w.value
+                  ? "bg-sky-500/20 text-sky-200 border border-sky-400"
+                  : "bg-slate-800 text-slate-300 border border-slate-600 hover:bg-slate-700",
+              )}
+            >
+              {w.label}
             </button>
           ))}
         </div>

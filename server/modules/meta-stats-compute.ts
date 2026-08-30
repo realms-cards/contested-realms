@@ -14,10 +14,10 @@ type AnyPrisma = PrismaClient & Record<string, unknown>;
 interface PrismaJsonObject { readonly [key: string]: PrismaJson | null }
 type PrismaJson = string | number | boolean | PrismaJsonObject | ReadonlyArray<PrismaJson | null>;
 
-type ElementRow = { elements: string | null; plays: bigint; wins: bigint };
-type TypeRow = { type: string | null; plays: bigint; wins: bigint };
-type CostRow = { cost: number | null; plays: bigint; wins: bigint };
-type RarityRow = { rarity: string | null; plays: bigint; wins: bigint };
+type ElementRow = { elements: string | null; plays: bigint; wins: bigint; losses: bigint };
+type TypeRow = { type: string | null; plays: bigint; wins: bigint; losses: bigint };
+type CostRow = { cost: number | null; plays: bigint; wins: bigint; losses: bigint };
+type RarityRow = { rarity: string | null; plays: bigint; wins: bigint; losses: bigint };
 type MatchRow = { format: string; count: bigint; avgDuration: number | null };
 
 type DeckCard = { type?: string | null; name?: string | null; zone?: string | null };
@@ -35,6 +35,99 @@ const FORMATS = ["constructed", "sealed", "draft"] as const;
 const CARD_CATEGORIES = ["avatar", "site", "spellbook", "all"] as const;
 const CARD_ORDERS = ["plays", "wins", "winRate"] as const;
 const CARD_LIMIT = 200; // Pre-compute a generous amount; clients can trim
+
+/** Time windows every card/aggregate snapshot is computed for */
+type MetaWindow = "all" | "month" | "3m";
+const WINDOWS: readonly MetaWindow[] = ["all", "month", "3m"];
+
+/** Deck/synergy stats read recent sessions rather than a fixed row cap */
+const SESSION_WINDOW_DAYS = 90;
+const SESSION_LIMIT = 5000;
+
+// --- Mirrors of src/lib/meta/stats.ts -------------------------------------
+// The server build (server/tsconfig.json, rootDir ".") cannot import from src/,
+// so these pure helpers are duplicated here. Keep both copies in sync.
+
+/**
+ * Lower bound of the Wilson score interval (95%). Orders win rates so that a
+ * 2-0 card (~0.34) ranks below a 58%-over-300 card (~0.52).
+ */
+function wilsonLowerBound(wins: number, losses: number, z = 1.96): number {
+  const n = wins + losses;
+  if (n <= 0) return 0;
+  const p = wins / n;
+  const z2 = z * z;
+  const denom = 1 + z2 / n;
+  const center = p + z2 / (2 * n);
+  const margin = z * Math.sqrt((p * (1 - p) + z2 / (4 * n)) / n);
+  return Math.max(0, (center - margin) / denom);
+}
+
+/** Upper bound of the same interval - used to rank anti-synergies fairly */
+function wilsonUpperBound(wins: number, losses: number, z = 1.96): number {
+  const n = wins + losses;
+  if (n <= 0) return 1;
+  const p = wins / n;
+  const z2 = z * z;
+  const denom = 1 + z2 / n;
+  const center = p + z2 / (2 * n);
+  const margin = z * Math.sqrt((p * (1 - p) + z2 / (4 * n)) / n);
+  return Math.min(1, (center + margin) / denom);
+}
+
+/** The `months` most recent "YYYY-MM" keys (UTC), current month first */
+function periodsBack(months: number, now: Date = new Date()): string[] {
+  const out: string[] = [];
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  for (let i = 0; i < months; i++) {
+    out.push(d.toISOString().slice(0, 7));
+    d.setUTCMonth(d.getUTCMonth() - 1);
+  }
+  return out;
+}
+// ---------------------------------------------------------------------------
+
+/**
+ * Which table a window reads and which month buckets it spans. All-time reads
+ * the cumulative HumanCardStats; windows sum HumanCardStatsPeriod buckets.
+ * Table names come from this fixed set, never from input, so they are safe to
+ * splice into SQL; everything else is bound as a parameter.
+ */
+function statsSource(window: MetaWindow): {
+  table: string;
+  periods: string[] | null;
+} {
+  if (window === "month") return { table: '"HumanCardStatsPeriod"', periods: periodsBack(1) };
+  if (window === "3m") return { table: '"HumanCardStatsPeriod"', periods: periodsBack(3) };
+  return { table: '"HumanCardStats"', periods: null };
+}
+
+/** All-time snapshots keep their historical keys; windows get a suffix */
+function snapshotKey(base: string, window: MetaWindow): string {
+  return window === "all" ? base : `${base}:${window}`;
+}
+
+/** Run a stats query with format bound as $1 and, for windows, periods as $2 */
+async function runStatsQuery<T>(
+  prisma: AnyPrisma,
+  sql: string,
+  format: string,
+  periods: string[] | null,
+): Promise<T[]> {
+  return periods
+    ? ((await prisma.$queryRawUnsafe(sql, format, periods)) as T[])
+    : ((await prisma.$queryRawUnsafe(sql, format)) as T[]);
+}
+
+function periodFilter(periods: string[] | null): string {
+  return periods ? 'AND h.period = ANY($2::text[])' : "";
+}
+
+/** wins / (wins + losses): draws are excluded from win rate throughout */
+function winRateOf(wins: number, losses: number): number {
+  const denom = wins + losses;
+  return denom > 0 ? wins / denom : 0;
+}
 
 function isAvatarType(type: string | null | undefined): boolean {
   return typeof type === "string" && type.toLowerCase().includes("avatar");
@@ -56,121 +149,169 @@ function matchesCategory(type: string | undefined, category: string): boolean {
   return lower !== "avatar" && !lower.includes("site");
 }
 
-async function computeElements(prisma: AnyPrisma, format: string): Promise<unknown> {
-  const rows = await prisma.$queryRaw<ElementRow[]>`
-    SELECT c.elements,
-           SUM(h.plays)::bigint as plays,
-           SUM(h.wins)::bigint as wins
-    FROM "HumanCardStats" h
-    JOIN "Card" c ON c.id = h."cardId"
-    WHERE h.format = ${format}::"GameFormat"
-    GROUP BY c.elements
-    ORDER BY SUM(h.plays) DESC
-  `;
+async function computeElements(
+  prisma: AnyPrisma,
+  format: string,
+  window: MetaWindow,
+): Promise<unknown> {
+  const { table, periods } = statsSource(window);
+  const rows = await runStatsQuery<ElementRow>(
+    prisma,
+    `SELECT c.elements,
+            SUM(h.plays)::bigint AS plays,
+            SUM(h.wins)::bigint AS wins,
+            SUM(h.losses)::bigint AS losses
+     FROM ${table} h
+     JOIN "Card" c ON c.id = h."cardId"
+     WHERE h.format = $1::"GameFormat" ${periodFilter(periods)}
+     GROUP BY c.elements
+     ORDER BY SUM(h.plays) DESC`,
+    format,
+    periods,
+  );
   return {
     stats: rows.map((r: ElementRow) => {
       const plays = Number(r.plays);
       const wins = Number(r.wins);
+      const losses = Number(r.losses);
       return {
         element: r.elements || "None",
         plays,
         wins,
-        winRate: plays > 0 ? wins / plays : 0,
+        losses,
+        winRate: winRateOf(wins, losses),
       };
     }),
     format,
+    window,
   };
 }
 
-async function computeTypes(prisma: AnyPrisma, format: string): Promise<unknown> {
-  const rows = await prisma.$queryRaw<TypeRow[]>`
-    SELECT m.type,
-           SUM(h.plays)::bigint as plays,
-           SUM(h.wins)::bigint as wins
-    FROM "HumanCardStats" h
-    JOIN LATERAL (
-      SELECT type FROM "CardSetMetadata"
-      WHERE "cardId" = h."cardId"
-      LIMIT 1
-    ) m ON true
-    WHERE h.format = ${format}::"GameFormat"
-    GROUP BY m.type
-    ORDER BY SUM(h.plays) DESC
-  `;
+async function computeTypes(
+  prisma: AnyPrisma,
+  format: string,
+  window: MetaWindow,
+): Promise<unknown> {
+  const { table, periods } = statsSource(window);
+  const rows = await runStatsQuery<TypeRow>(
+    prisma,
+    `SELECT m.type,
+            SUM(h.plays)::bigint AS plays,
+            SUM(h.wins)::bigint AS wins,
+            SUM(h.losses)::bigint AS losses
+     FROM ${table} h
+     JOIN LATERAL (
+       SELECT type FROM "CardSetMetadata"
+       WHERE "cardId" = h."cardId"
+       LIMIT 1
+     ) m ON true
+     WHERE h.format = $1::"GameFormat" ${periodFilter(periods)}
+     GROUP BY m.type
+     ORDER BY SUM(h.plays) DESC`,
+    format,
+    periods,
+  );
   return {
     stats: rows.map((r: TypeRow) => {
       const plays = Number(r.plays);
       const wins = Number(r.wins);
+      const losses = Number(r.losses);
       return {
         type: r.type || "Unknown",
         plays,
         wins,
-        winRate: plays > 0 ? wins / plays : 0,
+        losses,
+        winRate: winRateOf(wins, losses),
       };
     }),
     format,
+    window,
   };
 }
 
-async function computeCosts(prisma: AnyPrisma, format: string): Promise<unknown> {
-  const rows = await prisma.$queryRaw<CostRow[]>`
-    SELECT m.cost,
-           SUM(h.plays)::bigint as plays,
-           SUM(h.wins)::bigint as wins
-    FROM "HumanCardStats" h
-    JOIN LATERAL (
-      SELECT cost FROM "CardSetMetadata"
-      WHERE "cardId" = h."cardId"
-      LIMIT 1
-    ) m ON true
-    WHERE h.format = ${format}::"GameFormat"
-      AND m.cost IS NOT NULL
-    GROUP BY m.cost
-    ORDER BY m.cost ASC
-  `;
+async function computeCosts(
+  prisma: AnyPrisma,
+  format: string,
+  window: MetaWindow,
+): Promise<unknown> {
+  const { table, periods } = statsSource(window);
+  const rows = await runStatsQuery<CostRow>(
+    prisma,
+    `SELECT m.cost,
+            SUM(h.plays)::bigint AS plays,
+            SUM(h.wins)::bigint AS wins,
+            SUM(h.losses)::bigint AS losses
+     FROM ${table} h
+     JOIN LATERAL (
+       SELECT cost FROM "CardSetMetadata"
+       WHERE "cardId" = h."cardId"
+       LIMIT 1
+     ) m ON true
+     WHERE h.format = $1::"GameFormat" ${periodFilter(periods)}
+       AND m.cost IS NOT NULL
+     GROUP BY m.cost
+     ORDER BY m.cost ASC`,
+    format,
+    periods,
+  );
   return {
     stats: rows.map((r: CostRow) => {
       const plays = Number(r.plays);
       const wins = Number(r.wins);
+      const losses = Number(r.losses);
       return {
         cost: r.cost ?? 0,
         plays,
         wins,
-        winRate: plays > 0 ? wins / plays : 0,
+        losses,
+        winRate: winRateOf(wins, losses),
       };
     }),
     format,
+    window,
   };
 }
 
-async function computeRarity(prisma: AnyPrisma, format: string): Promise<unknown> {
-  const rows = await prisma.$queryRaw<RarityRow[]>`
-    SELECT m.rarity::text as rarity,
-           SUM(h.plays)::bigint as plays,
-           SUM(h.wins)::bigint as wins
-    FROM "HumanCardStats" h
-    JOIN LATERAL (
-      SELECT rarity FROM "CardSetMetadata"
-      WHERE "cardId" = h."cardId"
-      LIMIT 1
-    ) m ON true
-    WHERE h.format = ${format}::"GameFormat"
-      AND m.rarity IS NOT NULL
-    GROUP BY m.rarity
-    ORDER BY SUM(h.plays) DESC
-  `;
+async function computeRarity(
+  prisma: AnyPrisma,
+  format: string,
+  window: MetaWindow,
+): Promise<unknown> {
+  const { table, periods } = statsSource(window);
+  const rows = await runStatsQuery<RarityRow>(
+    prisma,
+    `SELECT m.rarity::text AS rarity,
+            SUM(h.plays)::bigint AS plays,
+            SUM(h.wins)::bigint AS wins,
+            SUM(h.losses)::bigint AS losses
+     FROM ${table} h
+     JOIN LATERAL (
+       SELECT rarity FROM "CardSetMetadata"
+       WHERE "cardId" = h."cardId"
+       LIMIT 1
+     ) m ON true
+     WHERE h.format = $1::"GameFormat" ${periodFilter(periods)}
+       AND m.rarity IS NOT NULL
+     GROUP BY m.rarity
+     ORDER BY SUM(h.plays) DESC`,
+    format,
+    periods,
+  );
   return {
     stats: rows.map((r: RarityRow) => {
       const plays = Number(r.plays);
       const wins = Number(r.wins);
+      const losses = Number(r.losses);
       return {
         rarity: r.rarity || "Unknown",
         plays,
         wins,
-        winRate: plays > 0 ? wins / plays : 0,
+        losses,
+        winRate: winRateOf(wins, losses),
       };
     }),
     format,
+    window,
   };
 }
 
@@ -199,38 +340,49 @@ async function computeCards(
   format: string,
   category: string,
   order: string,
+  window: MetaWindow,
 ): Promise<unknown> {
   const fetchLimit = category === "all" ? CARD_LIMIT : CARD_LIMIT * 2;
+  const { table, periods } = statsSource(window);
 
-  type HumanCardStatRow = {
+  type CardRow = {
     cardId: number;
     plays: number;
     wins: number;
     losses: number;
     draws: number;
+    inDeck: number;
+    inDeckWins: number;
+    inDeckLosses: number;
+    inDeckDraws: number;
   };
 
-  const model = (prisma as Record<string, unknown>)["humanCardStats"] as {
-    findMany: (args: {
-      where: { format: string };
-      take: number;
-      orderBy: Record<string, "asc" | "desc">;
-      select: Record<string, boolean>;
-    }) => Promise<HumanCardStatRow[]>;
-  };
+  // Pre-filter by popularity (plays, or wins for that ordering) so the
+  // leaderboard is drawn from cards with a real sample; the final ordering
+  // for winRate uses the Wilson lower bound below.
+  const fetchOrder = order === "wins" ? "SUM(h.wins)" : "SUM(h.plays)";
+  const rows = await runStatsQuery<CardRow>(
+    prisma,
+    `SELECT h."cardId",
+            SUM(h.plays)::int AS plays,
+            SUM(h.wins)::int AS wins,
+            SUM(h.losses)::int AS losses,
+            SUM(h.draws)::int AS draws,
+            SUM(h."inDeck")::int AS "inDeck",
+            SUM(h."inDeckWins")::int AS "inDeckWins",
+            SUM(h."inDeckLosses")::int AS "inDeckLosses",
+            SUM(h."inDeckDraws")::int AS "inDeckDraws"
+     FROM ${table} h
+     WHERE h.format = $1::"GameFormat" ${periodFilter(periods)}
+       AND h."cardId" > 0
+     GROUP BY h."cardId"
+     ORDER BY ${fetchOrder} DESC
+     LIMIT ${fetchLimit}`,
+    format,
+    periods,
+  );
 
-  const rows = await model.findMany({
-    where: { format },
-    take: fetchLimit,
-    orderBy:
-      order === "wins"
-        ? { wins: "desc" }
-        : { plays: "desc" },
-    select: { cardId: true, plays: true, wins: true, losses: true, draws: true },
-  });
-
-  const validRows = rows.filter((r) => r.cardId > 0);
-  const ids = validRows.map((r) => r.cardId);
+  const ids = rows.map((r) => r.cardId);
 
   const [cards, variants, cardMeta] = ids.length
     ? await Promise.all([
@@ -261,10 +413,10 @@ async function computeCards(
     if (!typeMap.has(m.cardId) && m.type) typeMap.set(m.cardId, m.type);
   }
 
-  const stats = validRows
+  const stats = rows
     .filter((r) => matchesCategory(typeMap.get(r.cardId), category))
     .map((r) => {
-      const denom = r.wins + r.losses;
+      const deckDenom = r.inDeckWins + r.inDeckLosses;
       return {
         cardId: r.cardId,
         name: nameMap.get(r.cardId) || String(r.cardId),
@@ -272,19 +424,30 @@ async function computeCards(
         wins: r.wins,
         losses: r.losses,
         draws: r.draws,
-        winRate: denom > 0 ? r.wins / denom : 0,
+        winRate: winRateOf(r.wins, r.losses),
+        // Sort key for win-rate views: 95% Wilson lower bound
+        winRateLB: wilsonLowerBound(r.wins, r.losses),
+        inDeck: r.inDeck,
+        inDeckWins: r.inDeckWins,
+        inDeckLosses: r.inDeckLosses,
+        inDeckDraws: r.inDeckDraws,
+        // How often the card hits the board when brought (null before any
+        // deck submissions carried inclusion data)
+        playRate: r.inDeck > 0 ? Math.min(1, r.plays / r.inDeck) : null,
+        // Win rate over matches where the card was in the maindeck at all
+        winRateInDeck: deckDenom > 0 ? r.inDeckWins / deckDenom : null,
         slug: slugMap.get(r.cardId) || null,
         type: typeMap.get(r.cardId) || null,
       };
     })
     .sort((a, b) => {
-      if (order === "winRate") return b.winRate - a.winRate || b.plays - a.plays;
+      if (order === "winRate") return b.winRateLB - a.winRateLB || b.plays - a.plays;
       if (order === "wins") return b.wins - a.wins || b.plays - a.plays;
       return b.plays - a.plays;
     })
     .slice(0, CARD_LIMIT);
 
-  return { stats, format, order, limit: CARD_LIMIT, category };
+  return { stats, format, order, limit: CARD_LIMIT, category, window };
 }
 
 async function computeDecks(prisma: AnyPrisma, format: string): Promise<unknown> {
@@ -765,7 +928,13 @@ async function computeDecks(prisma: AnyPrisma, format: string): Promise<unknown>
 const MIN_PAIR_OCCURRENCES = 3;
 const SYNERGY_LIMIT = 200;
 
+/**
+ * Recent completed human sessions with their submitted decks. Bounded by a
+ * time window rather than a fixed row cap so growth doesn't silently shrink
+ * the sample; SESSION_LIMIT is only a safety ceiling.
+ */
 async function fetchSessions(prisma: AnyPrisma, format: string): Promise<SessionRow[]> {
+  const since = new Date(Date.now() - SESSION_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   return format === "all"
     ? await prisma.$queryRaw<SessionRow[]>`
         SELECT oms.id, oms."playerDecks", oms."playerIds",
@@ -775,8 +944,9 @@ async function fetchSessions(prisma: AnyPrisma, format: string): Promise<Session
         JOIN "MatchResult" mr ON oms.id = mr."matchId"
         WHERE oms."playerDecks" IS NOT NULL
           AND oms."isPrecon" = false
+          AND mr."completedAt" >= ${since}
         ORDER BY mr."completedAt" DESC
-        LIMIT 500
+        LIMIT ${SESSION_LIMIT}
       `
     : await prisma.$queryRaw<SessionRow[]>`
         SELECT oms.id, oms."playerDecks", oms."playerIds",
@@ -787,8 +957,9 @@ async function fetchSessions(prisma: AnyPrisma, format: string): Promise<Session
         WHERE mr.format = ${format}::"GameFormat"
           AND oms."playerDecks" IS NOT NULL
           AND oms."isPrecon" = false
+          AND mr."completedAt" >= ${since}
         ORDER BY mr."completedAt" DESC
-        LIMIT 500
+        LIMIT ${SESSION_LIMIT}
       `;
 }
 
@@ -903,7 +1074,6 @@ async function computeSynergies(prisma: AnyPrisma, format: string): Promise<unkn
   const qualified = [...pairAgg.values()]
     .filter((p) => p.coOccurrences >= MIN_PAIR_OCCURRENCES)
     .map((p) => {
-      const denom = p.wins + p.losses;
       return {
         cardA: p.cardA,
         cardB: p.cardB,
@@ -913,18 +1083,20 @@ async function computeSynergies(prisma: AnyPrisma, format: string): Promise<unkn
         wins: p.wins,
         losses: p.losses,
         draws: p.draws,
-        winRate: denom > 0 ? p.wins / denom : 0,
+        winRate: winRateOf(p.wins, p.losses),
+        winRateLB: wilsonLowerBound(p.wins, p.losses),
+        winRateUB: wilsonUpperBound(p.wins, p.losses),
       };
     });
 
-  // Top synergies: highest win rate
+  // Top synergies: highest win rate we can be confident in (Wilson lower bound)
   const synergies = [...qualified]
-    .sort((a, b) => b.winRate - a.winRate || b.coOccurrences - a.coOccurrences)
+    .sort((a, b) => b.winRateLB - a.winRateLB || b.coOccurrences - a.coOccurrences)
     .slice(0, SYNERGY_LIMIT);
 
-  // Anti-synergies: lowest win rate
+  // Anti-synergies: mirror image - lowest Wilson upper bound
   const antiSynergies = [...qualified]
-    .sort((a, b) => a.winRate - b.winRate || b.coOccurrences - a.coOccurrences)
+    .sort((a, b) => a.winRateUB - b.winRateUB || b.coOccurrences - a.coOccurrences)
     .slice(0, SYNERGY_LIMIT);
 
   // Most popular pairs: highest co-occurrence
@@ -932,7 +1104,15 @@ async function computeSynergies(prisma: AnyPrisma, format: string): Promise<unkn
     .sort((a, b) => b.coOccurrences - a.coOccurrences || b.winRate - a.winRate)
     .slice(0, SYNERGY_LIMIT);
 
-  return { synergies, antiSynergies, popular, allPairs: qualified, format, totalDecks };
+  return {
+    synergies,
+    antiSynergies,
+    popular,
+    allPairs: qualified,
+    format,
+    totalDecks,
+    windowDays: SESSION_WINDOW_DAYS,
+  };
 }
 
 /**
@@ -949,24 +1129,29 @@ export async function computeAllMetaStats(prisma: PrismaClient): Promise<void> {
     const matchesData = await computeMatches(p);
     upserts.push({ key: "matches", data: matchesData });
 
-    // Per-format stats
+    // Per-format stats, for every time window
     for (const format of FORMATS) {
-      const [elemData, typeData, costData, rarityData] = await Promise.all([
-        computeElements(p, format),
-        computeTypes(p, format),
-        computeCosts(p, format),
-        computeRarity(p, format),
-      ]);
-      upserts.push({ key: `elements:${format}`, data: elemData });
-      upserts.push({ key: `types:${format}`, data: typeData });
-      upserts.push({ key: `costs:${format}`, data: costData });
-      upserts.push({ key: `rarity:${format}`, data: rarityData });
+      for (const window of WINDOWS) {
+        const [elemData, typeData, costData, rarityData] = await Promise.all([
+          computeElements(p, format, window),
+          computeTypes(p, format, window),
+          computeCosts(p, format, window),
+          computeRarity(p, format, window),
+        ]);
+        upserts.push({ key: snapshotKey(`elements:${format}`, window), data: elemData });
+        upserts.push({ key: snapshotKey(`types:${format}`, window), data: typeData });
+        upserts.push({ key: snapshotKey(`costs:${format}`, window), data: costData });
+        upserts.push({ key: snapshotKey(`rarity:${format}`, window), data: rarityData });
 
-      // Card stats per category per order
-      for (const category of CARD_CATEGORIES) {
-        for (const order of CARD_ORDERS) {
-          const cardData = await computeCards(p, format, category, order);
-          upserts.push({ key: `cards:${format}:${category}:${order}`, data: cardData });
+        // Card stats per category per order
+        for (const category of CARD_CATEGORIES) {
+          for (const order of CARD_ORDERS) {
+            const cardData = await computeCards(p, format, category, order, window);
+            upserts.push({
+              key: snapshotKey(`cards:${format}:${category}:${order}`, window),
+              data: cardData,
+            });
+          }
         }
       }
     }

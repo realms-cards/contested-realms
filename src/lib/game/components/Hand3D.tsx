@@ -1633,6 +1633,7 @@ export default function Hand3D({
                   width={CARD_SHORT}
                   height={CARD_LONG}
                   rotationZ={cardRotationZ}
+                  upright={!flatCards}
                   elevation={0.002 + 0.018 * (hoverWeight || 0)}
                   interactive={false}
                   depthWrite={true}

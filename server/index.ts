@@ -1293,46 +1293,118 @@ async function finalizeMatch(
       match.playerIds.every((pid) => !isCpuPlayerId(pid));
     if (allHuman && match.matchType !== "precon") {
       const rec = matchRecordings.get(match.id);
-      const formatRaw =
+      // Any matchType outside draft/sealed/constructed (open tournaments,
+      // custom lobbies, ...) is deliberately folded into "constructed" for
+      // stats: those matches are played with constructed-legal decks.
+      const formatRaw: "draft" | "sealed" | "constructed" =
         match.matchType === "draft" ||
         match.matchType === "sealed" ||
         match.matchType === "constructed"
           ? match.matchType
           : "constructed";
       if (rec && rec.cardPlays && prisma?.humanCardStats) {
-        const p1Cards: number[] = Array.from(rec.cardPlays.p1 || []);
-        const p2Cards: number[] = Array.from(rec.cardPlays.p2 || []);
+        const played: Record<"p1" | "p2", Set<number>> = {
+          p1: new Set(rec.cardPlays.p1 || []),
+          p2: new Set(rec.cardPlays.p2 || []),
+        };
+        // Maindeck contents per seat: the inclusion denominator behind play
+        // rate (plays/inDeck) and win-rate-when-in-deck. Submitted decks store
+        // card names, so resolve to ids in one batch; Collection-zone cards
+        // are not part of the maindeck and are excluded.
+        const inDeck: Record<"p1" | "p2", Set<number>> = {
+          p1: new Set(),
+          p2: new Set(),
+        };
+        try {
+          if (match.playerDecks instanceof Map) {
+            const nameSets: Record<"p1" | "p2", Set<string>> = {
+              p1: new Set(),
+              p2: new Set(),
+            };
+            for (const seatKey of ["p1", "p2"] as const) {
+              const pid = match.playerIds?.[seatKey === "p1" ? 0 : 1];
+              const deck = pid != null ? match.playerDecks.get(pid) : undefined;
+              if (!Array.isArray(deck)) continue;
+              for (const c of deck as Array<Record<string, unknown>>) {
+                const name = typeof c?.name === "string" ? c.name : "";
+                const zone =
+                  typeof c?.zone === "string" ? c.zone.toLowerCase() : "";
+                if (name && zone !== "collection") nameSets[seatKey].add(name);
+              }
+            }
+            const allNames = [...new Set([...nameSets.p1, ...nameSets.p2])];
+            if (allNames.length > 0) {
+              const cardRows = await prisma.card.findMany({
+                where: { name: { in: allNames } },
+                select: { id: true, name: true },
+              });
+              const idByName = new Map(cardRows.map((c) => [c.name, c.id]));
+              for (const seatKey of ["p1", "p2"] as const) {
+                for (const name of nameSets[seatKey]) {
+                  const id = idByName.get(name);
+                  if (id) inDeck[seatKey].add(id);
+                }
+              }
+            }
+          }
+        } catch {}
         const winnerSeatVal =
           winnerSeat === "p1" || winnerSeat === "p2" ? winnerSeat : null;
         const loserSeatVal =
           loserSeat === "p1" || loserSeat === "p2" ? loserSeat : null;
+        // Calendar-month bucket ("YYYY-MM", UTC) for windowed meta views
+        const period = new Date().toISOString().slice(0, 7);
         const ops: Promise<unknown>[] = [];
         const bump = (cardId: number, seat: "p1" | "p2") => {
           const isWin = winnerSeatVal ? seat === winnerSeatVal : false;
           const isLoss = loserSeatVal ? seat === loserSeatVal : false;
           const isDrawLocal = !!isDraw;
+          const wasPlayed = played[seat].has(cardId);
+          const wasInDeck = inDeck[seat].has(cardId);
+          const one = (cond: boolean) => (cond ? 1 : 0);
+          const createCounters = {
+            cardId,
+            format: formatRaw,
+            plays: one(wasPlayed),
+            wins: one(wasPlayed && isWin),
+            losses: one(wasPlayed && isLoss),
+            draws: one(wasPlayed && isDrawLocal),
+            inDeck: one(wasInDeck),
+            inDeckWins: one(wasInDeck && isWin),
+            inDeckLosses: one(wasInDeck && isLoss),
+            inDeckDraws: one(wasInDeck && isDrawLocal),
+          };
+          const updateCounters = {
+            ...(wasPlayed ? { plays: { increment: 1 } } : {}),
+            ...(wasPlayed && isWin ? { wins: { increment: 1 } } : {}),
+            ...(wasPlayed && isLoss ? { losses: { increment: 1 } } : {}),
+            ...(wasPlayed && isDrawLocal ? { draws: { increment: 1 } } : {}),
+            ...(wasInDeck ? { inDeck: { increment: 1 } } : {}),
+            ...(wasInDeck && isWin ? { inDeckWins: { increment: 1 } } : {}),
+            ...(wasInDeck && isLoss ? { inDeckLosses: { increment: 1 } } : {}),
+            ...(wasInDeck && isDrawLocal
+              ? { inDeckDraws: { increment: 1 } }
+              : {}),
+          };
           ops.push(
             prisma.humanCardStats.upsert({
               where: { cardId_format: { cardId, format: formatRaw } },
-              create: {
-                cardId,
-                format: formatRaw,
-                plays: 1,
-                wins: isWin ? 1 : 0,
-                losses: isLoss ? 1 : 0,
-                draws: isDrawLocal ? 1 : 0,
+              create: createCounters,
+              update: updateCounters,
+            }),
+          );
+          ops.push(
+            prisma.humanCardStatsPeriod.upsert({
+              where: {
+                cardId_format_period: { cardId, format: formatRaw, period },
               },
-              update: {
-                plays: { increment: 1 },
-                ...(isWin ? { wins: { increment: 1 } } : {}),
-                ...(isLoss ? { losses: { increment: 1 } } : {}),
-                ...(isDrawLocal ? { draws: { increment: 1 } } : {}),
-              },
+              create: { ...createCounters, period },
+              update: updateCounters,
             }),
           );
         };
-        for (const id of p1Cards) bump(id, "p1");
-        for (const id of p2Cards) bump(id, "p2");
+        for (const id of new Set([...played.p1, ...inDeck.p1])) bump(id, "p1");
+        for (const id of new Set([...played.p2, ...inDeck.p2])) bump(id, "p2");
         await Promise.allSettled(ops);
       }
     }

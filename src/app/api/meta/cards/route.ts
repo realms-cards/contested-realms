@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { deriveCardRates, parseMetaWindow } from "@/lib/meta/stats";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -40,10 +41,18 @@ type HumanCardStatRow = {
   wins: number;
   losses: number;
   draws: number;
+  inDeck: number;
+  inDeckWins: number;
+  inDeckLosses: number;
+  inDeckDraws: number;
 };
 type HumanCardStatOut = HumanCardStatRow & {
   name: string;
   winRate: number;
+  /** Wilson lower bound - the sort key for the winRate ordering */
+  winRateLB: number;
+  playRate: number | null;
+  winRateInDeck: number | null;
   slug: string | null;
   type: string | null;
 };
@@ -58,10 +67,13 @@ export async function GET(request: Request): Promise<NextResponse> {
     const order = parseOrder(url.searchParams.get("order"));
     const format = parseFormat(url.searchParams.get("format"));
     const category = parseCategory(url.searchParams.get("category"));
+    const window = parseMetaWindow(url.searchParams.get("window"));
 
-    // Try serving from pre-computed cache
+    // Try serving from pre-computed cache. All-time snapshots keep their
+    // historical key; windowed ones are suffixed.
+    const baseKey = `cards:${format}:${category}:${order}`;
     const snapshot = await prisma.metaStatsSnapshot.findUnique({
-      where: { key: `cards:${format}:${category}:${order}` },
+      where: { key: window === "all" ? baseKey : `${baseKey}:${window}` },
     });
     if (snapshot) {
       const cached = snapshot.data as Record<string, unknown>;
@@ -72,6 +84,21 @@ export async function GET(request: Request): Promise<NextResponse> {
         stats: cachedStats,
         limit,
         generatedAt: snapshot.computedAt.toISOString(),
+      });
+    }
+
+    // Windowed views are only served from snapshots (recomputed every 10 min
+    // and on server start); until the first run there is nothing to show.
+    if (window !== "all") {
+      return NextResponse.json({
+        stats: [],
+        format,
+        order,
+        category,
+        window,
+        limit,
+        pending: true,
+        generatedAt: new Date().toISOString(),
       });
     }
 
@@ -103,6 +130,10 @@ export async function GET(request: Request): Promise<NextResponse> {
         wins: true,
         losses: true,
         draws: true,
+        inDeck: true,
+        inDeckWins: true,
+        inDeckLosses: true,
+        inDeckDraws: true,
       },
     });
 
@@ -149,23 +180,19 @@ export async function GET(request: Request): Promise<NextResponse> {
     const stats: HumanCardStatOut[] = validRows
       .filter((r) => matchesCategory(typeMap.get(r.cardId), category))
       .map((r: HumanCardStatRow): HumanCardStatOut => {
-        const denom = r.wins + r.losses;
-        const winRate = denom > 0 ? r.wins / denom : 0;
+        const rates = deriveCardRates(r);
         return {
-          cardId: r.cardId,
+          ...r,
           name: nameMap.get(r.cardId) || String(r.cardId),
-          plays: r.plays,
-          wins: r.wins,
-          losses: r.losses,
-          draws: r.draws,
-          winRate,
+          ...rates,
           slug: slugMap.get(r.cardId) || null,
           type: typeMap.get(r.cardId) || null,
         };
       })
       .sort((a: HumanCardStatOut, b: HumanCardStatOut) => {
+        // Wilson lower bound keeps 2-0 flukes below proven performers
         if (order === "winRate")
-          return b.winRate - a.winRate || b.plays - a.plays;
+          return b.winRateLB - a.winRateLB || b.plays - a.plays;
         if (order === "wins") return b.wins - a.wins || b.plays - a.plays;
         return b.plays - a.plays;
       })
@@ -173,6 +200,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     return NextResponse.json({
       stats,
+      window,
       format,
       order,
       limit,
