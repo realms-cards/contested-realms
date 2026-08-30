@@ -579,13 +579,15 @@ const CardWithTexture = React.memo(function CardWithTexture(
   });
 
   // Custom atlas sleeves are uploaded as true landscape (525x375) images, but
-  // the default atlas back asset is that landscape art pre-rotated 90° CCW into
-  // a portrait texture, and every atlas render path (piles, opponent hand)
-  // assumes the portrait form. Rotate custom atlas textures the same way so
-  // they show in the orientation the user uploaded.
+  // the default atlas back asset is that landscape art pre-rotated into a
+  // portrait texture (art top on the texture's left edge), and every atlas
+  // render path (piles, opponent hand) assumes the portrait form. Rotate custom
+  // atlas textures the same way so they show in the orientation the user
+  // uploaded. With the UV y-invert undone below, -PI/2 maps the image's top
+  // edge to UV u=0 (left), matching the default asset.
   const isCustomAtlasBack = CUSTOM_ATLAS_BACK_RE.test(props.textureUrl || "");
   const effectiveTextureRotation =
-    textureRotation ?? (isCustomAtlasBack ? Math.PI / 2 : 0);
+    textureRotation ?? (isCustomAtlasBack ? -Math.PI / 2 : 0);
 
   const instancedMap = useMemo(() => {
     if (!tex) return null;
