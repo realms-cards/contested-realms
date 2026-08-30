@@ -1,14 +1,17 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   CanvasTexture,
   LinearFilter,
   LinearMipmapLinearFilter,
+  MeshStandardMaterial,
   RepeatWrapping,
   SRGBColorSpace,
 } from "three";
+import { CARD_THICK } from "@/lib/game/constants";
 import { SLEEVE_PRESETS, type SleevePreset } from "@/lib/game/sleevePresets";
+import { useCardGeometry } from "./useCardGeometry";
 
 interface MaterialCardBackProps {
   presetId: string;
@@ -30,6 +33,11 @@ interface MaterialCardBackProps {
 const MAX_METALNESS = 0.55;
 const MIN_ROUGHNESS = 0.42;
 const ENV_MAP_INTENSITY = 0.5;
+
+// Card-stock edge — must match CardPlane's EDGE_COLOR / EDGE_ROUGHNESS so
+// preset sleeves stack seamlessly with textured cards and PileBodies.
+const EDGE_COLOR = "#e8e0d0";
+const EDGE_ROUGHNESS = 0.9;
 
 // Generate a noise texture for roughness variation
 // Cached globally so all cards share the same texture
@@ -199,17 +207,71 @@ export default function MaterialCardBack({
     return getSleeveTexture(preset);
   }, [preset]);
 
-  // Landscape (atlas) sleeves: the baked texture is portrait, so rotate the
-  // geometry a quarter turn and swap the plane dimensions to match.
+  // Same rounded-corner OBJ geometry CardPlane uses, so preset sleeves line
+  // up exactly with textured cards (thickness, corners, stacking offsets).
+  const { geometry: cardGeometry, thicknessRatio } = useCardGeometry();
+
+  // Landscape (atlas) sleeves: the geometry/texture are portrait, so rotate a
+  // quarter turn and scale by the short edge — identical to CardPlane.
   const isLandscape = width > height;
-  const planeW = isLandscape ? height : width;
-  const planeH = isLandscape ? width : height;
   const geometryRotationZ = isLandscape ? Math.PI / 2 : 0;
+  const uniformScale = isLandscape ? height : width;
+  const scaleZ = CARD_THICK / thicknessRatio;
+
+  // OBJ group order: [edge, front, back]. Both faces get the sleeve so the
+  // card looks right from either side (hand fans, flips).
+  const materials = useMemo(() => {
+    if (!preset || !cardGeometry) return null;
+    const faceProps = {
+      map: sleeveTexture ?? undefined,
+      metalness: Math.min(preset.metalness, MAX_METALNESS),
+      roughness: Math.max(preset.roughness, MIN_ROUGHNESS),
+      roughnessMap: noiseTexture ?? undefined,
+      envMapIntensity: ENV_MAP_INTENSITY,
+      depthWrite,
+    };
+    const edge = new MeshStandardMaterial({
+      color: EDGE_COLOR,
+      roughness: EDGE_ROUGHNESS,
+      metalness: 0,
+      envMapIntensity: 0.3,
+      depthWrite,
+    });
+    const front = new MeshStandardMaterial(faceProps);
+    const back = new MeshStandardMaterial(faceProps);
+    return [edge, front, back];
+  }, [preset, cardGeometry, sleeveTexture, noiseTexture, depthWrite]);
+
+  useEffect(() => {
+    if (!materials) return;
+    return () => {
+      for (const m of materials) m.dispose();
+    };
+  }, [materials]);
 
   if (!preset) {
     return null;
   }
 
+  if (cardGeometry && materials) {
+    return (
+      <mesh
+        geometry={cardGeometry}
+        material={materials}
+        rotation-x={upright ? 0 : -Math.PI / 2}
+        rotation-z={rotationZ + geometryRotationZ}
+        position={[0, elevation + CARD_THICK / 2, 0]}
+        scale={[uniformScale, uniformScale, scaleZ]}
+        raycast={interactive ? undefined : () => []}
+        castShadow={shouldCastShadow}
+        receiveShadow
+      />
+    );
+  }
+
+  // Fallback while the OBJ is still loading: flat plane
+  const planeW = isLandscape ? height : width;
+  const planeH = isLandscape ? width : height;
   return (
     <mesh
       rotation-x={upright ? 0 : -Math.PI / 2}

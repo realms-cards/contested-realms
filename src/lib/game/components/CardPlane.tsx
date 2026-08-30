@@ -19,6 +19,8 @@ import { useCardGeometry } from "./useCardGeometry";
 
 // Card edge color (ivory to simulate card stock)
 const EDGE_COLOR = "#e8e0d0";
+// /api/users/me/cardbacks/<id>/atlas and /api/users/<userId>/cardbacks/<id>/atlas
+const CUSTOM_ATLAS_BACK_RE = /\/cardbacks\/[^/?#]+\/atlas(?:[?#]|$)/;
 
 function noopRaycast(
   this: Object3D,
@@ -576,19 +578,30 @@ const CardWithTexture = React.memo(function CardWithTexture(
     preferRaster,
   });
 
+  // Custom atlas sleeves are uploaded as true landscape (525x375) images, but
+  // the default atlas back asset is that landscape art pre-rotated 90° CCW into
+  // a portrait texture, and every atlas render path (piles, opponent hand)
+  // assumes the portrait form. Rotate custom atlas textures the same way so
+  // they show in the orientation the user uploaded.
+  const isCustomAtlasBack = CUSTOM_ATLAS_BACK_RE.test(props.textureUrl || "");
+  const effectiveTextureRotation =
+    textureRotation ?? (isCustomAtlasBack ? Math.PI / 2 : 0);
+
   const instancedMap = useMemo(() => {
     if (!tex) return null;
-    if (!textureRotation || Math.abs(textureRotation) < 1e-6) return tex;
+    if (!effectiveTextureRotation || Math.abs(effectiveTextureRotation) < 1e-6)
+      return tex;
     const t = tex.clone();
 
     // Special-case: token pile uses preferRaster and token textures; rotate without UV invert to prevent smear/stripes.
     const isTokenTexture =
       (props.textureUrl || "").includes("/tokens/") ||
       (props.slug || "").startsWith("token:");
-    const isCardbackTexture = (props.textureUrl || "").includes("cardback_");
+    const isCardbackTexture =
+      (props.textureUrl || "").includes("cardback_") || isCustomAtlasBack;
 
     t.center.set(0.5, 0.5);
-    t.rotation = textureRotation;
+    t.rotation = effectiveTextureRotation;
 
     if (isCardbackTexture) {
       // Cardbacks are normalized with a Y-invert (repeat.y=-1, offset.y=1). When combined with rotation,
@@ -605,7 +618,14 @@ const CardWithTexture = React.memo(function CardWithTexture(
 
     t.needsUpdate = true;
     return t;
-  }, [tex, textureRotation, props.preferRaster, props.textureUrl, props.slug]);
+  }, [
+    tex,
+    effectiveTextureRotation,
+    isCustomAtlasBack,
+    props.preferRaster,
+    props.textureUrl,
+    props.slug,
+  ]);
 
   useEffect(() => {
     return () => {
