@@ -1,15 +1,14 @@
 import { NextRequest } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
 import { invalidateCache, CacheKeys } from "@/lib/cache/redis-cache";
+import { codexIdForPrinting } from "@/lib/cards/registry";
 import {
   formatValidationErrors,
   resolveImportFormat,
 } from "@/lib/deck/validation-rules";
-import { resolveCardNames } from "@/lib/decks/card-resolver";
 import { prisma } from "@/lib/prisma";
 import {
   fetchCuriosatrpc,
-  fetchWithTimeout,
   extractDeckId,
   type CuriosatrpcDeck,
 } from "@/lib/services/curiosa-deck";
@@ -21,17 +20,10 @@ import {
 
 export const dynamic = "force-dynamic";
 
-// Minimal JSON typing helpers to avoid any
-type JSONValue = string | number | boolean | null | JSONObject | JSONArray;
-type JSONArray = JSONValue[];
-interface JSONObject {
-  [key: string]: JSONValue;
-}
-
 // POST /api/decks/import/curiosa
-// Body: { url: string, name?: string }
-// - Accepts a Curiosa or Four Cores (fourcores.xyz) deck URL, or pasted Curiosa TTS JSON
-// - Fetches the decklist, extracts card names+counts, maps to variants, creates a Constructed deck
+// Body: { url: string, name?: string, format?: string }
+// - Accepts a Curiosa (sorcerytcg.com) or Four Cores (fourcores.xyz) deck URL
+// - Fetches the structured decklist, maps printings to our variants, creates the deck
 // - Validates avatar/site/spellbook counts similar to game loader expectations
 export async function POST(req: NextRequest) {
   const session = await getServerAuthSession();
@@ -67,23 +59,21 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const rawUrl = String(body?.url || "").trim();
     const overrideName = body?.name ? String(body.name).trim() : "";
-    const rawTts: unknown = body?.tts ?? body?.ttsJson ?? null;
     // Optional: force a format instead of inferring it from the decklist
     const requestedFormat = body?.format ? String(body.format).trim() : null;
 
-    if (!rawUrl && rawTts == null) {
+    if (!rawUrl) {
       return new Response(
         JSON.stringify({
-          error:
-            "Provide a Curiosa or Four Cores deck URL, or paste Curiosa TTS JSON",
+          error: "Provide a Curiosa (sorcerytcg.com) or Four Cores deck URL",
         }),
-        { status: 400 }
+        { status: 400, headers: { "content-type": "application/json" } }
       );
     }
 
     // Four Cores decks come from a different host with their own list endpoint.
     // Normalized into the Curiosa deck shape, they reuse the same import path.
-    if (rawTts == null && isFourCoresUrl(rawUrl)) {
+    if (isFourCoresUrl(rawUrl)) {
       const fourCoresId = extractFourCoresDeckId(rawUrl);
       const fourCoresData = await fetchFourCoresDeck(rawUrl);
       if (!fourCoresData) {
@@ -131,306 +121,48 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1) Get TTS JSON either from pasted body or by fetching from Curiosa URL candidates
-    let tts: JSONValue | null = null;
-    if (rawTts != null) {
-      if (typeof rawTts === "string") {
-        try {
-          tts = JSON.parse(rawTts) as JSONValue;
-        } catch {
-          return new Response(
-            JSON.stringify({ error: "Invalid TTS JSON string" }),
-            { status: 400 }
-          );
-        }
-      } else if (typeof rawTts === "object") {
-        tts = rawTts as JSONValue;
-      }
-    } else {
-      const deckId = extractDeckId(rawUrl);
-      const candidates: string[] = [];
-      const tried = new Set<string>();
-
-      // Try the provided URL directly first (in case it's already an API/JSON endpoint)
-      if (rawUrl) candidates.push(rawUrl);
-
-      // Derive origins to try
-      let pastedOrigin: string | null = null;
-      try {
-        const u = new URL(rawUrl);
-        pastedOrigin = u.origin;
-        // If the pasted URL looks like a deck page and not already /tts, try appending /tts
-        if (/\/decks\//.test(u.pathname) && !/\/tts\/?$/.test(u.pathname)) {
-          const withTts = `${pastedOrigin}${u.pathname.replace(/\/$/, "")}/tts`;
-          if (!tried.has(withTts)) {
-            candidates.push(withTts);
-            tried.add(withTts);
-          }
-        }
-      } catch {}
-
-      const origins = Array.from(
-        new Set(
-          [
-            pastedOrigin || undefined,
-            "https://curiosa.io",
-            "https://www.curiosa.io",
-          ].filter(Boolean)
-        )
-      ) as string[];
-
-      if (deckId) {
-        for (const origin of origins) {
-          const apiPath = `${origin}/api/decks/${encodeURIComponent(
-            deckId
-          )}/tts`;
-          if (!tried.has(apiPath)) {
-            candidates.push(apiPath);
-            tried.add(apiPath);
-          }
-          const webPath = `${origin}/decks/${encodeURIComponent(deckId)}/tts`;
-          if (!tried.has(webPath)) {
-            candidates.push(webPath);
-            tried.add(webPath);
-          }
-          // Also try deck JSON endpoints (non-TTS) as a fallback
-          const deckJson1 = `${origin}/api/decks/${encodeURIComponent(deckId)}`;
-          if (!tried.has(deckJson1)) {
-            candidates.push(deckJson1);
-            tried.add(deckJson1);
-          }
-          const deckJson2 = `${origin}/decks/${encodeURIComponent(
-            deckId
-          )}.json`;
-          if (!tried.has(deckJson2)) {
-            candidates.push(deckJson2);
-            tried.add(deckJson2);
-          }
-        }
-      }
-
-      // Try tRPC endpoint first (works with Origin spoofing)
-      const trpcData = await fetchCuriosatrpc(deckId);
-      if (trpcData) {
-        // Direct import from tRPC response - has structured data with variants
-        const finalName =
-          overrideName || trpcData.deckName || `Curiosa Import ${deckId}`;
-        const importResult = await importFromTrpcData(
-          trpcData.deckList,
-          trpcData.sideboardList,
-          trpcData.avatarName,
-          session.user.id,
-          finalName,
-          deckId, // Pass curiosaSourceId for sync functionality
-          requestedFormat
-        );
-        if (importResult.error || !importResult.deck) {
-          return new Response(
-            JSON.stringify({
-              error: importResult.error ?? "Failed to create deck",
-              unresolved: importResult.unresolved,
-            }),
-            { status: 400 }
-          );
-        }
-        // Invalidate deck list cache for this user
-        await invalidateCache(CacheKeys.decks.list(session.user.id));
-        return new Response(
-          JSON.stringify({
-            id: importResult.deck.id,
-            name: importResult.deck.name,
-            format: importResult.deck.format,
-          }),
-          { status: 201, headers: { "content-type": "application/json" } }
-        );
-      }
-
-      // Fallback to TTS JSON endpoints
-      tts = await fetchFirstJson(candidates);
-      if (!tts) {
-        return new Response(
-          JSON.stringify({
-            error:
-              "Failed to fetch Curiosa deck. If the deck is private or requires login, paste the TTS JSON instead.",
-          }),
-          { status: 400 }
-        );
-      }
-    }
-
-    // 3) Extract card names and counts from TTS JSON (best-effort)
-    const nameCounts = extractNamesAndCounts(tts);
-    const entries = Array.from(nameCounts.entries())
-      .map(([name, count]) => ({ name, count }))
-      .filter((e) => !!e.name && e.count > 0);
-
-    if (entries.length === 0) {
+    // Curiosa: a single tRPC call returns the full structured decklist
+    const deckId = extractDeckId(rawUrl);
+    const trpcData = await fetchCuriosatrpc(deckId);
+    if (!trpcData) {
       return new Response(
         JSON.stringify({
           error:
-            "No cards found in Curiosa TTS export. The deck might be private or an unknown format.",
-        }),
-        { status: 400 }
-      );
-    }
-
-    // 4) Map names to variants/cards using shared resolver
-    type Mapped = {
-      cardId: number;
-      variantId: number | null;
-      setId: number | null;
-      typeText: string | null;
-      type: string | null;
-      count: number;
-      name: string;
-    };
-
-    const mapped: Mapped[] = [];
-    const unresolved: { name: string; count: number }[] = [];
-
-    // Batch lookup: fetch all cards and variants in one query
-    const uniqueNames = [...new Set(entries.map((e) => e.name))];
-    const { resolved: resolvedByName } = await resolveCardNames(uniqueNames);
-
-    for (const { name, count } of entries) {
-      const found = resolvedByName.get(name);
-      if (!found) {
-        unresolved.push({ name, count });
-        continue;
-      }
-      mapped.push({
-        cardId: found.cardId,
-        variantId: found.variantId,
-        setId: found.setId,
-        typeText: found.typeText,
-        type: found.type,
-        count,
-        name,
-      });
-    }
-
-    if (unresolved.length) {
-      return new Response(
-        JSON.stringify({
-          error: `Could not map some cards by name`,
-          unresolved,
+            "Failed to fetch deck. Make sure the URL points to a deck on sorcerytcg.com and that the deck still exists.",
         }),
         { status: 400, headers: { "content-type": "application/json" } }
       );
     }
 
-    // 5) Bucket into zones based on type
-    const allowedZones = new Set([
-      "Spellbook",
-      "Atlas",
-      "Collection",
-      "Sideboard",
-    ]);
-    type ZoneItem = {
-      cardId: number;
-      variantId: number | null;
-      setId: number | null;
-      zone: string;
-      count: number;
-    };
-    const zoneItems: ZoneItem[] = mapped.map((m) => {
-      const t = (m.type || "").toLowerCase();
-      const isSite = t.includes("site");
-      const zone = isSite ? "Atlas" : "Spellbook";
-      return {
-        cardId: m.cardId,
-        variantId: m.variantId,
-        setId: m.setId,
-        zone,
-        count: m.count,
-      };
-    });
-
-    // 6) Validate avatar count and minimums, using CardSetMetadata.type (not typeText which is flavor text)
-    const avatars = mapped.filter((m) =>
-      (m.type || "").toLowerCase().includes("avatar")
-    );
-    if (avatars.length !== 1) {
-      return new Response(
-        JSON.stringify({
-          error:
-            avatars.length === 0
-              ? "Deck requires exactly 1 Avatar"
-              : "Deck has multiple Avatars. Keep only one.",
-        }),
-        { status: 400 }
-      );
-    }
-
-    const avatarCards = avatars.reduce((a, b) => a + b.count, 0);
-    const avatarName = avatars[0]?.name ?? null;
-    const atlasCount = zoneItems
-      .filter((z) => z.zone === "Atlas")
-      .reduce((a, b) => a + b.count, 0);
-    const spellbookCount =
-      zoneItems
-        .filter((z) => z.zone === "Spellbook")
-        .reduce((a, b) => a + b.count, 0) - avatarCards;
-
-    // Store the format the list actually qualifies for so a later edit or
-    // publish doesn't fail a gate the import never applied
-    const resolvedFormat = resolveImportFormat(
-      { spellbookCount, atlasCount, avatarCount: avatarCards },
-      avatarName,
+    const finalName =
+      overrideName || trpcData.deckName || `Curiosa Import ${deckId}`;
+    const importResult = await importFromTrpcData(
+      trpcData.deckList,
+      trpcData.sideboardList,
+      trpcData.avatarName,
+      session.user.id,
+      finalName,
+      deckId, // Pass curiosaSourceId for sync functionality
       requestedFormat
     );
-    if (!resolvedFormat.validation.isValid) {
+    if (importResult.error || !importResult.deck) {
       return new Response(
         JSON.stringify({
-          error: formatValidationErrors(resolvedFormat.validation),
+          error: importResult.error ?? "Failed to create deck",
+          unresolved: importResult.unresolved,
         }),
-        { status: 400 }
+        { status: 400, headers: { "content-type": "application/json" } }
       );
-    }
-
-    // 7) Aggregate by (cardId, zone, variantId)
-    const agg = new Map<string, ZoneItem>();
-    for (const it of zoneItems) {
-      if (!allowedZones.has(it.zone)) continue;
-      const key = `${it.cardId}:${it.zone}:${it.variantId ?? "x"}`;
-      const prev = agg.get(key);
-      if (prev) prev.count += it.count;
-      else agg.set(key, { ...it });
-    }
-
-    // 8) Create the deck
-    const curiosaSourceId = extractDeckId(rawUrl);
-    const deckName =
-      overrideName || `Curiosa Import ${curiosaSourceId || "Deck"}`;
-    const deck = await prisma.deck.create({
-      data: {
-        name: deckName,
-        format: resolvedFormat.label,
-        imported: true,
-        curiosaSourceId, // Store for sync functionality
-        user: { connect: { id: session.user.id } },
-      },
-    });
-
-    // createMany doesn't allow relation inference per row, so compute setId per variant
-    const createRows = Array.from(agg.values()).map((v) => ({
-      deckId: deck.id,
-      cardId: v.cardId,
-      setId: v.setId,
-      variantId: v.variantId,
-      zone: v.zone,
-      count: v.count,
-    }));
-
-    if (createRows.length) {
-      await prisma.deckCard.createMany({ data: createRows });
     }
 
     // Invalidate deck list cache for this user
     await invalidateCache(CacheKeys.decks.list(session.user.id));
-
     return new Response(
-      JSON.stringify({ id: deck.id, name: deck.name, format: deck.format }),
+      JSON.stringify({
+        id: importResult.deck.id,
+        name: importResult.deck.name,
+        format: importResult.deck.format,
+      }),
       { status: 201, headers: { "content-type": "application/json" } }
     );
   } catch (e: unknown) {
@@ -444,163 +176,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Try multiple URLs in parallel, return first successful JSON response
-async function fetchFirstJson(urls: string[]): Promise<JSONValue | null> {
-  const uniqueUrls = [...new Set(urls.filter(Boolean))];
-  if (uniqueUrls.length === 0) return null;
-
-  // Try all URLs in parallel with individual timeouts
-  const results = await Promise.allSettled(
-    uniqueUrls.map(async (url) => {
-      const res = await fetchWithTimeout(
-        url,
-        {
-          cache: "no-store",
-          headers: {
-            Accept: "application/json, text/plain, */*",
-          },
-        },
-        8000 // 8 second timeout per URL
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const ct = res.headers.get("content-type") || "";
-      if (!ct.includes("json")) {
-        const txt = await res.text();
-        return JSON.parse(txt) as JSONValue;
-      }
-      return (await res.json()) as JSONValue;
-    })
-  );
-
-  // Return first successful result
-  for (const result of results) {
-    if (result.status === "fulfilled" && result.value) {
-      return result.value;
-    }
-  }
-  return null;
-}
-
-function extractNamesAndCounts(tts: JSONValue): Map<string, number> {
-  const counts = new Map<string, number>();
-  const push = (rawName: unknown, qty = 1) => {
-    if (typeof rawName !== "string") return;
-    const name = normalizeName(rawName);
-    if (!name) return;
-    counts.set(name, (counts.get(name) || 0) + Math.max(1, qty | 0));
-  };
-
-  const visit = (node: JSONValue) => {
-    if (node === null) return;
-    if (
-      typeof node === "string" ||
-      typeof node === "number" ||
-      typeof node === "boolean"
-    )
-      return;
-    if (Array.isArray(node)) {
-      for (const child of node) visit(child);
-      return;
-    }
-
-    const obj = node as JSONObject;
-
-    // Common TTS fields
-    const nickname = obj["Nickname"];
-    if (typeof nickname === "string") push(nickname, 1);
-
-    // Some exports include a quantity field
-    const cardName = obj["CardName"];
-    const quantity = obj["Quantity"];
-    if (typeof cardName === "string")
-      push(cardName, typeof quantity === "number" ? quantity : 1);
-
-    // Generic deck JSON fields (fallback): name + count variants
-    const nameFields = ["name", "Name", "card_name", "title"] as const;
-    const countFields = [
-      "count",
-      "Count",
-      "qty",
-      "Qty",
-      "quantity",
-      "Quantity",
-      "copies",
-      "Copies",
-      "amount",
-      "Amount",
-    ] as const;
-    for (const nf of nameFields) {
-      const n = obj[nf as keyof JSONObject];
-      if (typeof n === "string") {
-        // prefer a matching count field if present
-        let qtyNum: number | undefined;
-        for (const cf of countFields) {
-          const q = obj[cf as keyof JSONObject];
-          if (typeof q === "number") {
-            qtyNum = q;
-            break;
-          }
-        }
-        push(n, typeof qtyNum === "number" ? qtyNum : 1);
-        break;
-      }
-    }
-
-    // Walk typical containers
-    const objectStates = obj["ObjectStates"];
-    if (Array.isArray(objectStates))
-      for (const child of objectStates) visit(child);
-    const contained = obj["ContainedObjects"];
-    if (Array.isArray(contained)) for (const child of contained) visit(child);
-    const children = obj["Children"];
-    if (Array.isArray(children)) for (const child of children) visit(child);
-    const deckIDs = obj["DeckIDs"];
-    if (Array.isArray(deckIDs) && typeof nickname === "string") {
-      // Deck with repeated IDs: assume all entries are the same Nickname
-      push(nickname, deckIDs.length);
-    }
-
-    // Fallback: walk any nested objects/arrays
-    for (const [k, val] of Object.entries(obj)) {
-      if (
-        k === "Nickname" ||
-        k === "CardName" ||
-        k === "Quantity" ||
-        k === "name" ||
-        k === "Name" ||
-        k === "card_name" ||
-        k === "title" ||
-        k === "count" ||
-        k === "Count" ||
-        k === "qty" ||
-        k === "Qty" ||
-        k === "quantity" ||
-        k === "Quantity" ||
-        k === "copies" ||
-        k === "Copies" ||
-        k === "amount" ||
-        k === "Amount" ||
-        k === "ObjectStates" ||
-        k === "ContainedObjects" ||
-        k === "Children" ||
-        k === "DeckIDs"
-      )
-        continue;
-      if (val && typeof val === "object") visit(val as JSONValue);
-    }
-  };
-
-  visit(tts);
-  return counts;
-}
-
-function normalizeName(s: string): string {
-  return s
-    .replace(/[\u2018\u2019]/g, "'") // curly apostrophes -> straight
-    .replace(/[\u201C\u201D]/g, '"') // curly quotes -> straight
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 // Import directly from Curiosa tRPC response
 async function importFromTrpcData(
@@ -620,6 +195,7 @@ async function importFromTrpcData(
   const entries: {
     name: string;
     slug: string;
+    printingId: string | null;
     quantity: number;
     category: string;
     type: string;
@@ -638,6 +214,7 @@ async function importFromTrpcData(
     entries.push({
       name: card.name,
       slug,
+      printingId: variant?.printingId ?? null,
       quantity,
       category: card.category,
       type: card.type,
@@ -663,6 +240,7 @@ async function importFromTrpcData(
     entries.push({
       name: card.name,
       slug,
+      printingId: variant?.printingId ?? null,
       quantity,
       category: card.category,
       type: card.type,
@@ -680,6 +258,7 @@ async function importFromTrpcData(
     {
       name: string;
       slug: string;
+      printingId: string | null;
       quantity: number;
       category: string;
       type: string;
@@ -709,23 +288,93 @@ async function importFromTrpcData(
   const mapped: Mapped[] = [];
   const unresolved: { name: string; count: number }[] = [];
 
-  // Batch lookup: collect all slugs and fetch variants in one query
+  // Resolution order, most to least precise:
+  //   1. registry printing id  - exact printing, survives upstream renames
+  //   2. legacy slug           - printings the registry doesn't cover
+  //   3. registry codex id     - a different printing of the same card, for
+  //                              alternate art we hold no assets for
+  //   4. card name             - last resort
   const groupedEntries = Array.from(grouped.values());
   const allSlugs = groupedEntries.map((e) => e.slug);
+  const allPrintingIds = groupedEntries
+    .map((e) => e.printingId)
+    .filter((id): id is string => !!id);
 
   const variants = await prisma.variant.findMany({
-    where: { slug: { in: allSlugs } },
-    select: { id: true, cardId: true, setId: true, typeText: true, slug: true },
+    where: {
+      OR: [
+        { slug: { in: allSlugs } },
+        ...(allPrintingIds.length
+          ? [{ printingId: { in: allPrintingIds } }]
+          : []),
+      ],
+    },
+    select: {
+      id: true,
+      cardId: true,
+      setId: true,
+      typeText: true,
+      slug: true,
+      printingId: true,
+    },
   });
 
   const variantBySlug = new Map(variants.map((v) => [v.slug, v]));
-
-  // Find entries that didn't match by slug - need name fallback
-  const needsNameLookup = groupedEntries.filter(
-    (e) => !variantBySlug.has(e.slug)
+  const variantByPrintingId = new Map(
+    variants
+      .filter((v) => !!v.printingId)
+      .map((v) => [v.printingId as string, v])
   );
 
-  // Batch lookup cards by name for unresolved slugs
+  type ResolvedVariant = {
+    id: number;
+    cardId: number;
+    setId: number | null;
+    typeText: string | null;
+  };
+
+  const directHit = (entry: (typeof groupedEntries)[number]) =>
+    (entry.printingId ? variantByPrintingId.get(entry.printingId) : undefined) ??
+    variantBySlug.get(entry.slug);
+
+  const needsFallback = groupedEntries.filter((e) => !directHit(e));
+
+  // A printing we don't carry still identifies its card, so fall back to any
+  // printing of that card rather than failing the whole import
+  const variantByCodexId = new Map<string, ResolvedVariant>();
+  const codexIds = [
+    ...new Set(
+      needsFallback
+        .map((e) => codexIdForPrinting(e.printingId ?? undefined))
+        .filter((id): id is string => !!id)
+    ),
+  ];
+  if (codexIds.length > 0) {
+    const cards = await prisma.card.findMany({
+      where: { codexId: { in: codexIds } },
+      select: {
+        id: true,
+        codexId: true,
+        variants: {
+          select: { id: true, setId: true, typeText: true },
+          take: 1,
+        },
+      },
+    });
+    for (const c of cards) {
+      const v = c.variants[0];
+      if (c.codexId && v) {
+        variantByCodexId.set(c.codexId, {
+          id: v.id,
+          cardId: c.id,
+          setId: v.setId,
+          typeText: v.typeText,
+        });
+      }
+    }
+  }
+
+  // Batch lookup cards by name for anything still unmatched
   let cardByNameLower = new Map<
     string,
     {
@@ -733,6 +382,11 @@ async function importFromTrpcData(
       variants: { id: number; setId: number | null; typeText: string | null }[];
     }
   >();
+
+  const needsNameLookup = needsFallback.filter((e) => {
+    const codexId = codexIdForPrinting(e.printingId ?? undefined);
+    return !codexId || !variantByCodexId.has(codexId);
+  });
 
   if (needsNameLookup.length > 0) {
     const names = [...new Set(needsNameLookup.map((e) => e.name))];
@@ -752,56 +406,43 @@ async function importFromTrpcData(
 
   // Process all entries using the batched lookups
   for (const entry of groupedEntries) {
-    const variant = variantBySlug.get(entry.slug);
+    const codexId = codexIdForPrinting(entry.printingId ?? undefined);
+    const nameMatch = cardByNameLower.get(entry.name.toLowerCase());
+    const resolved: ResolvedVariant | undefined =
+      directHit(entry) ??
+      (codexId ? variantByCodexId.get(codexId) : undefined) ??
+      (nameMatch && nameMatch.variants[0]
+        ? {
+            id: nameMatch.variants[0].id,
+            cardId: nameMatch.id,
+            setId: nameMatch.variants[0].setId,
+            typeText: nameMatch.variants[0].typeText,
+          }
+        : undefined);
 
-    if (!variant) {
-      // Fallback: try by card name from batch lookup
-      const card = cardByNameLower.get(entry.name.toLowerCase());
-
-      if (!card) {
-        unresolved.push({ name: entry.name, count: entry.quantity });
-        continue;
-      }
-
-      const v = card.variants[0];
-      // Determine zone: sideboard -> Collection (for constructed), main deck sites -> Atlas, main deck spells -> Spellbook
-      let zone: string;
-      if (entry.zone === "sideboard") {
-        zone = "Collection";
-      } else {
-        const isSite =
-          entry.type?.toLowerCase() === "site" ||
-          entry.category?.toLowerCase() === "site";
-        zone = isSite ? "Atlas" : "Spellbook";
-      }
-      mapped.push({
-        cardId: card.id,
-        variantId: v?.id ?? null,
-        setId: v?.setId ?? null,
-        zone,
-        count: entry.quantity,
-        name: entry.name,
-      });
-    } else {
-      // Determine zone: sideboard -> Collection (for constructed), main deck sites -> Atlas, main deck spells -> Spellbook
-      let zone: string;
-      if (entry.zone === "sideboard") {
-        zone = "Collection";
-      } else {
-        const isSite =
-          entry.type?.toLowerCase() === "site" ||
-          entry.category?.toLowerCase() === "site";
-        zone = isSite ? "Atlas" : "Spellbook";
-      }
-      mapped.push({
-        cardId: variant.cardId,
-        variantId: variant.id,
-        setId: variant.setId,
-        zone,
-        count: entry.quantity,
-        name: entry.name,
-      });
+    if (!resolved) {
+      unresolved.push({ name: entry.name, count: entry.quantity });
+      continue;
     }
+
+    // Determine zone: sideboard -> Collection (for constructed), main deck sites -> Atlas, main deck spells -> Spellbook
+    let zone: string;
+    if (entry.zone === "sideboard") {
+      zone = "Collection";
+    } else {
+      const isSite =
+        entry.type?.toLowerCase() === "site" ||
+        entry.category?.toLowerCase() === "site";
+      zone = isSite ? "Atlas" : "Spellbook";
+    }
+    mapped.push({
+      cardId: resolved.cardId,
+      variantId: resolved.id,
+      setId: resolved.setId,
+      zone,
+      count: entry.quantity,
+      name: entry.name,
+    });
   }
 
   if (unresolved.length > 0) {

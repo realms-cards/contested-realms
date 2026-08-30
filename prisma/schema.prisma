@@ -26,6 +26,11 @@ model Set {
 
 model Card {
   id                Int               @id @default(autoincrement())
+  /// Stable identity from sorcery-registry (e.g. "C000001"). Survives upstream
+  /// renames and set renumbering, unlike name/slug. Null until backfilled.
+  /// Not unique: the registry treats art variants of a token as one card
+  /// (e.g. our "Frog (Blue)"/"Frog (Red)" both map to C001100).
+  codexId           String?
   name              String
   elements          String?
   subTypes          String?
@@ -41,6 +46,7 @@ model Card {
   variants          Variant[]
 
   @@index([name])
+  @@index([codexId])
 }
 
 model CardSetMetadata {
@@ -66,6 +72,9 @@ model Variant {
   id              Int              @id @default(autoincrement())
   cardId          Int
   setId           Int
+  /// Stable identity from sorcery-registry (e.g. "P000001"), one per physical
+  /// printing. Preferred lookup key for imports; slug is display/legacy only.
+  printingId      String?          @unique
   slug            String           @unique
   finish          Finish
   product         String
@@ -83,6 +92,7 @@ model Variant {
   @@index([setId])
   @@index([cardId])
   @@index([typeText])
+  @@index([printingId])
 }
 
 model PackConfig {
@@ -104,19 +114,19 @@ model PackConfig {
 }
 
 model Deck {
-  id             String     @id @default(cuid())
-  name           String
-  format         String     @default("Constructed")
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-  userId         String
-  isPublic       Boolean    @default(false)
+  id              String     @id @default(cuid())
+  name            String
+  format          String     @default("Constructed")
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  userId          String
+  isPublic        Boolean    @default(false)
   imported        Boolean    @default(false)
-  curiosaSourceId String?    // Curiosa deck ID for sync functionality
+  curiosaSourceId String? // Curiosa deck ID for sync functionality
   championCardId  Int?
-  champion       Card?      @relation("DeckChampion", fields: [championCardId], references: [id])
-  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cards          DeckCard[]
+  champion        Card?      @relation("DeckChampion", fields: [championCardId], references: [id])
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cards           DeckCard[]
 
   @@index([userId])
   @@index([isPublic, createdAt])
@@ -854,15 +864,15 @@ enum InvitationStatus {
 }
 
 model DiscordLinkToken {
-  id          String   @id @default(cuid())
-  token       String   @unique
-  discordId   String
-  discordTag  String
-  guildId     String?
-  expiresAt   DateTime
-  usedAt      DateTime?
-  userId      String?
-  createdAt   DateTime @default(now())
+  id         String    @id @default(cuid())
+  token      String    @unique
+  discordId  String
+  discordTag String
+  guildId    String?
+  expiresAt  DateTime
+  usedAt     DateTime?
+  userId     String?
+  createdAt  DateTime  @default(now())
 
   @@index([token])
   @@index([discordId])
@@ -870,17 +880,17 @@ model DiscordLinkToken {
 }
 
 model DiscordChallenge {
-  id            String                 @id @default(cuid())
-  challengerId  String
-  challengeeId  String
-  format        GameFormat             @default(constructed)
-  guildId       String?
-  channelId     String?
-  status        DiscordChallengeStatus @default(pending)
-  matchId       String?
-  expiresAt     DateTime
-  createdAt     DateTime               @default(now())
-  respondedAt   DateTime?
+  id           String                 @id @default(cuid())
+  challengerId String
+  challengeeId String
+  format       GameFormat             @default(constructed)
+  guildId      String?
+  channelId    String?
+  status       DiscordChallengeStatus @default(pending)
+  matchId      String?
+  expiresAt    DateTime
+  createdAt    DateTime               @default(now())
+  respondedAt  DateTime?
 
   @@index([challengerId])
   @@index([challengeeId])
@@ -896,17 +906,17 @@ enum DiscordChallengeStatus {
 }
 
 model League {
-  id             String             @id @default(cuid())
-  slug           String             @unique
+  id             String              @id @default(cuid())
+  slug           String              @unique
   name           String
-  discordGuildId String             @unique
+  discordGuildId String              @unique
   apiEndpoint    String?
   apiKeyEnvVar   String?
-  enabled        Boolean            @default(true)
+  enabled        Boolean             @default(true)
   iconUrl        String?
   badgeColor     String?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
   memberships    LeagueMembership[]
   matchReports   LeagueMatchReport[]
 

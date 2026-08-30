@@ -2,6 +2,17 @@
   Ingest Sorcery: Contested Realm cards from the public API into Prisma DB.
   - Fetches https://api.sorcerytcg.com/api/cards
   - Normalizes Sets, Cards, CardSetMetadata, Variants
+
+  Slugs from the API are NOT stable: the set renumbering rewrote every one of
+  them (alp-detonate-b-s -> 001-detonate-b-s), which breaks every resolver keyed
+  on the 3-letter set prefix. Incoming slugs are therefore canonicalized back to
+  our form via sorcery-registry, and the registry's permanent ids are stamped
+  onto Card.codexId / Variant.printingId so future renames cost nothing.
+
+  Usage:
+    node scripts/ingest-cards.js                  # fetch from the live API
+    node scripts/ingest-cards.js --from-file data/cards_raw.json
+                                                  # re-ingest a snapshot offline
 */
 // Load .env for local development
 try {
@@ -38,6 +49,42 @@ function normalizeProduct(p) {
   return String(p).trim();
 }
 
+/** Registry lookups: canonical slug + permanent ids for an incoming API slug */
+function loadRegistry() {
+  const file = path.join(
+    __dirname, "..", "data", "registry", "printing-index.json"
+  );
+  if (!fs.existsSync(file)) {
+    console.warn(
+      "data/registry/printing-index.json missing - slugs will be stored as the API reports them and no registry ids will be stamped. Run: node scripts/registry/sync-registry.js"
+    );
+    return null;
+  }
+  const index = JSON.parse(fs.readFileSync(file, "utf8"));
+  const legacyByPrinting = new Map();
+  for (const [legacySlug, printingId] of Object.entries(index.byLegacySlug)) {
+    legacyByPrinting.set(printingId, legacySlug);
+  }
+  return { index, legacyByPrinting };
+}
+
+/**
+ * Map an API slug onto the slug we store plus its registry ids. Falls through
+ * unchanged for printings the registry doesn't know, so ingest never drops a card.
+ */
+function canonicalize(registry, apiSlug) {
+  if (!registry) return { slug: apiSlug, printingId: null, codexId: null };
+  const key = String(apiSlug).trim().toLowerCase();
+  const printingId =
+    registry.index.bySlug[key] || registry.index.byLegacySlug[key] || null;
+  if (!printingId) return { slug: apiSlug, printingId: null, codexId: null };
+  return {
+    slug: registry.legacyByPrinting.get(printingId) || apiSlug,
+    printingId,
+    codexId: registry.index.codexByPrinting[printingId] || null,
+  };
+}
+
 /** Compute an image basename from a variant slug by stripping set prefix (e.g., alp_, bet_, arl_) */
 function computeImageBasename(slug) {
   if (!slug) return null;
@@ -49,18 +96,34 @@ function computeImageBasename(slug) {
 }
 
 async function main() {
-  console.log("Fetching cards from API...");
-  const res = await axios.get("https://api.sorcerytcg.com/api/cards", {
-    timeout: 60000,
-  });
-  if (!Array.isArray(res.data)) {
-    throw new Error("Unexpected response: expected an array");
-  }
-  const cards = res.data;
-  console.log(`Received ${cards.length} cards.`);
+  const fileArg = process.argv.indexOf("--from-file");
+  const fromFile = fileArg !== -1 ? process.argv[fileArg + 1] : null;
 
-  // Save a raw snapshot for reference
-  try {
+  let cards;
+  if (fromFile) {
+    console.log(`Reading cards from ${fromFile}...`);
+    cards = JSON.parse(fs.readFileSync(fromFile, "utf8"));
+    if (!Array.isArray(cards)) {
+      throw new Error("Unexpected snapshot: expected an array");
+    }
+    console.log(`Loaded ${cards.length} cards (no API call, snapshot untouched).`);
+  } else {
+    console.log("Fetching cards from API...");
+    const res = await axios.get("https://api.sorcerytcg.com/api/cards", {
+      timeout: 60000,
+    });
+    if (!Array.isArray(res.data)) {
+      throw new Error("Unexpected response: expected an array");
+    }
+    cards = res.data;
+    console.log(`Received ${cards.length} cards.`);
+  }
+
+  const registry = loadRegistry();
+  let stampedVariants = 0;
+
+  // Save a raw snapshot for reference (never when we just read one)
+  if (!fromFile) try {
     const dataDir = path.join(process.cwd(), "data");
     fs.mkdirSync(dataDir, { recursive: true });
     fs.writeFileSync(
@@ -145,18 +208,38 @@ async function main() {
         // Variants
         if (Array.isArray(s.variants)) {
           for (const v of s.variants) {
-            const slug = v.slug;
-            if (!slug) continue;
+            if (!v.slug) continue;
+            // Store our canonical slug, not whatever the API currently reports
+            const { slug, printingId, codexId } = canonicalize(registry, v.slug);
+
+            if (codexId && dbCard.codexId !== codexId) {
+              dbCard = await prisma.card.update({
+                where: { id: dbCard.id },
+                data: { codexId },
+              });
+            }
+
             const existing = await prisma.variant.findUnique({
               where: { slug },
             });
-            if (existing) continue;
+            if (existing) {
+              // Backfill ids onto rows ingested before the registry existed
+              if (printingId && existing.printingId !== printingId) {
+                await prisma.variant.update({
+                  where: { id: existing.id },
+                  data: { printingId },
+                });
+                stampedVariants++;
+              }
+              continue;
+            }
 
             await prisma.variant.create({
               data: {
                 card: { connect: { id: dbCard.id } },
                 set: { connect: { id: dbSet.id } },
                 slug,
+                printingId,
                 finish: mapFinish(v.finish),
                 product: normalizeProduct(v.product),
                 artist: v.artist || null,
@@ -173,7 +256,7 @@ async function main() {
   }
 
   console.log(
-    `Done. Cards created: ${createdCards}, updated: ${updatedCards}; Sets created: ${createdSets}; Variants created: ${createdVariants}`
+    `Done. Cards created: ${createdCards}, updated: ${updatedCards}; Sets created: ${createdSets}; Variants created: ${createdVariants}; registry ids stamped on existing variants: ${stampedVariants}`
   );
 }
 

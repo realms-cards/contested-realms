@@ -1,0 +1,46 @@
+{
+  "art_rubble_bt_s": {
+    "slug": "alp_rubble_bt_s",
+    "reason": "sibling-printing"
+  },
+  "pro_city_of_glass_scg_f": {
+    "slug": "got_city_of_glass_b_s",
+    "reason": "sibling-printing"
+  },
+  "pro_harbinger_d_f": {
+    "slug": "got_harbinger_b_s",
+    "reason": "sibling-printing"
+  },
+  "pro_necromancer_d_f": {
+    "slug": "got_necromancer_b_s",
+    "reason": "sibling-printing"
+  },
+  "pro_persecutor_d_f": {
+    "slug": "got_persecutor_b_s",
+    "reason": "sibling-printing"
+  },
+  "pro_savior_d_f": {
+    "slug": "got_savior_b_s",
+    "reason": "sibling-printing"
+  },
+  "pro_skeleton_tc_f": {
+    "token": "Skeleton",
+    "reason": "token-art"
+  },
+  "pro_skeleton_ai_f": {
+    "token": "Skeleton",
+    "reason": "token-art"
+  },
+  "got_skeleton_bt_s": {
+    "token": "Skeleton",
+    "reason": "token-art"
+  },
+  "art_foot_soldier_bt_s": {
+    "slug": "alp_foot_soldier_1_bt_s",
+    "reason": "sibling-printing"
+  },
+  "got_frog_bt_s": {
+    "slug": "alp_frog_blue_bt_s",
+    "reason": "sibling-printing"
+  }
+}

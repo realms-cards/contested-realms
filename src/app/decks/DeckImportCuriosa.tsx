@@ -13,7 +13,6 @@ export default function DeckImportCuriosa() {
   const enabled = process.env.NEXT_PUBLIC_ENABLE_CURIOSA_IMPORT === "true";
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
-  const [tts, setTts] = useState("");
   const [importState, setImportState] = useState<ImportState>({
     status: "idle",
   });
@@ -47,7 +46,7 @@ export default function DeckImportCuriosa() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url.trim() && !tts.trim()) return;
+    if (!url.trim()) return;
     setImportState({ status: "fetching" });
     try {
       const res = await fetch("/api/decks/import/curiosa", {
@@ -56,7 +55,6 @@ export default function DeckImportCuriosa() {
         body: JSON.stringify({
           url: url.trim(),
           name: name.trim() || undefined,
-          tts: tts.trim() || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -72,7 +70,6 @@ export default function DeckImportCuriosa() {
         setImportState({ status: "success", deckName, deckId });
         setUrl("");
         setName("");
-        setTts("");
         // Notify listeners with deck data for optimistic add
         try {
           const deckInfo = {
@@ -117,13 +114,13 @@ export default function DeckImportCuriosa() {
       <div>
         <div className="text-sm font-medium">Import Deck from URL</div>
         <div className="text-xs opacity-70 mt-0.5">
-          Works with Curiosa and — new — Four Cores (fourcores.xyz).
+          Works with Curiosa (sorcerytcg.com) and Four Cores (fourcores.xyz).
         </div>
       </div>
       <div className="grid gap-2 sm:grid-cols-5">
         <input
           className="sm:col-span-3 w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
-          placeholder="Paste Curiosa or Four Cores deck URL (public)"
+          placeholder="Paste a sorcerytcg.com or Four Cores deck URL"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           disabled={loading}
@@ -136,22 +133,6 @@ export default function DeckImportCuriosa() {
           disabled={loading}
         />
       </div>
-      <details className="bg-zinc-900/50 rounded ring-1 ring-zinc-700 p-3">
-        <summary className="cursor-pointer text-sm font-medium">
-          Paste Curiosa TTS JSON (fallback if the deck is private)
-        </summary>
-        <textarea
-          className="mt-2 w-full h-28 bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white font-mono text-xs"
-          placeholder="Paste the Tabletop Simulator JSON exported from Curiosa"
-          value={tts}
-          onChange={(e) => setTts(e.target.value)}
-          disabled={loading}
-        />
-        <div className="mt-1 text-xs opacity-70">
-          Tip: On Curiosa, open your deck, click Export → Tabletop Simulator,
-          copy the JSON and paste it here.
-        </div>
-      </details>
       {/* Progress indicator during import */}
       {loading && (
         <div className="bg-blue-900/30 rounded px-3 py-3 ring-1 ring-blue-700/50 space-y-2">
@@ -166,12 +147,6 @@ export default function DeckImportCuriosa() {
               </div>
             </div>
           </div>
-          {elapsedSeconds >= 15 && (
-            <div className="text-xs text-blue-300/80 bg-blue-900/40 rounded px-2 py-1.5">
-              Tip: If this takes too long, try using the TTS JSON fallback
-              option below.
-            </div>
-          )}
         </div>
       )}
 
@@ -207,7 +182,7 @@ export default function DeckImportCuriosa() {
       <div className="flex gap-2">
         <button
           type="submit"
-          disabled={loading || (!url.trim() && !tts.trim())}
+          disabled={loading || !url.trim()}
           className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
         >
           {loading ? "Importing..." : "Import"}

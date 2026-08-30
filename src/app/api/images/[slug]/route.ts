@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import artFallbackTable from "../../../../../data/registry/art-fallback.json";
 
 // NOTE: This route is now rarely hit in production because clients resolve
 // CDN URLs directly via src/lib/utils/cdnUrl.ts. This route serves as fallback
@@ -43,16 +44,46 @@ function suffixDirFromBasename(base: string): string | null {
   return `${a}_${b}`;
 }
 
-// Promo card fallbacks: map promo slugs to standard set equivalents when promo art is unavailable
-function getPromoFallbackSlug(normalizedSlug: string): string | null {
-  // City of Glass promo -> Gothic set standard version
-  if (
-    normalizedSlug.startsWith("pro_") &&
-    normalizedSlug.includes("city_of_glass")
-  ) {
-    return "got_city_of_glass_b_s";
+// Printings that exist upstream but that we hold no art for fall back to another
+// printing of the same card, or to generic token art. Generated from
+// sorcery-registry by scripts/registry/sync-registry.js - do not hand-edit.
+type ArtFallback = { slug?: string; token?: string; reason?: string };
+const ART_FALLBACKS = artFallbackTable as Record<string, ArtFallback>;
+
+function getArtFallback(normalizedSlug: string): ArtFallback | null {
+  return ART_FALLBACKS[normalizedSlug] ?? null;
+}
+
+/**
+ * Token art (Skeleton, Frog, ...) is stored by card name rather than by slug,
+ * and is the last resort when a card has no printing we hold art for.
+ */
+function serveTokenArt(token: string, req: NextRequest): Response {
+  const wantKtx2 = (() => {
+    try {
+      const v = new URL(req.url).searchParams.get("ktx2");
+      return v === "1" || v === "true";
+    } catch {
+      return false;
+    }
+  })();
+  const name = wantKtx2 ? `${token}.ktx2` : `${token}.webp`;
+  const baseDir = wantKtx2 ? "data-ktx2" : "data-webp";
+  const cdn = (
+    process.env.ASSET_CDN_ORIGIN || process.env.NEXT_PUBLIC_TEXTURE_ORIGIN
+  )?.trim();
+  if (cdn) {
+    return new Response(null, {
+      status: 308,
+      headers: {
+        Location: `${cdn.replace(/\/$/, "")}/${baseDir}/tokens/${name}`,
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+      },
+    });
   }
-  return null;
+  return new Response("Token art unavailable", { status: 404 });
 }
 
 // Handle CORS preflight for KTX2 loader
@@ -81,10 +112,14 @@ export async function GET(
     // Convert finish suffix separators: card-b-s -> card_b_s, card-pd-s -> card_pd_s, card-bt-s -> card_bt_s
     slug = slug.replace(/-([a-z]{1,2})-([sfea])$/, "_$1_$2");
 
-    // Check for promo fallback (e.g., City of Glass promo -> Gothic version)
-    const fallbackSlug = getPromoFallbackSlug(slug);
-    if (fallbackSlug) {
-      slug = fallbackSlug;
+    // Substitute art for printings we don't hold assets for (e.g. the promo
+    // City of Glass foil -> the Gothic standard printing of the same card)
+    const fallback = getArtFallback(slug);
+    if (fallback?.slug) {
+      slug = fallback.slug;
+    } else if (fallback?.token) {
+      // Generic token art lives outside the per-set directories
+      return serveTokenArt(fallback.token, _req);
     }
 
     if (!slug || !/^[a-z]{3}_[a-z0-9_]+$/.test(slug)) {

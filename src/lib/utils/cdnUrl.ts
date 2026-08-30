@@ -6,6 +6,8 @@
  * serverless function invocations.
  */
 
+import artFallbackTable from "../../../data/registry/art-fallback.json";
+
 const CDN_ORIGIN =
   process.env.NEXT_PUBLIC_TEXTURE_ORIGIN || "https://cdn.realms.cards";
 
@@ -24,27 +26,26 @@ const SET_DIR_MAP: Record<string, string> = {
 // Sets that use suffix subdirectories (e.g., alpha/b_s/cardname.webp)
 const SETS_WITH_SUFFIX_DIRS = new Set(["alpha", "beta", "arthurian_legends"]);
 
-// Promo card fallbacks: map promo slugs to standard set equivalents when promo art is unavailable
-const PROMO_FALLBACK_MAP: Record<string, string> = {
-  // City of Glass promo -> Gothic set standard version
-  pro_city_of_glass_scg_f: "got_city_of_glass_b_s",
-};
+// Printings that exist upstream but that we hold no art for. Each falls back to
+// another printing of the same card, or to generic token art. Generated from
+// sorcery-registry by scripts/registry/sync-registry.js - do not hand-edit.
+type ArtFallback = { slug?: string; token?: string; reason?: string };
+const ART_FALLBACKS = artFallbackTable as Record<string, ArtFallback>;
 
 /**
- * Check if a slug matches a promo card that needs fallback (case-insensitive, partial match).
- * Returns the fallback slug or null if no fallback needed.
+ * Returns the substitute art for a printing we hold no assets for, or null when
+ * the printing's own art is available.
  */
-function getPromoFallbackSlug(normalizedSlug: string): string | null {
-  // Direct match first
-  if (PROMO_FALLBACK_MAP[normalizedSlug]) {
-    return PROMO_FALLBACK_MAP[normalizedSlug];
-  }
-  // Check if it's a city_of_glass promo variant (any finish)
+function getArtFallback(normalizedSlug: string): ArtFallback | null {
+  const direct = ART_FALLBACKS[normalizedSlug];
+  if (direct) return direct;
+  // Predates the generated table: any City of Glass promo finish, not just the
+  // one printing the registry lists
   if (
     normalizedSlug.startsWith("pro_") &&
     normalizedSlug.includes("city_of_glass")
   ) {
-    return "got_city_of_glass_b_s";
+    return { slug: "got_city_of_glass_b_s", reason: "promo-variant" };
   }
   return null;
 }
@@ -84,10 +85,16 @@ export function getCardImageCdnUrl(
   // Convert finish suffix separators: card-b-s -> card_b_s
   normalizedSlug = normalizedSlug.replace(/-([a-z]{1,2})-([sfea])$/, "_$1_$2");
 
-  // Check for promo fallback (e.g., City of Glass promo -> Gothic version)
-  const fallbackSlug = getPromoFallbackSlug(normalizedSlug);
-  if (fallbackSlug) {
-    normalizedSlug = fallbackSlug;
+  // Substitute art for printings we don't hold assets for (e.g. the promo
+  // City of Glass foil -> the Gothic standard printing of the same card)
+  const fallback = getArtFallback(normalizedSlug);
+  if (fallback?.slug) {
+    normalizedSlug = fallback.slug;
+  } else if (fallback?.token) {
+    // Generic token art is stored by card name, outside the per-set directories
+    const ext = preferKtx2 ? "ktx2" : "webp";
+    const baseDir = preferKtx2 ? "data-ktx2" : "data-webp";
+    return `${getCdnOrigin()}/${baseDir}/tokens/${fallback.token}.${ext}`;
   }
 
   // Extract set code (first 3 chars)
