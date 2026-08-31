@@ -108,6 +108,10 @@ function PileBodies({
     rotationZ,
     geometryRotationZ,
     cardGeometry,
+    // `material` is part of the instancedMesh args, so a material change
+    // (sleeve preset toggled) recreates the mesh with identity instance
+    // matrices — the transforms must be written again.
+    material,
   ]);
 
   useEffect(() => () => material.dispose(), [material]);
