@@ -307,32 +307,32 @@ export default function OnlineMatchPage() {
     const controller = new AbortController();
 
     // Helper to parse sleeve refs into URLs and preset
+    // Each pile resolves independently: a custom upload URL or a preset id.
     const parseSleeveRefs = (
       data: { selectedSpellbookRef?: string; selectedAtlasRef?: string },
       baseUrl: string,
     ) => {
       let spellbookUrl: string | null = null;
-      let preset: string | null = null;
+      let spellbookPreset: string | null = null;
       const sbRef = data.selectedSpellbookRef;
       if (sbRef?.startsWith("custom:")) {
         const id = sbRef.slice("custom:".length);
         if (id) spellbookUrl = `${baseUrl}/${id}/spellbook`;
       } else if (sbRef?.startsWith("preset:")) {
-        // Use spellbook preset as the unified preset
-        preset = sbRef;
+        spellbookPreset = sbRef;
       }
 
       let atlasUrl: string | null = null;
+      let atlasPreset: string | null = null;
       const atRef = data.selectedAtlasRef;
       if (atRef?.startsWith("custom:")) {
         const id = atRef.slice("custom:".length);
         if (id) atlasUrl = `${baseUrl}/${id}/atlas`;
-      } else if (atRef?.startsWith("preset:") && !preset) {
-        // Fall back to atlas preset if no spellbook preset
-        preset = atRef;
+      } else if (atRef?.startsWith("preset:")) {
+        atlasPreset = atRef;
       }
 
-      return { spellbookUrl, atlasUrl, preset };
+      return { spellbookUrl, atlasUrl, spellbookPreset, atlasPreset };
     };
 
     const fetchCardbacks = async () => {
@@ -348,11 +348,15 @@ export default function OnlineMatchPage() {
               selectedSpellbookRef?: string;
               selectedAtlasRef?: string;
             };
-            const { spellbookUrl, atlasUrl, preset } = parseSleeveRefs(
-              data,
-              "/api/users/me/cardbacks",
+            const { spellbookUrl, atlasUrl, spellbookPreset, atlasPreset } =
+              parseSleeveRefs(data, "/api/users/me/cardbacks");
+            setCardbackUrls(
+              resolvedSeat,
+              spellbookUrl,
+              atlasUrl,
+              spellbookPreset,
+              atlasPreset,
             );
-            setCardbackUrls(resolvedSeat, spellbookUrl, atlasUrl, preset);
           }
         } catch {
           // Ignore fetch errors
@@ -371,11 +375,15 @@ export default function OnlineMatchPage() {
               selectedSpellbookRef?: string;
               selectedAtlasRef?: string;
             };
-            const { spellbookUrl, atlasUrl, preset } = parseSleeveRefs(
-              data,
-              `/api/users/${opponentPlayerId}/cardbacks`,
+            const { spellbookUrl, atlasUrl, spellbookPreset, atlasPreset } =
+              parseSleeveRefs(data, `/api/users/${opponentPlayerId}/cardbacks`);
+            setCardbackUrls(
+              opponentSeat,
+              spellbookUrl,
+              atlasUrl,
+              spellbookPreset,
+              atlasPreset,
             );
-            setCardbackUrls(opponentSeat, spellbookUrl, atlasUrl, preset);
           }
         } catch {
           // Ignore fetch errors

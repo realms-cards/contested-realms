@@ -105,9 +105,8 @@ export default function Hand3D({
   const hand = useMemo(() => zones?.[owner]?.hand ?? [], [zones, owner]);
   const { settings: graphicsSettings } = useGraphicsSettings();
 
-  // Get cardback config for this hand's owner (hand cards always use preset)
+  // Get cardback config for this hand's owner
   const ownerCardbacks = cardbackUrls[owner];
-  const usePreset = showCardBacks && ownerCardbacks?.preset;
 
   // Detect if the hand's owner is a Magician (hide card type distinction from opponents)
   const ownerIsMagician = useMemo(
@@ -1627,9 +1626,21 @@ export default function Hand3D({
             )}
 
             <group>
-              {usePreset && ownerCardbacks.preset ? (
+              {(() => {
+                // Site cards wear the atlas sleeve, everything else the
+                // spellbook sleeve (Magicians hide the distinction).
+                if (!showCardBacks) return null;
+                if (ownerIsMagician) return ownerCardbacks?.spellbookPreset;
+                return isSite
+                  ? ownerCardbacks?.atlasPreset
+                  : ownerCardbacks?.spellbookPreset;
+              })() ? (
                 <MaterialCardBack
-                  presetId={ownerCardbacks.preset}
+                  presetId={
+                    (ownerIsMagician || !isSite
+                      ? ownerCardbacks?.spellbookPreset
+                      : ownerCardbacks?.atlasPreset) ?? ""
+                  }
                   width={CARD_SHORT}
                   height={CARD_LONG}
                   rotationZ={cardRotationZ}

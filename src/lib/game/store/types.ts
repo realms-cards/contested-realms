@@ -2838,7 +2838,12 @@ export type GameState = {
   activePlaymatOwner: PlayerKey | null; // Which player's playmat is currently shown (null = use own)
   cardbackUrls: Record<
     PlayerKey,
-    { spellbook: string | null; atlas: string | null; preset: string | null }
+    {
+      spellbook: string | null;
+      atlas: string | null;
+      spellbookPreset: string | null;
+      atlasPreset: string | null;
+    }
   >;
   gridColor: "white" | "black";
   gridBlend: "normal" | "subtract";
@@ -2858,7 +2863,8 @@ export type GameState = {
     who: PlayerKey,
     spellbook: string | null,
     atlas: string | null,
-    preset?: string | null,
+    spellbookPreset?: string | null,
+    atlasPreset?: string | null,
   ) => void;
   setGridColor: (color: "white" | "black") => void;
   setGridBlend: (blend: "normal" | "subtract") => void;

@@ -73,12 +73,14 @@ export const createInitialBoardUiState = (): BoardUiDefaults => ({
     p1: {
       spellbook: null,
       atlas: null,
-      preset: null,
+      spellbookPreset: null,
+      atlasPreset: null,
     },
     p2: {
       spellbook: null,
       atlas: null,
-      preset: null,
+      spellbookPreset: null,
+      atlasPreset: null,
     },
   },
   gridColor: "white",
@@ -199,14 +201,15 @@ export const createBoardUiSlice: StateCreator<
       },
     })),
   setActivePlaymatOwner: (who) => set({ activePlaymatOwner: who }),
-  setCardbackUrls: (who, spellbook, atlas, preset) =>
+  setCardbackUrls: (who, spellbook, atlas, spellbookPreset, atlasPreset) =>
     set((state) => ({
       cardbackUrls: {
         ...state.cardbackUrls,
         [who]: {
           spellbook,
           atlas,
-          preset: preset ?? null,
+          spellbookPreset: spellbookPreset ?? null,
+          atlasPreset: atlasPreset ?? null,
         },
       },
     })),

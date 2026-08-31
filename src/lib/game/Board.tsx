@@ -447,30 +447,36 @@ export default function Board({
           selectedAtlasRef?: string;
         };
 
-        // Parse spellbook ref
+        // Parse spellbook ref (custom upload URL or preset id)
         let spellbookUrl: string | null = null;
-        let preset: string | null = null;
+        let spellbookPreset: string | null = null;
         const sbRef = data.selectedSpellbookRef;
         if (sbRef?.startsWith("custom:")) {
           const id = sbRef.slice("custom:".length);
           if (id) spellbookUrl = `/api/users/me/cardbacks/${id}/spellbook`;
         } else if (sbRef?.startsWith("preset:")) {
-          preset = sbRef;
+          spellbookPreset = sbRef;
         }
 
-        // Parse atlas ref
+        // Parse atlas ref independently of the spellbook choice
         let atlasUrl: string | null = null;
+        let atlasPreset: string | null = null;
         const atRef = data.selectedAtlasRef;
         if (atRef?.startsWith("custom:")) {
           const id = atRef.slice("custom:".length);
           if (id) atlasUrl = `/api/users/me/cardbacks/${id}/atlas`;
-        } else if (atRef?.startsWith("preset:") && !preset) {
-          // Fall back to atlas preset if no spellbook preset
-          preset = atRef;
+        } else if (atRef?.startsWith("preset:")) {
+          atlasPreset = atRef;
         }
 
         // Apply to local player (p2) in solo mode
-        setCardbackUrls("p2", spellbookUrl, atlasUrl, preset);
+        setCardbackUrls(
+          "p2",
+          spellbookUrl,
+          atlasUrl,
+          spellbookPreset,
+          atlasPreset,
+        );
       } catch {
         // Fetch failed - use defaults
       }

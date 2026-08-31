@@ -17,6 +17,7 @@ import {
   CARD_THICK,
   TILE_SIZE,
 } from "@/lib/game/constants";
+import { SLEEVE_PRESETS } from "@/lib/game/sleevePresets";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
 import { useCardGeometry } from "./useCardGeometry";
@@ -41,25 +42,38 @@ function PileBodies({
   width,
   height,
   rotationZ,
+  presetId,
 }: {
   count: number;
   stackSpacing: number;
   width: number;
   height: number;
   rotationZ: number;
+  presetId?: string | null; // sleeve preset: colour the whole stack, not just the top card
 }) {
   const ref = useRef<THREE.InstancedMesh>(null);
   const { geometry: cardGeometry, thicknessRatio } = useCardGeometry();
-  const material = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: PILE_EDGE_COLOR,
-        roughness: PILE_EDGE_ROUGHNESS,
-        metalness: 0,
-        envMapIntensity: 0.3,
-      }),
-    [],
-  );
+  const material = useMemo(() => {
+    const preset = presetId
+      ? SLEEVE_PRESETS.find((p) => p.id === presetId)
+      : undefined;
+    if (preset) {
+      // Sleeved deck: every card in the stack wears the sleeve, so the body
+      // takes the preset's metallic finish instead of bare card stock.
+      return new THREE.MeshStandardMaterial({
+        color: preset.color,
+        roughness: preset.roughness,
+        metalness: preset.metalness,
+        envMapIntensity: 0.8,
+      });
+    }
+    return new THREE.MeshStandardMaterial({
+      color: PILE_EDGE_COLOR,
+      roughness: PILE_EDGE_ROUGHNESS,
+      metalness: 0,
+      envMapIntensity: 0.3,
+    });
+  }, [presetId]);
 
   // Match CardPlane's transform exactly (see CardPlane render): the normalized
   // (width=1, portrait) geometry is laid flat (rot-x -90°), rotated to the pile
@@ -324,7 +338,11 @@ export default function Piles3D({
         // Atlas needs 180° extra rotation to display upright (landscape card with portrait-oriented texture)
         const pileRotZ = isAtlas ? rotZ + Math.PI : rotZ;
         const ownerCardbacks = cardbackUrls[owner];
-        const presetId = !isCemetery ? ownerCardbacks?.preset : null;
+        const presetId = isCemetery
+          ? null
+          : isAtlas
+            ? (ownerCardbacks?.atlasPreset ?? null)
+            : (ownerCardbacks?.spellbookPreset ?? null);
         const cardbackUrl = isCemetery
           ? undefined
           : presetId
@@ -357,6 +375,7 @@ export default function Piles3D({
                     width={w}
                     height={h}
                     rotationZ={pileRotZ}
+                    presetId={presetId}
                   />
                 ) : (
                   cards
