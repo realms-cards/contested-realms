@@ -5,8 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 import { SRGBColorSpace } from "three";
 
-// Playmat thickness in world units
-const PLAYMAT_THICKNESS = 0.015;
+// Playmat thickness in world units (top surface sits at y=0, where cards rest)
+export const PLAYMAT_THICKNESS = 0.015;
 
 // Default playmat path
 const DEFAULT_PLAYMAT = "/playmat.jpg";

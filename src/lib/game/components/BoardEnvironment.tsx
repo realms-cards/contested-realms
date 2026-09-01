@@ -12,7 +12,10 @@ import {
   type Raycaster,
 } from "three";
 import { TextureErrorBoundary } from "@/components/game/TextureErrorBoundary";
-import { SafePlaymat } from "@/lib/game/components/SafePlaymat";
+import {
+  SafePlaymat,
+  PLAYMAT_THICKNESS,
+} from "@/lib/game/components/SafePlaymat";
 import {
   EDGE_MARGIN,
   GROUND_HALF_THICK,
@@ -117,10 +120,7 @@ function noopRaycast(
   void _intersects;
 }
 
-// Table surface height offset - playmat Y position relative to table top
-const _TABLE_SURFACE_Y = 0.02;
-
-function MahoganyTable({ scale = 1 }: { scale?: number }) {
+function MahoganyTable({ scale = 1, topY = 0 }: { scale?: number; topY?: number }) {
   const { scene } = useGLTF("/3dmodels/tables/mahogany_table.glb");
 
   // Increase environment map intensity on table materials for better reflections
@@ -135,11 +135,19 @@ function MahoganyTable({ scale = 1 }: { scale?: number }) {
     }
   });
 
+  // Measure the model's own top surface so the tabletop can be pinned exactly
+  // at `topY` in world space (cards rest on the y=0 plane; a hardcoded offset
+  // previously left a ~0.12 gap that showed as floating cards without a playmat).
+  const localTopY = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(scene);
+    return box.max.y;
+  }, [scene]);
+
   return (
     <primitive
       object={scene}
       scale={[scale, scale, scale]}
-      position={[0, -6.3, 0]}
+      position={[0, topY - localTopY * scale, 0]}
       raycast={noopRaycast}
     />
   );
@@ -147,9 +155,6 @@ function MahoganyTable({ scale = 1 }: { scale?: number }) {
 
 // Preload the table model
 useGLTF.preload("/3dmodels/tables/mahogany_table.glb");
-
-// Playmat thickness in world units (1.5mm = 0.0015m, but scaled for visibility)
-const _PLAYMAT_THICKNESS = 0.015;
 
 // Playmat component moved to SafePlaymat.tsx for better error handling
 
@@ -206,10 +211,16 @@ export function BoardEnvironment({
         environmentIntensity={0.3}
       />
 
-      {/* Mahogany table underneath the playmat */}
+      {/* Mahogany table underneath the playmat. With the playmat visible the
+          tabletop tucks flush under it (slightly embedded to avoid a seam);
+          with the playmat hidden it rises to just under the y=0 card plane so
+          cards rest on the wood instead of floating a mat-thickness above it. */}
       {showTable && (
         <Suspense fallback={null}>
-          <MahoganyTable scale={0.95} />
+          <MahoganyTable
+            scale={0.95}
+            topY={showPlaymat ? -PLAYMAT_THICKNESS + 0.001 : -0.002}
+          />
         </Suspense>
       )}
       {/* Playmat */}

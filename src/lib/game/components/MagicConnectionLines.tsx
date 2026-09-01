@@ -1,8 +1,9 @@
-import { useFrame, invalidate } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { TargetBullseye } from "@/lib/game/components/TargetBullseye";
 import { TILE_SIZE, PLAYER_COLORS } from "@/lib/game/constants";
+import { requestCosmeticFrame } from "@/lib/game/render/cosmeticFrame";
 import type { GameState } from "@/lib/game/store/types";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
 
@@ -164,8 +165,10 @@ function ChevronStrip({
         (mesh.material as THREE.MeshBasicMaterial).opacity = opacity;
       }
     });
-    // Connection wave animates continuously while shown (frameloop="demand").
-    invalidate();
+    // Decorative wave: ride the shared ~12fps cosmetic pump instead of
+    // invalidate() so a spell left pending doesn't render the whole scene at
+    // display refresh rate for minutes (frameloop="demand").
+    requestCosmeticFrame();
   });
 
   return (

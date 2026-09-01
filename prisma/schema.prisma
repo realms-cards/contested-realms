@@ -249,8 +249,8 @@ model User {
   selectedSpellbookRef    String?
   showOpponentPlaymat     Boolean                  @default(true)
   cameraMode              String                   @default("topdown")
-  showPlaymat             Boolean                  @default(true)
-  showGrid                Boolean                  @default(false)
+  showPlaymat             Boolean                  @default(false)
+  showGrid                Boolean                  @default(true)
   soatcAutoDetect         Boolean                  @default(false)
   soatcUuid               String?
   discordId               String?                  @unique

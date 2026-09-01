@@ -2,8 +2,16 @@ import type { StateCreator } from "zustand";
 import type { BoardPingEvent, CellKey, GameState, SiteTile } from "./types";
 import { BOARD_PING_LIFETIME_MS, BOARD_PING_MAX_HISTORY } from "./types";
 
-const DEFAULT_SHOW_PLAYMAT = true;
-const DEFAULT_SHOW_GRID = false;
+// Default look: grid lines on the bare wooden table (playmat hidden) — it
+// reads nicer than the playmat art. The playmat comes back as the default only
+// when the 3D table is disabled in graphics settings (grid floating over a
+// black void looks broken); see applyLocalPlaymatPrefs.
+const DEFAULT_SHOW_PLAYMAT = false;
+const DEFAULT_SHOW_GRID = true;
+
+// Storage keys shared with the toggles below and the play pages.
+const STORAGE_KEY_SHOW_PLAYMAT = "sorcery:showPlaymat";
+const STORAGE_KEY_SHOW_GRID = "sorcery:showGrid";
 
 /**
  * Load playmat/grid settings from API (for authenticated users).
@@ -24,11 +32,65 @@ export async function loadPlaymatSettingsFromApi(): Promise<{
     };
     return {
       showPlaymat:
-        typeof data.showPlaymat === "boolean" ? data.showPlaymat : true,
-      showGrid: typeof data.showGrid === "boolean" ? data.showGrid : false,
+        typeof data.showPlaymat === "boolean"
+          ? data.showPlaymat
+          : DEFAULT_SHOW_PLAYMAT,
+      showGrid:
+        typeof data.showGrid === "boolean" ? data.showGrid : DEFAULT_SHOW_GRID,
     };
   } catch {}
   return null;
+}
+
+type PlaymatPrefsStore = {
+  getState: () => Pick<GameState, "showPlaymat" | "showPlaymatOverlay">;
+  setState: (
+    partial: Partial<Pick<GameState, "showPlaymat" | "showPlaymatOverlay">>,
+  ) => void;
+};
+
+/**
+ * Apply locally persisted playmat/grid preferences to the store — the fallback
+ * for anonymous users (or when the preferences API is unavailable).
+ *
+ * With no stored choice, the default is grid-on-table (playmat hidden) unless
+ * the 3D table itself is disabled in graphics settings, in which case the
+ * playmat is shown so the grid isn't floating over a black void.
+ */
+export function applyLocalPlaymatPrefs(store: PlaymatPrefsStore): void {
+  if (typeof window === "undefined") return;
+  try {
+    const storedMat = localStorage.getItem(STORAGE_KEY_SHOW_PLAYMAT);
+    const storedGrid = localStorage.getItem(STORAGE_KEY_SHOW_GRID);
+
+    let showPlaymat: boolean;
+    if (storedMat !== null) {
+      showPlaymat = storedMat === "true";
+    } else {
+      // No explicit choice: grid-on-table unless the table is turned off.
+      let showTable = true;
+      try {
+        const graphics = JSON.parse(
+          localStorage.getItem("sorcery-graphics-settings") ?? "{}",
+        ) as { showTable?: unknown };
+        if (typeof graphics.showTable === "boolean") {
+          showTable = graphics.showTable;
+        }
+      } catch {}
+      showPlaymat = !showTable;
+    }
+    const showGrid = storedGrid !== null ? storedGrid === "true" : !showPlaymat;
+
+    const current = store.getState();
+    const patch: Partial<
+      Pick<GameState, "showPlaymat" | "showPlaymatOverlay">
+    > = {};
+    if (current.showPlaymat !== showPlaymat) patch.showPlaymat = showPlaymat;
+    if (current.showPlaymatOverlay !== showGrid) {
+      patch.showPlaymatOverlay = showGrid;
+    }
+    if (Object.keys(patch).length > 0) store.setState(patch);
+  } catch {}
 }
 
 export type DraggingSite = {
@@ -148,7 +210,7 @@ export const createBoardUiSlice: StateCreator<
       // Persist to localStorage
       try {
         if (typeof window !== "undefined") {
-          localStorage.setItem("sorcery:showPlaymat", String(newValue));
+          localStorage.setItem(STORAGE_KEY_SHOW_PLAYMAT, String(newValue));
         }
       } catch {}
       // Persist to API for authenticated users (fire and forget)
@@ -167,7 +229,7 @@ export const createBoardUiSlice: StateCreator<
       // Persist to localStorage
       try {
         if (typeof window !== "undefined") {
-          localStorage.setItem("sorcery:showGrid", String(newValue));
+          localStorage.setItem(STORAGE_KEY_SHOW_GRID, String(newValue));
         }
       } catch {}
       // Persist to API for authenticated users (fire and forget)

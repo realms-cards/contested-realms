@@ -190,7 +190,6 @@ export default function Board({
   const board = boardState ?? fallbackBoard;
   const showGrid = useScopedStore((s) => s.showGridOverlay);
   const showPlaymat = useScopedStore((s) => s.showPlaymat);
-  const showPlaymatOverlay = useScopedStore((s) => s.showPlaymatOverlay);
   const playmatUrl = useScopedStore((s) => s.playmatUrl);
   const playmatUrls = useScopedStore((s) => s.playmatUrls);
   const activePlaymatOwner = useScopedStore((s) => s.activePlaymatOwner);
@@ -1531,7 +1530,9 @@ export default function Board({
             ? playmatUrls[activePlaymatOwner]
             : playmatUrl
         }
-        showOverlay={showPlaymatOverlay}
+        // Overlay grid is the automatic fallback whenever the playmat is hidden
+        // or fails to load (BoardEnvironment gates it on !showPlaymat); only
+        // scenes that never want a grid (deck editor) pass showOverlay={false}.
         showTable={graphicsSettings.showTable}
       />
 

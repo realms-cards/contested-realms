@@ -16,8 +16,10 @@ const STORAGE_KEY_GRID = "sorcery:showGrid";
 
 const DEFAULT_SETTINGS: GameViewSettings = {
   cameraMode: "topdown",
-  showPlaymat: true,
-  showGrid: false,
+  // Default look: grid on the wooden table, playmat hidden (matches
+  // boardUiState defaults and the User table column defaults).
+  showPlaymat: false,
+  showGrid: true,
 };
 
 function loadFromLocalStorage(): GameViewSettings {

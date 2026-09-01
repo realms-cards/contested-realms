@@ -117,7 +117,7 @@ import {
   applyLoadedGame,
 } from "@/lib/game/hotseatPersistence";
 import { Physics } from "@/lib/game/physics";
-import { useGameStore } from "@/lib/game/store";
+import { applyLocalPlaymatPrefs, useGameStore } from "@/lib/game/store";
 import { getStoredCardPreviewsEnabled } from "@/lib/game/store/uiState";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { useSmallScreen } from "@/lib/hooks/useTouchDevice";
@@ -226,8 +226,11 @@ export default function PlayPage() {
             return;
           }
         } catch {
-          // API failed, settings already loaded from localStorage via store initialization
+          // API unavailable — fall through to the local fallback below.
         }
+        // Anonymous (or API failed): apply localStorage prefs, defaulting to
+        // grid-on-table unless the 3D table is disabled in graphics settings.
+        applyLocalPlaymatPrefs(useGameStore);
       };
 
       void loadSettings();

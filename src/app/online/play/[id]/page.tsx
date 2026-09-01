@@ -130,7 +130,11 @@ import {
 } from "@/lib/game/constants";
 import { useCardHover } from "@/lib/game/hooks/useCardHover";
 import { Physics } from "@/lib/game/physics";
-import { useGameStore, type PlayerKey } from "@/lib/game/store";
+import {
+  applyLocalPlaymatPrefs,
+  useGameStore,
+  type PlayerKey,
+} from "@/lib/game/store";
 import {
   arePortalsFullyAssigned,
   needsPortalPhaseForHarbinger,
@@ -2417,6 +2421,9 @@ export default function OnlineMatchPage() {
             setCameraMode("orbit");
           }
         } catch {}
+        // Anonymous (or API failed): apply localStorage playmat/grid prefs,
+        // defaulting to grid-on-table unless the 3D table is disabled.
+        applyLocalPlaymatPrefs(useGameStore);
       };
 
       void loadSettings();

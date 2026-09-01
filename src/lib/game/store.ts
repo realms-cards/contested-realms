@@ -156,6 +156,7 @@ export {
   REMOTE_CURSOR_TTL_MS,
 } from "./store/types";
 export { createInitialBoard } from "./store/boardState";
+export { applyLocalPlaymatPrefs } from "./store/boardUiState";
 export type {
   AvatarState,
   BoardPingEvent,
