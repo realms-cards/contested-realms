@@ -139,6 +139,7 @@ import {
   arePortalsFullyAssigned,
   needsPortalPhaseForHarbinger,
 } from "@/lib/game/store/portalState";
+import { prefetchCardImages } from "@/lib/game/textures/prefetchCardImages";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { useSoatcPlayers } from "@/lib/hooks/useSoatcStatus";
 import { useSmallScreen } from "@/lib/hooks/useTouchDevice";
@@ -2221,6 +2222,86 @@ export default function OnlineMatchPage() {
   const [soatcLeagueResult, setSoatcLeagueResult] =
     useState<LeagueMatchResult | null>(null);
 
+  // Rematch handshake state (mirrors server rematchState broadcasts)
+  const [rematchInfo, setRematchInfo] = useState<{
+    requestedBy: string[];
+    declinedBy: string | null;
+    error: string | null;
+  } | null>(null);
+
+  // Subscribe to rematch events; on rematchStarted both players hard-navigate
+  // to the fresh match so every system (store, canvas, replay recording)
+  // starts from a clean slate.
+  useEffect(() => {
+    if (!transport || !matchId) return undefined;
+    const offState = transport.on("rematchState", (p) => {
+      if (p.matchId !== matchId) return;
+      setRematchInfo({
+        requestedBy: Array.isArray(p.requestedBy) ? p.requestedBy : [],
+        declinedBy: p.declinedBy ?? null,
+        error: p.error ?? null,
+      });
+    });
+    const offStarted = transport.on("rematchStarted", (p) => {
+      if (p.matchId !== matchId || !p.newMatchId) return;
+      window.location.assign(`/online/play/${p.newMatchId}`);
+    });
+    return () => {
+      offState();
+      offStarted();
+    };
+  }, [transport, matchId]);
+
+  // --- Card art prefetch: warm the HTTP cache for my deck + both avatars
+  // during Setup, so the board doesn't fire a 50+ request burst the moment
+  // turn 1 reveals the canvas (failures there left cards face-down until a
+  // reload). The canvas stays behind a small loading overlay until done.
+  const [assetsReady, setAssetsReady] = useState(false);
+  const [assetProgress, setAssetProgress] = useState<{
+    loaded: number;
+    total: number;
+  } | null>(null);
+  const assetPrefetchForRef = useRef<string | null>(null);
+  const myDeckCardCount = useGameStore((s) => {
+    if (!resolvedSeat) return 0;
+    const z = s.zones[resolvedSeat];
+    return (z?.spellbook?.length ?? 0) + (z?.hand?.length ?? 0);
+  });
+  useEffect(() => {
+    if (!matchId || isSpectatorView) return;
+    if (assetPrefetchForRef.current === matchId) return;
+    if (myDeckCardCount === 0 || !resolvedSeat) return; // deck not loaded yet
+    const st = useGameStore.getState();
+    const slugs: Array<string | null | undefined> = [
+      st.avatars?.p1?.card?.slug,
+      st.avatars?.p2?.card?.slug,
+    ];
+    const mine = st.zones?.[resolvedSeat];
+    for (const zone of [
+      mine?.hand,
+      mine?.spellbook,
+      mine?.atlas,
+      mine?.graveyard,
+    ]) {
+      for (const card of zone || []) slugs.push(card?.slug);
+    }
+    assetPrefetchForRef.current = matchId;
+    void prefetchCardImages(slugs, {
+      onProgress: (loaded, total) => setAssetProgress({ loaded, total }),
+    }).finally(() => setAssetsReady(true));
+  }, [matchId, isSpectatorView, resolvedSeat, myDeckCardCount]);
+  // Never hold the board hostage: if the prefetch didn't run (spectator,
+  // empty zones) release immediately; otherwise cap the wait.
+  useEffect(() => {
+    if (setupOpen || assetsReady) return undefined;
+    if (assetPrefetchForRef.current !== matchId) {
+      setAssetsReady(true);
+      return undefined;
+    }
+    const t = window.setTimeout(() => setAssetsReady(true), 12000);
+    return () => window.clearTimeout(t);
+  }, [setupOpen, assetsReady, matchId]);
+
   // Debug: page mount/unmount
   useEffect(() => {
     try {
@@ -2634,6 +2715,10 @@ export default function OnlineMatchPage() {
     prevEndedRef.current = false;
     setFinalEndContext(null);
     setSoatcLeagueResult(null);
+    setRematchInfo(null);
+    setAssetsReady(false);
+    setAssetProgress(null);
+    assetPrefetchForRef.current = null;
   }, [matchId]);
 
   // Get player IDs for SOATC lookup
@@ -3495,6 +3580,29 @@ export default function OnlineMatchPage() {
             leaveLabel={tournamentId ? "Return to Tournament" : undefined}
             isTournament={!!tournamentId}
             allowContinue={false}
+            rematch={
+              !isSpectatorView &&
+              !tournamentId &&
+              !opponentPlayerId?.startsWith("cpu_") &&
+              connected &&
+              myPlayerId &&
+              matchId
+                ? {
+                    requestedByMe: !!rematchInfo?.requestedBy.includes(
+                      myPlayerId,
+                    ),
+                    requestedByOpponent: !!rematchInfo?.requestedBy.some(
+                      (id) => id !== myPlayerId,
+                    ),
+                    declined: !!rematchInfo?.declinedBy,
+                    error: rematchInfo?.error ?? null,
+                    onRequest: () =>
+                      transport?.emit("requestRematch", { matchId }),
+                    onDecline: () =>
+                      transport?.emit("declineRematch", { matchId }),
+                  }
+                : undefined
+            }
           />
 
           {/* All player-interactive overlays hidden for spectators; deferred while Turn overlay is active */}
@@ -3619,6 +3727,18 @@ export default function OnlineMatchPage() {
           {/* 3D Board Canvas - fills entire viewport */}
           {!setupOpen && (
             <div className="absolute inset-0 w-full h-full">
+              {!assetsReady && (
+                <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-sm pointer-events-none">
+                  <div className="text-white text-lg font-medium">
+                    Loading card art…
+                  </div>
+                  {assetProgress && (
+                    <div className="mt-2 text-sm text-slate-300">
+                      {assetProgress.loaded} / {assetProgress.total}
+                    </div>
+                  )}
+                </div>
+              )}
               <ClientCanvas
                 camera={cameraOptions}
                 shadows

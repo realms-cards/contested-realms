@@ -26,6 +26,15 @@ interface MatchEndOverlayProps {
   soatcLeagueResult?: LeagueMatchResult | null;
   viewerSoatcUuid?: string;
   isTournament?: boolean;
+  /** Rematch handshake state + actions; omitted when a rematch is unavailable */
+  rematch?: {
+    requestedByMe: boolean;
+    requestedByOpponent: boolean;
+    declined: boolean;
+    error?: string | null;
+    onRequest: () => void;
+    onDecline: () => void;
+  };
 }
 
 export default function MatchEndOverlay({
@@ -46,6 +55,7 @@ export default function MatchEndOverlay({
   soatcLeagueResult,
   viewerSoatcUuid,
   isTournament,
+  rematch,
 }: MatchEndOverlayProps) {
   if (!isVisible) return null;
 
@@ -300,6 +310,59 @@ export default function MatchEndOverlay({
         {matchId && (
           <div className="mb-6">
             <LeagueReportStatus matchId={matchId} />
+          </div>
+        )}
+
+        {/* Rematch */}
+        {rematch && (
+          <div className="mb-3 sm:mb-4 space-y-2">
+            {rematch.error ? (
+              <p className="text-sm text-red-400">{rematch.error}</p>
+            ) : rematch.declined ? (
+              <p className="text-sm opacity-70">Rematch declined.</p>
+            ) : rematch.requestedByOpponent && !rematch.requestedByMe ? (
+              <>
+                <p className="text-sm text-emerald-400 font-medium">
+                  Your opponent wants a rematch!
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={rematch.onRequest}
+                    className="flex-1 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-500 text-white rounded-lg sm:rounded-xl px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors"
+                  >
+                    Accept Rematch
+                  </button>
+                  <button
+                    onClick={rematch.onDecline}
+                    className="flex-1 bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-500 text-white rounded-lg sm:rounded-xl px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors"
+                  >
+                    Decline
+                  </button>
+                </div>
+              </>
+            ) : rematch.requestedByMe ? (
+              <>
+                <button
+                  disabled
+                  className="w-full bg-emerald-900/60 text-emerald-200/80 rounded-lg sm:rounded-xl px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium cursor-wait"
+                >
+                  Waiting for opponent…
+                </button>
+                <button
+                  onClick={rematch.onDecline}
+                  className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                >
+                  Cancel rematch request
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={rematch.onRequest}
+                className="w-full bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-500 text-white rounded-lg sm:rounded-xl px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors"
+              >
+                Request Rematch
+              </button>
+            )}
           </div>
         )}
 

@@ -61,6 +61,16 @@ export type TransportEventMap = {
   };
   matchStarted: MatchStartedPayloadT;
   matchEnded: { matchId: string; tournamentId?: string; reason?: string };
+  // Post-match rematch handshake (matchId is the match that just ended)
+  rematchState: {
+    matchId: string;
+    requestedBy: string[];
+    /** Display names for the roster, keyed by player id */
+    names?: Record<string, string>;
+    declinedBy?: string | null;
+    error?: string;
+  };
+  rematchStarted: { matchId: string; newMatchId: string };
   resync: ResyncResponsePayloadT;
   lobbyUpdated: LobbyUpdatedPayloadT;
   error: ErrorPayloadT;

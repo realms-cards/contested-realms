@@ -871,18 +871,28 @@ function createLobbyFeature(deps) {
       } catch {}
       broadcastLobbies();
     } else if (lobby.hostId === player.id) {
-      lobby.status = "closed";
-      if (botManager) {
+      // Host left: keep a started lobby alive for the remaining human
+      // player(s) (rematch offers depend on it) by transferring host; only
+      // open pre-match lobbies disband when the host leaves.
+      const nextHumanHost = Array.from(lobby.playerIds).find(
+        (pid) => !isCpuPlayerId(pid),
+      );
+      if (lobby.status === "started" && nextHumanHost) {
+        lobby.hostId = nextHumanHost;
+      } else {
+        lobby.status = "closed";
+        if (botManager) {
+          try {
+            botManager.cleanupBotsForLobby(lobbyId);
+          } catch {}
+        }
+        lobbies.delete(lobbyId);
         try {
-          botManager.cleanupBotsForLobby(lobbyId);
+          publishLobbyDelete(lobbyId);
         } catch {}
+        broadcastLobbies();
+        return;
       }
-      lobbies.delete(lobbyId);
-      try {
-        publishLobbyDelete(lobbyId);
-      } catch {}
-      broadcastLobbies();
-      return;
     }
 
     if (lobbies.has(lobbyId)) {
@@ -923,6 +933,7 @@ function createLobbyFeature(deps) {
     soatcLeagueMatch = null,
     timerConfig = null,
     enableSeer = false,
+    rematchOfMatch = null,
   ) {
     console.log(
       `[Match] Starting match requested by ${requestingPlayer?.displayName}, type: ${matchType}`,
@@ -1016,6 +1027,31 @@ function createLobbyFeature(deps) {
       };
     }
 
+    // Rematch of a sealed/draft match: carry the previous game's decks over so
+    // players skip pack opening / drafting and run it back with the same lists.
+    // Constructed/precon rematches submit decks through the normal flow instead
+    // (players may want to swap decks between games).
+    let rematchCarriedDecks = false;
+    if (
+      rematchOfMatch &&
+      (matchType === "sealed" || matchType === "draft") &&
+      rematchOfMatch.playerDecks instanceof Map &&
+      match.playerIds.every((pid) => rematchOfMatch.playerDecks.has(pid))
+    ) {
+      match.playerDecks = new Map(rematchOfMatch.playerDecks);
+      if (rematchOfMatch.sealedPacks)
+        match.sealedPacks = rematchOfMatch.sealedPacks;
+      if (matchType === "draft" && rematchOfMatch.draftState) {
+        try {
+          match.draftState = JSON.parse(
+            JSON.stringify(rematchOfMatch.draftState),
+          );
+        } catch {}
+      }
+      match.status = "waiting";
+      rematchCarriedDecks = true;
+    }
+
     matches.set(match.id, match);
     try {
       if (storeRedis)
@@ -1075,7 +1111,7 @@ function createLobbyFeature(deps) {
     });
     broadcastLobbies();
 
-    if (matchType === "sealed" && match.sealedConfig) {
+    if (matchType === "sealed" && match.sealedConfig && !rematchCarriedDecks) {
       try {
         const sealedPacks = {};
         for (const pid of match.playerIds) {
@@ -1531,34 +1567,46 @@ function createLobbyFeature(deps) {
         })();
         return;
       } else if (lobby.hostId === playerId) {
-        try {
-          const remaining = Array.from(lobby.playerIds);
-          for (const pid of remaining) {
-            const pl = await ensurePlayerCached(pid);
-            if (pl?.socketId) {
+        // Host left. If the lobby's match already started (in progress or just
+        // finished), keep the lobby alive for the remaining human player(s) -
+        // e.g. so a rematch offer can still bring everyone back - and hand
+        // host to the next human. Open pre-match lobbies keep the original
+        // behavior: the host closing the lobby disbands it.
+        const nextHumanHost = Array.from(lobby.playerIds).find(
+          (pid) => !isCpuPlayerId(pid),
+        );
+        if (lobby.status === "started" && nextHumanHost) {
+          lobby.hostId = nextHumanHost;
+        } else {
+          try {
+            const remaining = Array.from(lobby.playerIds);
+            for (const pid of remaining) {
+              const pl = await ensurePlayerCached(pid);
+              if (pl?.socketId) {
+                try {
+                  await io.in(pl.socketId).socketsLeave(`lobby:${lobbyId}`);
+                } catch {}
+              }
               try {
-                await io.in(pl.socketId).socketsLeave(`lobby:${lobbyId}`);
+                pl.lobbyId = null;
               } catch {}
             }
+          } catch {}
+          lobby.status = "closed";
+          if (botManager) {
             try {
-              pl.lobbyId = null;
+              botManager.cleanupBotsForLobby(lobbyId);
             } catch {}
           }
-        } catch {}
-        lobby.status = "closed";
-        if (botManager) {
-          try {
-            botManager.cleanupBotsForLobby(lobbyId);
-          } catch {}
+          lobbies.delete(lobbyId);
+          await publishLobbyDelete(lobbyId);
+          await (async () => {
+            const leader = await getOrClaimLobbyLeader();
+            if (leader === INSTANCE_ID)
+              io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
+          })();
+          return;
         }
-        lobbies.delete(lobbyId);
-        await publishLobbyDelete(lobbyId);
-        await (async () => {
-          const leader = await getOrClaimLobbyLeader();
-          if (leader === INSTANCE_ID)
-            io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
-        })();
-        return;
       }
       if (lobbies.has(lobbyId)) {
         io.to(`lobby:${lobbyId}`).emit("lobbyUpdated", {
@@ -1676,6 +1724,170 @@ function createLobbyFeature(deps) {
         try {
           await publishLobbyDelete(lobby?.id);
         } catch {}
+      }
+      return;
+    }
+    if (msg.type === "rematchRequest" || msg.type === "rematchDecline") {
+      const { playerId, matchId } = msg;
+      if (!playerId || !matchId) return;
+      // Validate against the ended match's roster snapshot, NOT live lobby
+      // membership: a player who clicked "Leave Match" is back on the lobby
+      // page and was already removed from lobby.playerIds.
+      const prev = matches.get(matchId) || null;
+      if (!prev) return;
+      const roster =
+        Array.isArray(prev.rematchRoster) && prev.rematchRoster.length > 0
+          ? prev.rematchRoster
+          : Array.isArray(prev.playerIds)
+            ? prev.playerIds
+            : [];
+      if (!roster.includes(playerId)) return;
+      // Emit to player rooms so the request reaches players wherever they are
+      // (end-game overlay, lobby page, or after a reconnect).
+      const emitToRoster = (event, payload) => {
+        for (const pid of roster) {
+          try {
+            io.to(`player:${pid}`).emit(event, payload);
+          } catch {}
+        }
+      };
+      const names = {};
+      for (const pid of roster) {
+        try {
+          const info = getPlayerInfo(pid);
+          if (info && info.displayName) names[pid] = info.displayName;
+        } catch {}
+      }
+      if (msg.type === "rematchDecline") {
+        prev.rematch = null;
+        emitToRoster("rematchState", {
+          matchId,
+          requestedBy: [],
+          names,
+          declinedBy: playerId,
+        });
+        return;
+      }
+      // Rematch requests: 1v1 human matches only, and only once the game ended
+      if (prev.status !== "ended") return;
+      if (roster.length !== 2 || roster.some((pid) => isCpuPlayerId(pid)))
+        return;
+      if (prev.rematchStarting) return;
+      if (!prev.rematch) prev.rematch = { requested: new Set() };
+      prev.rematch.requested.add(playerId);
+      const requestedBy = Array.from(prev.rematch.requested);
+      emitToRoster("rematchState", {
+        matchId,
+        requestedBy,
+        names,
+        declinedBy: null,
+      });
+      const everyoneIn = roster.every((pid) =>
+        prev.rematch.requested.has(pid),
+      );
+      if (!everyoneIn) return;
+      prev.rematchStarting = true;
+      try {
+        // Rebuild lobby membership: leaveLobby removed anyone who returned to
+        // the lobby page, and mid-match forfeit may have stripped the roster.
+        let lobby =
+          prev.lobbyId && lobbies.has(prev.lobbyId)
+            ? lobbies.get(prev.lobbyId)
+            : null;
+        if (!lobby) {
+          for (const lb of lobbies.values()) {
+            if (lb && lb.matchId === matchId) {
+              lobby = lb;
+              break;
+            }
+          }
+        }
+        const failRematch = (error) => {
+          prev.rematch = null;
+          emitToRoster("rematchState", {
+            matchId,
+            requestedBy: [],
+            names,
+            declinedBy: null,
+            error,
+          });
+        };
+        if (!lobby) {
+          // Both players left and the lobby was deleted - recreate a private
+          // one for the roster so the rematch can still start.
+          const now = Date.now();
+          lobby = {
+            id: rid("lobby"),
+            name: prev.lobbyName || null,
+            hostId: roster[0],
+            playerIds: new Set(),
+            status: "started",
+            maxPlayers: 2,
+            ready: new Set(),
+            visibility: "private",
+            plannedMatchType: prev.matchType || "constructed",
+            createdAt: now,
+            lastActive: now,
+          };
+          lobbies.set(lobby.id, lobby);
+        }
+        for (const pid of roster) {
+          lobby.playerIds.add(pid);
+          lobby.ready.add(pid);
+          const rp = await ensurePlayerCached(pid);
+          if (rp) {
+            rp.lobbyId = lobby.id;
+            if (rp.socketId) {
+              try {
+                await io.in(rp.socketId).socketsJoin(`lobby:${lobby.id}`);
+              } catch {}
+            }
+          }
+        }
+        if (!roster.includes(lobby.hostId)) lobby.hostId = roster[0];
+        const host = await ensurePlayerCached(lobby.hostId);
+        if (!host) {
+          failRematch("Host is no longer available");
+          return;
+        }
+        host.lobbyId = lobby.id;
+        const rematchType =
+          prev.matchType || lobby.plannedMatchType || "constructed";
+        const timerConfig = prev.timedMatch
+          ? {
+              enabled: true,
+              matchTimeMinutes: prev.matchTimeMinutes,
+              warningMinutes: prev.timerWarningMinutes,
+              tiebreakEnabled: prev.tiebreakEnforced === true,
+              tiebreakExtraTurns: prev.tiebreakExtraTurns,
+            }
+          : null;
+        // soatcLeagueMatch is intentionally NOT carried over: the league match
+        // was already reported, so the rematch is a casual game.
+        const res = await startMatchFromLobby(
+          host,
+          rematchType,
+          prev.sealedConfig || null,
+          prev.draftConfig || null,
+          null,
+          timerConfig,
+          prev.enableSeer === true,
+          prev,
+        );
+        if (res && res.ok && res.matchId) {
+          prev.rematch = null;
+          emitToRoster("rematchStarted", {
+            matchId,
+            newMatchId: res.matchId,
+          });
+          if (lobbies.has(lobby.id)) {
+            await publishLobbyState(lobbies.get(lobby.id));
+          }
+        } else {
+          failRematch((res && res.error) || "Could not start rematch");
+        }
+      } finally {
+        prev.rematchStarting = false;
       }
       return;
     }
@@ -2526,6 +2738,33 @@ function createLobbyFeature(deps) {
         await handleLobbyControlAsLeader(msg);
       } catch {}
     });
+
+    // Post-match rematch handshake. Both players must request before a fresh
+    // match is started in the same lobby; routed through the lobby leader so
+    // the request set lives on a single instance.
+    const relayRematchControl = (type) => async (payload = {}) => {
+      if (!isAuthed()) return;
+      const player = getPlayerBySocket(socket);
+      if (!player) return;
+      const matchId =
+        payload && typeof payload.matchId === "string" ? payload.matchId : null;
+      if (!matchId) return;
+      const msg = { type, playerId: player.id, matchId };
+      try {
+        const leader = await getOrClaimLobbyLeader();
+        if (leader && leader !== INSTANCE_ID) {
+          if (storeRedis)
+            await storeRedis.publish(
+              LOBBY_CONTROL_CHANNEL,
+              JSON.stringify(msg),
+            );
+          return;
+        }
+        await handleLobbyControlAsLeader(msg);
+      } catch {}
+    };
+    socket.on("requestRematch", relayRematchControl("rematchRequest"));
+    socket.on("declineRematch", relayRematchControl("rematchDecline"));
   }
 
   /**

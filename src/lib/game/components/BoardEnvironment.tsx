@@ -1,6 +1,7 @@
 import { Environment, useGLTF, useTexture } from "@react-three/drei";
+import { useThree } from "@react-three/fiber";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
-import { Suspense, useMemo, useState, useCallback } from "react";
+import { Suspense, useEffect, useMemo, useState, useCallback } from "react";
 import * as THREE from "three";
 import {
   SRGBColorSpace,
@@ -188,6 +189,18 @@ export function BoardEnvironment({
   showOverlay = true,
   showTable = true,
 }: BoardEnvironmentProps) {
+  // frameloop="demand": the HDRI environment, table GLB, and their material
+  // tweaks land asynchronously outside React props, so nothing requests a
+  // frame when they arrive. A few staggered invalidates after mount make
+  // sure the finished environment is actually painted.
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    const timers = [250, 1000, 2500, 5000].map((ms) =>
+      window.setTimeout(() => invalidate(), ms),
+    );
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [invalidate]);
+
   // Memoize the URL to prevent unnecessary texture reloads
   const stableUrl = useMemo(() => playmatUrl ?? null, [playmatUrl]);
 

@@ -949,6 +949,19 @@ export class SocketTransport implements GameTransport {
       socket.on("tournamentsListUpdated", (payload) =>
         this.dispatch("tournamentsListUpdated", payload),
       );
+      // Post-match rematch handshake events
+      socket.on("rematchState", (payload) =>
+        this.dispatch(
+          "rematchState",
+          payload as TransportEventMap["rematchState"],
+        ),
+      );
+      socket.on("rematchStarted", (payload) =>
+        this.dispatch(
+          "rematchStarted",
+          payload as TransportEventMap["rematchStarted"],
+        ),
+      );
     });
 
     // Refresh token prior to reconnection attempts

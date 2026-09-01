@@ -1160,6 +1160,18 @@ async function finalizeMatch(
     loserId = inferLoserId(match, winnerId);
   }
 
+  // Roster snapshot for post-game rematch offers: a mid-match forfeit strips
+  // the leaver from playerIds before finalize runs, so capture both sides here
+  // (before draw handling nulls winnerId/loserId).
+  try {
+    const rematchRoster = new Set<string>(
+      Array.isArray(match.playerIds) ? match.playerIds : [],
+    );
+    if (winnerId) rematchRoster.add(winnerId);
+    if (loserId) rematchRoster.add(loserId);
+    (match as AnyRecord).rematchRoster = Array.from(rematchRoster);
+  } catch {}
+
   let isDraw = options?.isDraw === true;
   if (!winnerId && !isDraw) {
     isDraw = true;

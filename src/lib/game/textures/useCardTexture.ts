@@ -339,15 +339,25 @@ function release(url: string | null) {
 
 // Attempts to load a KTX2 texture first (when URL is /api/images/*),
 // and falls back to loading the raster image when unsupported or unavailable.
+// How often a fully failed load (KTX2 + raster) may retry before giving up.
+const MAX_TEXTURE_RETRIES = 2;
+
 export function useCardTexture({
   slug,
   textureUrl,
   preferRaster: preferRasterProp,
 }: UseCardTextureOptions) {
-  const { gl } = useThree();
+  const { gl, invalidate } = useThree();
   const [tex, setTex] = useState<Texture | null>(null);
   // Track which cache key (URL) we currently hold a ref for.
   const heldKeyRef = useRef<string | null>(null);
+  // Retry bookkeeping for transient load failures (request burst at match
+  // start, 429s, dropped connections). Without this a failed card stays on
+  // its back until the page is reloaded.
+  const [retryNonce, setRetryNonce] = useState(0);
+  const retryRef = useRef<{ key: string; count: number; timer: number | null }>(
+    { key: "", count: 0, timer: null },
+  );
 
   // Respect both the prop and the global graphics setting
   // Global setting allows users to force raster textures for better performance
@@ -455,6 +465,14 @@ export function useCardTexture({
     let cancelled = false;
     // Track cancellation only; cleanup will release any held texture.
 
+    const retryKey = `${ktx2Url}|${baseUrl}`;
+    if (retryRef.current.key !== retryKey) {
+      if (retryRef.current.timer !== null) {
+        window.clearTimeout(retryRef.current.timer);
+      }
+      retryRef.current = { key: retryKey, count: 0, timer: null };
+    }
+
     async function load() {
       // Determine whether we already have the target texture in cache.
       const lastFailure = ktx2FailureTimes.get(ktx2Url);
@@ -491,7 +509,10 @@ export function useCardTexture({
           heldKeyRef.current = ktx2Url;
           // Normalize again in case the cached instance carried mutated state
           normalizeTexture(t, "ktx2", gl);
+          retryRef.current.count = 0;
           setTex(t);
+          // frameloop="demand": make sure the arrival is actually painted
+          invalidate();
           return;
         } catch (err) {
           // Fall through to raster
@@ -527,10 +548,23 @@ export function useCardTexture({
           heldKeyRef.current = baseUrl;
           // Normalize again in case the cached instance carried mutated state
           normalizeTexture(t, "raster", gl);
+          retryRef.current.count = 0;
           setTex(t);
+          // frameloop="demand": make sure the arrival is actually painted
+          invalidate();
         } catch {
           if (!cancelled) {
             setTex(null);
+            // Both KTX2 and raster failed - schedule a bounded retry instead
+            // of leaving the card on its back for the rest of the match.
+            const rs = retryRef.current;
+            if (rs.count < MAX_TEXTURE_RETRIES) {
+              rs.count += 1;
+              rs.timer = window.setTimeout(
+                () => setRetryNonce((n) => n + 1),
+                rs.count * 2000,
+              );
+            }
           }
         }
       }
@@ -540,13 +574,17 @@ export function useCardTexture({
 
     return () => {
       cancelled = true;
+      if (retryRef.current.timer !== null) {
+        window.clearTimeout(retryRef.current.timer);
+        retryRef.current.timer = null;
+      }
       // Release the currently held texture reference
       if (heldKeyRef.current) {
         release(heldKeyRef.current);
       }
       heldKeyRef.current = null;
     };
-  }, [baseUrl, ktx2Url, gl]);
+  }, [baseUrl, ktx2Url, gl, invalidate, retryNonce]);
 
   return tex;
 }

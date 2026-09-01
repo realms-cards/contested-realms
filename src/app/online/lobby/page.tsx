@@ -281,6 +281,42 @@ function LobbyPageContent({
       ? `Player ${matchmaking.matchedPlayerId.slice(-4)}`
       : "your opponent");
 
+  // Rematch offer: the opponent from a just-finished match wants a rematch
+  // while we're back on the lobby page.
+  const [rematchOffer, setRematchOffer] = useState<{
+    matchId: string;
+    requesterName: string;
+  } | null>(null);
+  useEffect(() => {
+    if (!transport) return undefined;
+    const offState = transport.on("rematchState", (p) => {
+      const myId = me?.id;
+      if (!myId) return;
+      const requestedBy = Array.isArray(p.requestedBy) ? p.requestedBy : [];
+      const others = requestedBy.filter((id) => id !== myId);
+      if (p.declinedBy || p.error || others.length === 0) {
+        setRematchOffer((prev) =>
+          prev && prev.matchId === p.matchId ? null : prev,
+        );
+        return;
+      }
+      const requesterId = others[0];
+      setRematchOffer({
+        matchId: p.matchId,
+        requesterName: p.names?.[requesterId] || "Your opponent",
+      });
+    });
+    const offStarted = transport.on("rematchStarted", (p) => {
+      if (!p.newMatchId) return;
+      // Hard navigation so the game store and canvas start from a clean slate
+      window.location.assign(`/online/play/${p.newMatchId}`);
+    });
+    return () => {
+      offState();
+      offStarted();
+    };
+  }, [transport, me?.id]);
+
   // Get current user's SOATC status
   const { status: myStatus, loading: myStatusLoading } = useSoatcStatus();
 
@@ -2796,6 +2832,52 @@ function LobbyPageContent({
                 {matchmaking.youAccepted
                   ? "Accepted - Waiting"
                   : "Accept Match"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Rematch offer from the opponent of a just-finished match */}
+      {rematchOffer && !match && (
+        <Modal
+          onClose={() => setRematchOffer(null)}
+          closeOnBackdrop={false}
+          className="w-full max-w-md"
+        >
+          <div className="rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950/60 p-6 shadow-2xl">
+            <div className="text-[11px] uppercase tracking-[0.28em] text-emerald-200/80">
+              Rematch Offer
+            </div>
+            <h3 className="mt-2 text-2xl font-semibold text-white">
+              {rematchOffer.requesterName} wants a rematch!
+            </h3>
+            <p className="mt-2 text-sm text-slate-300">
+              Accept to start a fresh match against the same opponent.
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  transport?.emit("declineRematch", {
+                    matchId: rematchOffer.matchId,
+                  });
+                  setRematchOffer(null);
+                }}
+                className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100 transition hover:bg-red-500/20"
+              >
+                Decline
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  transport?.emit("requestRematch", {
+                    matchId: rematchOffer.matchId,
+                  })
+                }
+                className="rounded-xl border border-emerald-300/40 bg-emerald-500/20 px-4 py-3 text-sm font-semibold text-emerald-50 transition hover:bg-emerald-500/30"
+              >
+                Accept Rematch
               </button>
             </div>
           </div>
