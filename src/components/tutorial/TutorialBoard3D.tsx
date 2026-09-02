@@ -123,6 +123,10 @@ export default function TutorialBoard3D({ visibleHud, highlightTarget, highlight
     <ClientCanvas
       camera={{ position: [0, 10, 0], fov: 50 }}
       shadows
+      // Demand loop like the play pages — without it the tutorial rendered
+      // continuously at display refresh rate (shadow pass included) for the
+      // whole session, pegging CPU/GPU on the one screen new players see first.
+      frameloop="demand"
       gl={{
         preserveDrawingBuffer: true,
         antialias: true,
@@ -136,8 +140,10 @@ export default function TutorialBoard3D({ visibleHud, highlightTarget, highlight
         position={[5, 12, 5]}
         intensity={1.6}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        // 1024 matches the main play board; 2048 doubles shadow bake cost for
+        // no visible gain at this camera distance.
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-camera-far={50}
         shadow-camera-left={-15}
         shadow-camera-right={15}

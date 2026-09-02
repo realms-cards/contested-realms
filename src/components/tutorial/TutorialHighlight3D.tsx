@@ -13,6 +13,7 @@ import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { TILE_SIZE, CARD_LONG, CARD_SHORT } from "@/lib/game/constants";
+import { requestCosmeticFrame } from "@/lib/game/render/cosmeticFrame";
 import { useGameStore } from "@/lib/game/store";
 import type { TutorialHighlightTarget } from "@/lib/tutorial/types";
 
@@ -78,6 +79,8 @@ function BoardHighlight() {
     const t = clock.getElapsedTime();
     const mat = fillRef.current.material as THREE.MeshBasicMaterial;
     mat.opacity = 0.15 + Math.sin(t * 2.5) * 0.08;
+    // Decorative pulse rides the shared ~12fps pump (frameloop="demand").
+    requestCosmeticFrame();
   });
 
   // Cover the entire 5×4 grid with a single large plane
@@ -152,6 +155,8 @@ function TileHighlight({ tile, label }: { tile: number; label?: string }) {
     const t = clock.getElapsedTime();
     const mat = fillRef.current.material as THREE.MeshBasicMaterial;
     mat.opacity = 0.25 + Math.sin(t * 3) * 0.1;
+    // Decorative pulse rides the shared ~12fps pump (frameloop="demand").
+    requestCosmeticFrame();
   });
 
   const halfTile = TILE_SIZE / 2;
@@ -243,6 +248,8 @@ function PilesHighlight({ player }: { player: "p1" | "p2" }) {
       const mat = mesh.material as THREE.MeshBasicMaterial;
       mat.opacity = 0.2 + Math.sin(t * 2.5) * 0.1;
     }
+    // Decorative pulse rides the shared ~12fps pump (frameloop="demand").
+    requestCosmeticFrame();
   });
 
   const piles = useMemo<PileInfo[]>(() => {
@@ -343,6 +350,8 @@ function AvatarHighlight({ player }: { player: "p1" | "p2" }) {
     const t = clock.getElapsedTime();
     const mat = ringRef.current.material as THREE.MeshBasicMaterial;
     mat.opacity = 0.3 + Math.sin(t * 2.5) * 0.15;
+    // Decorative pulse rides the shared ~12fps pump (frameloop="demand").
+    requestCosmeticFrame();
   });
 
   const innerRadius = TILE_SIZE * 0.45;

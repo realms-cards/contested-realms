@@ -36,8 +36,25 @@ const shellStyle: CSSProperties = {
  */
 type GlStatus = "pending" | "ok" | "ok-no-aa" | "unsupported";
 
-function probeWebGL2(): GlStatus {
-  if (typeof document === "undefined") return "pending";
+type GlProbeResult = {
+  status: GlStatus;
+  /** True when WebGL is emulated on the CPU (SwiftShader/llvmpipe) — typically
+   * hardware acceleration disabled in the browser. The board technically works
+   * but renders at a crawl with high CPU, the classic "great PC, 10fps" report. */
+  softwareRenderer: boolean;
+};
+
+function isSoftwareRendererString(renderer: string): boolean {
+  return /swiftshader|llvmpipe|softpipe|software rasterizer|microsoft basic render/i.test(
+    renderer,
+  );
+}
+
+function probeWebGL2(): GlProbeResult {
+  if (typeof document === "undefined") {
+    return { status: "pending", softwareRenderer: false };
+  }
+  let softwareRenderer = false;
   const probe = (antialias: boolean): boolean => {
     let canvas: HTMLCanvasElement | null = null;
     try {
@@ -47,6 +64,19 @@ function probeWebGL2(): GlStatus {
         failIfMajorPerformanceCaveat: false,
       });
       if (!ctx) return false;
+      try {
+        const dbg = ctx.getExtension("WEBGL_debug_renderer_info");
+        const renderer = dbg
+          ? String(ctx.getParameter(dbg.UNMASKED_RENDERER_WEBGL))
+          : String(ctx.getParameter(ctx.RENDERER));
+        if (isSoftwareRendererString(renderer)) {
+          softwareRenderer = true;
+          console.warn(
+            "[ClientCanvas] Software WebGL renderer detected:",
+            renderer,
+          );
+        }
+      } catch {}
       // Release the probe context promptly so we don't hold a GPU context slot.
       ctx.getExtension("WEBGL_lose_context")?.loseContext();
       return true;
@@ -55,10 +85,12 @@ function probeWebGL2(): GlStatus {
     }
   };
 
-  if (probe(true)) return "ok";
-  if (probe(false)) return "ok-no-aa";
-  return "unsupported";
+  if (probe(true)) return { status: "ok", softwareRenderer };
+  if (probe(false)) return { status: "ok-no-aa", softwareRenderer };
+  return { status: "unsupported", softwareRenderer };
 }
+
+const SW_WARNING_DISMISS_KEY = "sorcery:softwareGlWarningDismissed";
 
 /**
  * Client-only Canvas wrapper that prevents SSR issues with React Three Fiber and
@@ -85,6 +117,67 @@ function probeWebGL2(): GlStatus {
  */
 const DEFAULT_DPR: [number, number] = [1, 1.5];
 
+function SoftwareRendererWarning() {
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SW_WARNING_DISMISS_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  if (dismissed) return null;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: 16,
+        left: "50%",
+        transform: "translateX(-50%)",
+        zIndex: 90,
+        maxWidth: 460,
+        padding: "10px 14px",
+        borderRadius: 10,
+        background: "rgba(120, 53, 15, 0.92)",
+        color: "#fef3c7",
+        fontSize: 13,
+        lineHeight: 1.45,
+        boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+        display: "flex",
+        gap: 12,
+        alignItems: "center",
+        pointerEvents: "auto",
+      }}
+    >
+      <span>
+        Your browser is rendering the 3D board without GPU acceleration, which
+        causes low frame rates and high CPU usage. Enable hardware acceleration
+        in your browser settings, then restart the browser.
+      </span>
+      <button
+        onClick={() => {
+          setDismissed(true);
+          try {
+            localStorage.setItem(SW_WARNING_DISMISS_KEY, "true");
+          } catch {}
+        }}
+        style={{
+          flexShrink: 0,
+          border: "1px solid rgba(254,243,199,0.4)",
+          borderRadius: 6,
+          background: "transparent",
+          color: "#fef3c7",
+          padding: "4px 8px",
+          cursor: "pointer",
+        }}
+      >
+        Dismiss
+      </button>
+    </div>
+  );
+}
+
 export function ClientCanvas({
   children,
   gl,
@@ -92,9 +185,12 @@ export function ClientCanvas({
   ...props
 }: ClientCanvasProps) {
   const [status, setStatus] = useState<GlStatus>("pending");
+  const [softwareRenderer, setSoftwareRenderer] = useState(false);
 
   useEffect(() => {
-    setStatus(probeWebGL2());
+    const result = probeWebGL2();
+    setSoftwareRenderer(result.softwareRenderer);
+    setStatus(result.status);
   }, []);
 
   if (status === "pending") {
@@ -147,9 +243,12 @@ export function ClientCanvas({
       : gl;
 
   return (
-    <Canvas {...props} dpr={dpr} gl={glConfig}>
-      {children}
-    </Canvas>
+    <>
+      {softwareRenderer && <SoftwareRendererWarning />}
+      <Canvas {...props} dpr={dpr} gl={glConfig}>
+        {children}
+      </Canvas>
+    </>
   );
 }
 
