@@ -1,7 +1,7 @@
 import { Environment, useGLTF, useTexture } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
-import { Suspense, useEffect, useMemo, useState, useCallback } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import * as THREE from "three";
 import {
   SRGBColorSpace,
@@ -108,7 +108,13 @@ type BoardEnvironmentProps = {
   matH: number;
   showPlaymat: boolean;
   playmatUrl?: string | null;
-  showOverlay?: boolean;
+  /**
+   * Opt-out for scenes that must never show the grid (deck editor, drafts).
+   * Game views leave this unset: the grid overlay is always mounted and simply
+   * hidden underneath the playmat, so a bare table can never appear without a
+   * grid — including while the playmat texture is still loading or has failed.
+   */
+  suppressGrid?: boolean;
   showTable?: boolean;
 };
 
@@ -159,13 +165,22 @@ useGLTF.preload("/3dmodels/tables/mahogany_table.glb");
 
 // Playmat component moved to SafePlaymat.tsx for better error handling
 
+// The grid overlay sits just below the playmat's top surface (y=0) and just
+// above the bare tabletop (y=-0.002 when the playmat is hidden). Because the
+// playmat box is opaque and depth-tested, a rendered playmat automatically
+// occludes the grid — no flag juggling — while any state where the playmat
+// isn't actually on screen (hidden, texture still loading, load failed)
+// reveals the grid underneath. This is what guarantees "never a bare table
+// without a grid" in game views.
+const GRID_OVERLAY_Y = -0.0005;
+
 function PlaymatOverlay({ matW, matH }: { matW: number; matH: number }) {
   const tex = useTexture("/playmat-overlay.png");
   tex.colorSpace = SRGBColorSpace;
   return (
     <mesh
       rotation-x={-Math.PI / 2}
-      position={[0, 0.001, 0]}
+      position={[0, GRID_OVERLAY_Y, 0]}
       raycast={noopRaycast}
       renderOrder={-100}
     >
@@ -186,7 +201,7 @@ export function BoardEnvironment({
   matH,
   showPlaymat,
   playmatUrl,
-  showOverlay = true,
+  suppressGrid = false,
   showTable = true,
 }: BoardEnvironmentProps) {
   // frameloop="demand": the HDRI environment, table GLB, and their material
@@ -203,17 +218,6 @@ export function BoardEnvironment({
 
   // Memoize the URL to prevent unnecessary texture reloads
   const stableUrl = useMemo(() => playmatUrl ?? null, [playmatUrl]);
-
-  // Track if playmat failed to load - if so, always show overlay as fallback
-  const [playmatFailed, setPlaymatFailed] = useState(false);
-
-  const handlePlaymatError = useCallback(() => {
-    setPlaymatFailed(true);
-  }, []);
-
-  // `showOverlay` is a hard gate: scenes that want no grid at all (e.g. the deck
-  // editor) pass false, and the playmat-failed fallback must not override it.
-  const shouldShowOverlay = showOverlay && (!showPlaymat || playmatFailed);
 
   return (
     <>
@@ -248,20 +252,15 @@ export function BoardEnvironment({
                   err.message,
                 );
               }
-              handlePlaymatError();
             }}
           >
-            <SafePlaymat
-              matW={matW}
-              matH={matH}
-              url={stableUrl}
-              onLoadError={() => handlePlaymatError()}
-            />
+            <SafePlaymat matW={matW} matH={matH} url={stableUrl} />
           </TextureErrorBoundary>
         </Suspense>
       )}
-      {/* Always show overlay (grid) as fallback when playmat fails */}
-      {shouldShowOverlay && (
+      {/* Grid overlay — always mounted in game views; the opaque playmat
+          occludes it whenever the mat is actually rendered (see GRID_OVERLAY_Y). */}
+      {!suppressGrid && (
         <Suspense fallback={null}>
           <PlaymatOverlay matW={matW} matH={matH} />
         </Suspense>

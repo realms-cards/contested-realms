@@ -1530,9 +1530,9 @@ export default function Board({
             ? playmatUrls[activePlaymatOwner]
             : playmatUrl
         }
-        // Overlay grid is the automatic fallback whenever the playmat is hidden
-        // or fails to load (BoardEnvironment gates it on !showPlaymat); only
-        // scenes that never want a grid (deck editor) pass showOverlay={false}.
+        // The grid overlay is always mounted and hidden under the playmat via
+        // depth, so game views can never show a bare table without a grid;
+        // only editors/drafts opt out by passing suppressGrid.
         showTable={graphicsSettings.showTable}
       />
 

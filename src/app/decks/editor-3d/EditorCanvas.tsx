@@ -79,7 +79,7 @@ export default function EditorCanvas({
             matW={matW}
             matH={matH}
             showPlaymat={false}
-            showOverlay={false}
+            suppressGrid
             showTable
           />
           {children}
