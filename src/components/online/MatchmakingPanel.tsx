@@ -143,18 +143,16 @@ export default function MatchmakingPanel({
         </button>
       )}
 
-      {/* Card 3: Create Match (guests host through invite links instead) */}
-      {!isGuest && (
-        <button
-          onClick={onCreateMatch}
-          className="flex-1 rounded-xl bg-gradient-to-br from-green-600/80 to-green-700/60 ring-1 ring-green-500/40 flex flex-col items-center justify-center p-3 hover:from-green-600 hover:to-green-700 transition-colors"
-        >
-          <div className="text-sm font-semibold text-white">Create Match</div>
-          <div className="text-[10px] text-green-100/80">
-            Constructed • Sealed • Draft
-          </div>
-        </button>
-      )}
+      {/* Card 3: Create Match */}
+      <button
+        onClick={onCreateMatch}
+        className="flex-1 rounded-xl bg-gradient-to-br from-green-600/80 to-green-700/60 ring-1 ring-green-500/40 flex flex-col items-center justify-center p-3 hover:from-green-600 hover:to-green-700 transition-colors"
+      >
+        <div className="text-sm font-semibold text-white">Create Match</div>
+        <div className="text-[10px] text-green-100/80">
+          Constructed • Sealed • Draft
+        </div>
+      </button>
 
       {/* Card 3b: Invite a friend - private lobby reachable by link, no account needed */}
       {onInviteFriend && (

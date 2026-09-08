@@ -53,10 +53,6 @@ function createLobbyFeature(deps) {
   const prisma = deps.prisma || null;
   const PORT = deps.port;
   const isCpuPlayerId = deps.isCpuPlayerId;
-  const isGuestPlayerId =
-    typeof deps.isGuestPlayerId === "function"
-      ? deps.isGuestPlayerId
-      : (id) => String(id || "").startsWith("guest_");
   const _rtcMigration = deps.rtcMigration || null;
   const botInternalSecret = deps.botInternalSecret || null;
   const onPlayerEnteredGame =
@@ -1728,13 +1724,6 @@ function createLobbyFeature(deps) {
       if (!isAuthed()) return;
       const player = getPlayerBySocket(socket);
       if (!player) return;
-      if (isGuestPlayerId(player.id)) {
-        socket.emit("error", {
-          message: "Guests can only play through an invite link",
-          code: "guest_invite_only",
-        });
-        return;
-      }
       try {
         const leader = await getOrClaimLobbyLeader();
         const msg = {
@@ -1764,13 +1753,6 @@ function createLobbyFeature(deps) {
       const player = getPlayerBySocket(socket);
       if (!player) return;
       const lobbyId = payload.lobbyId || undefined;
-      if (!lobbyId && isGuestPlayerId(player.id)) {
-        socket.emit("error", {
-          message: "Guests can only play through an invite link",
-          code: "guest_invite_only",
-        });
-        return;
-      }
       const plannedMatchType =
         payload.plannedMatchType === "sealed" ||
         payload.plannedMatchType === "draft" ||
