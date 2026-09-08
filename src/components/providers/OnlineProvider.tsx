@@ -21,6 +21,7 @@ import { useLoadingContext } from "@/lib/contexts/LoadingContext";
 import { FEATURE_AUDIO_ONLY, FEATURE_SEAT_VIDEO } from "@/lib/flags";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
+import { useGuestSession } from "@/lib/guest/guestSession";
 import type {
   LobbyInfo,
   MatchInfo,
@@ -33,7 +34,10 @@ import type {
   MatchmakingPreferences,
   MatchmakingUpdatePayloadT,
 } from "@/lib/net/protocol";
-import { fetchSocketToken } from "@/lib/net/socketTokenCache";
+import {
+  clearSocketTokenCache,
+  fetchSocketToken,
+} from "@/lib/net/socketTokenCache";
 import { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
 import {
@@ -112,6 +116,31 @@ export default function OnlineProvider({
   const { startLoading: startGlobalLoading, stopLoading: stopGlobalLoading } =
     useLoadingContext();
   const { data: session, status: sessionStatus } = useSession();
+  const guestSession = useGuestSession();
+  // Who connects to online play: the signed-in account, or - only once NextAuth
+  // has definitively said there is none - the guest identity from an invite link.
+  const sessionUserId =
+    (session?.user as { id?: string | null } | undefined)?.id ?? null;
+  const sessionUserName = session?.user?.name ?? null;
+  const guestReady = guestSession.status === "ready";
+  const guestId = guestReady ? (guestSession.guest?.id ?? null) : null;
+  const guestName = guestReady ? (guestSession.guest?.name ?? null) : null;
+  const principal = useMemo<
+    { id: string; name: string; guest: boolean } | null
+  >(() => {
+    if (sessionStatus === "authenticated") {
+      return sessionUserId && sessionUserName
+        ? { id: sessionUserId, name: sessionUserName, guest: false }
+        : null;
+    }
+    if (sessionStatus === "unauthenticated" && guestId && guestName) {
+      return { id: guestId, name: guestName, guest: true };
+    }
+    return null;
+  }, [sessionStatus, sessionUserId, sessionUserName, guestId, guestName]);
+  // The cached socket token is minted for one identity; a guest who signs in
+  // (or a sign-out) must not reconnect with the previous principal's token.
+  const lastPrincipalIdRef = useRef<string | null>(null);
   const [connected, setConnected] = useState<boolean>(false);
   // True when another tab owns the (single) socket connection for this browser.
   const [standby, setStandby] = useState<boolean>(false);
@@ -303,7 +332,7 @@ export default function OnlineProvider({
   const connLoadingActiveRef = useRef<boolean>(false);
   const connLoadingTimerRef = useRef<number | null>(null);
   useEffect(() => {
-    if (sessionStatus !== "authenticated") {
+    if (!principal) {
       if (connLoadingTimerRef.current) {
         window.clearTimeout(connLoadingTimerRef.current);
         connLoadingTimerRef.current = null;
@@ -338,7 +367,7 @@ export default function OnlineProvider({
         connLoadingTimerRef.current = null;
       }
     };
-  }, [connected, standby, sessionStatus, startGlobalLoading, stopGlobalLoading]);
+  }, [connected, standby, principal, startGlobalLoading, stopGlobalLoading]);
 
   // Resolve the HTTP origin for the Socket server (for REST-like endpoints)
   const getSocketHttpOrigin = useCallback((): string => {
@@ -1018,32 +1047,27 @@ export default function OnlineProvider({
   }, []);
 
   useEffect(() => {
-    // Only connect if the user is authenticated and has a display name (previous behavior)
-    if (sessionStatus !== "authenticated" || !session?.user?.name) {
+    // Only connect once we know who is playing: a signed-in account with a
+    // display name, or a guest who arrived through an invite link.
+    if (!principal) {
       return;
     }
-
-    const user = session.user as {
-      id?: string | null;
-      name?: string | null;
-      email?: string | null;
-      image?: string | null;
-    };
-
-    if (!user.id) {
-      console.error(
-        "User ID is missing from session, cannot connect to online services.",
-      );
-      return;
+    const user = principal;
+    if (
+      lastPrincipalIdRef.current &&
+      lastPrincipalIdRef.current !== user.id
+    ) {
+      clearSocketTokenCache();
     }
+    lastPrincipalIdRef.current = user.id;
 
     const unsubscribers: Array<() => void> = [];
 
     (async () => {
       try {
         await transport.connect({
-          displayName: user.name ?? "Player",
-          playerId: user.id ?? undefined,
+          displayName: user.name,
+          playerId: user.id,
         });
         // Only reflect a real connection. Non-leader tabs resolve in "standby" with
         // no socket; the poller/welcome handler will update the flag accordingly.
@@ -1549,6 +1573,10 @@ export default function OnlineProvider({
             setSocialError("Only the host can invite");
           } else if (code === "private_lobby") {
             setSocialError("Lobby is private. You need an invite.");
+          } else if (code === "guest_invite_only") {
+            setSocialError(
+              msg || "Guests can only play through an invite link",
+            );
           } else if (code === "target_in_match") {
             setSocialError("Target is currently in a match");
           } else if (
@@ -1647,7 +1675,7 @@ export default function OnlineProvider({
       setMatchmakingQueueBySource(null);
       lastMatchmakingNotificationRef.current = null;
     };
-  }, [transport, session, sessionStatus, queueServerPatch]);
+  }, [transport, principal, queueServerPatch]);
 
   // Periodic re-sync of socket-driven player list (fallback in case a broadcast was missed)
   useEffect(() => {
@@ -1768,8 +1796,9 @@ export default function OnlineProvider({
   const ctxValue: OnlineContextValue = {
     transport,
     connected,
-    displayName: session?.user?.name || "",
+    displayName: principal?.name || "",
     setDisplayName: () => {}, // No-op, handled by AuthButton
+    isGuest: principal?.guest === true,
     me,
     lobby,
     match,
@@ -1782,8 +1811,11 @@ export default function OnlineProvider({
         transport.ready(true);
       } catch {}
     },
-    joinLobby: async (id?: string) => {
-      await transport.joinLobby(id);
+    joinLobby: async (
+      id?: string,
+      options?: { plannedMatchType?: "constructed" | "sealed" | "draft" },
+    ) => {
+      await transport.joinLobby(id, options);
       // Reset local ready state on lobby join; server updates will resync this shortly
       setReady(false);
     },

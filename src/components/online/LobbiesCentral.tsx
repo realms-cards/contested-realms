@@ -9,6 +9,7 @@ import { useMemo, useState, useRef } from "react";
 import type { VoiceOutgoingRequest } from "@/app/online/online-context";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import type { SoatcStatus } from "@/lib/hooks/useSoatcStatus";
+import { buildLobbyInviteUrl } from "@/lib/lobby-links";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
 import { generateLobbyName } from "@/lib/random-name-generator";
 
@@ -1067,12 +1068,17 @@ export default function LobbiesCentral({
                         onClick={() => {
                           try {
                             if (navigator.clipboard)
-                              void navigator.clipboard.writeText(l.id);
+                              void navigator.clipboard.writeText(
+                                buildLobbyInviteUrl(
+                                  window.location.origin,
+                                  l.id,
+                                ),
+                              );
                           } catch {}
                         }}
-                        title="Copy lobby ID"
+                        title="Copy an invite link to this lobby"
                       >
-                        Copy ID
+                        Copy invite link
                       </button>
                     </>
                   ) : (

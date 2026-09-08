@@ -30,6 +30,10 @@ function createMatchmakingFeature(deps) {
     deps.setMatchmakingLobbyConfirmationRequired;
   const cancelReservedLobby = deps.cancelReservedLobby;
   const addLobbyInvite = deps.addLobbyInvite;
+  const isGuestPlayerId =
+    typeof deps.isGuestPlayerId === "function"
+      ? deps.isGuestPlayerId
+      : (id) => String(id || "").startsWith("guest_");
 
   /** @type {Map<string, { playerId: string, socketId: string | null, joinedAt: number, disconnectedAt: number | null, source: "web" | "discord", discordId: string | null, guildId: string | null, channelId: string | null }>} */
   const queue = new Map();
@@ -1251,6 +1255,14 @@ function createMatchmakingFeature(deps) {
       if (!isAuthed()) return;
       const player = getPlayerBySocket(socket);
       if (!player) return;
+
+      if (isGuestPlayerId(player.id)) {
+        socket.emit("error", {
+          message: "Create an account to use matchmaking",
+          code: "guest_invite_only",
+        });
+        return;
+      }
 
       const requested = payload?.preferences?.matchTypes;
       const requestedConstructed =

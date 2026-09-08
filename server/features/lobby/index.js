@@ -53,6 +53,10 @@ function createLobbyFeature(deps) {
   const prisma = deps.prisma || null;
   const PORT = deps.port;
   const isCpuPlayerId = deps.isCpuPlayerId;
+  const isGuestPlayerId =
+    typeof deps.isGuestPlayerId === "function"
+      ? deps.isGuestPlayerId
+      : (id) => String(id || "").startsWith("guest_");
   const _rtcMigration = deps.rtcMigration || null;
   const botInternalSecret = deps.botInternalSecret || null;
   const onPlayerEnteredGame =
@@ -548,26 +552,43 @@ function createLobbyFeature(deps) {
   }
 
   /**
-   * Create a lobby with a specific ID (used for Discord bot challenges).
-   * The first player to join becomes the host, lobby is open for the second player.
+   * Lobby ids that may be materialized on demand by an invite link. The id
+   * itself is the capability: it is minted client-side (or by the Discord
+   * challenge flow) before any lobby exists, so the link keeps working across
+   * server restarts and lobby reaping - whoever arrives first becomes host.
    */
-  function createLobbyWithId(lobbyId, hostId) {
+  const ON_DEMAND_LOBBY_ID = /^(invite|discord)-[a-z0-9]{8,64}$/i;
+  function isOnDemandLobbyId(lobbyId) {
+    return typeof lobbyId === "string" && ON_DEMAND_LOBBY_ID.test(lobbyId);
+  }
+
+  /**
+   * Create a lobby with a specific ID (invite links, Discord bot challenges).
+   * The first player to join becomes the host; the lobby is private so it
+   * never shows up for matchmaking, but anyone holding the link can join.
+   */
+  function createLobbyWithId(lobbyId, hostId, opts = {}) {
     const now = Date.now();
+    const isDiscordMatch = lobbyId.startsWith("discord-");
+    const plannedMatchType =
+      opts.plannedMatchType === "sealed" || opts.plannedMatchType === "draft"
+        ? opts.plannedMatchType
+        : "constructed";
     const lobby = {
       id: lobbyId,
-      name: "Discord Match",
+      name: isDiscordMatch ? "Discord Match" : "Invite Match",
       hostId,
       playerIds: new Set(),
       status: "open",
       maxPlayers: 2,
       ready: new Set(),
-      visibility: "open", // Open so second player can join with the link
-      plannedMatchType: "constructed",
+      visibility: "private",
+      plannedMatchType,
       createdAt: now,
       lastActive: now,
       allowSpectators: false,
-      hostReady: true, // Discord matches are ready to start immediately
-      isDiscordMatch: true,
+      hostReady: true, // Invite matches are ready to start immediately
+      isDiscordMatch,
     };
     lobbies.set(lobby.id, lobby);
     // Persist to Redis for cross-instance visibility (fire and forget)
@@ -713,203 +734,6 @@ function createLobbyFeature(deps) {
     }
   }
 
-  function _joinLobby(socket, player, suppliedLobbyId) {
-    if (player.lobbyId) leaveLobby(socket, player);
-
-    let lobby = null;
-    if (suppliedLobbyId && lobbies.has(suppliedLobbyId)) {
-      lobby = lobbies.get(suppliedLobbyId);
-    } else if (suppliedLobbyId && suppliedLobbyId.startsWith("discord-")) {
-      // Discord bot challenge - create lobby on-demand with the exact ID
-      console.log(
-        `[lobby] Creating Discord match lobby on-demand: ${suppliedLobbyId}`,
-      );
-      lobby = createLobbyWithId(suppliedLobbyId, player.id);
-    } else {
-      lobby = findOpenLobby() || createLobby(player.id);
-    }
-    if (!lobby) lobby = createLobby(player.id);
-
-    if (lobby.status !== "open") {
-      socket.emit("error", {
-        message: "Lobby is not open",
-        code: "lobby_not_open",
-      });
-      return;
-    }
-    if (lobby.playerIds.size >= lobby.maxPlayers) {
-      socket.emit("error", { message: "Lobby is full", code: "lobby_full" });
-      return;
-    }
-    // Private and tournament lobbies require explicit invite link (not matchmaking)
-    if (
-      (lobby.visibility === "private" || lobby.visibility === "tournament") &&
-      !suppliedLobbyId
-    ) {
-      socket.emit("error", {
-        message:
-          lobby.visibility === "tournament"
-            ? "Tournament lobbies require an invite link."
-            : "Private lobbies require an invite link.",
-        code:
-          lobby.visibility === "tournament"
-            ? "tournament_invite_required"
-            : "private_invite_required",
-      });
-      return;
-    }
-    // Tournament lobbies: non-host players can only join after host has opened the lobby
-    if (
-      lobby.visibility === "tournament" &&
-      lobby.hostId !== player.id &&
-      !lobby.hostReady
-    ) {
-      socket.emit("error", {
-        message: "The host is still setting up the match. Please wait.",
-        code: "host_not_ready",
-      });
-      return;
-    }
-    if (
-      suppliedLobbyId &&
-      (lobby.visibility === "private" || lobby.visibility === "tournament")
-    ) {
-      const allowed =
-        lobby.hostId === player.id ||
-        (lobbyInvites.get(lobby.id)?.has(player.id) ?? false);
-      if (!allowed) {
-        socket.emit("error", {
-          message:
-            lobby.visibility === "tournament"
-              ? "This is a tournament match. You need an invite link."
-              : "Lobby is private. You need an invite.",
-          code:
-            lobby.visibility === "tournament"
-              ? "tournament_lobby"
-              : "private_lobby",
-        });
-        try {
-          console.info(
-            `[invite] denied (not_invited) inviter=${String(lobby.hostId).slice(
-              -6,
-            )} target=${String(player.id).slice(-6)} lobby=${lobby.id}`,
-          );
-        } catch {}
-        return;
-      }
-    }
-    if (
-      lobby.isMatchmakingLobby &&
-      lobby.matchmakingRequiresAcceptance === true
-    ) {
-      socket.emit("error", {
-        message:
-          "This matchmaking match is still waiting for both players to confirm.",
-        code: "matchmaking_confirm_pending",
-      });
-      return;
-    }
-
-    lobby.playerIds.add(player.id);
-    lobby.ready.add(player.id);
-    player.lobbyId = lobby.id;
-    notifyPlayerEnteredGame(player.id, {
-      lobbyId: lobby.id,
-      reason: "joined_lobby",
-    });
-    socket.join(`lobby:${lobby.id}`);
-
-    markLobbyActive(lobby);
-
-    if (!lobby.hostId) lobby.hostId = player.id;
-
-    const info = getLobbyInfo(lobby);
-    socket.emit("joinedLobby", { lobby: info });
-    io.to(`lobby:${lobby.id}`).emit("lobbyUpdated", { lobby: info });
-    broadcastLobbies();
-    const inv = lobbyInvites.get(lobby.id);
-    if (inv) inv.delete(player.id);
-    maybeAutoStartConstructedMatchmakingLobby(lobby).catch((err) => {
-      console.warn("[lobby] Auto-start after direct join failed:", err);
-    });
-  }
-
-  function leaveLobby(socket, player) {
-    const lobbyId = player.lobbyId;
-    if (!lobbyId) return;
-    const lobby = lobbies.get(lobbyId);
-    if (!lobby) return;
-
-    lobby.playerIds.delete(player.id);
-    lobby.ready.delete(player.id);
-    socket.leave(`lobby:${lobbyId}`);
-    player.lobbyId = null;
-
-    markLobbyActive(lobby);
-
-    if (lobby.playerIds.size === 0) {
-      lobby.status = "closed";
-      if (botManager) {
-        try {
-          botManager.cleanupBotsForLobby(lobbyId);
-        } catch {}
-      }
-      lobbies.delete(lobbyId);
-      try {
-        publishLobbyDelete(lobbyId);
-      } catch {}
-    } else if (!lobbyHasHumanPlayers(lobby)) {
-      lobby.status = "closed";
-      if (botManager) {
-        try {
-          botManager.cleanupBotsForLobby(lobbyId);
-        } catch {}
-      }
-      lobbies.delete(lobbyId);
-      try {
-        publishLobbyDelete(lobbyId);
-      } catch {}
-      broadcastLobbies();
-    } else if (lobby.hostId === player.id) {
-      // Host left: keep a started lobby alive for the remaining human
-      // player(s) (rematch offers depend on it) by transferring host; only
-      // open pre-match lobbies disband when the host leaves.
-      const nextHumanHost = Array.from(lobby.playerIds).find(
-        (pid) => !isCpuPlayerId(pid),
-      );
-      if (lobby.status === "started" && nextHumanHost) {
-        lobby.hostId = nextHumanHost;
-      } else {
-        lobby.status = "closed";
-        if (botManager) {
-          try {
-            botManager.cleanupBotsForLobby(lobbyId);
-          } catch {}
-        }
-        lobbies.delete(lobbyId);
-        try {
-          publishLobbyDelete(lobbyId);
-        } catch {}
-        broadcastLobbies();
-        return;
-      }
-    }
-
-    if (lobbies.has(lobbyId)) {
-      io.to(`lobby:${lobbyId}`).emit("lobbyUpdated", {
-        lobby: getLobbyInfo(lobby),
-      });
-      try {
-        publishLobbyState(lobby);
-      } catch {}
-    }
-    broadcastLobbies();
-  }
-
-  /**
-   * Normalize the optional timed-match config sent by the lobby host.
-   * Returns null when timers are disabled, otherwise clamped values.
-   */
   function normalizeTimerConfig(timerConfig) {
     if (!timerConfig || typeof timerConfig !== "object") return null;
     if (timerConfig.enabled !== true) return null;
@@ -1444,9 +1268,15 @@ function createLobbyFeature(deps) {
       return;
     }
     if (msg.type === "join") {
-      const { playerId, socketId, lobbyId } = msg;
+      const { playerId, socketId, lobbyId, plannedMatchType } = msg;
       let lobby = null;
       if (lobbyId) {
+        if (!lobbies.has(lobbyId) && isOnDemandLobbyId(lobbyId)) {
+          // Invite link / Discord challenge: the lobby is created the moment
+          // the first player arrives, with that player as host.
+          console.log(`[lobby] Creating invite lobby on demand: ${lobbyId}`);
+          createLobbyWithId(lobbyId, playerId, { plannedMatchType });
+        }
         // An explicit target that no longer exists must fail loudly. Silently
         // redirecting to findOpenLobby() dropped matchmade players into a
         // stranger's lobby (or a fresh empty one) instead of their own match.
@@ -1898,6 +1728,13 @@ function createLobbyFeature(deps) {
       if (!isAuthed()) return;
       const player = getPlayerBySocket(socket);
       if (!player) return;
+      if (isGuestPlayerId(player.id)) {
+        socket.emit("error", {
+          message: "Guests can only play through an invite link",
+          code: "guest_invite_only",
+        });
+        return;
+      }
       try {
         const leader = await getOrClaimLobbyLeader();
         const msg = {
@@ -1927,6 +1764,19 @@ function createLobbyFeature(deps) {
       const player = getPlayerBySocket(socket);
       if (!player) return;
       const lobbyId = payload.lobbyId || undefined;
+      if (!lobbyId && isGuestPlayerId(player.id)) {
+        socket.emit("error", {
+          message: "Guests can only play through an invite link",
+          code: "guest_invite_only",
+        });
+        return;
+      }
+      const plannedMatchType =
+        payload.plannedMatchType === "sealed" ||
+        payload.plannedMatchType === "draft" ||
+        payload.plannedMatchType === "constructed"
+          ? payload.plannedMatchType
+          : undefined;
       try {
         const leader = await getOrClaimLobbyLeader();
         const msg = {
@@ -1934,6 +1784,7 @@ function createLobbyFeature(deps) {
           playerId: player.id,
           socketId: socket.id,
           lobbyId,
+          plannedMatchType,
         };
         if (leader && leader !== INSTANCE_ID) {
           if (storeRedis)

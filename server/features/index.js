@@ -58,6 +58,7 @@ function registerFeatures(container, deps) {
       prisma: container.resolve("prisma"),
       port: deps.port,
       isCpuPlayerId: deps.isCpuPlayerId,
+      isGuestPlayerId: deps.isGuestPlayerId,
       botInternalSecret: deps.botInternalSecret,
       redisState: deps.redisState, // For horizontal scaling - cross-instance lobby visibility
       rtcMigration, // For preserving voice connections from lobby to match
@@ -104,6 +105,7 @@ function registerFeatures(container, deps) {
         lobby.setMatchmakingLobbyConfirmationRequired,
       cancelReservedLobby: lobby.cancelReservedLobby,
       addLobbyInvite: lobby.addLobbyInvite,
+      isGuestPlayerId: deps.isGuestPlayerId,
     }),
   );
 

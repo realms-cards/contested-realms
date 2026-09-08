@@ -357,7 +357,11 @@ export const CreateLobbyPayload = z.object({
   visibility: LobbyVisibilitySchema.optional(),
   maxPlayers: z.number().int().min(2).max(8).optional(),
 });
-export const JoinLobbyPayload = z.object({ lobbyId: z.string().optional() });
+export const JoinLobbyPayload = z.object({
+  lobbyId: z.string().optional(),
+  // Planned format for lobbies materialized on demand from an invite link
+  plannedMatchType: z.enum(["constructed", "sealed", "draft"]).optional(),
+});
 export const LeaveLobbyPayload = z.object({});
 export const LeaveMatchPayload = z.object({});
 export const ReadyPayload = z.object({ ready: z.boolean() });

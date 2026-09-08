@@ -34,7 +34,7 @@ export default function OnlineDeckSelector({
   onPrepareComplete,
   matchType,
 }: OnlineDeckSelectorProps) {
-  const { transport } = useOnline();
+  const { transport, isGuest } = useOnline();
   const curiosaEnabled =
     process.env.NEXT_PUBLIC_ENABLE_CURIOSA_IMPORT === "true";
   const [myDecks, setMyDecks] = useState<MyDeckInfo[]>([]);
@@ -53,6 +53,9 @@ export default function OnlineDeckSelector({
   const [impLoading, setImpLoading] = useState(false);
   const [impError, setImpError] = useState<string | null>(null);
   const [decksLoaded, setDecksLoaded] = useState<boolean>(false);
+  // Guests have no saved decks: they paste a sorcerytcg.com / Four Cores URL
+  // and the list is resolved on the fly without being stored.
+  const [guestUrl, setGuestUrl] = useState("");
 
   const isConstructed = (matchType ?? "constructed") === "constructed";
   const isPrecon = matchType === "precon";
@@ -63,6 +66,10 @@ export default function OnlineDeckSelector({
   }, [publicDecks]);
 
   useEffect(() => {
+    if (isGuest) {
+      setDecksLoaded(true);
+      return;
+    }
     (async () => {
       try {
         const res = await fetch("/api/decks", { cache: "no-store" });
@@ -83,7 +90,40 @@ export default function OnlineDeckSelector({
         setDecksLoaded(true);
       }
     })();
-  }, []);
+  }, [isGuest]);
+
+  // Once a deck sits in the store: report it for meta stats and move to Setup
+  const finishPrepare = async () => {
+    const { useGameStore } = await import("@/lib/game/store");
+    // Send deck card list to server for meta statistics tracking
+    try {
+      const state = useGameStore.getState();
+      const zones = state.zones?.[myPlayerKey];
+      const avatar = state.avatars?.[myPlayerKey];
+      if (zones && transport) {
+        type ZoneCard = { name?: string | null; type?: string | null };
+        const toDeckCard = (c: ZoneCard, zone: string) => ({
+          name: c.name || "",
+          type: c.type || "",
+          zone,
+        });
+        const deckCards = [
+          ...(avatar?.card
+            ? [{ name: avatar.card.name || "", type: avatar.card.type || "Avatar", zone: "avatar" }]
+            : []),
+          ...(zones.spellbook || []).map((c: ZoneCard) => toDeckCard(c, "spellbook")),
+          ...(zones.hand || []).map((c: ZoneCard) => toDeckCard(c, "spellbook")),
+          ...(zones.atlas || []).map((c: ZoneCard) => toDeckCard(c, "atlas")),
+        ];
+        transport.emit("submitConstructedDeck", { deck: deckCards });
+      }
+    } catch {
+      // Non-critical: don't block gameplay if deck emission fails
+    }
+
+    useGameStore.getState().setPhase("Setup");
+    onPrepareComplete();
+  };
 
   const prepareMyDeck = async () => {
     if (!selectedDeck) return;
@@ -93,44 +133,48 @@ export default function OnlineDeckSelector({
 
     try {
       const { loadDeckFor } = await import("@/lib/game/deckLoader");
-      const { useGameStore } = await import("@/lib/game/store");
-
       const success = await loadDeckFor(
         myPlayerKey,
         selectedDeck,
         setDeckError
       );
+      if (success) await finishPrepare();
+    } catch {
+      setDeckError("Failed to load deck");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-      if (success) {
-        // Send deck card list to server for meta statistics tracking
-        try {
-          const state = useGameStore.getState();
-          const zones = state.zones?.[myPlayerKey];
-          const avatar = state.avatars?.[myPlayerKey];
-          if (zones && transport) {
-            type ZoneCard = { name?: string | null; type?: string | null };
-            const toDeckCard = (c: ZoneCard, zone: string) => ({
-              name: c.name || "",
-              type: c.type || "",
-              zone,
-            });
-            const deckCards = [
-              ...(avatar?.card
-                ? [{ name: avatar.card.name || "", type: avatar.card.type || "Avatar", zone: "avatar" }]
-                : []),
-              ...(zones.spellbook || []).map((c: ZoneCard) => toDeckCard(c, "spellbook")),
-              ...(zones.hand || []).map((c: ZoneCard) => toDeckCard(c, "spellbook")),
-              ...(zones.atlas || []).map((c: ZoneCard) => toDeckCard(c, "atlas")),
-            ];
-            transport.emit("submitConstructedDeck", { deck: deckCards });
-          }
-        } catch {
-          // Non-critical: don't block gameplay if deck emission fails
-        }
+  const prepareGuestDeck = async () => {
+    const url = guestUrl.trim();
+    if (!url) return;
 
-        useGameStore.getState().setPhase("Setup");
-        onPrepareComplete();
+    setIsLoading(true);
+    setDeckError(null);
+
+    try {
+      const res = await fetch("/api/guest/deck", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const unresolved = Array.isArray(data?.unresolved)
+          ? (data.unresolved as Array<{ name: string }>)
+              .map((c) => c.name)
+              .slice(0, 5)
+              .join(", ")
+          : "";
+        const msg =
+          typeof data?.error === "string" ? data.error : "Could not load deck";
+        setDeckError(unresolved ? `${msg}: ${unresolved}` : msg);
+        return;
       }
+      const { loadDeckFromData } = await import("@/lib/game/deckLoader");
+      const success = await loadDeckFromData(myPlayerKey, data, setDeckError);
+      if (success) await finishPrepare();
     } catch {
       setDeckError("Failed to load deck");
     } finally {
@@ -204,160 +248,199 @@ export default function OnlineDeckSelector({
         </p>
       </div>
 
-      <div className="space-y-4">
-        {/* Deck URL import inline panel - hidden for precon matches */}
-        {curiosaEnabled && !isPrecon && (
-          <div className="bg-zinc-900/60 ring-1 ring-zinc-700 rounded p-3 space-y-2">
-            <div className="text-sm font-medium">
-              Import from Curiosa or Four Cores
+      {isGuest ? (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              Load a deck from sorcerytcg.com or Four Cores
+            </label>
+            <input
+              className="w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
+              placeholder="https://sorcerytcg.com/decks/..."
+              value={guestUrl}
+              onChange={(e) => setGuestUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void prepareGuestDeck();
+              }}
+              disabled={isLoading}
+              autoFocus
+            />
+            <p className="mt-2 text-xs opacity-60">
+              Playing as a guest: the list is loaded for this match only and
+              nothing is saved. Sign in to keep decks in your collection.
+            </p>
+          </div>
+
+          {deckError && (
+            <div className="text-red-400 text-sm bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">
+              {deckError}
             </div>
-            <div className="grid gap-2 sm:grid-cols-5">
-              <input
-                className="sm:col-span-3 w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
-                placeholder="Curiosa or Four Cores deck URL"
-                value={impUrl}
-                onChange={(e) => setImpUrl(e.target.value)}
-                disabled={impLoading || isLoading}
-              />
-              <input
-                className="sm:col-span-2 w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
-                placeholder="Optional name"
-                value={impName}
-                onChange={(e) => setImpName(e.target.value)}
-                disabled={impLoading || isLoading}
-              />
+          )}
+
+          <button
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded px-4 py-2 font-medium transition-colors"
+            onClick={prepareGuestDeck}
+            disabled={!guestUrl.trim() || isLoading}
+          >
+            {isLoading ? "Loading Deck..." : "Ready to Play"}
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* Deck URL import inline panel - hidden for precon matches */}
+          {curiosaEnabled && !isPrecon && (
+            <div className="bg-zinc-900/60 ring-1 ring-zinc-700 rounded p-3 space-y-2">
+              <div className="text-sm font-medium">
+                Import from Curiosa or Four Cores
+              </div>
+              <div className="grid gap-2 sm:grid-cols-5">
+                <input
+                  className="sm:col-span-3 w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
+                  placeholder="Curiosa or Four Cores deck URL"
+                  value={impUrl}
+                  onChange={(e) => setImpUrl(e.target.value)}
+                  disabled={impLoading || isLoading}
+                />
+                <input
+                  className="sm:col-span-2 w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
+                  placeholder="Optional name"
+                  value={impName}
+                  onChange={(e) => setImpName(e.target.value)}
+                  disabled={impLoading || isLoading}
+                />
+              </div>
+              <details className="bg-zinc-900/50 rounded ring-1 ring-zinc-700 p-2">
+                <summary className="cursor-pointer text-xs font-medium">
+                  Paste Curiosa TTS JSON (fallback if the deck is private)
+                </summary>
+                <textarea
+                  className="mt-2 w-full h-24 bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-2 py-2 text-white font-mono text-xs"
+                  placeholder="Paste the Tabletop Simulator JSON exported from Curiosa"
+                  value={impTts}
+                  onChange={(e) => setImpTts(e.target.value)}
+                  disabled={impLoading || isLoading}
+                />
+              </details>
+              {impError && (
+                <div className="text-red-400 text-xs bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">
+                  {impError}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                  onClick={importFromCuriosa}
+                  disabled={
+                    (!impUrl.trim() && !impTts.trim()) || impLoading || isLoading
+                  }
+                >
+                  {impLoading ? "Importing..." : "Import"}
+                </button>
+              </div>
             </div>
-            <details className="bg-zinc-900/50 rounded ring-1 ring-zinc-700 p-2">
-              <summary className="cursor-pointer text-xs font-medium">
-                Paste Curiosa TTS JSON (fallback if the deck is private)
-              </summary>
-              <textarea
-                className="mt-2 w-full h-24 bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-2 py-2 text-white font-mono text-xs"
-                placeholder="Paste the Tabletop Simulator JSON exported from Curiosa"
-                value={impTts}
-                onChange={(e) => setImpTts(e.target.value)}
-                disabled={impLoading || isLoading}
-              />
-            </details>
-            {impError && (
-              <div className="text-red-400 text-xs bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">
-                {impError}
+          )}
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Choose Deck</label>
+            {/* Hide deck options for precon mode - only precon decks available */}
+            {!isPrecon && (
+              <div className="flex items-center justify-between mb-2 text-xs">
+                <span className="opacity-60">
+                  Your own decks are always shown.
+                </span>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="rounded"
+                    checked={includePublic}
+                    onChange={(e) => {
+                      const next = e.target.checked;
+                      setIncludePublic(next);
+                      try {
+                        localStorage.setItem(
+                          "sorcery:includePublicDecks",
+                          next ? "1" : "0"
+                        );
+                      } catch {}
+                    }}
+                  />
+                  Include precon decks
+                </label>
               </div>
             )}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-                onClick={importFromCuriosa}
-                disabled={
-                  (!impUrl.trim() && !impTts.trim()) || impLoading || isLoading
-                }
-              >
-                {impLoading ? "Importing..." : "Import"}
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium mb-2">Choose Deck</label>
-          {/* Hide deck options for precon mode - only precon decks available */}
-          {!isPrecon && (
-            <div className="flex items-center justify-between mb-2 text-xs">
-              <span className="opacity-60">
-                Your own decks are always shown.
-              </span>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  className="rounded"
-                  checked={includePublic}
-                  onChange={(e) => {
-                    const next = e.target.checked;
-                    setIncludePublic(next);
-                    try {
-                      localStorage.setItem(
-                        "sorcery:includePublicDecks",
-                        next ? "1" : "0"
-                      );
-                    } catch {}
-                  }}
-                />
-                Include precon decks
-              </label>
-            </div>
-          )}
-          {!decksLoaded ? (
-            <div className="w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-gray-400">
-              Loading decks...
-            </div>
-          ) : isPrecon ? (
-            /* Precon mode: only show precon decks */
-            <CustomSelect
-              className="w-full"
-              value={selectedDeck}
-              onChange={(v) => setSelectedDeck(v)}
-              disabled={isLoading}
-              placeholder={preconDecks.length > 0 ? "Select a precon deck..." : "No precon decks available"}
-              options={preconDecks.map((deck) => ({
-                value: deck.id,
-                label: deck.name,
-              }))}
-            />
-          ) : (
-            /* Normal mode: show user's decks and optionally public decks */
-            <CustomSelect
-              className="w-full"
-              value={selectedDeck}
-              onChange={(v) => setSelectedDeck(v)}
-              disabled={isLoading}
-              placeholder="Select a deck..."
-              options={[
-                ...myDecks.map((deck) => ({
+            {!decksLoaded ? (
+              <div className="w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-gray-400">
+                Loading decks...
+              </div>
+            ) : isPrecon ? (
+              /* Precon mode: only show precon decks */
+              <CustomSelect
+                className="w-full"
+                value={selectedDeck}
+                onChange={(v) => setSelectedDeck(v)}
+                disabled={isLoading}
+                placeholder={preconDecks.length > 0 ? "Select a precon deck..." : "No precon decks available"}
+                options={preconDecks.map((deck) => ({
                   value: deck.id,
-                  label: `${deck.name} (${deck.format})`,
-                })),
-                ...(includePublic
-                  ? publicDecks.map((deck) => ({
-                      value: deck.id,
-                      label: `[Precon] ${deck.name} (${deck.format})`,
-                    }))
-                  : []),
-              ]}
-            />
+                  label: deck.name,
+                }))}
+              />
+            ) : (
+              /* Normal mode: show user's decks and optionally public decks */
+              <CustomSelect
+                className="w-full"
+                value={selectedDeck}
+                onChange={(v) => setSelectedDeck(v)}
+                disabled={isLoading}
+                placeholder="Select a deck..."
+                options={[
+                  ...myDecks.map((deck) => ({
+                    value: deck.id,
+                    label: `${deck.name} (${deck.format})`,
+                  })),
+                  ...(includePublic
+                    ? publicDecks.map((deck) => ({
+                        value: deck.id,
+                        label: `[Precon] ${deck.name} (${deck.format})`,
+                      }))
+                    : []),
+                ]}
+              />
+            )}
+          </div>
+
+          {deckError && (
+            <div className="text-red-400 text-sm bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">
+              {deckError}
+            </div>
           )}
+
+          {/* Warning for precon decks in constructed mode (not for precon matches) */}
+          {isConstructed && !isPrecon && isPreconSelected && (
+            <div className="mt-2 text-amber-300 text-xs bg-amber-900/20 rounded px-3 py-2 ring-1 ring-amber-800">
+              You selected a Precon deck. These lists are for learning the game
+              and are not competitive constructed-legal.
+            </div>
+          )}
+
+          {/* Helpful info for precon matches */}
+          {isPrecon && (
+            <div className="mt-2 text-blue-300 text-xs bg-blue-900/20 rounded px-3 py-2 ring-1 ring-blue-800">
+              Precon Match: Both players use prebuilt element decks. Great for
+              learning the game!
+            </div>
+          )}
+
+          <button
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded px-4 py-2 font-medium transition-colors"
+            onClick={prepareMyDeck}
+            disabled={!selectedDeck || isLoading}
+          >
+            {isLoading ? "Loading Deck..." : "Ready to Play"}
+          </button>
         </div>
-
-        {deckError && (
-          <div className="text-red-400 text-sm bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">
-            {deckError}
-          </div>
-        )}
-
-        {/* Warning for precon decks in constructed mode (not for precon matches) */}
-        {isConstructed && !isPrecon && isPreconSelected && (
-          <div className="mt-2 text-amber-300 text-xs bg-amber-900/20 rounded px-3 py-2 ring-1 ring-amber-800">
-            You selected a Precon deck. These lists are for learning the game
-            and are not competitive constructed-legal.
-          </div>
-        )}
-
-        {/* Helpful info for precon matches */}
-        {isPrecon && (
-          <div className="mt-2 text-blue-300 text-xs bg-blue-900/20 rounded px-3 py-2 ring-1 ring-blue-800">
-            Precon Match: Both players use prebuilt element decks. Great for
-            learning the game!
-          </div>
-        )}
-
-        <button
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded px-4 py-2 font-medium transition-colors"
-          onClick={prepareMyDeck}
-          disabled={!selectedDeck || isLoading}
-        >
-          {isLoading ? "Loading Deck..." : "Ready to Play"}
-        </button>
-      </div>
+      )}
 
       <div className="mt-6 text-xs opacity-60 text-center">
         Waiting for other players to select their decks...

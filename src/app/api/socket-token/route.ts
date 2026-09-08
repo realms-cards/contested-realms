@@ -1,7 +1,16 @@
 import jwt from "jsonwebtoken";
 import { getServerAuthSession } from "@/lib/auth";
+import { readGuestSession } from "@/lib/guest/guest-session.server";
 
 export const dynamic = "force-dynamic";
+
+const TOKEN_HEADERS = {
+  "content-type": "application/json",
+  // Add browser-level caching as second layer of defense (in case localStorage fails)
+  // private: only browser can cache (not CDN), max-age=300: 5 minutes
+  // This dramatically reduces Vercel function invocations when localStorage fails
+  "cache-control": "private, max-age=300, stale-while-revalidate=60",
+};
 
 // GET /api/socket-token
 // Generate a long-lived JWT token for socket.io authentication
@@ -11,6 +20,21 @@ export async function GET() {
     const session = await getServerAuthSession();
 
     if (!session?.user) {
+      // Account-less players who joined through an invite link carry a signed
+      // guest cookie; the socket server treats `guest: true` ids as rating-less.
+      const guest = await readGuestSession();
+      const secret = process.env.NEXTAUTH_SECRET;
+      if (guest && secret) {
+        const token = jwt.sign(
+          { userId: guest.id, name: guest.name, guest: true },
+          secret,
+          { expiresIn: "24h" },
+        );
+        return new Response(JSON.stringify({ token }), {
+          status: 200,
+          headers: TOKEN_HEADERS,
+        });
+      }
       // Don't log 401s - they're expected for unauthenticated requests
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -54,15 +78,9 @@ export async function GET() {
     );
 
     // Success - no logging needed for normal flow
-    // Add browser-level caching as second layer of defense (in case localStorage fails)
-    // private: only browser can cache (not CDN), max-age=300: 5 minutes
-    // This dramatically reduces Vercel function invocations when localStorage fails
     return new Response(JSON.stringify({ token }), {
       status: 200,
-      headers: {
-        "content-type": "application/json",
-        "cache-control": "private, max-age=300, stale-while-revalidate=60",
-      },
+      headers: TOKEN_HEADERS,
     });
   } catch (e: unknown) {
     console.error("[socket-token] Error generating token:", e);

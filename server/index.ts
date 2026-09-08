@@ -113,6 +113,8 @@ interface NextAuthJwtPayload {
   uid?: string; // NextAuth format
   sub?: string; // Standard JWT format
   name?: string;
+  // Set by /api/socket-token for account-less players joining via invite link
+  guest?: boolean;
 }
 
 interface DraftSessionJoinPayload {
@@ -893,6 +895,7 @@ const {
   loadBotCardIdMapFn,
   port: PORT,
   isCpuPlayerId,
+  isGuestPlayerId,
   botInternalSecret: BOT_INTERNAL_SECRET,
   tournamentBroadcast,
   redisState, // For horizontal scaling - cross-instance lobby visibility
@@ -1100,6 +1103,12 @@ function isCpuPlayerId(id: string | null | undefined): boolean {
   return typeof id === "string" && id.startsWith("cpu_");
 }
 
+// Account-less players joining through an invite link (see /api/guest/session).
+// The prefix is minted by the Next.js API and can never collide with a cuid.
+function isGuestPlayerId(id: string | null | undefined): boolean {
+  return typeof id === "string" && id.startsWith("guest_");
+}
+
 // Returns true if there is at least one non-CPU (human) player in the lobby
 function lobbyHasHumanPlayers(lobby: LobbyState | null | undefined): boolean {
   if (!lobby || !lobby.playerIds || lobby.playerIds.size === 0) return false;
@@ -1215,7 +1224,14 @@ async function finalizeMatch(
   // This prevents penalizing players for opponent connection issues
   // Explicit forfeits always count regardless of turn
   const isEarlyDisconnect = isDisconnectReason && gameTurn < 5;
-  const isRatedResult = !isEarlyDisconnect;
+  // Guests have no account to rate, and a registered player should not gain
+  // or lose rating against an anonymous opponent.
+  const hasGuestPlayer =
+    (Array.isArray(match.playerIds) &&
+      match.playerIds.some((pid) => isGuestPlayerId(pid))) ||
+    isGuestPlayerId(winnerId) ||
+    isGuestPlayerId(loserId);
+  const isRatedResult = !isEarlyDisconnect && !hasGuestPlayer;
 
   if (isEarlyDisconnect) {
     console.log(
@@ -2425,6 +2441,7 @@ io.use((socket: SocketClient, next: (err?: Error) => void) => {
         // Support multiple JWT formats: socket-token API uses userId, NextAuth uses uid/sub
         id: payload?.userId || payload?.uid || payload?.sub || null,
         name: payload?.name,
+        guest: payload?.guest === true,
       };
       return next();
     }
@@ -2461,7 +2478,8 @@ io.use((socket: SocketClient, next: (err?: Error) => void) => {
 
 io.on("connection", async (socket: SocketClient) => {
   let authed = false;
-  let authUser: { id?: string; name?: string } | null = null;
+  let authUser: { id?: string; name?: string; guest?: boolean } | null =
+    null;
   // Track current draft session room for this socket (if any)
   let currentDraftSessionId: string | null = null;
   container.applyConnectionHandlers({
@@ -2528,7 +2546,9 @@ io.on("connection", async (socket: SocketClient) => {
     // Fetch the latest name from the database for authenticated users
     // Uses a short-lived cache (30s) to avoid excessive DB queries during rapid reconnects
     // This ensures profile name changes are reflected without JWT refresh
-    if (tokenId) {
+    // Guests have no User row: their name comes from the guest token instead.
+    const isGuest = authUser?.guest === true;
+    if (tokenId && !isGuest) {
       const cached = userNameCache.get(tokenId);
       if (cached && Date.now() - cached.ts < USER_NAME_CACHE_TTL_MS) {
         displayName = cached.name;
@@ -2642,7 +2662,7 @@ io.on("connection", async (socket: SocketClient) => {
 
     // Persist displayName to User.name in database for authenticated users
     // This ensures admin panel and patron marquee show correct names
-    if (tokenId && displayName && displayName !== "Player") {
+    if (tokenId && !isGuest && displayName && displayName !== "Player") {
       try {
         await prisma.user.update({
           where: { id: tokenId },

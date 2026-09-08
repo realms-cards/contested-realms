@@ -3,6 +3,7 @@
 import { Trophy, ExternalLink, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useOnline } from "@/app/online/online-context";
 import LobbyChatConsole from "@/components/chat/LobbyChatConsole";
@@ -21,6 +22,7 @@ import {
   normalizeCubeSummary,
   type CubeSummaryInput,
 } from "@/lib/cubes/normalizers";
+import { createGuestSession, useGuestSession } from "@/lib/guest/guestSession";
 import {
   useAvailableSets,
   buildDefaultPackCounts,
@@ -31,7 +33,13 @@ import {
   useSharedTournament,
   useSoatcStatus,
 } from "@/lib/hooks/useSoatcStatus";
-import { buildLobbyInviteUrl, getLobbyJoinId } from "@/lib/lobby-links";
+import {
+  buildLobbyInvitePath,
+  buildLobbyInviteUrl,
+  createInviteLobbyId,
+  getLobbyJoinId,
+  parseInviteFormat,
+} from "@/lib/lobby-links";
 import type {
   TournamentInfo as ProtocolTournamentInfo,
   SealedConfig,
@@ -217,6 +225,7 @@ function LobbyPageContent({
   const searchParams = useSearchParams();
   const {
     connected,
+    isGuest,
     lobby,
     match,
     me,
@@ -258,6 +267,67 @@ function LobbyPageContent({
   // Check for invite link params
   const inviteLobbyId = getLobbyJoinId(searchParams);
   const inviteTournamentId = searchParams?.get("tournament") ?? null;
+  const inviteFormat = parseInviteFormat(searchParams?.get("format"));
+
+  // Invite links work without an account: an unauthenticated visitor picks a
+  // name and continues as a guest (see /api/guest/session).
+  const { status: sessionStatus } = useSession();
+  const guestSession = useGuestSession();
+  const showGuestGate =
+    !!inviteLobbyId &&
+    sessionStatus === "unauthenticated" &&
+    guestSession.status === "ready" &&
+    !guestSession.guest;
+  const [guestName, setGuestName] = useState("");
+  const [guestJoining, setGuestJoining] = useState(false);
+  const [guestError, setGuestError] = useState<string | null>(null);
+  const invitePath = inviteLobbyId
+    ? buildLobbyInvitePath(inviteLobbyId, {
+        tournamentId: inviteTournamentId,
+        format: inviteFormat,
+      })
+    : "/online/lobby";
+  const signInHref = `/auth/signin?callbackUrl=${encodeURIComponent(invitePath)}`;
+  const continueAsGuest = async () => {
+    setGuestJoining(true);
+    setGuestError(null);
+    try {
+      await createGuestSession(guestName);
+    } catch (error) {
+      setGuestError(
+        error instanceof Error ? error.message : "Could not continue as guest",
+      );
+    } finally {
+      setGuestJoining(false);
+    }
+  };
+
+  // Shareable link for the current lobby (origin is only known in the browser)
+  const [origin, setOrigin] = useState("");
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const lobbyInviteUrl =
+    lobby && origin
+      ? buildLobbyInviteUrl(origin, lobby.id, {
+          format: lobby.plannedMatchType ?? null,
+        })
+      : "";
+  const copyLobbyInvite = async () => {
+    if (!lobbyInviteUrl) return;
+    try {
+      await navigator.clipboard.writeText(lobbyInviteUrl);
+      setInviteCopied(true);
+      window.setTimeout(() => setInviteCopied(false), 2000);
+    } catch {}
+  };
+  const showLobbyInvite =
+    !!lobby &&
+    lobby.status === "open" &&
+    lobby.visibility !== "tournament" &&
+    !lobby.soatcLeagueMatch?.isLeagueMatch &&
+    (lobby.players?.length ?? 0) < (lobby.maxPlayers || 2);
   const [showIneligibleModal, setShowIneligibleModal] = useState(false);
   const [ineligibleReason, setIneligibleReason] = useState<string>("");
   const [matchmakingNow, setMatchmakingNow] = useState(() => Date.now());
@@ -994,7 +1064,10 @@ function LobbyPageContent({
     }
     if (inviteJoinAttemptRef.current === inviteLobbyId) return;
     inviteJoinAttemptRef.current = inviteLobbyId;
-    joinLobby(inviteLobbyId).catch((error) => {
+    joinLobby(
+      inviteLobbyId,
+      inviteFormat ? { plannedMatchType: inviteFormat } : undefined,
+    ).catch((error) => {
       console.error("Failed to join invite lobby:", error);
       if (inviteJoinAttemptRef.current === inviteLobbyId) {
         inviteJoinAttemptRef.current = null;
@@ -1003,6 +1076,7 @@ function LobbyPageContent({
   }, [
     inviteLobbyId,
     inviteTournamentId,
+    inviteFormat,
     connected,
     me?.id,
     lobby?.id,
@@ -1299,11 +1373,103 @@ function LobbyPageContent({
   return (
     <OnlinePageShell>
       <div className="space-y-6">
+        {/* Invite link without an account: pick a name or sign in */}
+        {showGuestGate && (
+          <div className="rounded-xl bg-slate-900/60 ring-1 ring-sky-500/40 p-5 space-y-3">
+            <div className="text-lg font-semibold">
+              You&apos;ve been invited to a match
+            </div>
+            <p className="text-sm opacity-80">
+              Sign in to play with your saved decks, or jump in as a guest and
+              load a deck from sorcerytcg.com when the match starts.
+            </p>
+            <form
+              className="flex flex-col gap-2 sm:flex-row sm:items-center"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void continueAsGuest();
+              }}
+            >
+              <input
+                className="flex-1 rounded-lg bg-slate-800/80 ring-1 ring-slate-700 px-3 py-2 text-sm"
+                placeholder="Your name"
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                maxLength={24}
+                autoFocus
+                disabled={guestJoining}
+              />
+              <button
+                type="submit"
+                className="rounded-lg bg-sky-600/90 hover:bg-sky-600 disabled:opacity-50 px-4 py-2 text-sm font-semibold"
+                disabled={guestJoining || guestName.trim().length < 2}
+              >
+                {guestJoining ? "Joining..." : "Continue as guest"}
+              </button>
+              <Link
+                href={signInHref}
+                className="rounded-lg bg-slate-700/80 hover:bg-slate-700 px-4 py-2 text-sm font-semibold text-center"
+              >
+                Sign in
+              </Link>
+            </form>
+            {guestError && (
+              <div className="text-xs text-red-300 bg-red-900/20 ring-1 ring-red-800 rounded px-3 py-2">
+                {guestError}
+              </div>
+            )}
+          </div>
+        )}
+
+        {isGuest && (
+          <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 px-4 py-3 text-sm flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              Playing as guest{" "}
+              <span className="font-semibold">{me?.displayName}</span>. Guest
+              matches are unrated.
+            </div>
+            <Link
+              href={signInHref}
+              className="text-xs underline text-slate-300/80 hover:text-slate-100"
+            >
+              Sign in to use matchmaking and save decks
+            </Link>
+          </div>
+        )}
+
         {/* Quick Play / Matchmaking - show when not in a lobby, and either no match or user is not a player in the match (spectators should still see this) */}
-        {!lobby && (!match || !isPlayerInMatch) && (
+        {!isGuest && !lobby && (!match || !isPlayerInMatch) && (
           <MatchmakingPanel
             onCreateMatch={() => setCreateMatchOverlayOpen(true)}
+            onInviteFriend={() =>
+              router.push(buildLobbyInvitePath(createInviteLobbyId()))
+            }
           />
+        )}
+
+        {/* Shareable invite link for the current lobby */}
+        {showLobbyInvite && (
+          <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-2">
+            <div className="text-sm font-semibold">Invite link</div>
+            <div className="text-xs opacity-70">
+              Anyone with this link can join this lobby - no account needed.
+            </div>
+            <div className="flex gap-2">
+              <input
+                readOnly
+                className="flex-1 min-w-0 rounded-lg bg-slate-800/80 ring-1 ring-slate-700 px-3 py-2 text-xs font-mono"
+                value={lobbyInviteUrl}
+                onFocus={(e) => e.currentTarget.select()}
+              />
+              <button
+                className="rounded-lg bg-sky-600/90 hover:bg-sky-600 px-4 py-2 text-xs font-semibold shrink-0"
+                onClick={() => void copyLobbyInvite()}
+                disabled={!lobbyInviteUrl}
+              >
+                {inviteCopied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Match Controls - show only when user is actually a player in the match (not spectator) */}

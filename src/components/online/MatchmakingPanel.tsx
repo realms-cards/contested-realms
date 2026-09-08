@@ -7,10 +7,12 @@ import { isFeatureEnabled } from "@/lib/config/features";
 
 interface MatchmakingPanelProps {
   onCreateMatch?: () => void;
+  onInviteFriend?: () => void;
 }
 
 export default function MatchmakingPanel({
   onCreateMatch,
+  onInviteFriend,
 }: MatchmakingPanelProps) {
   const {
     matchmaking,
@@ -136,6 +138,19 @@ export default function MatchmakingPanel({
           Constructed • Sealed • Draft
         </div>
       </button>
+
+      {/* Card 3b: Invite a friend - private lobby reachable by link, no account needed */}
+      {onInviteFriend && (
+        <button
+          onClick={onInviteFriend}
+          className="flex-1 rounded-xl bg-gradient-to-br from-sky-600/80 to-indigo-700/60 ring-1 ring-sky-500/40 flex flex-col items-center justify-center p-3 hover:from-sky-600 hover:to-indigo-700 transition-colors"
+        >
+          <div className="text-sm font-semibold text-white">Invite a Friend</div>
+          <div className="text-[10px] text-sky-100/80">
+            Share a link • No account needed
+          </div>
+        </button>
+      )}
 
       {/* Card 4: Tutorial - shown when feature-gated */}
       {isFeatureEnabled("tutorialMode") && (

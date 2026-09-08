@@ -79,6 +79,17 @@ function validateDuplicatorDeck(
   return { valid: true };
 }
 
+/**
+ * Deck payload as served by GET /api/decks/[id] (and /api/guest/deck for
+ * account-less players loading a sorcerytcg.com list on the fly).
+ */
+export interface DeckLoadPayload {
+  spellbook?: CardRef[];
+  atlas?: CardRef[];
+  collection?: CardRef[];
+  champion?: { cardId: number; name: string; slug?: string | null } | null;
+}
+
 export async function loadDeckFor(
   who: "p1" | "p2",
   deckId: string,
@@ -96,23 +107,38 @@ export async function loadDeckFor(
       return false;
     }
 
-    const data = await res.json();
+    const data = (await res.json()) as DeckLoadPayload;
+    return loadDeckFromData(who, data, setError);
+  } catch {
+    setError("Error loading deck");
+    return false;
+  }
+}
 
+/**
+ * Validate an already-fetched deck payload and seed the store for `who`
+ * (libraries, avatar, opening hand). Shared by saved decks and guest imports.
+ */
+export async function loadDeckFromData(
+  who: "p1" | "p2",
+  data: DeckLoadPayload,
+  setError: (error: string) => void,
+): Promise<boolean> {
+  try {
     // DEBUG: Log API response to see if thresholds are included
     console.log(
       `[loadDeckFor] ${who} API response atlas sites:`,
       (data?.atlas || [])
-        .filter((c: { type?: string }) =>
-          c?.type?.toLowerCase().includes("site"),
-        )
-        .map((c: { name?: string; thresholds?: unknown }) => ({
-          name: c?.name,
-          thresholds: c?.thresholds,
-        })),
+        .filter((c) => c?.type?.toLowerCase().includes("site"))
+        .map((c) => ({ name: c?.name, thresholds: c?.thresholds })),
     );
 
     // Pre-cache card images in the background for offline play
-    preCacheDeckFromResponse(data);
+    preCacheDeckFromResponse({
+      spellbook: data.spellbook,
+      atlas: data.atlas,
+      champion: data.champion ?? undefined,
+    });
 
     // Load and enrich cards with full metadata from service worker cache
     let rawSpellbook: CardRef[] = Array.isArray(data?.spellbook)

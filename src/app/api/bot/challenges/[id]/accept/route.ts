@@ -69,7 +69,9 @@ export async function POST(
       );
     }
 
-    // Generate a unique lobby ID for the match
+    // Generate a unique lobby ID for the match. Nothing is created here: the
+    // socket server materializes `discord-` lobbies on demand when the first
+    // player opens the invite link (see isOnDemandLobbyId in the lobby feature).
     const lobbyId = `discord-${randomBytes(8).toString("hex")}`;
     const baseUrl = process.env.NEXTAUTH_URL || "https://realms.cards";
 

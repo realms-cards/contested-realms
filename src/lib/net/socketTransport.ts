@@ -1063,8 +1063,12 @@ export class SocketTransport implements GameTransport {
     // tab keeps (or yields) leadership correctly across SPA mount/unmount cycles.
   }
 
-  async joinLobby(lobbyId?: string): Promise<{ lobbyId: string }> {
+  async joinLobby(
+    lobbyId?: string,
+    options?: { plannedMatchType?: "constructed" | "sealed" | "draft" },
+  ): Promise<{ lobbyId: string }> {
     const s = this.requireSocket();
+    const plannedMatchType = options?.plannedMatchType;
 
     return new Promise((resolve) => {
       const onJoin = (payload: unknown) => {
@@ -1074,7 +1078,10 @@ export class SocketTransport implements GameTransport {
         resolve({ lobbyId: parsed.lobby.id });
       };
       s.on("joinedLobby", onJoin);
-      s.emit("joinLobby", Protocol.JoinLobbyPayload.parse({ lobbyId }));
+      s.emit(
+        "joinLobby",
+        Protocol.JoinLobbyPayload.parse({ lobbyId, plannedMatchType }),
+      );
     });
   }
 

@@ -56,12 +56,17 @@ export type OnlineContextValue = {
   connected: boolean;
   displayName: string;
   setDisplayName: () => void;
+  /** Account-less player who joined through an invite link */
+  isGuest: boolean;
   me: PlayerInfo | null;
   lobby: LobbyInfo | null;
   match: MatchInfo | null;
   ready: boolean;
   toggleReady: () => void;
-  joinLobby: (id?: string) => Promise<void>;
+  joinLobby: (
+    id?: string,
+    options?: { plannedMatchType?: "constructed" | "sealed" | "draft" },
+  ) => Promise<void>;
   createLobby: (options?: {
     name?: string;
     visibility?: LobbyVisibility;
