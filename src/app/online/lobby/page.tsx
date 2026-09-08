@@ -269,12 +269,12 @@ function LobbyPageContent({
   const inviteTournamentId = searchParams?.get("tournament") ?? null;
   const inviteFormat = parseInviteFormat(searchParams?.get("format"));
 
-  // Invite links work without an account: an unauthenticated visitor picks a
-  // name and continues as a guest (see /api/guest/session).
+  // Online play works without an account: an unauthenticated visitor picks a
+  // name and continues as a guest (see /api/guest/session). Guests can browse
+  // the lobby, join open games and invite links; matchmaking needs an account.
   const { status: sessionStatus } = useSession();
   const guestSession = useGuestSession();
   const showGuestGate =
-    !!inviteLobbyId &&
     sessionStatus === "unauthenticated" &&
     guestSession.status === "ready" &&
     !guestSession.guest;
@@ -1377,11 +1377,14 @@ function LobbyPageContent({
         {showGuestGate && (
           <div className="rounded-xl bg-slate-900/60 ring-1 ring-sky-500/40 p-5 space-y-3">
             <div className="text-lg font-semibold">
-              You&apos;ve been invited to a match
+              {inviteLobbyId
+                ? "You\u2019ve been invited to a match"
+                : "Play online"}
             </div>
             <p className="text-sm opacity-80">
-              Sign in to play with your saved decks, or jump in as a guest and
-              load a deck from sorcerytcg.com when the match starts.
+              Sign in to play with your saved decks and matchmaking, or
+              continue as a guest: join open games or invite links and play
+              with a precon or a deck loaded from sorcerytcg.com.
             </p>
             <form
               className="flex flex-col gap-2 sm:flex-row sm:items-center"
@@ -1438,7 +1441,7 @@ function LobbyPageContent({
         )}
 
         {/* Quick Play / Matchmaking - show when not in a lobby, and either no match or user is not a player in the match (spectators should still see this) */}
-        {!isGuest && !lobby && (!match || !isPlayerInMatch) && (
+        {!lobby && (!match || !isPlayerInMatch) && (
           <MatchmakingPanel
             onCreateMatch={() => setCreateMatchOverlayOpen(true)}
             onInviteFriend={() =>

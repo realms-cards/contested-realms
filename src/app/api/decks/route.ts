@@ -58,16 +58,12 @@ export async function GET() {
   const authStart = performance.now();
   const session = await getServerAuthSession();
   const authTime = performance.now() - authStart;
-  if (!session?.user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-    });
-  }
+  // Without a session (guests playing through an invite link) only the
+  // system precon decks are listed - they are all a guest can pick from.
+  const userId = session?.user?.id ?? null;
   try {
-    const userId = session.user.id;
-
     // Use Redis cache for the entire response (user-specific)
-    const cacheKey = CacheKeys.decks.list(userId);
+    const cacheKey = CacheKeys.decks.list(userId ?? "guest");
     const cacheStart = performance.now();
 
     const response = await withCache<DeckListResponse>(
@@ -76,7 +72,8 @@ export async function GET() {
         // Run both deck queries in parallel for better performance
         const [myDecks, publicDecks] = await Promise.all([
           // Get user's own decks (both public and private)
-          prisma.deck.findMany({
+          userId
+            ? prisma.deck.findMany({
             where: { userId },
             orderBy: { updatedAt: "desc" },
             select: {
@@ -88,7 +85,8 @@ export async function GET() {
               curiosaSourceId: true,
               updatedAt: true,
             },
-          }),
+          })
+            : Promise.resolve([]),
           // Get precon decks only (from system user public-decks@system.local)
           // User's own public decks are already included in myDecks
           prisma.deck.findMany({

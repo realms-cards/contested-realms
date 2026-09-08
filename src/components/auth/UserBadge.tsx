@@ -21,6 +21,7 @@ import { FEATURE_CARD_SLEEVES } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useLoadingContext } from "@/lib/contexts/LoadingContext";
 import { useGameStore } from "@/lib/game/store";
+import { useGuestSession } from "@/lib/guest/guestSession";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
@@ -43,6 +44,8 @@ export default function UserBadge({
   const { isLoading: isGlobalLoading } = useLoadingContext();
   const { data: session, status, update: updateSession } = useSession();
   const user = session?.user;
+  const guestSession = useGuestSession();
+  const guest = status === "unauthenticated" ? guestSession.guest : null;
   const userEmailVerifiedRaw =
     (user as { emailVerified?: string | Date | null } | undefined)
       ?.emailVerified ?? null;
@@ -394,18 +397,32 @@ export default function UserBadge({
     );
   }
 
-  // Not authenticated: reuse AuthButton
+  // Not authenticated: reuse AuthButton (plus the guest name when playing as one)
   if (!user?.id) {
+    const guestChip = guest ? (
+      <span
+        className="rounded-full bg-slate-800/90 ring-1 ring-slate-700 px-3 py-1 text-xs text-slate-200 whitespace-nowrap"
+        title="Playing as a guest - sign in to save decks and use matchmaking"
+      >
+        Guest · {guest.name}
+      </span>
+    ) : null;
     if (variant === "floating") {
       return (
         <div
-          className={`pointer-events-auto fixed top-3 right-4 z-[70] ${className}`}
+          className={`pointer-events-auto fixed top-3 right-4 z-[70] flex items-center gap-2 ${className}`}
         >
+          {guestChip}
           <AuthButton variant="floating" />
         </div>
       );
     }
-    return <AuthButton className={className} />;
+    return (
+      <div className={`flex items-center gap-2 ${className}`}>
+        {guestChip}
+        <AuthButton />
+      </div>
+    );
   }
 
   const shouldShowPresence = showPresence && !!onlineCtx;

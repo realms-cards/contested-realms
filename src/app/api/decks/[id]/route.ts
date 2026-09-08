@@ -27,12 +27,10 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Public decks (precons) are readable without a session so guests can
+  // load them for an invite-link match; private decks still need the owner.
   const session = await getServerAuthSession();
-  if (!session?.user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-    });
-  }
+  const viewerId = session?.user?.id ?? null;
   try {
     const { id } = await params;
     if (!id)
@@ -76,7 +74,7 @@ export async function GET(
     });
 
     // Allow access if it's the user's own deck OR if it's a public deck
-    if (!deck || (deck.userId !== session.user.id && !deck.isPublic)) {
+    if (!deck || (deck.userId !== viewerId && !deck.isPublic)) {
       return new Response(JSON.stringify({ error: "Not found" }), {
         status: 404,
       });
@@ -187,7 +185,7 @@ export async function GET(
         format: deck.format,
         isPublic: deck.isPublic,
         imported: deck.imported,
-        isOwner: deck.userId === session.user.id,
+        isOwner: viewerId !== null && deck.userId === viewerId,
         userName: deck.user?.name || "Unknown Player",
         championCardId: deck.championCardId,
         champion,

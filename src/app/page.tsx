@@ -104,20 +104,26 @@ export default function Home() {
           </AsciiPanel>
           */}
 
-          {session ? (
-            <AsciiPanel className="w-full p-5 md:p-6 justify-self-center">
-              <Link
-                href="/online/lobby"
-                className="group block hover:scale-[1.02] transition-transform duration-200"
-              >
-                <div className="flex items-center justify-center py-5 md:py-6">
-                  <h3 className="text-2xl font-semibold tracking-wide">
-                    Online Realms
-                  </h3>
+          {/* The lobby is open to everyone: guests can join games via open
+              lobbies or invite links, signing in unlocks decks + matchmaking */}
+          <AsciiPanel className="w-full p-5 md:p-6 justify-self-center">
+            <Link
+              href="/online/lobby"
+              className="group block hover:scale-[1.02] transition-transform duration-200"
+            >
+              <div className="flex items-center justify-center py-5 md:py-6">
+                <h3 className="text-2xl font-semibold tracking-wide">
+                  Online Realms
+                </h3>
+              </div>
+              {!session && (
+                <div className="text-center text-xs opacity-70 -mt-3 pb-2">
+                  Sign in or play as a guest
                 </div>
-              </Link>
-            </AsciiPanel>
-          ) : (
+              )}
+            </Link>
+          </AsciiPanel>
+          {!session && (
             <AsciiPanel className="w-full p-5 md:p-6 justify-self-center">
               <button
                 type="button"

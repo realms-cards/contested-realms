@@ -23,6 +23,7 @@ export default function MatchmakingPanel({
     lobby,
     match,
     players,
+    isGuest,
   } = useOnline();
 
   const isSearching = matchmaking.status === "searching";
@@ -78,66 +79,82 @@ export default function MatchmakingPanel({
         </div>
       </div>
 
-      {/* Card 2: Constructed Queue */}
-      <button
-        onClick={handleSearchClick}
-        className={`flex-1 rounded-xl ring-1 flex flex-col items-center justify-center p-3 transition-all duration-200 group ${
-          isConfirming
-            ? "bg-gradient-to-br from-amber-600/20 via-rose-950/55 to-slate-950/90 ring-amber-400/50 shadow-[0_0_18px_rgba(251,191,36,0.16)]"
-            : matchFound
-              ? "bg-gradient-to-br from-emerald-700/25 via-emerald-950/55 to-slate-950/90 ring-emerald-400/35 shadow-[0_0_16px_rgba(16,185,129,0.12)]"
-              : isSearching
-                ? "bg-gradient-to-br from-violet-700/20 via-violet-950/55 to-slate-950/90 ring-violet-400/35 shadow-[0_0_16px_rgba(139,92,246,0.14)]"
-                : "bg-gradient-to-br from-violet-950/40 to-slate-900/60 ring-violet-500/20 hover:ring-violet-400/35 hover:bg-white/5"
-        }`}
-      >
-        {isConfirming || matchFound ? (
-          <div className="flex items-center gap-2">
-            <div className="text-sm font-semibold text-white">
-              {isConfirming
-                ? `Confirm${confirmSeconds !== null ? ` • ${confirmSeconds}s` : ""}`
-                : "Match Ready"}
-            </div>
-            <X className="w-4 h-4 text-red-400 opacity-60 group-hover:opacity-100" />
+      {/* Card 2: Constructed Queue (rated - needs an account) */}
+      {isGuest ? (
+        <Link
+          href="/auth/signin?callbackUrl=%2Fonline%2Flobby"
+          className="flex-1 rounded-xl bg-gradient-to-br from-violet-950/30 to-slate-900/60 ring-1 ring-violet-500/10 flex flex-col items-center justify-center p-3 hover:bg-white/5 transition-colors"
+        >
+          <div className="text-sm font-semibold text-white/70">
+            Constructed Queue
           </div>
-        ) : isSearching ? (
-          <div className="flex items-center gap-2">
-            <div className="text-sm font-semibold text-white">Searching...</div>
-            <Loader2 className="w-4 h-4 text-violet-300 animate-spin" />
-            <X className="w-4 h-4 text-red-400 opacity-60 group-hover:opacity-100" />
+          <div className="text-[10px] text-violet-300/70">
+            Sign in to use matchmaking
           </div>
-        ) : (
-          <div>
-            <div className="text-sm font-semibold text-white">
-              Constructed Queue
-            </div>
-            <div className="text-[10px] text-violet-300/80">
-              {queueSize > 0 ? `${queueSize} waiting` : "Click to find match"}
-            </div>
-            {queueBySource ? (
-              <div className="text-[10px] text-violet-200/60 mt-1">
-                {queueBySource.web} web • {queueBySource.discord} discord
+        </Link>
+      ) : (
+        <button
+          onClick={handleSearchClick}
+          className={`flex-1 rounded-xl ring-1 flex flex-col items-center justify-center p-3 transition-all duration-200 group ${
+            isConfirming
+              ? "bg-gradient-to-br from-amber-600/20 via-rose-950/55 to-slate-950/90 ring-amber-400/50 shadow-[0_0_18px_rgba(251,191,36,0.16)]"
+              : matchFound
+                ? "bg-gradient-to-br from-emerald-700/25 via-emerald-950/55 to-slate-950/90 ring-emerald-400/35 shadow-[0_0_16px_rgba(16,185,129,0.12)]"
+                : isSearching
+                  ? "bg-gradient-to-br from-violet-700/20 via-violet-950/55 to-slate-950/90 ring-violet-400/35 shadow-[0_0_16px_rgba(139,92,246,0.14)]"
+                  : "bg-gradient-to-br from-violet-950/40 to-slate-900/60 ring-violet-500/20 hover:ring-violet-400/35 hover:bg-white/5"
+          }`}
+        >
+          {isConfirming || matchFound ? (
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-semibold text-white">
+                {isConfirming
+                  ? `Confirm${confirmSeconds !== null ? ` • ${confirmSeconds}s` : ""}`
+                  : "Match Ready"}
               </div>
-            ) : null}
-            {isSearching && queuePosition !== null ? (
-              <div className="text-[10px] text-violet-200/60 mt-1">
-                You are #{queuePosition + 1}
+              <X className="w-4 h-4 text-red-400 opacity-60 group-hover:opacity-100" />
+            </div>
+          ) : isSearching ? (
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-semibold text-white">Searching...</div>
+              <Loader2 className="w-4 h-4 text-violet-300 animate-spin" />
+              <X className="w-4 h-4 text-red-400 opacity-60 group-hover:opacity-100" />
+            </div>
+          ) : (
+            <div>
+              <div className="text-sm font-semibold text-white">
+                Constructed Queue
               </div>
-            ) : null}
-          </div>
-        )}
-      </button>
+              <div className="text-[10px] text-violet-300/80">
+                {queueSize > 0 ? `${queueSize} waiting` : "Click to find match"}
+              </div>
+              {queueBySource ? (
+                <div className="text-[10px] text-violet-200/60 mt-1">
+                  {queueBySource.web} web • {queueBySource.discord} discord
+                </div>
+              ) : null}
+              {isSearching && queuePosition !== null ? (
+                <div className="text-[10px] text-violet-200/60 mt-1">
+                  You are #{queuePosition + 1}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </button>
+      )}
 
-      {/* Card 3: Create Match */}
-      <button
-        onClick={onCreateMatch}
-        className="flex-1 rounded-xl bg-gradient-to-br from-green-600/80 to-green-700/60 ring-1 ring-green-500/40 flex flex-col items-center justify-center p-3 hover:from-green-600 hover:to-green-700 transition-colors"
-      >
-        <div className="text-sm font-semibold text-white">Create Match</div>
-        <div className="text-[10px] text-green-100/80">
-          Constructed • Sealed • Draft
-        </div>
-      </button>
+      {/* Card 3: Create Match (guests host through invite links instead) */}
+      {!isGuest && (
+        <button
+          onClick={onCreateMatch}
+          className="flex-1 rounded-xl bg-gradient-to-br from-green-600/80 to-green-700/60 ring-1 ring-green-500/40 flex flex-col items-center justify-center p-3 hover:from-green-600 hover:to-green-700 transition-colors"
+        >
+          <div className="text-sm font-semibold text-white">Create Match</div>
+          <div className="text-[10px] text-green-100/80">
+            Constructed • Sealed • Draft
+          </div>
+        </button>
+      )}
 
       {/* Card 3b: Invite a friend - private lobby reachable by link, no account needed */}
       {onInviteFriend && (
