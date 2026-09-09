@@ -1473,6 +1473,31 @@ export type PendingPiracy = {
   createdAt: number;
 };
 
+/**
+ * A spell discarded by piracy that the attacker may still cast this turn,
+ * ignoring threshold requirements ("You may cast each of those spells once
+ * this turn, ignoring threshold requirements").
+ *
+ * The card physically sits in `fromSeat`'s cemetery; the grant records that
+ * `granteeSeat` is allowed to cast that specific copy exactly once, and only
+ * while `turn` is still the current turn.
+ */
+export type PiracyGrant = {
+  id: string;
+  /** instanceId of the discarded card as it sits in `fromSeat`'s graveyard. */
+  instanceId: string;
+  card: CardRef;
+  /** Player allowed to cast it (the attacking minion's controller). */
+  granteeSeat: PlayerKey;
+  /** Player whose cemetery holds the card. */
+  fromSeat: PlayerKey;
+  /** Turn number the grant was issued on; it expires when that turn ends. */
+  turn: number;
+  used: boolean;
+  /** Name of the minion that granted it, for logging. */
+  sourceName: string;
+};
+
 // --- Artifact Cast State (Toolbox, Silver Bullet) ---------------------
 // Allows bearer to cast a spell from collection with rarity restriction
 export type ArtifactCastType = "toolbox" | "silver_bullet";
@@ -2691,6 +2716,13 @@ export type GameState = {
     discardCount: number;
   }) => void;
   dismissPiracy: () => void;
+  /** Spells the piracy ability left castable this turn (see PiracyGrant). */
+  piracyGrants: PiracyGrant[];
+  /** Cast a pirated spell out of the defender's cemetery onto a tile. */
+  castFromPiracyGrant: (
+    grantId: string,
+    targetTile: { x: number; y: number },
+  ) => void;
   // Generic auto-resolve confirmation (for silence effects)
   pendingAutoResolve: PendingAutoResolve | null;
   beginAutoResolve: (
@@ -2771,7 +2803,7 @@ export type GameState = {
   ) => CardRef | false;
   // Pending cast from Morgana/Omphalos hands (for tile targeting)
   pendingPrivateHandCast: {
-    kind: "morgana" | "omphalos";
+    kind: "morgana" | "omphalos" | "piracy";
     handId: string;
     cardIndex: number;
     card: CardRef;
@@ -2779,7 +2811,7 @@ export type GameState = {
   } | null;
   setPendingPrivateHandCast: (
     pending: {
-      kind: "morgana" | "omphalos";
+      kind: "morgana" | "omphalos" | "piracy";
       handId: string;
       cardIndex: number;
       card: CardRef;
@@ -3678,7 +3710,9 @@ export type ServerPatchT = Partial<{
   pendingInfiltrate: GameState["pendingInfiltrate"];
   activeInfiltrations: GameState["activeInfiltrations"];
   pendingMirrorRealm: GameState["pendingMirrorRealm"];
+  piracyGrants: GameState["piracyGrants"];
   __replaceKeys: string[];
+  __allowZoneSeats: PlayerKey[];
   // Snapshot timestamp for replay truncation on undo
   __snapshotTs: number;
 }>;

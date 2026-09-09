@@ -17,11 +17,19 @@ export default function PrivateHandTargetingOverlay() {
   if (!pendingPrivateHandCast) return null;
 
   const { card, kind, mustCastAtLocation } = pendingPrivateHandCast;
-  const sourceName = kind === "morgana" ? "Morgana le Fay" : "Omphalos";
+  const sourceName =
+    kind === "morgana"
+      ? "Morgana le Fay"
+      : kind === "piracy"
+        ? "Plunder"
+        : "Omphalos";
   const imageId = card.slug || String(card.cardId);
 
   // Build instruction text
   let instruction = "Click a tile to cast this card";
+  if (kind === "piracy") {
+    instruction = "Click a tile to cast this pirated spell (ignores threshold)";
+  }
   if (mustCastAtLocation) {
     instruction = "Click the Omphalos tile to summon this minion";
   }

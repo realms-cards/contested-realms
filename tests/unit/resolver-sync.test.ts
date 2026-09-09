@@ -519,3 +519,191 @@ describe("Deathrite triggers run on the card owner's client", () => {
     }
   });
 });
+
+describe("Piracy grants (Captain Baldassare / Sea Raider)", () => {
+  // "the defending player discards their topmost three spells. You may cast
+  // each of those spells once this turn, ignoring threshold requirements."
+  // Only the discard used to be implemented.
+  function setupPiracy(actor: "p1" | "p2" | null) {
+    const store = createGameStore();
+    const sent: Array<Record<string, unknown>> = [];
+    const state = store.getState();
+    state.setTransport(createRecordingTransport(sent));
+    state.setActorKey(actor);
+    store.setState({
+      zones: {
+        ...state.zones,
+        p2: {
+          ...state.zones.p2,
+          spellbook: [
+            card("Pirated One", 900, { type: "Magic", cost: 0 }),
+            card("Pirated Two", 901, { type: "Magic", cost: 0 }),
+            card("Pirated Three", 902, { type: "Magic", cost: 0 }),
+            card("Untouched", 903, { type: "Magic", cost: 0 }),
+          ],
+          graveyard: [],
+        },
+      },
+    } as unknown as Partial<GameState> as GameState);
+
+    store.getState().triggerPiracy({
+      source: {
+        at: "2,2" as CellKey,
+        index: 0,
+        instanceId: "baldassare_1",
+        owner: 1,
+        card: card("Captain Baldassare", 910),
+      },
+      attackerSeat: "p1",
+      discardCount: 3,
+    });
+    return { store, sent };
+  }
+
+  it("discards three spells to the defender's cemetery", () => {
+    const { store } = setupPiracy("p1");
+    const zones = store.getState().zones;
+    expect(zones.p2.spellbook.map((c) => c.name)).toEqual(["Untouched"]);
+    expect(zones.p2.graveyard.map((c) => c.name)).toEqual([
+      "Pirated One",
+      "Pirated Two",
+      "Pirated Three",
+    ]);
+  });
+
+  it("grants the attacker one cast of each discarded spell this turn", () => {
+    const { store } = setupPiracy("p1");
+    const grants = store.getState().piracyGrants;
+    expect(grants).toHaveLength(3);
+    for (const g of grants) {
+      expect(g.granteeSeat).toBe("p1");
+      expect(g.fromSeat).toBe("p2");
+      expect(g.used).toBe(false);
+      expect(g.turn).toBe(store.getState().turn);
+      expect(g.instanceId).toBeTruthy();
+    }
+  });
+
+  it("casts a granted spell out of the opponent's cemetery onto the board", () => {
+    const { store } = setupPiracy("p1");
+    const grant = store.getState().piracyGrants[0];
+
+    store.getState().castFromPiracyGrant(grant.id, { x: 1, y: 2 });
+
+    const after = store.getState();
+    const placed = after.permanents["1,2"] || [];
+    expect(placed).toHaveLength(1);
+    expect(placed[0].card.name).toBe("Pirated One");
+    // Cast by p1, but still p2's card: it must return to p2's cemetery.
+    expect(placed[0].owner).toBe(1);
+    expect(
+      (placed[0] as unknown as { originalOwnerSeat?: string })
+        .originalOwnerSeat,
+    ).toBe("p2");
+    // Gone from the cemetery it was cast from.
+    expect(after.zones.p2.graveyard.map((c) => c.name)).toEqual([
+      "Pirated Two",
+      "Pirated Three",
+    ]);
+  });
+
+  it("allows each granted spell only once", () => {
+    const { store } = setupPiracy("p1");
+    const grant = store.getState().piracyGrants[0];
+
+    store.getState().castFromPiracyGrant(grant.id, { x: 1, y: 2 });
+    expect(
+      store.getState().piracyGrants.find((g) => g.id === grant.id)?.used,
+    ).toBe(true);
+
+    // A second attempt must not place another copy.
+    store.getState().castFromPiracyGrant(grant.id, { x: 3, y: 2 });
+    expect(store.getState().permanents["3,2"] || []).toHaveLength(0);
+  });
+
+  it("ignores threshold requirements but still charges mana", () => {
+    const store = createGameStore();
+    const sent: Array<Record<string, unknown>> = [];
+    const state = store.getState();
+    state.setTransport(createRecordingTransport(sent));
+    state.setActorKey("p1");
+
+    // A spell with an elemental threshold p1 cannot possibly meet.
+    const pricey = card("Costly Water Spell", 920, {
+      type: "Magic",
+      cost: 2,
+      thresholds: { air: 0, earth: 0, fire: 0, water: 3 },
+    });
+    store.setState({
+      zones: {
+        ...state.zones,
+        p2: { ...state.zones.p2, spellbook: [pricey], graveyard: [] },
+      },
+    } as unknown as Partial<GameState> as GameState);
+
+    store.getState().triggerPiracy({
+      source: {
+        at: "2,2" as CellKey,
+        index: 0,
+        instanceId: "baldassare_1",
+        owner: 1,
+        card: card("Captain Baldassare", 910),
+      },
+      attackerSeat: "p1",
+      discardCount: 3,
+    });
+
+    const grant = store.getState().piracyGrants[0];
+    const manaBefore = store.getState().players.p1.mana;
+
+    // No mana available -> refused (mana is still a cost).
+    store.getState().castFromPiracyGrant(grant.id, { x: 1, y: 2 });
+    expect(store.getState().permanents["1,2"] || []).toHaveLength(0);
+
+    // With mana available the threshold is NOT an obstacle.
+    store.setState({
+      players: {
+        ...store.getState().players,
+        p1: { ...store.getState().players.p1, mana: manaBefore + 5 },
+      },
+    } as unknown as Partial<GameState> as GameState);
+
+    store.getState().castFromPiracyGrant(grant.id, { x: 1, y: 2 });
+    expect(store.getState().permanents["1,2"] || []).toHaveLength(1);
+    // 2 mana paid.
+    expect(store.getState().players.p1.mana).toBe(manaBefore + 5 - 2);
+  });
+
+  it("refuses a cast by the player who was pirated", () => {
+    const { store } = setupPiracy("p2"); // we are the defender
+    const grant = store.getState().piracyGrants[0];
+    store.getState().castFromPiracyGrant(grant.id, { x: 1, y: 2 });
+    expect(store.getState().permanents["1,2"] || []).toHaveLength(0);
+  });
+
+  it("refuses a cast once the granting turn has passed", () => {
+    const { store } = setupPiracy("p1");
+    const grant = store.getState().piracyGrants[0];
+    store.setState({ turn: store.getState().turn + 1 } as unknown as Partial<
+      GameState
+    > as GameState);
+    store.getState().castFromPiracyGrant(grant.id, { x: 1, y: 2 });
+    expect(store.getState().permanents["1,2"] || []).toHaveLength(0);
+  });
+
+  it("expires all grants when the turn ends", () => {
+    const { store } = setupPiracy("p1");
+    expect(store.getState().piracyGrants).toHaveLength(3);
+    store.getState()._executeTurnTransition();
+    expect(store.getState().piracyGrants).toHaveLength(0);
+  });
+
+  it("sends the defender's cemetery change with __allowZoneSeats", () => {
+    const { store, sent } = setupPiracy("p1");
+    // triggerPiracy patches the defender's zones; the attacker is not that
+    // seat, so without the flag the server would strip the write.
+    const state = store.getState();
+    expect(state.zones.p2.graveyard).toHaveLength(3);
+    expect(sent.some((m) => m.type === "piracyTrigger")).toBe(true);
+  });
+});

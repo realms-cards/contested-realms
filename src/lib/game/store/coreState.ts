@@ -544,10 +544,14 @@ export const createCoreSlice: StateCreator<
 
       // Don't send turn in patch - server increments turn when currentPlayer changes
       // Include avatars to ensure correct position is broadcast (e.g., after Pathfinder move)
+      // Piracy grants ("may cast this turn") expire when the turn ends.
+      const piracyGrantsNext: GameState["piracyGrants"] = [];
+
       const base: ServerPatchT = {
         phase: nextPhase,
         currentPlayer: nextPlayer,
         hasDrawnThisTurn: false, // Reset draw tracking for new turn
+        piracyGrants: piracyGrantsNext,
         pathfinderUsed: pathfinderUsedNext,
         geomancerRubbleUsed: geomancerRubbleUsedNext,
         templeOfMolochUsed: templeOfMolochUsedNext,
@@ -567,6 +571,7 @@ export const createCoreSlice: StateCreator<
         hasDrawnThisTurn: false, // Reset draw tracking for new turn
         permanents,
         avatars: avatarsNext,
+        piracyGrants: piracyGrantsNext,
         pathfinderUsed: pathfinderUsedNext,
         geomancerRubbleUsed: geomancerRubbleUsedNext,
         templeOfMolochUsed: templeOfMolochUsedNext,
@@ -757,11 +762,15 @@ export const createCoreSlice: StateCreator<
     }
 
     // Build and send combined patch
+    // Piracy grants ("may cast this turn") expire when the turn ends.
+    const piracyGrantsNext: GameState["piracyGrants"] = [];
+
     const base: ServerPatchT = {
       phase: "Start",
       currentPlayer: nextPlayer,
       hasDrawnThisTurn: false,
       cardsDrawnThisTurn: { p1: 0, p2: 0 },
+      piracyGrants: piracyGrantsNext,
       players: { [nextKey]: playersNext[nextKey] } as GameState["players"],
       necromancerSkeletonUsed: necromancerSkeletonUsedNext,
       mephistophelesSummonUsed: mephistophelesSummonUsedNext,
@@ -785,6 +794,7 @@ export const createCoreSlice: StateCreator<
       currentPlayer: nextPlayer,
       hasDrawnThisTurn: false,
       cardsDrawnThisTurn: { p1: 0, p2: 0 },
+      piracyGrants: piracyGrantsNext,
       permanents,
       avatars: avatarsNext,
       players: playersNext,

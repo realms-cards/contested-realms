@@ -81,6 +81,7 @@ import PathfinderPlayOverlay from "@/components/game/PathfinderPlayOverlay";
 import KettletopLeprechaunOverlay from "@/components/game/KettletopLeprechaunOverlay";
 import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
+import PiracyCastOverlay from "@/components/game/PiracyCastOverlay";
 import PithImpOverlay from "@/components/game/PithImpOverlay";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
@@ -3719,6 +3720,7 @@ export default function OnlineMatchPage() {
               <PithImpOverlay />
               {/* Private hand targeting overlay (Morgana/Omphalos) */}
               <PrivateHandTargetingOverlay />
+              <PiracyCastOverlay />
               {/* Switch Site HUD Overlay (layout-level, not inside Canvas) */}
               <SwitchSiteHudOverlay />
             </>
