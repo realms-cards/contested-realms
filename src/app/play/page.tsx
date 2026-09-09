@@ -68,6 +68,7 @@ import OverlayBackdrop from "@/components/game/OverlayBackdrop";
 import PathfinderPlayOverlay from "@/components/game/PathfinderPlayOverlay";
 import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
+import PiracyCastOverlay from "@/components/game/PiracyCastOverlay";
 import PithImpOverlay from "@/components/game/PithImpOverlay";
 import PlacementDialog from "@/components/game/PlacementDialog";
 import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
@@ -1184,6 +1185,7 @@ export default function PlayPage() {
 
           {/* Private hand targeting overlay (Morgana/Omphalos) */}
           <PrivateHandTargetingOverlay />
+          <PiracyCastOverlay />
         </>
       )}
 

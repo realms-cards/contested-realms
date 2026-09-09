@@ -1327,6 +1327,11 @@ export const createNetworkSlice: StateCreator<
       } else if (replaceKeys.has("activeInfiltrations")) {
         next.activeInfiltrations = [];
       }
+      if (p.piracyGrants !== undefined) {
+        next.piracyGrants = p.piracyGrants;
+      } else if (replaceKeys.has("piracyGrants")) {
+        next.piracyGrants = [];
+      }
       // Pith Imp private hands (stolen cards)
       // CRITICAL: Do NOT clear based on replaceKeys - owner tracks locally, server snapshots would wipe it
       if (p.pithImpHands !== undefined) {
@@ -1836,6 +1841,9 @@ export const createNetworkSlice: StateCreator<
       }
       if (p.activeBetrayals !== undefined) {
         next.activeBetrayals = p.activeBetrayals;
+      }
+      if (p.piracyGrants !== undefined) {
+        next.piracyGrants = p.piracyGrants;
       }
       if (p.pendingInfiltrate !== undefined) {
         next.pendingInfiltrate = p.pendingInfiltrate;

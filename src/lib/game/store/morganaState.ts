@@ -385,6 +385,9 @@ export const createMorganaSlice: StateCreator<
       get().castFromMorganaHand(pending.handId, pending.cardIndex, targetTile);
     } else if (pending.kind === "omphalos") {
       get().castFromOmphalosHand(pending.handId, pending.cardIndex, targetTile);
+    } else if (pending.kind === "piracy") {
+      // handId carries the PiracyGrant id.
+      get().castFromPiracyGrant(pending.handId, targetTile);
     }
 
     set({ pendingPrivateHandCast: null } as Partial<GameState> as GameState);
