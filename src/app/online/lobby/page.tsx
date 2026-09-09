@@ -34,6 +34,8 @@ import {
   useSoatcStatus,
 } from "@/lib/hooks/useSoatcStatus";
 import {
+  LEGACY_LOBBY_JOIN_QUERY_PARAM,
+  LOBBY_INVITE_QUERY_PARAM,
   buildLobbyInvitePath,
   buildLobbyInviteUrl,
   createInviteLobbyId,
@@ -265,6 +267,7 @@ function LobbyPageContent({
   } = useOnline();
 
   // Check for invite link params
+  const inviteJoinAttemptRef = useRef<string | null>(null);
   const inviteLobbyId = getLobbyJoinId(searchParams);
   const inviteTournamentId = searchParams?.get("tournament") ?? null;
   const inviteFormat = parseInviteFormat(searchParams?.get("format"));
@@ -301,6 +304,25 @@ function LobbyPageContent({
       setGuestJoining(false);
     }
   };
+
+  // A disconnect drops the player from their lobby server-side, so the invite
+  // param has to stay in the URL while they are in that lobby - it is what
+  // puts them back after a refresh, keeping the link they shared valid. Once
+  // they leave, it has to go: `invite-` ids are materialized on demand, so the
+  // next refresh would silently recreate the lobby they just left.
+  const clearInviteParam = useCallback(() => {
+    if (!inviteLobbyId) return;
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.delete(LOBBY_INVITE_QUERY_PARAM);
+    params.delete(LEGACY_LOBBY_JOIN_QUERY_PARAM);
+    params.delete("format");
+    const query = params.toString();
+    router.replace(`/online/lobby${query ? `?${query}` : ""}`, {
+      scroll: false,
+    });
+    // Allow the same link to be opened again later in this session
+    inviteJoinAttemptRef.current = null;
+  }, [inviteLobbyId, router, searchParams]);
 
   // Shareable link for the current lobby (origin is only known in the browser)
   const [origin, setOrigin] = useState("");
@@ -813,7 +835,6 @@ function LobbyPageContent({
   );
 
   const prevLobbyIdRef = useRef<string | null>(null);
-  const inviteJoinAttemptRef = useRef<string | null>(null);
 
   // Overlay for configuring and confirming match start (host)
   const [configOpen, setConfigOpen] = useState(false);
@@ -1663,7 +1684,10 @@ function LobbyPageContent({
 
             setConfigOpen(true);
           }}
-          onLeaveLobby={leaveLobby}
+          onLeaveLobby={() => {
+            leaveLobby();
+            clearInviteParam();
+          }}
           onSetLobbyVisibility={(v) => setLobbyVisibility(v)}
           onResync={() => resync()}
           onAddCpuBot={addCpuBot}
@@ -1825,6 +1849,7 @@ function LobbyPageContent({
                     } finally {
                       try {
                         leaveLobby();
+                        clearInviteParam();
                       } catch {}
                       setLeaveConfirmOpen(false);
                     }
