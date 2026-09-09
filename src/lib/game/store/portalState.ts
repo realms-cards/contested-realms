@@ -381,17 +381,18 @@ export function findLastDuplicateIndex(rolls: number[]): number {
  * - Tiles 11-15: third row (y=2)
  * - Tiles 16-20: top row (y=3)
  *
- * Board is 5x4 (w=5, h=4), y=0 is bottom, y=3 is top.
+ * Board is 5x4 (w=5, h=4). Tiles are numbered left-to-right, top-to-bottom
+ * from P1's seat, matching the playmat: y=0 (P2's home row) holds tiles 1-5
+ * and y=3 (P1's home row) holds tiles 16-20. See `getCellNumber`.
  */
 export function tileNumberToCoords(
   tileNumber: number,
   boardWidth: number = 5
 ): [number, number] {
-  // tileNumber 1-20 maps to rows 0-3 from bottom
-  // Row 0 (bottom, y=0): tiles 1-5
+  // Row 0 (y=0, P2 home row): tiles 1-5
   // Row 1 (y=1): tiles 6-10
   // Row 2 (y=2): tiles 11-15
-  // Row 3 (top, y=3): tiles 16-20
+  // Row 3 (y=3, P1 home row): tiles 16-20
   const zeroIndexed = tileNumber - 1;
   const row = Math.floor(zeroIndexed / boardWidth);
   const col = zeroIndexed % boardWidth;

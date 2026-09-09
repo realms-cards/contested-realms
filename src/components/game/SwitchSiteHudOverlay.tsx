@@ -1,6 +1,7 @@
 "use client";
 
 import { useGameStore } from "@/lib/game/store";
+import { getCellNumber } from "@/lib/game/store/utils/boardHelpers";
 
 /**
  * HUD overlay shown when a site is selected for position switching.
@@ -60,7 +61,7 @@ export default function SwitchSiteHudOverlay() {
   // Source selection state (switchSiteSource is guaranteed non-null here due to early return)
   if (!switchSiteSource) return null;
   const { x, y } = switchSiteSource;
-  const cellNo = (board.size.h - 1 - y) * board.size.w + x + 1;
+  const cellNo = getCellNumber(x, y, board.size.w, board.size.h);
 
   const handleCancel = () => {
     setSwitchSiteSource(null);

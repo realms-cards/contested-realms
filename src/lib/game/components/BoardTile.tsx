@@ -30,6 +30,7 @@ import type {
   PlayerKey,
   PortalState,
 } from "@/lib/game/store/types";
+import { getCellNumber } from "@/lib/game/store/utils/boardHelpers";
 
 type BoardTileProps = {
   tileX: number;
@@ -221,7 +222,7 @@ export function BoardTile({
   castPlacementMode,
 }: BoardTileProps) {
   const items = permanents[tileKey] || [];
-  const cellNumber = (boardSize.h - 1 - tileY) * boardSize.w + tileX + 1;
+  const cellNumber = getCellNumber(tileX, tileY, boardSize.w, boardSize.h);
 
   return (
     <group position={position}>

@@ -10,12 +10,21 @@ export const parseCellKey = (key: CellKey): { x: number; y: number } => {
   };
 };
 
+/**
+ * Convert board coordinates to the 1-based tile number printed on the playmat
+ * and grid overlay. Tiles are numbered left-to-right, top-to-bottom as seen
+ * from P1's seat: row y=0 (P2's home row) is tiles 1-5, row y=3 (P1's home
+ * row) is tiles 16-20. This must match `public/playmat-overlay.svg`,
+ * `tileToCellKey` in the tutorial types, and `tileNumberToCoords` in
+ * portalState. The `height` parameter is accepted for call-site compatibility
+ * but is not needed by the mapping.
+ */
 export const getCellNumber = (
   x: number,
   y: number,
   width: number,
-  height: number,
-): number => (height - 1 - y) * width + x + 1;
+  _height?: number,
+): number => y * width + x + 1;
 
 export const seatFromOwner = (owner: 1 | 2): PlayerKey =>
   owner === 1 ? "p1" : "p2";
