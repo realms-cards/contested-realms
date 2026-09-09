@@ -7,6 +7,11 @@ import type {
   PlayerKey,
   ServerPatchT,
 } from "./types";
+import {
+  createPermanentDeltaPatch,
+  createPermanentsPatch,
+  type PermanentDeltaUpdate,
+} from "./utils/patchHelpers";
 
 function newPigsDeathId() {
   return `pigs_death_${Date.now().toString(36)}_${Math.random()
@@ -58,9 +63,33 @@ export const createPigsOfTheSounderSlice: StateCreator<
     deathLocation: CellKey;
     triggerCardName?: string; // Optional: defaults to "Pigs of the Sounder"
   }) => {
-    const id = newPigsDeathId();
     const { ownerSeat, deathLocation } = input;
     const triggerCardName = input.triggerCardName || "Pigs of the Sounder";
+
+    // This Deathrite reveals the top of the OWNER's spellbook, and spellbooks
+    // are private: only the owner's client holds the real cards. The trigger
+    // fires inside movePermanentToZone, i.e. on whichever client moved the
+    // permanent, so when the opponent destroyed this minion we are the wrong
+    // client. Hand the trigger to the owner instead of revealing from a copy
+    // we do not have.
+    const actorKey = get().actorKey;
+    if (actorKey !== null && actorKey !== ownerSeat) {
+      const requestTransport = get().transport;
+      if (requestTransport?.sendMessage) {
+        try {
+          requestTransport.sendMessage({
+            type: "pigsDeathriteRequest",
+            ownerSeat,
+            deathLocation,
+            triggerCardName,
+            ts: Date.now(),
+          } as unknown as CustomMessage);
+        } catch {}
+      }
+      return;
+    }
+
+    const id = newPigsDeathId();
     const triggerNameLower = triggerCardName.toLowerCase();
 
     // Look up what card this Deathrite should summon
@@ -170,15 +199,19 @@ export const createPigsOfTheSounderSlice: StateCreator<
     const ownerNum = ownerSeat === "p1" ? 1 : 2;
     const locationPerms = [...(permanents[deathLocation] || [])];
 
+    const summonUpdates: PermanentDeltaUpdate[] = [];
+
     for (const pig of pigsToSummon) {
-      locationPerms.push({
+      const summoned = {
         owner: ownerNum as 1 | 2,
         card: pig,
         tapped: false,
         instanceId: `pigs_${Date.now()}_${Math.random()
           .toString(36)
           .slice(2, 6)}`,
-      });
+      };
+      locationPerms.push(summoned);
+      summonUpdates.push({ at: deathLocation, entry: summoned });
     }
 
     const zonesNext = {
@@ -198,12 +231,17 @@ export const createPigsOfTheSounderSlice: StateCreator<
       pendingPigsOfTheSounder: { ...pending, phase: "complete" },
     } as Partial<GameState> as GameState);
 
-    // Send patches - send full zones for seat to prevent partial patch issues
+    // Send patches - full zones for the owning seat only, and a permanents
+    // delta limited to the death location so other tiles are not overwritten
+    const permanentsPatch =
+      (summonUpdates.length > 0
+        ? createPermanentDeltaPatch(summonUpdates)
+        : null) ?? createPermanentsPatch(permanentsNext, deathLocation);
     const patches: ServerPatchT = {
       zones: {
         [ownerSeat]: zonesNext[ownerSeat],
       } as unknown as ServerPatchT["zones"],
-      permanents: permanentsNext,
+      permanents: permanentsPatch.permanents,
     };
     get().trySendPatch(patches);
 

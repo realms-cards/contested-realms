@@ -8,6 +8,11 @@ import type {
   ServerPatchT,
   Zones,
 } from "./types";
+import {
+  createPermanentDeltaPatch,
+  type PermanentDeltaUpdate,
+} from "./utils/patchHelpers";
+import { ensurePermanentInstanceId } from "./utils/permanentHelpers";
 
 function newShapeshiftId() {
   return `shapeshift_${Date.now().toString(36)}_${Math.random()
@@ -254,25 +259,31 @@ export const createShapeshiftSlice: StateCreator<
     const _board = get().board;
     const permanents = { ...get().permanents };
 
+    let transformUpdate: PermanentDeltaUpdate | null = null;
+
     if (selectedCard && pending.targetMinion) {
       const { cellKey, index: targetIndex } = pending.targetMinion;
       const arr = permanents[cellKey];
 
       if (arr && arr[targetIndex]) {
-        const oldCard = arr[targetIndex].card as CardRef;
+        const target = arr[targetIndex];
+        const oldCard = target.card as CardRef;
+        const nextCard: CardRef = {
+          ...selectedCard,
+          instanceId: target.card.instanceId,
+          owner: target.card.owner,
+        };
         // Replace the card on the minion
         permanents[cellKey] = arr.map((p, i) =>
-          i === targetIndex
-            ? {
-                ...p,
-                card: {
-                  ...selectedCard,
-                  instanceId: p.card.instanceId,
-                  owner: p.card.owner,
-                },
-              }
-            : p,
+          i === targetIndex ? { ...p, card: nextCard } : p,
         );
+        const instanceId = ensurePermanentInstanceId(target);
+        if (instanceId) {
+          transformUpdate = {
+            at: cellKey,
+            entry: { instanceId, card: nextCard },
+          };
+        }
         transformedMessage = `${oldCard.name} transforms into ${selectedCard.name}!`;
 
         // The original minion card goes to graveyard
@@ -298,14 +309,19 @@ export const createShapeshiftSlice: StateCreator<
       pendingShapeshift: null,
     } as Partial<GameState> as GameState);
 
-    // Send zone patch
+    // Send zone patch plus a permanents delta for the transformed minion only
     const zonePatch: ServerPatchT = {
       zones: { [casterSeat]: zonesNext[casterSeat] } as Record<
         PlayerKey,
         Zones
       >,
-      permanents,
     };
+    const permanentsPatch = transformUpdate
+      ? createPermanentDeltaPatch([transformUpdate])
+      : null;
+    if (permanentsPatch?.permanents) {
+      zonePatch.permanents = permanentsPatch.permanents;
+    }
     get().trySendPatch(zonePatch);
 
     // Move spell to graveyard

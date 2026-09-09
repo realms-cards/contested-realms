@@ -8,6 +8,7 @@ import type {
   ServerPatchT,
 } from "./types";
 import { getHaystackLimit } from "./utils/boardHelpers";
+import { isEvilSubtypes } from "./utils/cardHelpers";
 
 function newBlackMassId() {
   return `black_mass_${Date.now().toString(36)}_${Math.random()
@@ -100,13 +101,6 @@ export const createBlackMassSlice: StateCreator<
       return;
     }
 
-    // Evil minion types: Demons, Undead, Monsters
-    const EVIL_SUBTYPES = ["demon", "undead", "monster"];
-    const isEvilSubtype = (subTypes: string) => {
-      const lower = subTypes.toLowerCase();
-      return EVIL_SUBTYPES.some((evil) => lower.includes(evil));
-    };
-
     // Filter using embedded CardRef data (no async fetch needed)
     const eligibleIndices: number[] = [];
     const allMinionIndices: number[] = [];
@@ -116,7 +110,7 @@ export const createBlackMassSlice: StateCreator<
       const isMinion = cardType.includes("minion");
       if (isMinion) {
         allMinionIndices.push(index);
-        if (isEvilSubtype(subTypes)) {
+        if (isEvilSubtypes(subTypes)) {
           eligibleIndices.push(index);
         }
       }

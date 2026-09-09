@@ -7,6 +7,10 @@ import type {
   PlayerKey,
   ServerPatchT,
 } from "./types";
+import {
+  createPermanentDeltaPatch,
+  createPermanentsPatch,
+} from "./utils/patchHelpers";
 import { triggerCardResolvers } from "./utils/resolverTriggers";
 // Board helper imports available if needed for future expansion
 // import { seatFromOwner, toCellKey } from "./utils/boardHelpers";
@@ -272,9 +276,10 @@ export const createArtifactCastSlice: StateCreator<
     const tileStack = [...(permanents[bearerTile] || [])];
 
     // Create the spell permanent with the caster's ownership
+    const spellOwner: 1 | 2 = casterSeat === "p1" ? 1 : 2;
     const spellPermanent = {
       card: removedSpell,
-      owner: casterSeat === "p1" ? 1 : 2,
+      owner: spellOwner,
       tapped: false,
       instanceId:
         removedSpell.instanceId ||
@@ -304,12 +309,25 @@ export const createArtifactCastSlice: StateCreator<
       pendingArtifactCast: { ...pending, phase: "complete" },
     } as Partial<GameState> as GameState);
 
-    // Send patches
+    // Send patches — only the caster's zones and the bearer's tile, so
+    // concurrent changes on other tiles are not overwritten
+    const permanentsPatch =
+      createPermanentDeltaPatch([
+        {
+          at: bearerTile,
+          entry: {
+            instanceId: spellPermanent.instanceId,
+            card: spellPermanent.card,
+            owner: spellPermanent.owner,
+            tapped: spellPermanent.tapped,
+          },
+        },
+      ]) ?? createPermanentsPatch(permanentsNext, bearerTile);
     const patches: ServerPatchT = {
       zones: {
         [casterSeat]: zonesNext[casterSeat],
       } as unknown as ServerPatchT["zones"],
-      permanents: permanentsNext as ServerPatchT["permanents"],
+      permanents: permanentsPatch.permanents,
     };
     get().trySendPatch(patches);
 

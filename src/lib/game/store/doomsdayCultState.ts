@@ -1,7 +1,9 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
-import type { CellKey, GameState, PlayerKey } from "./types";
+import type { CardRef, CellKey, GameState, PlayerKey } from "./types";
 import { seatFromOwner } from "./utils/boardHelpers";
+import { isEvilCard } from "./utils/cardHelpers";
+import { triggerCardResolvers } from "./utils/resolverTriggers";
 
 // Doomsday Cult continuous effect:
 // - Both players play with top spellbook card revealed
@@ -103,13 +105,8 @@ export const createDoomsdayCultSlice: StateCreator<
 
     const topCard = spellbook[0];
 
-    // Check if the card is Evil (has Evil subtype) - use embedded CardRef data
-    const subTypes = (topCard.subTypes || "").toLowerCase();
-
-    // Check for Evil subtype
-    const isEvil = subTypes.includes("evil");
-
-    if (!isEvil) {
+    // "Evil" is the Demon/Undead/Monster subtype group, not a literal subtype.
+    if (!isEvilCard(topCard)) {
       return { canCast: false, reason: "Top card is not Evil" };
     }
 
@@ -142,13 +139,50 @@ export const createDoomsdayCultSlice: StateCreator<
       [playerKey]: { ...zones[playerKey], spellbook },
     };
 
-    set({ zones: zonesNext } as Partial<GameState> as GameState);
+    // Pay the card's mana cost, as for any other cast.
+    const manaCost = card.cost ?? 0;
+    if (manaCost > 0) {
+      const availableMana = get().getAvailableMana(playerKey);
+      if (availableMana < manaCost) {
+        get().log(
+          `[${playerKey.toUpperCase()}] Not enough mana to cast ${card.name} (need ${manaCost}, have ${availableMana})`,
+        );
+        return false;
+      }
+    }
 
-    // Send patch - send full zones for seat to prevent partial patch issues
+    // Place the card on the board at the Doomsday Cult's location. Without
+    // this the card was only removed from the spellbook and never entered
+    // play, so it vanished from the game.
+    const owner = playerKey === "p1" ? 1 : 2;
+    const permanents = get().permanents;
+    const arr = [...(permanents[targetCell] || [])];
+    const newPermanent = {
+      card,
+      owner: owner as 1 | 2,
+      instanceId: `doomsday_${Date.now().toString(36)}_${Math.random()
+        .toString(36)
+        .slice(2, 6)}`,
+      tapped: false,
+      attachedTo: null,
+    };
+    arr.push(newPermanent);
+
+    set({
+      zones: zonesNext,
+      permanents: { ...permanents, [targetCell]: arr },
+    } as Partial<GameState> as GameState);
+
+    if (manaCost > 0) {
+      get().addMana(playerKey, -manaCost);
+    }
+
+    // Send only the caster's own zones and the affected permanents cell.
     get().trySendPatch({
       zones: {
         [playerKey]: zonesNext[playerKey],
       } as GameState["zones"],
+      permanents: { [targetCell]: arr } as GameState["permanents"],
     });
 
     get().log(
@@ -156,6 +190,17 @@ export const createDoomsdayCultSlice: StateCreator<
         card.name
       } from spellbook top (Doomsday Cult)`,
     );
+
+    // Run the card's own resolver (genesis abilities, spell flows, etc.)
+    triggerCardResolvers({
+      card: card as CardRef,
+      key: targetCell,
+      permanentIndex: arr.length - 1,
+      instanceId: newPermanent.instanceId,
+      owner: owner as 1 | 2,
+      ownerSeat: playerKey,
+      get,
+    });
 
     // Broadcast
     const transport = get().transport;
@@ -171,8 +216,6 @@ export const createDoomsdayCultSlice: StateCreator<
       } catch {}
     }
 
-    // The card needs to be played/cast - return the card so the caller can handle it
-    // This integrates with the existing casting system
     return card;
   },
 });

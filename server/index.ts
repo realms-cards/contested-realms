@@ -36,6 +36,7 @@ import {
   inferLoserId,
 } from "./modules/match-utils";
 import { createPlayerRegistry } from "./modules/player-registry";
+import { isResolverRelayMessage } from "./modules/resolver-messages";
 import { ensureCosts as ensureCostsTs } from "./modules/rules-costs";
 import { applyMovementAndCombat } from "./modules/rules-movement";
 import { applyTurnStart } from "./modules/rules-turn-start";
@@ -4610,72 +4611,7 @@ io.on("connection", async (socket: SocketClient) => {
           io.to(`spectate:${matchId}`).emit("message", out);
         } catch {}
       } catch {}
-    } else if (
-      type === "chaosTwisterBegin" ||
-      type === "chaosTwisterSelectMinion" ||
-      type === "chaosTwisterSelectSite" ||
-      type === "chaosTwisterMinigameResult" ||
-      type === "chaosTwisterResolve" ||
-      type === "chaosTwisterCancel" ||
-      type === "chaosTwisterSliderPosition" ||
-      type === "pithImpSteal" ||
-      type === "pithImpReturn" ||
-      type === "accusationBegin" ||
-      type === "accusationSelectCard" ||
-      type === "accusationResolve" ||
-      type === "accusationCancel" ||
-      type === "inquisitionBegin" ||
-      type === "inquisitionSelectCard" ||
-      type === "inquisitionResolve" ||
-      type === "inquisitionSkip" ||
-      type === "inquisitionCancel" ||
-      type === "inquisitionSummonOffer" ||
-      type === "inquisitionSummonAccept" ||
-      type === "inquisitionSummonPlace" ||
-      type === "inquisitionSummonDecline" ||
-      type === "legionOfGallBegin" ||
-      type === "legionOfGallConfirm" ||
-      type === "legionOfGallSelect" ||
-      type === "legionOfGallResolve" ||
-      type === "legionOfGallCancel" ||
-      type === "kingswoodPoachersBegin" ||
-      type === "kingswoodPoachersConfirm" ||
-      type === "kingswoodPoachersSelectSpellbook" ||
-      type === "kingswoodPoachersResolve" ||
-      type === "kingswoodPoachersCancel" ||
-      type === "searingTruthBegin" ||
-      type === "searingTruthTarget" ||
-      type === "searingTruthResolve" ||
-      type === "searingTruthCancel" ||
-      type === "interrogatorTrigger" ||
-      type === "interrogatorResolve" ||
-      type === "gardenOfEdenRegister" ||
-      type === "gardenOfEdenUnregister" ||
-      type === "kettletopBegin" ||
-      type === "kettletopResolve" ||
-      type === "kettletopCancel" ||
-      type === "feastForCrowsBegin" ||
-      type === "feastForCrowsName" ||
-      type === "feastForCrowsResolve" ||
-      type === "feastForCrowsCancel" ||
-      type === "merlinRegister" ||
-      type === "merlinUnregister" ||
-      type === "merlinCast" ||
-      type === "selfsameSimulacrumBegin" ||
-      type === "selfsameSimulacrumSelect" ||
-      type === "selfsameSimulacrumResolve" ||
-      type === "selfsameSimulacrumCancel" ||
-      type === "waveshaperBegin" ||
-      type === "waveshaperResolve" ||
-      type === "waveshaperCancel" ||
-      type === "frontierSettlersBegin" ||
-      type === "frontierSettlersSelectTarget" ||
-      type === "frontierSettlersResolve" ||
-      type === "frontierSettlersCancel" ||
-      type === "autoResolveBegin" ||
-      type === "autoResolveConfirm" ||
-      type === "autoResolveCancel"
-    ) {
+    } else if (isResolverRelayMessage(type)) {
       // Resolver messages - broadcast to match room
       try {
         const match = await getOrLoadMatch(matchId);

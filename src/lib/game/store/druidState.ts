@@ -15,6 +15,7 @@ import type {
 import { toCellKey } from "./utils/boardHelpers";
 import { prepareCardForSeat } from "./utils/cardHelpers";
 import { newPermanentInstanceId } from "./utils/idHelpers";
+import { createPermanentsPatch } from "./utils/patchHelpers";
 import { randomTilt } from "./utils/permanentHelpers";
 
 // Druid flipped art slug (the transformed/back side)
@@ -138,11 +139,17 @@ export const createDruidSlice: StateCreator<
     // Send patch to server
     const tr = state.transport;
     if (tr) {
+      // Patch rules: only the acting seat's avatar (a patch carrying the
+      // opponent's avatar is hard-rejected by the server) and only the cell the
+      // Bruin token was added to (the full map would clobber other tiles).
+      const permanentsPatch = createPermanentsPatch(permanentsNext, cellKey);
       const patch: ServerPatchT = {
-        permanents: permanentsNext,
-        avatars: avatarsNext,
+        avatars: { [who]: avatarsNext[who] } as GameState["avatars"],
         druidFlipped: druidFlippedNext,
       };
+      if (permanentsPatch?.permanents) {
+        patch.permanents = permanentsPatch.permanents;
+      }
       get().trySendPatch(patch);
 
       // Send toast notification

@@ -16,6 +16,10 @@ import { NECROMANCER_SKELETON_COST } from "./types";
 import { toCellKey } from "./utils/boardHelpers";
 import { prepareCardForSeat } from "./utils/cardHelpers";
 import { newPermanentInstanceId } from "./utils/idHelpers";
+import {
+  createPermanentDeltaPatch,
+  createPermanentsPatch,
+} from "./utils/patchHelpers";
 import { randomTilt } from "./utils/permanentHelpers";
 
 export const createInitialNecromancerSkeletonUsed =
@@ -149,9 +153,14 @@ export const createNecromancerSlice: StateCreator<
     // Send patch to server
     const tr = state.transport;
     if (tr) {
-      // Only send affected player's data to avoid overwriting opponent's state
+      // Only send affected player's data and the avatar's cell to avoid
+      // overwriting opponent's state or concurrent changes on other tiles
+      const permanentsPatch =
+        createPermanentDeltaPatch([
+          { at: cellKey, entry: skeletonPermanent },
+        ]) ?? createPermanentsPatch(permanentsNext, cellKey);
       const patch: ServerPatchT = {
-        permanents: permanentsNext,
+        permanents: permanentsPatch.permanents,
         players: { [who]: playersNext[who] } as GameState["players"],
         necromancerSkeletonUsed: necromancerSkeletonUsedNext,
       };

@@ -22,9 +22,47 @@ import {
   seatFromOwner,
   toCellKey,
 } from "./utils/boardHelpers";
+import { findPermanentByInstanceId } from "./utils/permanentHelpers";
 
 type StoreSet = Parameters<StateCreator<GameState>>[0];
 type StoreGet = Parameters<StateCreator<GameState>>[1];
+
+/**
+ * Message types that must NOT be processed when they come back to their own
+ * sender.
+ *
+ * The server relays custom messages to the whole match room (`io.to(room)`),
+ * so the sender receives its own message back. Most handlers guard themselves
+ * with `actorKey`, but these either re-open UI the sender already has or
+ * overwrite pending state the sender has since advanced. The sender has
+ * already applied the effect locally, so dropping the echo is always correct
+ * for them.
+ */
+const ECHO_SUPPRESSED_TYPES: ReadonlySet<string> = new Set([
+  "revealCards",
+  "piracyTrigger",
+  "chaosTwisterBegin",
+  "chaosTwisterSelectMinion",
+  "chaosTwisterSelectSite",
+  "chaosTwisterMinigameResult",
+  "kingswoodPoachersConfirm",
+  "motherNatureRevealBegin",
+  // Sender already applied these locally; the echo would only re-schedule the
+  // CPU auto-resolve timer / rewrite an assignment it just set.
+  "magicConfirm",
+  "combatAssign",
+]);
+
+/**
+ * True when this message is our own broadcast coming back from the server.
+ * The server stamps the sender's seat as `playerKey` on every relayed message.
+ */
+function isOwnEcho(msg: unknown, get: StoreGet): boolean {
+  const actorKey = get().actorKey;
+  if (!actorKey) return false; // hotseat: nothing is relayed at all
+  const from = (msg as { playerKey?: unknown }).playerKey;
+  return from === actorKey;
+}
 
 export function handleCustomMessage(
   msg: unknown,
@@ -34,6 +72,7 @@ export function handleCustomMessage(
   if (!msg || typeof msg !== "object") return;
   const t = (msg as { type?: unknown }).type;
   if (typeof t !== "string" || !t) return;
+  if (ECHO_SUPPRESSED_TYPES.has(t) && isOwnEcho(msg, get)) return;
   if (t === "boardPing") {
     const payload = msg as {
       id?: string;
@@ -2173,10 +2212,34 @@ export function handleCustomMessage(
 
     if (!id || !casterSeat || !victimSeat) return;
 
-    // Skip if we're the caster - we already handled it locally
+    // We are the caster. Either this is our own echo (we resolved it and
+    // already moved the spell), or the victim resolved the no-Evil case — in
+    // which case they could not move OUR spell (movePermanentToZone refuses a
+    // non-owner move), so we must send it to the graveyard here.
     const actorKey = get().actorKey;
     if (actorKey === casterSeat) {
+      const pending = get().pendingAccusation;
       set({ pendingAccusation: null } as Partial<GameState> as GameState);
+      const stillPending = pending && pending.id === id;
+      if (stillPending && !isOwnEcho(msg, get)) {
+        const msgSpell = (msg as { spell?: unknown }).spell as
+          | { at?: CellKey; index?: number; instanceId?: string | null }
+          | undefined;
+        const instanceId =
+          pending.spell.instanceId ?? msgSpell?.instanceId ?? null;
+        const located = instanceId
+          ? findPermanentByInstanceId(get().permanents, instanceId)
+          : null;
+        const at = located?.at ?? msgSpell?.at ?? pending.spell.at;
+        const index =
+          located?.index ??
+          (typeof msgSpell?.index === "number"
+            ? msgSpell.index
+            : pending.spell.index);
+        try {
+          get().movePermanentToZone(at, index, "graveyard");
+        } catch {}
+      }
       return;
     }
 
@@ -2198,12 +2261,12 @@ export function handleCustomMessage(
           c.name === selectedCard.name,
       );
 
+      // Only banish the card when it was actually found in (and removed from)
+      // hand — pushing it regardless duplicates a card that was never there.
       if (handIndex !== -1) {
         hand.splice(handIndex, 1);
+        banished.push(selectedCard);
       }
-
-      // Add to banished
-      banished.push(selectedCard);
 
       const zonesNext = {
         ...zones,
@@ -5362,6 +5425,44 @@ export function handleCustomMessage(
   }
 
   // --- Pigs of the Sounder / Squeakers Deathrite message handlers ---
+  if (t === "pigsDeathriteRequest") {
+    // The opponent destroyed our Pigs of the Sounder / Squeakers. The reveal
+    // reads our own spellbook, so the trigger has been handed to us here.
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const deathLocation = (msg as { deathLocation?: unknown }).deathLocation as
+      | CellKey
+      | undefined;
+    const triggerCardName = (msg as { triggerCardName?: unknown })
+      .triggerCardName as string | undefined;
+    if (!ownerSeat || !deathLocation) return;
+    if (get().actorKey !== ownerSeat) return;
+    try {
+      get().triggerPigsDeathrite({
+        ownerSeat,
+        deathLocation,
+        triggerCardName,
+      });
+    } catch {}
+    return;
+  }
+  if (t === "kettletopDeathriteRequest") {
+    // The opponent destroyed our Kettletop Leprechaun. Drawing the site reads
+    // our own atlas, so the trigger has been handed to us here.
+    const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as
+      | PlayerKey
+      | undefined;
+    const deathLocation = (msg as { deathLocation?: unknown }).deathLocation as
+      | CellKey
+      | undefined;
+    if (!ownerSeat || !deathLocation) return;
+    if (get().actorKey !== ownerSeat) return;
+    try {
+      get().triggerKettletopDeathrite({ ownerSeat, deathLocation });
+    } catch {}
+    return;
+  }
   if (t === "pigsDeathrite") {
     const id = (msg as { id?: unknown }).id as string | undefined;
     const ownerSeat = (msg as { ownerSeat?: unknown }).ownerSeat as

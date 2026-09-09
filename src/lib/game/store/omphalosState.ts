@@ -7,6 +7,10 @@ import type {
   PlayerKey,
   ServerPatchT,
 } from "./types";
+import {
+  createPermanentDeltaPatch,
+  createPermanentsPatch,
+} from "./utils/patchHelpers";
 import { triggerCardResolvers } from "./utils/resolverTriggers";
 
 function newOmphalosId() {
@@ -279,9 +283,12 @@ export const createOmphalosSlice: StateCreator<
       omphalosHands: updatedOmphalosHands,
     } as Partial<GameState> as GameState);
 
-    // Send patch
+    // Send patch — only the target tile, so concurrent changes elsewhere stay
+    const permanentsPatch =
+      createPermanentDeltaPatch([{ at: key, entry: newPermanent }]) ??
+      createPermanentsPatch(per, key);
     const patch: ServerPatchT = {
-      permanents: per,
+      permanents: permanentsPatch.permanents,
       omphalosHands: updatedOmphalosHands,
     };
     get().trySendPatch(patch);
@@ -364,9 +371,11 @@ export const createOmphalosSlice: StateCreator<
       omphalosHands: remainingOmphalosHands,
     } as Partial<GameState> as GameState);
 
-    // Send patch
+    // Send patch — only the owning seat's zones, never the opponent's
     const zonePatch: ServerPatchT = {
-      zones: zonesNext,
+      zones: {
+        [ownerSeat]: zonesNext[ownerSeat],
+      } as unknown as ServerPatchT["zones"],
       omphalosHands: remainingOmphalosHands,
     };
     get().trySendPatch(zonePatch);

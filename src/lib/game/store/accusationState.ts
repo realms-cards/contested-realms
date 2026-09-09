@@ -3,6 +3,7 @@ import type { CustomMessage } from "@/lib/net/transport";
 import { findInquisitionInCards } from "./inquisitionSummonState";
 import type { CardRef, CellKey, GameState, PlayerKey, Zones } from "./types";
 import { opponentSeat } from "./utils/boardHelpers";
+import { isEvilSubtypes } from "./utils/cardHelpers";
 
 function newAccusationId() {
   return `acc_${Date.now().toString(36)}_${Math.random()
@@ -90,19 +91,12 @@ export const createAccusationSlice: StateCreator<
     }
 
     // Check for Evil cards in hand
-    // Evil minion types: Demons, Undead, Monsters
-    const EVIL_SUBTYPES = ["demon", "undead", "monster"];
-    const isEvilSubtype = (subTypes: string) => {
-      const lower = subTypes.toLowerCase();
-      return EVIL_SUBTYPES.some((evil) => lower.includes(evil));
-    };
-
     // Check hand for Evil cards (use embedded subTypes from CardRef)
     const evilCardIndices: number[] = [];
     for (let i = 0; i < victimHand.length; i++) {
       const card = victimHand[i];
       const subTypes = card.subTypes || "";
-      if (isEvilSubtype(subTypes)) {
+      if (isEvilSubtypes(subTypes)) {
         evilCardIndices.push(i);
       }
     }
@@ -117,7 +111,7 @@ export const createAccusationSlice: StateCreator<
         const type = (perm.card?.type || "").toLowerCase();
         if (!type.includes("minion") && type !== "token") continue;
         const permSubTypes = perm.card?.subTypes || "";
-        if (isEvilSubtype(permSubTypes)) {
+        if (isEvilSubtypes(permSubTypes)) {
           hasEvilAlly = true;
           break;
         }
@@ -291,14 +285,22 @@ export const createAccusationSlice: StateCreator<
       } catch {}
     }
 
-    // Move spell to graveyard
-    try {
-      get().movePermanentToZone(
-        pending.spell.at,
-        pending.spell.index,
-        "graveyard",
-      );
-    } catch {}
+    // Move spell to graveyard.
+    // Online this must be done by the CASTER's client: the Accusation spell is
+    // the caster's permanent and `movePermanentToZone` refuses a non-owner move
+    // unless the mover is the current player. When the victim resolves (the
+    // no-Evil case) the caster performs the move on receipt of the relayed
+    // `accusationResolve` message instead. Hotseat (actorKey === null) does
+    // everything from the single client.
+    if (actorKey === null || actorKey === casterSeat) {
+      try {
+        get().movePermanentToZone(
+          pending.spell.at,
+          pending.spell.index,
+          "graveyard",
+        );
+      } catch {}
+    }
 
     // Broadcast resolution with full card data so victim can update their own zones
     const transport = get().transport;
@@ -312,6 +314,13 @@ export const createAccusationSlice: StateCreator<
           selectedCardIndex: pending.selectedCardIndex,
           // Include full card data so victim can add to their banished zone
           selectedCard,
+          // Location of the caster's Accusation permanent so the caster's client
+          // can send it to the graveyard when the victim resolved.
+          spell: {
+            at: pending.spell.at,
+            index: pending.spell.index,
+            instanceId: pending.spell.instanceId ?? null,
+          },
           ts: Date.now(),
         } as unknown as CustomMessage);
       } catch {}

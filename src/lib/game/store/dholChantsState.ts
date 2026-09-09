@@ -8,6 +8,12 @@ import type {
   ServerPatchT,
 } from "./types";
 import { seatFromOwner, getAdjacentCells } from "./utils/boardHelpers";
+import {
+  createPermanentDeltaPatch,
+  createPermanentsPatch,
+  type PermanentDeltaUpdate,
+} from "./utils/patchHelpers";
+import { bumpPermanentVersion } from "./utils/permanentHelpers";
 
 function newDholChantsId() {
   return `dhol_chants_${Date.now().toString(36)}_${Math.random()
@@ -207,14 +213,34 @@ export const createDholChantsSlice: StateCreator<
     const permanents = get().permanents;
     const permsCopy = { ...permanents };
 
+    const tapUpdates: PermanentDeltaUpdate[] = [];
+    const tappedCells: CellKey[] = [];
+
     for (const sel of selectedAllies) {
       const cellArr = [...(permsCopy[sel.at] || [])];
-      if (cellArr[sel.index]) {
-        cellArr[sel.index] = {
-          ...cellArr[sel.index],
+      const cur = cellArr[sel.index];
+      if (cur) {
+        // Tap merges are version-gated on the server, so the patch has to carry
+        // a bumped tapVersion or the tap is silently dropped.
+        const nextTapVersion =
+          Number(cur.tapVersion ?? 0) + (cur.tapped === true ? 0 : 1);
+        const next = bumpPermanentVersion({
+          ...cur,
           tapped: true,
-        };
+          tapVersion: nextTapVersion,
+        });
+        cellArr[sel.index] = next;
         permsCopy[sel.at] = cellArr;
+        if (!tappedCells.includes(sel.at)) tappedCells.push(sel.at);
+        tapUpdates.push({
+          at: sel.at,
+          entry: {
+            instanceId: next.instanceId ?? undefined,
+            tapped: next.tapped,
+            tapVersion: next.tapVersion,
+            version: next.version,
+          },
+        });
       }
     }
 
@@ -233,8 +259,12 @@ export const createDholChantsSlice: StateCreator<
       },
     } as Partial<GameState> as GameState);
 
-    // Send patches for tapped permanents
-    get().trySendPatch({ permanents: permsCopy });
+    // Send patches for tapped permanents — only the affected cells
+    if (tapUpdates.length > 0) {
+      const deltaPatch = createPermanentDeltaPatch(tapUpdates);
+      if (deltaPatch) get().trySendPatch(deltaPatch);
+      else get().trySendPatch(createPermanentsPatch(permsCopy, tappedCells));
+    }
 
     const allyNames = selectedAllies
       .map(

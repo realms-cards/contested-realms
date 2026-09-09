@@ -40,9 +40,30 @@ export const createKettletopLeprechaunSlice: StateCreator<
     ownerSeat: PlayerKey;
     deathLocation: CellKey;
   }) => {
-    const id = newKettletopId();
     const { ownerSeat, deathLocation } = input;
 
+    // This Deathrite draws from the OWNER's atlas, which is private: only the
+    // owner's client holds it. The trigger fires inside movePermanentToZone,
+    // i.e. on whichever client moved the permanent, so when the opponent
+    // destroyed this minion we are the wrong client. Hand the trigger to the
+    // owner rather than acting on an atlas we cannot see.
+    const actorKey = get().actorKey;
+    if (actorKey !== null && actorKey !== ownerSeat) {
+      const requestTransport = get().transport;
+      if (requestTransport?.sendMessage) {
+        try {
+          requestTransport.sendMessage({
+            type: "kettletopDeathriteRequest",
+            ownerSeat,
+            deathLocation,
+            ts: Date.now(),
+          } as unknown as CustomMessage);
+        } catch {}
+      }
+      return;
+    }
+
+    const id = newKettletopId();
     const zones = get().zones;
     const atlas = zones[ownerSeat]?.atlas || [];
 
@@ -134,9 +155,13 @@ export const createKettletopLeprechaunSlice: StateCreator<
       },
     } as Partial<GameState> as GameState);
 
-    // Send full zone patch for owner seat
+    // Send full zone patch for owner seat.
+    // The deathrite can be resolved by the client that killed the minion, so the
+    // patch must explicitly allow writing the owner's zones (otherwise it is
+    // stripped client-side / rejected server-side and the drawn site is lost).
     const zonePatch = createZonesPatchFor(zonesNext, ownerSeat);
     if (zonePatch) {
+      (zonePatch as Record<string, unknown>).__allowZoneSeats = [ownerSeat];
       get().trySendPatch(zonePatch);
     }
 

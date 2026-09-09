@@ -94,6 +94,11 @@ export function triggerCardResolvers(ctx: ResolverContext): boolean {
       get().beginCorpseExplosion({ spell: spellRef, casterSeat: ownerSeat });
       triggered = true;
     } catch {}
+  } else if (cardNameLower === "demonic contract") {
+    try {
+      get().beginDemonicContract({ spell: spellRef, casterSeat: ownerSeat });
+      triggered = true;
+    } catch {}
   } else if (cardNameLower === "black mass") {
     try {
       get().beginBlackMass({ spell: spellRef, casterSeat: ownerSeat });

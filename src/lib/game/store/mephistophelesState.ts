@@ -1,7 +1,18 @@
 import type { StateCreator } from "zustand";
 import { isMephistopheles } from "@/lib/game/avatarAbilities";
 import type { CustomMessage } from "@/lib/net/transport";
-import type { CardRef, CellKey, GameState, PlayerKey } from "./types";
+import type {
+  CardRef,
+  CellKey,
+  GameState,
+  PlayerKey,
+  ServerPatchT,
+} from "./types";
+import {
+  createPermanentDeltaPatch,
+  createPermanentsPatch,
+} from "./utils/patchHelpers";
+import { ensurePermanentInstanceId } from "./utils/permanentHelpers";
 
 function newMephistophelesId() {
   return `meph_${Date.now().toString(36)}_${Math.random()
@@ -244,10 +255,30 @@ export const createMephistophelesSlice: StateCreator<
           pendingMephistopheles: null,
         } as Partial<GameState> as GameState);
 
-        get().trySendPatch({
-          permanents: updatedPerms,
-          avatars: updatedAvatars,
-        });
+        // Patch rules: only the acting seat's avatar (sending both avatars is
+        // hard-rejected by the server), and only the affected permanents cell.
+        // Locally splicing Mephistopheles out does NOT delete it server-side —
+        // the merge preserves base items missing from the patch — so the removal
+        // must be expressed explicitly via `__remove: true`.
+        const mephInstanceId = mephPerm
+          ? ensurePermanentInstanceId(mephPerm)
+          : null;
+        const permanentsPatch = mephInstanceId
+          ? createPermanentDeltaPatch([
+              {
+                at: spell.at,
+                entry: { instanceId: mephInstanceId },
+                remove: true,
+              },
+            ])
+          : createPermanentsPatch(updatedPerms, spell.at);
+        const patch: ServerPatchT = {
+          avatars: { [casterSeat]: newAvatarState } as GameState["avatars"],
+        };
+        if (permanentsPatch?.permanents) {
+          patch.permanents = permanentsPatch.permanents;
+        }
+        get().trySendPatch(patch);
 
         get().log(
           `[${casterSeat.toUpperCase()}] Mephistopheles becomes your new Avatar!`,
@@ -372,18 +403,26 @@ export const createMephistophelesSlice: StateCreator<
     // Add to permanents at target cell
     const permanents = state.permanents;
     const cellPerms = [...(permanents[targetCell] || [])];
-    cellPerms.push({
-      owner: ownerNum,
+    const summonInstanceId =
+      card.instanceId ||
+      `summon_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    // Summoned minions enter untapped with summoning sickness, matching every
+    // other summon path (lilithState / motherNatureState).
+    const newPermanent = {
+      owner: ownerNum as 1 | 2,
       card: {
         ...card,
-        instanceId:
-          card.instanceId ||
-          `summon_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        instanceId: summonInstanceId,
       },
-      offset: [0, 0], // Center on tile
-      tapped: true, // Summoned minions enter tapped (summoning sickness)
+      instanceId: summonInstanceId,
+      offset: [0, 0] as [number, number], // Center on tile
+      tapped: false,
+      tapVersion: 0,
+      version: 0,
       damage: 0,
-    });
+      summoningSickness: true,
+    };
+    cellPerms.push(newPermanent);
 
     const updatedZones = {
       ...zones,
@@ -403,8 +442,8 @@ export const createMephistophelesSlice: StateCreator<
     } as Partial<GameState> as GameState);
 
     get().trySendPatch({
+      ...createPermanentsPatch(updatedPerms, targetCell),
       zones: { [who]: updatedZones[who] } as GameState["zones"],
-      permanents: updatedPerms,
       mephistophelesSummonUsed: updatedUsed,
     });
 

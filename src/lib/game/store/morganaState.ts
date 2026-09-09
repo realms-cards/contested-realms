@@ -8,6 +8,10 @@ import type {
   ServerPatchT,
   Zones,
 } from "./types";
+import {
+  createPermanentDeltaPatch,
+  createPermanentsPatch,
+} from "./utils/patchHelpers";
 import { triggerCardResolvers } from "./utils/resolverTriggers";
 
 function newMorganaId() {
@@ -220,9 +224,12 @@ export const createMorganaSlice: StateCreator<
       morganaHands: updatedMorganaHands,
     } as Partial<GameState> as GameState);
 
-    // Send patch
+    // Send patch — only the target tile, so concurrent changes elsewhere stay
+    const permanentsPatch =
+      createPermanentDeltaPatch([{ at: key, entry: newPermanent }]) ??
+      createPermanentsPatch(per, key);
     const patch: ServerPatchT = {
-      permanents: per,
+      permanents: permanentsPatch.permanents,
       morganaHands: updatedMorganaHands,
     };
     get().trySendPatch(patch);

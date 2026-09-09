@@ -482,6 +482,17 @@ export const createDemonicContractSlice: StateCreator<
 
     const { spell, casterSeat } = pending;
 
+    // The additional cost (4 life or a sacrificed token) is paid before the
+    // search begins. Once it is spent the search is mandatory, so refuse to
+    // cancel while there is still a card the caster could take.
+    const costPaid = pending.costType !== null;
+    if (costPaid && pending.eligibleCards.length > 0) {
+      get().log(
+        `[${casterSeat.toUpperCase()}] must choose a card - Demonic Contract's cost is already paid`,
+      );
+      return;
+    }
+
     // Move spell to graveyard
     get().movePermanentToZone(spell.at, spell.index, "graveyard");
 

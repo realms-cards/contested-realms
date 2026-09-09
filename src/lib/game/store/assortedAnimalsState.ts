@@ -72,16 +72,9 @@ export const createAssortedAnimalsSlice: StateCreator<
     const id = newAssortedAnimalsId();
     const { spell, casterSeat } = input;
 
-    // Calculate available mana from site count
-    const board = get().board;
-    const ownerNum = casterSeat === "p1" ? 1 : 2;
-    const siteCount = Object.values(board.sites || {}).filter(
-      (s) => s?.owner === ownerNum,
-    ).length;
-    const players = get().players;
-    const player = players[casterSeat];
-    const manaOffset = player?.mana ?? 0;
-    const availableMana = Math.max(0, siteCount - manaOffset);
+    // Available mana comes from the shared resource helper: base site mana
+    // (including special sites) plus the player's spend offset.
+    const availableMana = get().getAvailableMana(casterSeat);
 
     // Set choosing_x phase - player must choose X value first
     set({
@@ -112,10 +105,10 @@ export const createAssortedAnimalsSlice: StateCreator<
       return;
     }
 
-    // Spend the mana
+    // Spend the mana (players[seat].mana is a spend offset: subtract to pay)
     const players = get().players;
     const player = players[casterSeat];
-    const newManaOffset = (player?.mana ?? 0) + chosenX;
+    const newManaOffset = (player?.mana ?? 0) - chosenX;
     const playersNext = {
       ...players,
       [casterSeat]: { ...player, mana: newManaOffset },
@@ -267,10 +260,13 @@ export const createAssortedAnimalsSlice: StateCreator<
     // Move spell from board to graveyard (this properly removes it from permanents)
     get().movePermanentToZone(spell.at, spell.index, "graveyard");
 
+    // Re-read zones AFTER movePermanentToZone: it appends the spell to the
+    // graveyard, and building from the pre-move snapshot would drop it.
+    const zonesAfterMove = get().zones;
     const zonesNext = {
-      ...zones,
+      ...zonesAfterMove,
       [casterSeat]: {
-        ...zones[casterSeat],
+        ...zonesAfterMove[casterSeat],
         spellbook,
         hand,
       },

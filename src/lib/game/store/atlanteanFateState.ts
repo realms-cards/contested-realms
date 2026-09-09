@@ -1,7 +1,18 @@
 import type { StateCreator } from "zustand";
 import type { CustomMessage } from "@/lib/net/transport";
-import type { AtlanteanFateAura, CellKey, GameState } from "./types";
+import type {
+  AtlanteanFateAura,
+  CellKey,
+  GameState,
+  PermanentItem,
+  ServerPatchT,
+} from "./types";
 import { parseCellKey, toCellKey, getCellNumber } from "./utils/boardHelpers";
+import {
+  createPermanentDeltaPatch,
+  type PermanentDeltaUpdate,
+} from "./utils/patchHelpers";
+import { ensurePermanentInstanceId } from "./utils/permanentHelpers";
 
 function newAtlanteanFateId() {
   return `af_${Date.now().toString(36)}_${Math.random()
@@ -701,7 +712,8 @@ export const createAtlanteanFateSlice: StateCreator<
     // Remove the aura permanent from the board
     const permanentsNext = { ...state.permanents };
     const cellPerms = permanentsNext[spell.at];
-    if (cellPerms && cellPerms[spell.index]) {
+    const removedPermanent = cellPerms?.[spell.index] ?? null;
+    if (cellPerms && removedPermanent) {
       const newArr = [...cellPerms];
       newArr.splice(spell.index, 1);
       if (newArr.length === 0) {
@@ -737,12 +749,22 @@ export const createAtlanteanFateSlice: StateCreator<
       } catch {}
     }
 
-    // Send state patch
-    get().trySendPatch({
-      permanents: permanentsNext,
-      zones: zonesNext,
+    // Send state patch — only the caster's own zones and a delta removal for
+    // the aura permanent, so concurrent changes on other tiles/seats survive.
+    const patch: ServerPatchT = {
+      zones: { [casterSeat]: playerZones } as GameState["zones"],
       pendingAtlanteanFate: null,
-    });
+    };
+    const removedId = removedPermanent
+      ? ensurePermanentInstanceId(removedPermanent)
+      : null;
+    if (removedId) {
+      const removalPatch = createPermanentDeltaPatch([
+        { at: spell.at, entry: { instanceId: removedId }, remove: true },
+      ]);
+      if (removalPatch?.permanents) patch.permanents = removalPatch.permanents;
+    }
+    get().trySendPatch(patch);
 
     get().log(
       "Atlantean Fate returned to hand - play it again to choose a new area",
@@ -823,16 +845,29 @@ export const createAtlanteanFateSlice: StateCreator<
       const permanents = state.permanents;
       let permanentsNext = { ...permanents };
       let permanentsChanged = false;
+      const removalUpdates: PermanentDeltaUpdate[] = [];
 
       for (const cellKey of auraToRemove.floodedSites) {
         const cellPerms = permanentsNext[cellKey];
         if (!cellPerms) continue;
 
         // Remove Flooded tokens from this cell
-        const filteredPerms = cellPerms.filter((perm) => {
+        const filteredPerms: PermanentItem[] = [];
+        for (const perm of cellPerms) {
           const name = String(perm.card?.name || "").toLowerCase();
-          return name !== "flooded";
-        });
+          if (name === "flooded") {
+            const instanceId = ensurePermanentInstanceId(perm);
+            if (instanceId) {
+              removalUpdates.push({
+                at: cellKey,
+                entry: { instanceId },
+                remove: true,
+              });
+            }
+            continue;
+          }
+          filteredPerms.push(perm);
+        }
 
         if (filteredPerms.length !== cellPerms.length) {
           permanentsNext = { ...permanentsNext, [cellKey]: filteredPerms };
@@ -840,10 +875,13 @@ export const createAtlanteanFateSlice: StateCreator<
         }
       }
 
-      // Update permanents if any Flooded tokens were removed
+      // Update permanents if any Flooded tokens were removed. The patch must
+      // carry explicit `__remove` entries — a filtered-out item is preserved by
+      // the server merge, so a plain cell array would never delete it.
       if (permanentsChanged) {
         set({ permanents: permanentsNext } as Partial<GameState> as GameState);
-        get().trySendPatch({ permanents: permanentsNext });
+        const removalPatch = createPermanentDeltaPatch(removalUpdates);
+        if (removalPatch) get().trySendPatch(removalPatch);
       }
     }
 

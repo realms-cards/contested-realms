@@ -4,9 +4,11 @@ import type {
   CardRef,
   CellKey,
   GameState,
+  PermanentItem,
   PlayerKey,
   ServerPatchT,
 } from "./types";
+import { createZonesPatchFor } from "./utils/zoneHelpers";
 
 function newRaiseDeadId() {
   return `raise_dead_${Date.now().toString(36)}_${Math.random()
@@ -178,6 +180,14 @@ export const createRaiseDeadSlice: StateCreator<
     const permanents = get().permanents;
     const ownerNum = casterSeat === "p1" ? 1 : 2;
     const cellPerms = [...(permanents[spell.at] || [])];
+    // Capture the Raise Dead permanent itself so the outgoing patch can carry an
+    // explicit removal marker (the server merge preserves base items otherwise).
+    const spellPerm = cellPerms[spell.index] ?? null;
+    const spellInstanceId =
+      spellPerm?.instanceId ??
+      spellPerm?.card?.instanceId ??
+      spell.instanceId ??
+      null;
 
     const newPermanent = {
       card: {
@@ -228,21 +238,45 @@ export const createRaiseDeadSlice: StateCreator<
     // Move the Raise Dead spell to graveyard
     get().movePermanentToZone(spell.at, spell.index, "graveyard");
 
-    // Create patches for network sync
-    // Important: Include the source seat's graveyard update
-    const zonePatch: ServerPatchT = {
-      zones: {
-        [selectedFromSeat]: zonesNext[selectedFromSeat],
-      } as ServerPatchT["zones"],
-    };
+    // Create patches for network sync.
+    // Re-read state AFTER movePermanentToZone so the patch reflects the spell
+    // having left the board (permanentsNext still contained it) and the caster's
+    // graveyard having received it.
+    const zonesAfter = get().zones;
+    const permanentsAfter = get().permanents;
 
-    const permanentsPatch: ServerPatchT = {
+    const patchCellPerms = [...(permanentsAfter[spell.at] || [])];
+    const spellStillOnBoard = patchCellPerms.some(
+      (p) =>
+        (p?.instanceId ?? p?.card?.instanceId ?? null) === spellInstanceId,
+    );
+    if (spellInstanceId && !spellStillOnBoard) {
+      // Explicit removal marker: locally filtering the spell out of the cell is
+      // not enough, the merge keeps base items missing from the patch.
+      patchCellPerms.push({
+        ...(spellPerm ?? {}),
+        instanceId: spellInstanceId,
+        __remove: true,
+      } as unknown as PermanentItem);
+    }
+
+    const patch: ServerPatchT = {
       permanents: {
-        [spell.at]: permanentsNext[spell.at],
-      },
+        [spell.at]: patchCellPerms,
+      } as GameState["permanents"],
     };
 
-    get().trySendPatch({ ...zonePatch, ...permanentsPatch });
+    // Important: include the source seat's graveyard update. When the minion
+    // came from the opponent's cemetery the patch writes their zones, which is
+    // stripped/rejected without __allowZoneSeats — leaving the minion both on
+    // the board and in their graveyard.
+    const zonePatch = createZonesPatchFor(zonesAfter, selectedFromSeat);
+    if (zonePatch?.zones) {
+      patch.zones = zonePatch.zones;
+      (patch as Record<string, unknown>).__allowZoneSeats = [selectedFromSeat];
+    }
+
+    get().trySendPatch(patch);
 
     // Log the result
     const fromPlayerStr =

@@ -21,6 +21,7 @@ import {
 } from "./utils/boardHelpers";
 import { prepareCardForSeat } from "./utils/cardHelpers";
 import { newPermanentInstanceId } from "./utils/idHelpers";
+import { createPermanentsPatch } from "./utils/patchHelpers";
 import { randomTilt } from "./utils/permanentHelpers";
 
 // Detection functions for Babel cards
@@ -401,15 +402,25 @@ export const createBabelTowerSlice: StateCreator<
     // Send patches
     const transport = get().transport;
     if (transport) {
+      // Only the destroyed cell is sent for board.sites and permanents — the
+      // full maps would clobber concurrent changes on other tiles. The tower
+      // can be destroyed by the NON-owner (see boardState.ts callers), so the
+      // owner's graveyard write needs __allowZoneSeats or it is silently
+      // stripped client-side and rejected server-side.
       const patch: ServerPatchT = {
         board: {
-          ...state.board,
-          sites: { ...sitesNext, [cellKey]: null },
-        } as GameState["board"],
+          sites: { [cellKey]: null },
+        } as unknown as ServerPatchT["board"],
         zones: { [ownerSeat]: zonesNext[ownerSeat] } as GameState["zones"],
         babelTowers: babelTowersNext,
-        permanents: permanentsNext,
       };
+      if (permanentsNext !== state.permanents) {
+        const permanentsPatch = createPermanentsPatch(permanentsNext, cellKey);
+        if (permanentsPatch?.permanents) {
+          patch.permanents = permanentsPatch.permanents;
+        }
+      }
+      (patch as Record<string, unknown>).__allowZoneSeats = [ownerSeat];
       get().trySendPatch(patch);
     }
 
@@ -489,10 +500,14 @@ export const createBabelTowerSlice: StateCreator<
       const sitesPatch: Record<string, unknown> = {
         [targetCell]: sitesNext[targetCell] ?? null,
       };
+      // Only send the acting seat's avatar: a patch carrying the opponent's
+      // avatar (which has `tapped`) is hard-rejected by the server.
       const patch: ServerPatchT = {
-        board: { ...board, sites: sitesPatch } as GameState["board"],
+        board: { sites: sitesPatch } as unknown as ServerPatchT["board"],
         zones: { [casterSeat]: zonesNext[casterSeat] } as GameState["zones"],
-        avatars: avatarsNext,
+        avatars: {
+          [casterSeat]: avatarsNext[casterSeat],
+        } as GameState["avatars"],
       };
       get().trySendPatch(patch);
     }
@@ -575,14 +590,16 @@ export const createBabelTowerSlice: StateCreator<
     // Send patches
     const transport = get().transport;
     if (transport) {
+      // Send only the affected cell of board.sites, and allow the owner's hand
+      // write even when a different seat triggered the bounce.
       const patch: ServerPatchT = {
         board: {
-          ...state.board,
-          sites: { ...sitesNext, [cellKey]: null },
-        } as GameState["board"],
+          sites: { [cellKey]: null },
+        } as unknown as ServerPatchT["board"],
         zones: { [ownerSeat]: zonesNext[ownerSeat] } as GameState["zones"],
         babelTowers: babelTowersNext,
       };
+      (patch as Record<string, unknown>).__allowZoneSeats = [ownerSeat];
       get().trySendPatch(patch);
     }
   },

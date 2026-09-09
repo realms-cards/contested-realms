@@ -172,3 +172,22 @@ export function normalizeCardRefList(
   }
   return normalized;
 }
+
+/**
+ * Subtypes the rulebook treats as "Evil".
+ * Shared by Doomsday Cult, Black Mass, Accusation and Mephistopheles so the
+ * definition cannot drift between resolvers.
+ */
+export const EVIL_SUBTYPES = ["demon", "undead", "monster"] as const;
+
+/** True when a subtypes string contains one of the Evil subtypes. */
+export function isEvilSubtypes(subTypes: string | null | undefined): boolean {
+  const lower = (subTypes || "").toLowerCase();
+  return EVIL_SUBTYPES.some((evil) => lower.includes(evil));
+}
+
+/** True when a card is Evil (Demon, Undead or Monster). */
+export function isEvilCard(card: CardRef | null | undefined): boolean {
+  if (!card) return false;
+  return isEvilSubtypes(card.subTypes);
+}

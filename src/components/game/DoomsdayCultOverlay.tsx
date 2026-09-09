@@ -13,6 +13,7 @@ export default function DoomsdayCultOverlay() {
   const castFromSpellbookTop = useGameStore((s) => s.castFromSpellbookTop);
   const getActiveDoomsdayCults = useGameStore((s) => s.getActiveDoomsdayCults);
   const actorKey = useGameStore((s) => s.actorKey);
+  const currentPlayer = useGameStore((s) => s.currentPlayer);
 
   const isActive = isDoomsdayCultActive();
 
@@ -20,8 +21,8 @@ export default function DoomsdayCultOverlay() {
 
   const cults = getActiveDoomsdayCults();
 
-  // Get current player's cast eligibility for each cult location
-  const playerKey = actorKey || "p1";
+  // Online: the local seat. Hotseat (actorKey === null): whoever is to act.
+  const playerKey = actorKey ?? (currentPlayer === 1 ? "p1" : "p2");
   const castableLocations = cults.map((cult) => ({
     ...cult,
     check: canCastFromSpellbookTop(playerKey, cult.at),
@@ -32,7 +33,7 @@ export default function DoomsdayCultOverlay() {
   return (
     <div className="fixed inset-0 z-[150] pointer-events-none">
       {/* Cast from spellbook hint (if player can cast) */}
-      {canCastAnywhere && actorKey && (
+      {canCastAnywhere && (
         <div className="fixed right-4 bottom-32 z-[151] pointer-events-auto">
           <div className="bg-black/90 rounded-lg p-3 ring-1 ring-green-500/50 max-w-48">
             <div className="text-xs text-green-400 font-medium mb-1">

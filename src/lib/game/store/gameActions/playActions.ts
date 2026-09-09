@@ -1036,6 +1036,7 @@ export const createPlayActionsSlice: StateCreator<
       const isKingswoodPoachers = cardNameLower === "kingswood poachers";
       const isFeastForCrows = cardNameLower === "feast for crows";
       const isSelfsameSimulacrum = cardNameLower === "selfsame simulacrum";
+      const isDemonicContract = cardNameLower === "demonic contract";
 
       // If this is Torshammar Trinket, show a toast that it will return to hand automatically
       if (isTorshammarTrinket && newest && type.includes("artifact")) {
@@ -1158,6 +1159,23 @@ export const createPlayActionsSlice: StateCreator<
             casterSeat: who,
           });
         } catch {}
+      }
+      // If this is Demonic Contract, begin the cost/search flow
+      else if (isDemonicContract && newest) {
+        try {
+          get().beginDemonicContract({
+            spell: {
+              at: key,
+              index: arr.length - 1,
+              instanceId: newest.instanceId ?? null,
+              owner: newest.owner,
+              card: newest.card as CardRef,
+            },
+            casterSeat: who,
+          });
+        } catch (e) {
+          console.error("[playActions] Error triggering Demonic Contract:", e);
+        }
       }
       // If this is Browse, begin the browse spell flow
       else if (isBrowse && newest) {
