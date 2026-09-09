@@ -3,6 +3,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { AnyRecord, MatchPatch } from "../types";
+import { computeThresholdTotals } from "./rules-resources";
 
 type SeatKey = "p1" | "p2";
 
@@ -107,30 +108,6 @@ function getThresholdsForCard(card: AnyRecord): Thresholds | null {
   return null;
 }
 
-const THRESHOLD_KEYS: ReadonlyArray<keyof Thresholds> = [
-  "air",
-  "water",
-  "earth",
-  "fire",
-] as const;
-
-const THRESHOLD_GRANT_BY_NAME: Record<string, Thresholds> = {
-  "amethyst core": { air: 1 },
-  "aquamarine core": { water: 1 },
-  "onyx core": { earth: 1 },
-  "ruby core": { fire: 1 },
-};
-
-function accumulateThresholds(acc: Thresholds, src: Thresholds | null): void {
-  if (!src) return;
-  for (const k of THRESHOLD_KEYS) {
-    const v = Number(src[k] ?? 0);
-    if (Number.isFinite(v) && v !== 0) {
-      acc[k] = (acc[k] || 0) + v;
-    }
-  }
-}
-
 function parseCellKey(key: string): { x: number; y: number } | null {
   try {
     const [xs, ys] = String(key).split(",");
@@ -202,54 +179,13 @@ function isAdjacentToOwnedSite(
   return false;
 }
 
+// Thresholds are computed by the shared server mirror of the client rules
+// (special sites, Elementalist, carried cores, auras, ...). See rules-resources.ts.
 function countThresholdsForPlayer(
   game: AnyRecord,
   playerNum: number,
 ): Thresholds {
-  const out: Thresholds = { air: 0, water: 0, earth: 0, fire: 0 };
-  const board = game.board as AnyRecord | undefined;
-  const sites =
-    board && typeof board.sites === "object"
-      ? (board.sites as Record<string, AnyRecord>)
-      : {};
-  for (const key of Object.keys(sites)) {
-    try {
-      const tile = sites[key];
-      if (!tile || Number(tile.owner) !== playerNum) continue;
-      const card = tile.card as AnyRecord | undefined;
-      const th =
-        card && typeof card.thresholds === "object"
-          ? (card.thresholds as Thresholds)
-          : null;
-      if (th) {
-        accumulateThresholds(out, th);
-      }
-    } catch {
-      // ignore per-tile failures
-    }
-  }
-  // Permanents that grant thresholds (e.g., cores)
-  const per = (game.permanents as Record<string, unknown[]>) || {};
-  for (const cellKey of Object.keys(per)) {
-    const arrRaw = per[cellKey];
-    const arr = Array.isArray(arrRaw) ? arrRaw : [];
-    for (const p of arr) {
-      try {
-        const perm = (p || {}) as AnyRecord;
-        if (!perm || Number(perm.owner) !== playerNum) continue;
-        const nm = (
-          perm.card && (perm.card as AnyRecord).name
-            ? String((perm.card as AnyRecord).name)
-            : ""
-        ).toLowerCase();
-        const grant = THRESHOLD_GRANT_BY_NAME[nm];
-        if (grant) accumulateThresholds(out, grant);
-      } catch {
-        // ignore malformed entries
-      }
-    }
-  }
-  return out;
+  return computeThresholdTotals(game, playerNum === 2 ? "p2" : "p1");
 }
 
 export function markAndCountNewPlacements(

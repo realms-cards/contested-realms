@@ -44,6 +44,7 @@ import {
   computeThresholdTotals,
   getAvatarAdjustedManaCost,
   getCardManaCost,
+  resourceContextFromState,
 } from "../utils/resourceHelpers";
 import { createZonesPatchFor } from "../utils/zoneHelpers";
 
@@ -401,14 +402,8 @@ export const createPlayActionsSlice: StateCreator<
         const req = (card.thresholds || {}) as Partial<
           Record<keyof Thresholds, number>
         >;
-        const have = computeThresholdTotals(
-          state.board,
-          state.permanents,
-          who,
-          state.avatars[who],
-          state.specialSiteState,
-          state.babelTowers,
-        );
+        const resourceCtx = resourceContextFromState(state, who);
+        const have = computeThresholdTotals(resourceCtx);
         const missingThresholds: string[] = [];
         for (const kk of Object.keys(req) as (keyof Thresholds)[]) {
           const need = Number(req[kk] ?? 0);
@@ -420,18 +415,7 @@ export const createPlayActionsSlice: StateCreator<
 
         // Check mana cost using computeAvailableMana
         const cardManaCost = getCardManaCost(card, state.metaByCardId);
-        const currentManaBase = computeAvailableMana(
-          state.board,
-          state.permanents,
-          who,
-          state.zones,
-          state.specialSiteState,
-          have,
-          state.turn,
-          state.etherCoresInVoidAtTurnStart,
-          state.babelTowers,
-          state.coresCarriedAtTurnStart,
-        );
+        const currentManaBase = computeAvailableMana(resourceCtx);
         const currentMana = Math.max(
           0,
           currentManaBase + Number(state.players[who]?.mana || 0),

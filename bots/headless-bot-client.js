@@ -3057,9 +3057,9 @@ class BotClient {
           if (!this._game.avatars) this._game.avatars = {};
           const avPrev = this._game.avatars[meKey] || {};
           this._game.avatars[meKey] = { ...avPrev, tapped: false };
-          // Reset mana spent for new turn
-          if (!this._game.resources) this._game.resources = {};
-          this._game.resources[meKey] = { spentThisTurn: 0 };
+          // Reset the mana spend ledger for the new turn (players[seat].mana)
+          if (!this._game.players) this._game.players = {};
+          this._game.players[meKey] = { ...(this._game.players[meKey] || {}), mana: 0 };
           // Clear summoning sickness on all our units
           const perms = this._game.permanents || {};
           for (const cellKey of Object.keys(perms)) {
@@ -3265,7 +3265,8 @@ class BotClient {
                 patch.zones ? 'DRAW' : 'PASS/OTHER';
               const siteCount = Object.keys((this._game && this._game.board && this._game.board.sites) || {}).length;
               const handSize = ((this._game && this._game.zones && this._game.zones[meKey] && this._game.zones[meKey].hand) || []).length;
-              const manaSpent = (this._game && this._game.resources && this._game.resources[meKey] && this._game.resources[meKey].spentThisTurn) || 0;
+              const manaLedger = Number(this._game && this._game.players && this._game.players[meKey] && this._game.players[meKey].mana) || 0;
+              const manaSpent = Math.max(0, -manaLedger);
               console.log(`[Bot] Engine decision: ${decisionType} | turn=${this._turnIndex} action#${actionCount + 1} sites=${siteCount} hand=${handSize} manaSpent=${manaSpent}`);
             } catch {}
 

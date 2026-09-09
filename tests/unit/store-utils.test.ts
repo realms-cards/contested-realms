@@ -245,31 +245,160 @@ describe("resourceHelpers", () => {
         },
       ],
     };
-    const totals = computeThresholdTotals(board, permanents, "p1");
+    const totals = computeThresholdTotals({ board, permanents, who: "p1" });
     expect(totals.air).toBe(1);
     expect(totals.fire).toBe(1); // Ruby Core grant
   });
 
-  it("counts available mana from sites and permanents", () => {
+  it("counts available mana from sites and carried permanents", () => {
     const board: BoardState = {
-      size: { w: 1, h: 1 },
+      size: { w: 2, h: 1 },
       sites: {
-        "0,0": {
-          owner: 1,
-          card: baseCard({ name: "Abundance" }),
-        },
+        "0,0": { owner: 1, card: baseCard({ name: "Spire", type: "Site" }) },
+        "1,0": { owner: 1, card: baseCard({ name: "Stream", type: "Site" }) },
       },
     };
     const permanents: Permanents = {
       "0,0": [
         {
           owner: 1,
-          card: baseCard({ name: "Amethyst Core" }),
+          card: baseCard({ name: "Knight", type: "Minion" }),
+          instanceId: "perm-knight",
+        },
+        {
+          owner: 1,
+          card: baseCard({ name: "Amethyst Core", type: "Artifact" }),
           instanceId: "perm-core",
+          attachedTo: { at: "0,0", index: 0 },
+          enteredOnTurn: 3,
+        },
+        {
+          owner: 1,
+          card: baseCard({ name: "Ruby Core", type: "Artifact" }),
+          instanceId: "perm-core-loose",
         },
       ],
     };
-    expect(computeAvailableMana(board, permanents, "p1")).toBe(2);
+    // 2 sites + carried core summoned this turn; the loose core provides nothing.
+    expect(
+      computeAvailableMana({ board, permanents, who: "p1", currentTurn: 3 }),
+    ).toBe(3);
+  });
+
+  it("applies aura site modifiers (Abundance, Drought, Sow the Earth)", () => {
+    const board: BoardState = {
+      size: { w: 3, h: 1 },
+      sites: {
+        "0,0": {
+          owner: 1,
+          card: baseCard({ name: "Stream", type: "Site", thresholds: { water: 1 } }),
+        },
+        "1,0": {
+          owner: 1,
+          card: baseCard({ name: "Spring River", type: "Site", thresholds: { water: 1 } }),
+        },
+        "2,0": {
+          owner: 1,
+          card: baseCard({ name: "Spire", type: "Site", thresholds: { air: 1 } }),
+        },
+      },
+    };
+    const permanents: Permanents = {
+      "0,0": [{ owner: 1, card: baseCard({ name: "Abundance", type: "Aura" }) }],
+      "1,0": [{ owner: 2, card: baseCard({ name: "Drought", type: "Aura" }) }],
+      "2,0": [{ owner: 1, card: baseCard({ name: "Sow the Earth", type: "Aura" }) }],
+    };
+    // Abundance: 1+1, Drought site: 1, Sow the Earth: 1*2 => 5. Auras themselves give none.
+    expect(computeAvailableMana({ board, permanents, who: "p1" })).toBe(5);
+    const totals = computeThresholdTotals({ board, permanents, who: "p1" });
+    expect(totals.water).toBe(1); // Drought removed the second site's water
+    expect(totals.air).toBe(2); // Sow the Earth doubled the Spire
+  });
+
+  it("Finwife provides 2 per nearby enemy Avatar, Shrine enhances its site", () => {
+    const board: BoardState = {
+      size: { w: 3, h: 2 },
+      sites: {
+        "0,0": { owner: 1, card: baseCard({ name: "Spire", type: "Site", thresholds: { air: 1 } }) },
+      },
+    };
+    const permanents: Permanents = {
+      "0,0": [
+        { owner: 1, card: baseCard({ name: "Finwife", type: "Minion" }) },
+        { owner: 1, card: baseCard({ name: "Shrine of the Dragonlord", type: "Artifact" }) },
+      ],
+    };
+    const avatars = {
+      p1: { card: null, pos: [2, 1] as [number, number] },
+      p2: { card: null, pos: [1, 1] as [number, number] },
+    };
+    // Spire 1 + Shrine 1 + Finwife 2 (enemy avatar diagonal) = 4
+    expect(computeAvailableMana({ board, permanents, who: "p1", avatars })).toBe(4);
+    const totals = computeThresholdTotals({ board, permanents, who: "p1", avatars });
+    expect(totals).toEqual({ air: 2, water: 1, earth: 1, fire: 1 });
+    // Enemy avatar far away: Finwife provides nothing.
+    const farAvatars = { ...avatars, p2: { card: null, pos: [2, 1] as [number, number] } };
+    expect(
+      computeAvailableMana({ board, permanents, who: "p1", avatars: farAvatars }),
+    ).toBe(2);
+  });
+
+  it("Elementalist grants +1 of each threshold, also as an Imposter mask", () => {
+    const board: BoardState = { size: { w: 1, h: 1 }, sites: {} };
+    const elementalist = baseCard({ name: "Elementalist", type: "Avatar" });
+    const direct = computeThresholdTotals({
+      board,
+      permanents: {},
+      who: "p1",
+      avatars: { p1: { card: elementalist, pos: null } },
+    });
+    expect(direct).toEqual({ air: 1, water: 1, earth: 1, fire: 1 });
+    const masked = computeThresholdTotals({
+      board,
+      permanents: {},
+      who: "p1",
+      avatars: { p1: { card: baseCard({ name: "Imposter", type: "Avatar" }), pos: null } },
+      imposterMasks: {
+        p1: {
+          originalAvatar: baseCard({ name: "Imposter" }),
+          maskAvatar: elementalist,
+          maskedAt: 0,
+        },
+      },
+    });
+    expect(masked).toEqual({ air: 1, water: 1, earth: 1, fire: 1 });
+  });
+
+  it("opponent's City of Plenty gives us 1 mana when its bonus is active", () => {
+    const board: BoardState = {
+      size: { w: 2, h: 1 },
+      sites: {
+        "0,0": { owner: 2, card: baseCard({ name: "City of Plenty", type: "Site" }) },
+        "1,0": { owner: 2, card: baseCard({ name: "Stream", type: "Site", thresholds: { water: 1 } }) },
+      },
+    };
+    expect(computeAvailableMana({ board, permanents: {}, who: "p1" })).toBe(1);
+    expect(computeAvailableMana({ board, permanents: {}, who: "p2" })).toBe(3);
+  });
+
+  it("Granary Rats and a Sinterfee-silenced site provide no threshold", () => {
+    const board: BoardState = {
+      size: { w: 3, h: 1 },
+      sites: {
+        "0,0": { owner: 1, card: baseCard({ name: "Spire", type: "Site", thresholds: { air: 1 } }) },
+        "1,0": { owner: 1, card: baseCard({ name: "Stream", type: "Site", thresholds: { water: 1 } }) },
+        "2,0": { owner: 1, card: baseCard({ name: "Valley", type: "Site", thresholds: { earth: 1 } }) },
+      },
+    };
+    const permanents: Permanents = {
+      "0,0": [{ owner: 1, card: baseCard({ name: "Granary Rats", type: "Minion" }) }],
+      "1,0": [{ owner: 2, card: baseCard({ name: "Silenced", type: "Token" }) }],
+      "2,0": [{ owner: 2, card: baseCard({ name: "Sinterfee", type: "Minion" }) }],
+    };
+    const totals = computeThresholdTotals({ board, permanents, who: "p1" });
+    expect(totals).toEqual({ air: 0, water: 0, earth: 1, fire: 0 });
+    // Mana is unaffected by either.
+    expect(computeAvailableMana({ board, permanents, who: "p1" })).toBe(3);
   });
 
   const makeSpecialSiteState = (
@@ -310,13 +439,12 @@ describe("resourceHelpers", () => {
         },
       },
     };
-    const totals = computeThresholdTotals(
+    const totals = computeThresholdTotals({
       board,
-      {},
-      "p1",
-      undefined,
-      makeSpecialSiteState(["0,0"]),
-    );
+      permanents: {},
+      who: "p1",
+      specialSiteState: makeSpecialSiteState(["0,0"]),
+    });
     // Flooded site provides only Water, not its printed Fire threshold.
     expect(totals.water).toBe(1);
     expect(totals.fire).toBe(0);
@@ -346,13 +474,12 @@ describe("resourceHelpers", () => {
         },
       },
     };
-    const totals = computeThresholdTotals(
+    const totals = computeThresholdTotals({
       board,
-      {},
-      "p1",
-      undefined,
-      makeRealmFloodedState(),
-    );
+      permanents: {},
+      who: "p1",
+      specialSiteState: makeRealmFloodedState(),
+    });
     expect(totals.earth).toBe(1);
     expect(totals.water).toBe(1);
   });
@@ -373,13 +500,12 @@ describe("resourceHelpers", () => {
         },
       },
     };
-    const totals = computeThresholdTotals(
+    const totals = computeThresholdTotals({
       board,
-      {},
-      "p1",
-      undefined,
-      makeRealmFloodedState(),
-    );
+      permanents: {},
+      who: "p1",
+      specialSiteState: makeRealmFloodedState(),
+    });
     expect(totals.water).toBe(1);
   });
 
@@ -396,19 +522,18 @@ describe("resourceHelpers", () => {
         },
       },
     };
-    const totals = computeThresholdTotals(
+    const totals = computeThresholdTotals({
       board,
-      {},
-      "p1",
-      undefined,
-      makeSpecialSiteState(["0,0"]),
-    );
+      permanents: {},
+      who: "p1",
+      specialSiteState: makeSpecialSiteState(["0,0"]),
+    });
     expect(totals.water).toBe(0);
     expect(totals.air).toBe(0);
     expect(totals.earth).toBe(0);
     expect(totals.fire).toBe(0);
     // And it provides no mana either.
-    expect(computeAvailableMana(board, {}, "p1")).toBe(0);
+    expect(computeAvailableMana({ board, permanents: {}, who: "p1" })).toBe(0);
   });
 });
 

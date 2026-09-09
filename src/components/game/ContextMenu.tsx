@@ -208,6 +208,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const disableSite = useGameStore((s) => s.disableSite);
   const silencePermanent = useGameStore((s) => s.silencePermanent);
   const movePermanentToZone = useGameStore((s) => s.movePermanentToZone);
+  const sacrificeToTempleOfMoloch = useGameStore(
+    (s) => s.sacrificeToTempleOfMoloch,
+  );
+  const templeOfMolochUsed = useGameStore((s) => s.templeOfMolochUsed);
   const transferSiteControl = useGameStore((s) => s.transferSiteControl);
   const transferPermanentControl = useGameStore(
     (s) => s.transferPermanentControl,
@@ -1257,6 +1261,39 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           isEnabled: true,
           targetPermanentId: "",
           description: "Add Silenced token (no abilities).",
+        });
+      }
+    }
+
+    // Temple of Moloch: "Once on each player's turn, they may sacrifice a
+    // minion here to gain (2)." Offered on the owner's own minion standing on
+    // the Temple during the owner's turn.
+    {
+      const siteHere = board.sites[t.at];
+      const siteHereName = (siteHere?.card?.name || "").toLowerCase();
+      const permIsMinion = (item?.card?.type || "")
+        .toLowerCase()
+        .includes("minion");
+      const ownerSeat = item ? seatFromOwner(item.owner) : null;
+      const ownerIsActive =
+        ownerSeat !== null &&
+        ((ownerSeat === "p1" && currentPlayer === 1) ||
+          (ownerSeat === "p2" && currentPlayer === 2));
+      if (
+        isMine &&
+        permIsMinion &&
+        siteHereName === "temple of moloch" &&
+        ownerIsActive &&
+        ownerSeat &&
+        !templeOfMolochUsed[ownerSeat]
+      ) {
+        extraActions.push({
+          actionId: "__temple_of_moloch__",
+          displayText: "Sacrifice to Moloch (+2)",
+          isEnabled: true,
+          targetPermanentId: "",
+          description:
+            "Sacrifice this minion to Temple of Moloch to gain (2) this turn.",
         });
       }
     }
@@ -3725,6 +3762,27 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           onClick={() => {
                             if (t.kind === "permanent") {
                               silencePermanent(t.at, t.index);
+                              try {
+                                playCardFlip();
+                              } catch {}
+                            }
+                            onClose();
+                          }}
+                        />
+                      );
+                    }
+                    // Temple of Moloch sacrifice
+                    if (action.actionId === "__temple_of_moloch__") {
+                      return (
+                        <MenuBtn
+                          key={action.actionId}
+                          icon="game-icons:fire-shrine"
+                          label={action.displayText}
+                          title={action.description}
+                          className="bg-red-600/20 hover:bg-red-600/30"
+                          onClick={() => {
+                            if (t.kind === "permanent") {
+                              sacrificeToTempleOfMoloch(t.at, t.index);
                               try {
                                 playCardFlip();
                               } catch {}

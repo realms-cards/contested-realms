@@ -69,6 +69,10 @@ export interface TutorialPlayerState {
   avatar: CardRef;
   life: number;
   mana?: number;
+  /**
+   * @deprecated Ignored. Thresholds are derived from the sites a lesson places
+   * on the board (computeThresholdTotals); kept so older lessons still typecheck.
+   */
   thresholds?: Partial<Thresholds>;
   hand: CardRef[];
   spellbook: CardRef[];
@@ -173,6 +177,7 @@ export type TutorialAction =
 export type TutorialStatePatch =
   | { op: "set_life"; player: PlayerKey; value: number }
   | { op: "set_mana"; player: PlayerKey; value: number }
+  /** @deprecated No-op: thresholds come from placed sites. */
   | { op: "set_thresholds"; player: PlayerKey; value: Partial<Thresholds> }
   | { op: "set_phase"; value: Phase }
   | { op: "set_current_player"; value: PlayerKey }

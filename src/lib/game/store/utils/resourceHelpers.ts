@@ -4,6 +4,8 @@ import {
   isTemplar,
 } from "@/lib/game/avatarAbilities";
 import {
+  ADJACENT_SILENCER_NO_THRESHOLD,
+  AURA_SITE_MODIFIERS,
   BACK_ROW_ONLY_SITES,
   CEMETERY_MANA_SITES,
   CITY_BONUS_SITES,
@@ -14,14 +16,23 @@ import {
   MANA_PROVIDER_BY_NAME,
   MULTI_THRESHOLD_SITES,
   NON_MANA_SITE_IDENTIFIERS,
+  OPPONENT_MANA_SITES,
+  PER_NEARBY_ENEMY_AVATAR_PROVIDERS,
   SHARED_MANA_SITES,
+  SITE_ENHANCER_ARTIFACTS,
+  SITE_NO_THRESHOLD_OCCUPANTS,
   THRESHOLD_GRANT_BY_NAME,
   VOID_MANA_PROVIDERS,
 } from "@/lib/game/mana-providers";
 import { isOrdinarySite } from "../atlanteanFateState";
 import { isBaseOfBabel, isTowerOfBabel } from "../babelTowerState";
 import { portalOwnersAt } from "../portalState";
-import { getAdjacentCells, parseCellKey } from "./boardHelpers";
+import {
+  getAdjacentCells,
+  getNearbyCells,
+  parseCellKey,
+  toCellKey,
+} from "./boardHelpers";
 import type {
   AvatarState,
   BabelTowerMerge,
@@ -29,6 +40,8 @@ import type {
   CardRef,
   CellKey,
   GameState,
+  ImposterMaskState,
+  PermanentItem,
   Permanents,
   Phase,
   PlayerKey,
@@ -158,25 +171,101 @@ export const emptyThresholds = (): Thresholds => ({
   fire: 0,
 });
 
-// Note: Threshold cache is currently disabled to ensure accuracy with dynamic
-// special site bonuses (bloom sites, valley choices, etc.). The cache can be
-// re-enabled with proper invalidation when special site state changes.
-
 export const playerKeyToOwner = (who: PlayerKey): 1 | 2 =>
   who === "p1" ? 1 : 2;
+
+const opponentOf = (who: PlayerKey): PlayerKey => (who === "p1" ? "p2" : "p1");
+
+// ---------------------------------------------------------------------------
+// Resource context
+//
+// Everything mana/threshold computation depends on, in one object. Build it
+// from the store with `resourceContextFromState`, or assemble it from
+// subscribed slices in components. Both `computeThresholdTotals` and
+// `computeAvailableMana` accept the same shape so callers cannot forget a
+// dependency (which is how the HUD previously lost core mana).
+// ---------------------------------------------------------------------------
+export type ResourceContext = {
+  board: BoardState;
+  permanents: Permanents;
+  who: PlayerKey;
+  avatars?: Partial<Record<PlayerKey, AvatarState | null | undefined>> | null;
+  imposterMasks?: Partial<Record<PlayerKey, ImposterMaskState | null>> | null;
+  specialSiteState?: SpecialSiteState | null;
+  babelTowers?: BabelTowerMerge[] | null;
+  zones?: Partial<Record<PlayerKey, Zones>> | null;
+  currentTurn?: number;
+  etherCoresInVoidAtTurnStart?: string[] | null;
+  coresCarriedAtTurnStart?: string[] | null;
+};
+
+export type ResourceStateSlice = Pick<
+  GameState,
+  | "board"
+  | "permanents"
+  | "avatars"
+  | "imposterMasks"
+  | "specialSiteState"
+  | "babelTowers"
+  | "zones"
+  | "turn"
+  | "etherCoresInVoidAtTurnStart"
+  | "coresCarriedAtTurnStart"
+>;
+
+export const resourceContextFromState = (
+  state: ResourceStateSlice,
+  who: PlayerKey,
+): ResourceContext => ({
+  board: state.board,
+  permanents: state.permanents,
+  who,
+  avatars: state.avatars,
+  imposterMasks: state.imposterMasks,
+  specialSiteState: state.specialSiteState,
+  babelTowers: state.babelTowers,
+  zones: state.zones,
+  currentTurn: state.turn,
+  etherCoresInVoidAtTurnStart: state.etherCoresInVoidAtTurnStart,
+  coresCarriedAtTurnStart: state.coresCarriedAtTurnStart,
+});
+
+const effectiveAvatarNameFromContext = (
+  ctx: ResourceContext,
+  who: PlayerKey,
+): string | null | undefined =>
+  ctx.imposterMasks?.[who]?.maskAvatar?.name ?? ctx.avatars?.[who]?.card?.name;
 
 const accumulateThresholds = (
   acc: Thresholds,
   amount: Partial<Thresholds> | null | undefined,
+  multiplier = 1,
 ) => {
   if (!amount || typeof amount !== "object") return;
   for (const key of THRESHOLD_KEYS) {
     const value = Number((amount as Record<string, unknown>)[key] ?? 0);
     if (Number.isFinite(value) && value !== 0) {
-      acc[key] += value;
+      acc[key] += value * multiplier;
     }
   }
 };
+
+const permanentName = (p: PermanentItem | null | undefined): string =>
+  String(p?.card?.name || "").toLowerCase();
+
+const permanentsAt = (
+  permanents: Permanents,
+  cellKey: string,
+): PermanentItem[] => {
+  const arr = permanents?.[cellKey];
+  return Array.isArray(arr) ? arr : [];
+};
+
+const cellHasPermanentNamed = (
+  permanents: Permanents,
+  cellKey: string,
+  name: string,
+): boolean => permanentsAt(permanents, cellKey).some((p) => permanentName(p) === name);
 
 // Check if a site is adjacent to the void
 const isSiteAdjacentToVoid = (cellKey: string, board: BoardState): boolean => {
@@ -188,10 +277,8 @@ const isSiteAdjacentToVoid = (cellKey: string, board: BoardState): boolean => {
 };
 
 // Check if site is completely empty (no permanents)
-const isSiteEmpty = (cellKey: string, permanents: Permanents): boolean => {
-  const permsAtCell = permanents[cellKey];
-  return !permsAtCell || permsAtCell.length === 0;
-};
+const isSiteEmpty = (cellKey: string, permanents: Permanents): boolean =>
+  permanentsAt(permanents, cellKey).length === 0;
 
 // Check if player controls an Angel or Ward nearby a site
 const hasNearbyAngelOrWard = (
@@ -204,25 +291,16 @@ const hasNearbyAngelOrWard = (
   const cellsToCheck = [cellKey, ...adjacent];
 
   for (const checkKey of cellsToCheck) {
-    const permsAtCell = permanents[checkKey];
-    if (!permsAtCell) continue;
-
-    for (const perm of permsAtCell) {
+    for (const perm of permanentsAt(permanents, checkKey)) {
       if (perm.owner !== owner) continue;
 
       const subTypes = String(perm.card?.subTypes || "").toLowerCase();
-      const name = String(perm.card?.name || "").toLowerCase();
+      const name = permanentName(perm);
 
-      // Check for Angel subtype
       if (subTypes.includes("angel")) return true;
-
-      // Check for Ward keyword in name or card having Ward status
-      // Note: Ward is typically granted by effects, not easily detectable
-      // For now, check if the permanent has "ward" in name or subtypes
       if (name.includes("ward") || subTypes.includes("ward")) return true;
     }
 
-    // Also check if any site nearby has Ward
     const siteAtCell = board.sites[checkKey];
     if (siteAtCell && siteAtCell.owner === owner) {
       const siteName = String(siteAtCell.card?.name || "").toLowerCase();
@@ -240,9 +318,7 @@ export const conditionalSiteProvides = (
   board: BoardState,
   permanents: Permanents,
 ): boolean => {
-  const lc = siteName.toLowerCase();
-  const condition =
-    CONDITIONAL_MANA_SITES[lc as keyof typeof CONDITIONAL_MANA_SITES];
+  const condition = CONDITIONAL_MANA_SITES[siteName.toLowerCase()];
   if (!condition) return true; // Not a conditional site
 
   if (condition.condition === "empty") {
@@ -261,15 +337,7 @@ export const conditionalSiteProvides = (
 export const auraHasSilencedToken = (
   auraPermanentAt: string,
   permanents: Permanents,
-): boolean => {
-  const permsAtCell = permanents[auraPermanentAt];
-  if (!permsAtCell) return false;
-  for (const perm of permsAtCell) {
-    const name = String(perm.card?.name || "").toLowerCase();
-    if (name === "silenced") return true;
-  }
-  return false;
-};
+): boolean => cellHasPermanentNamed(permanents, auraPermanentAt, "silenced");
 
 // Check if a site is flooded by Atlantean Fate
 // A silenced Atlantean Fate aura does NOT flood sites.
@@ -287,8 +355,6 @@ const isSiteFloodedByAtlanteanFate = (
   permanents?: Permanents,
 ): boolean => {
   if (!specialSiteState?.atlanteanFateAuras) return false;
-  // Only a non-Ordinary, mana-providing site can actually be flooded. This
-  // rejects stale entries pointing at Rubble (or any Ordinary site).
   if (!siteCard) return false;
   if (!siteProvidesMana(siteCard)) return false;
   if (
@@ -298,9 +364,8 @@ const isSiteFloodedByAtlanteanFate = (
   }
   for (const aura of specialSiteState.atlanteanFateAuras) {
     if (aura.floodedSites.includes(cellKey)) {
-      // Check if this aura is silenced - silenced auras don't apply their effect
       if (permanents && auraHasSilencedToken(aura.permanentAt, permanents)) {
-        continue; // Skip this aura, it's silenced
+        continue; // Silenced aura: no effect
       }
       return true;
     }
@@ -312,15 +377,7 @@ const isSiteFloodedByAtlanteanFate = (
 export const siteHasFloodedToken = (
   cellKey: string,
   permanents: Permanents,
-): boolean => {
-  const permsAtCell = permanents[cellKey];
-  if (!permsAtCell) return false;
-  for (const perm of permsAtCell) {
-    const name = String(perm.card?.name || "").toLowerCase();
-    if (name === "flooded") return true;
-  }
-  return false;
-};
+): boolean => cellHasPermanentNamed(permanents, cellKey, "flooded");
 
 export const siteHasFloodedAbility = (
   cellKey: string,
@@ -338,223 +395,72 @@ export const siteHasFloodedAbility = (
 export const siteHasSilencedToken = (
   cellKey: string,
   permanents: Permanents,
-): boolean => {
-  const permsAtCell = permanents[cellKey];
-  if (!permsAtCell) return false;
-  for (const perm of permsAtCell) {
-    const name = String(perm.card?.name || "").toLowerCase();
-    if (name === "silenced") return true;
-  }
-  return false;
-};
+): boolean => cellHasPermanentNamed(permanents, cellKey, "silenced");
 
 // Check if a site has a Disabled token on it
 // NOTE: Disabled sites lose their textbox ability AND provide neither mana nor threshold
 export const siteHasDisabledToken = (
   cellKey: string,
   permanents: Permanents,
-): boolean => {
-  const permsAtCell = permanents[cellKey];
-  if (!permsAtCell) return false;
-  for (const perm of permsAtCell) {
-    const name = String(perm.card?.name || "").toLowerCase();
-    if (name === "disabled") return true;
+): boolean => cellHasPermanentNamed(permanents, cellKey, "disabled");
+
+// Aura modifiers affecting the site at this cell (Abundance, Drought, Sow the Earth).
+// An aura affects the site it sits on, regardless of who controls the aura.
+const getAuraSiteModifiers = (
+  cellKey: string,
+  permanents: Permanents,
+): { extraMana: number; noWaterThreshold: boolean; multiplier: number } => {
+  let extraMana = 0;
+  let noWaterThreshold = false;
+  let multiplier = 1;
+  for (const perm of permanentsAt(permanents, cellKey)) {
+    const mod = AURA_SITE_MODIFIERS[permanentName(perm)];
+    if (!mod) continue;
+    if (mod.extraMana) extraMana += mod.extraMana;
+    if (mod.noWaterThreshold) noWaterThreshold = true;
+    if (mod.multiplier && mod.multiplier > multiplier) {
+      multiplier = mod.multiplier;
+    }
   }
-  return false;
+  return { extraMana, noWaterThreshold, multiplier };
 };
 
-export const computeThresholdTotals = (
+// Unattached artifacts on this cell that enhance the site (Shrine of the Dragonlord).
+const getSiteEnhancerBonus = (
+  cellKey: string,
+  permanents: Permanents,
+): { mana: number; thresholds: Thresholds } => {
+  const bonus = { mana: 0, thresholds: emptyThresholds() };
+  for (const perm of permanentsAt(permanents, cellKey)) {
+    const enhancer = SITE_ENHANCER_ARTIFACTS[permanentName(perm)];
+    if (!enhancer) continue;
+    bonus.mana += enhancer.mana;
+    accumulateThresholds(bonus.thresholds, enhancer.thresholds);
+  }
+  return bonus;
+};
+
+// "Granary Rats" standing on a site: that site doesn't provide threshold.
+const siteHasNoThresholdOccupant = (
+  cellKey: string,
+  permanents: Permanents,
+): boolean =>
+  permanentsAt(permanents, cellKey).some((p) =>
+    SITE_NO_THRESHOLD_OCCUPANTS.has(permanentName(p)),
+  );
+
+// "Sinterfee": a Silenced site adjacent to a Sinterfee provides no threshold.
+const siteSilencedByAdjacentSilencer = (
+  cellKey: string,
   board: BoardState,
   permanents: Permanents,
-  who: PlayerKey,
-  avatar?: AvatarState | null,
-  specialSiteState?: SpecialSiteState | null,
-  babelTowers?: BabelTowerMerge[],
-): Thresholds => {
-  const owner = playerKeyToOwner(who);
-  const boardHeight = board?.size?.h ?? 4;
-  const totals = emptyThresholds();
-
-  // Elementalist avatar grants +1 to each threshold
-  if (avatar && isElementalist(avatar.card?.name)) {
-    totals.air += 1;
-    totals.water += 1;
-    totals.earth += 1;
-    totals.fire += 1;
-  }
-
-  for (const [cellKey, tile] of Object.entries(board?.sites ?? {})) {
-    // Check SHARED_MANA_SITES (Avalon) - provides threshold to BOTH players
-    const siteName = String(tile?.card?.name || "").toLowerCase();
-
-    // Rubble is a neutral, uncontrolled site: it provides no mana and no
-    // threshold to anyone, even when overlaid by a (stale) Atlantean Fate flood.
-    if (siteName === "rubble") continue;
-
-    const isShared = SHARED_MANA_SITES.has(siteName);
-
-    // For non-shared sites, check ownership
-    if (!isShared && (!tile || tile.owner !== owner)) continue;
-
-    // Check if site is disabled - disabled sites provide no threshold
-    // (Silenced sites still provide threshold, they only lose textbox abilities)
-    if (siteHasDisabledToken(cellKey, permanents)) {
-      continue; // Skip threshold calculation for disabled sites
-    }
-
-    // Check if site is flooded by Atlantean Fate - flooded sites only provide water
-    // A silenced Atlantean Fate aura does NOT flood sites
-    if (
-      isSiteFloodedByAtlanteanFate(
-        cellKey,
-        tile?.card,
-        specialSiteState,
-        permanents,
-      )
-    ) {
-      totals.water += 1;
-      continue; // Skip normal threshold calculation for flooded sites
-    }
-
-    // Check if site has the Flooded ability - adds water threshold
-    if (siteHasFloodedAbility(cellKey, permanents, specialSiteState)) {
-      // Flooding turns land sites into water sites; a site that already
-      // provides water threshold is unchanged (no double water bonus).
-      // MULTI_THRESHOLD_SITES is checked too because card.thresholds may be
-      // null for those sites (their thresholds are hardcoded below).
-      const printedWater =
-        (tile?.card?.thresholds?.water ?? 0) +
-        (MULTI_THRESHOLD_SITES[siteName]?.water ?? 0);
-      if (printedWater <= 0) {
-        totals.water += 1;
-      }
-      // Flooded land sites still provide their normal threshold, plus the
-      // water bonus - so we don't continue here; fall through to normal calc
-    }
-
-    // Check back-row-only sites
-    if (
-      !backRowSiteProvidesMana(
-        tile?.card ?? null,
-        cellKey,
-        tile?.owner ?? owner,
-        boardHeight,
-      )
-    )
-      continue;
-
-    // Check conditional sites (Pristine Paradise, Colour Out of Space)
-    if (!conditionalSiteProvides(siteName, cellKey, board, permanents))
-      continue;
-
-    // Check if this is an element choice site (Valley of Delight)
-    if (ELEMENT_CHOICE_SITES.has(siteName)) {
-      // Look up the choice for this site cell (each cell can only have one choice)
-      const choice = specialSiteState?.valleyChoices.find(
-        (c) => c.cellKey === cellKey,
-      );
-      if (choice) {
-        totals[choice.element] += 1;
-      }
-      // If no choice made yet, site provides nothing
-      continue;
-    }
-
-    // Check The Empyrean - provides (A)(E)(F)(W) if nearby Angel or Ward
-    const empyreanConfig =
-      CONDITIONAL_THRESHOLD_SITES[
-        siteName as keyof typeof CONDITIONAL_THRESHOLD_SITES
-      ];
-    if (empyreanConfig) {
-      if (
-        hasNearbyAngelOrWard(cellKey, board, permanents, tile?.owner ?? owner)
-      ) {
-        accumulateThresholds(totals, empyreanConfig.thresholds);
-      }
-      continue;
-    }
-
-    // Check multi-threshold sites (Tintagel, Avalon, etc.)
-    const multiThreshold = MULTI_THRESHOLD_SITES[siteName];
-    if (multiThreshold) {
-      accumulateThresholds(totals, multiThreshold);
-      continue;
-    }
-
-    // Tower of Babel: Base provides earth, Apex provides air
-    // When merged, both thresholds apply. Hardcoded because card.thresholds
-    // may be null depending on the data pipeline.
-    if (isBaseOfBabel(siteName)) {
-      totals.earth += 1;
-      // If merged with Apex, also grant air threshold
-      if (babelTowers) {
-        const merge = babelTowers.find(
-          (t) => t.cellKey === (cellKey as CellKey),
-        );
-        if (merge) {
-          totals.air += 1;
-        }
-      }
-      continue;
-    }
-    if (siteName.includes("apex of babel")) {
-      // Apex played as a standalone site (not merged)
-      totals.air += 1;
-      continue;
-    }
-
-    // Standard threshold from site card data (fallback)
-    accumulateThresholds(totals, tile?.card?.thresholds ?? null);
-  }
-
-  // Add bloom bonuses (temporary threshold from Genesis this turn)
-  if (specialSiteState?.bloomBonuses) {
-    for (const bonus of specialSiteState.bloomBonuses) {
-      if (bonus.owner === owner) {
-        accumulateThresholds(totals, bonus.thresholds);
-      }
-    }
-  }
-
-  // Add threshold from permanents
-  for (const arr of Object.values(permanents ?? {})) {
-    const list = Array.isArray(arr) ? arr : [];
-    for (const p of list) {
-      try {
-        if (!p || p.owner !== owner) continue;
-        const nm = String(p.card?.name || "").toLowerCase();
-        const grant = THRESHOLD_GRANT_BY_NAME[nm];
-        if (grant) {
-          const cardType = String(p.card?.type || "").toLowerCase();
-          const isArtifact = cardType.includes("artifact");
-          // ALL artifacts (including cores) only provide threshold when attached (being carried)
-          if (isArtifact && !p.attachedTo) {
-            continue;
-          }
-          accumulateThresholds(totals, grant as Partial<Thresholds>);
-        }
-      } catch {}
-    }
-  }
-
-  return totals;
-};
-
-export const getCachedThresholdTotals = (
-  state: GameState,
-  who: PlayerKey,
-): Thresholds => {
-  // Note: Cache is disabled when special site state changes frequently
-  // For now, always recompute to ensure accuracy with bloom bonuses
-  const avatarRef = state.avatars[who];
-
-  return computeThresholdTotals(
-    state.board,
-    state.permanents,
-    who,
-    avatarRef,
-    state.specialSiteState,
-    state.babelTowers,
+): boolean => {
+  if (!siteHasSilencedToken(cellKey, permanents)) return false;
+  const adjacent = getAdjacentCells(cellKey, board.size.w, board.size.h);
+  return adjacent.some((adj) =>
+    permanentsAt(permanents, adj).some((p) =>
+      ADJACENT_SILENCER_NO_THRESHOLD.has(permanentName(p)),
+    ),
   );
 };
 
@@ -569,15 +475,12 @@ export const siteProvidesMana = (card: CardRef | null | undefined): boolean => {
 
 // Check if a site is in the owner's back row.
 // Board coordinate system: y=0 is at the bottom (P2's side), y=boardHeight-1 is at the top (P1's side).
-// P1's back row is y=boardHeight-1 (top), P2's back row is y=0 (bottom).
 export const isInBackRow = (
   cellKey: string,
   owner: 1 | 2,
   boardHeight: number,
 ): boolean => {
   const { y } = parseCellKey(cellKey);
-  // P1 (owner=1) back row is at the top (y = boardHeight - 1)
-  // P2 (owner=2) back row is at the bottom (y = 0)
   return owner === 1 ? y === boardHeight - 1 : y === 0;
 };
 
@@ -590,7 +493,7 @@ export const backRowSiteProvidesMana = (
 ): boolean => {
   if (!card) return false;
   const name = typeof card.name === "string" ? card.name.toLowerCase() : null;
-  if (!name || !BACK_ROW_ONLY_SITES.has(name)) return true; // Not a back-row-only site
+  if (!name || !BACK_ROW_ONLY_SITES.has(name)) return true;
   return isInBackRow(cellKey, owner, boardHeight);
 };
 
@@ -599,138 +502,338 @@ export const backRowSiteProvidesMana = (
 const countUniqueMinionsInZone = (zone: CardRef[]): number => {
   let count = 0;
   for (const card of zone) {
-    // Must be a minion (not spell, site, artifact, etc.)
     const type = String(card.type || "").toLowerCase();
     if (!type.includes("minion")) continue;
-
-    // Must have Unique rarity
     const rarity = String(card.rarity || "").toLowerCase();
     if (rarity !== "unique") continue;
-
     count += 1;
   }
   return count;
 };
 
-export const computeAvailableMana = (
-  board: BoardState,
-  permanents: Permanents,
-  who: PlayerKey,
-  zones?: Record<PlayerKey, Zones> | null,
-  specialSiteState?: SpecialSiteState | null,
-  thresholds?: Thresholds | null,
-  currentTurn?: number,
-  etherCoresInVoidAtTurnStart?: string[],
-  babelTowers?: BabelTowerMerge[],
-  coresCarriedAtTurnStart?: string[],
-): number => {
-  const owner = playerKeyToOwner(who);
-  const opponent: PlayerKey = who === "p1" ? "p2" : "p1";
-  const boardHeight = board?.size?.h ?? 4;
-  let mana = 0;
+// Shared per-site gate used by both mana and threshold computation.
+// Returns null when the site provides nothing at all to `owner`, otherwise
+// describes the flood / aura state the caller must honour.
+type SiteEvaluation = {
+  siteName: string;
+  tileOwner: 1 | 2;
+  floodedByAtlanteanFate: boolean;
+  modifiers: ReturnType<typeof getAuraSiteModifiers>;
+};
 
-  for (const [cellKey, tile] of Object.entries(board?.sites ?? {})) {
-    const siteName = String(tile?.card?.name || "").toLowerCase();
+const evaluateSiteForOwner = (
+  ctx: ResourceContext,
+  cellKey: string,
+  tile: BoardState["sites"][string],
+  owner: 1 | 2,
+): SiteEvaluation | null => {
+  if (!tile) return null;
+  const siteName = String(tile.card?.name || "").toLowerCase();
+  // Rubble is a neutral, uncontrolled site: it provides nothing to anyone.
+  if (siteName === "rubble") return null;
 
-    // Check SHARED_MANA_SITES (Avalon) - provides mana to BOTH players
-    const isShared = SHARED_MANA_SITES.has(siteName);
+  const isShared = SHARED_MANA_SITES.has(siteName);
+  if (!isShared && tile.owner !== owner) return null;
 
-    // For non-shared sites, check ownership
-    if (!isShared && (!tile || tile.owner !== owner)) continue;
-    if (tile?.tapped) continue;
-    if (!siteProvidesMana(tile?.card ?? null)) continue;
+  // Disabled sites provide neither mana nor threshold.
+  // (Silenced sites still provide both; they only lose textbox abilities.)
+  if (siteHasDisabledToken(cellKey, ctx.permanents)) return null;
 
-    // Check if site is disabled - disabled sites provide no mana
-    // (Silenced sites still provide mana, they only lose textbox abilities)
-    if (siteHasDisabledToken(cellKey, permanents)) {
-      continue;
-    }
+  const modifiers = getAuraSiteModifiers(cellKey, ctx.permanents);
+  const floodedByAtlanteanFate = isSiteFloodedByAtlanteanFate(
+    cellKey,
+    tile.card,
+    ctx.specialSiteState,
+    ctx.permanents,
+  );
 
-    // Check back-row-only sites
+  // An Atlantean-flooded site "loses all other abilities", so its back-row and
+  // conditional restrictions no longer apply.
+  if (!floodedByAtlanteanFate) {
+    const boardHeight = ctx.board?.size?.h ?? 4;
     if (
       !backRowSiteProvidesMana(
-        tile?.card ?? null,
+        tile.card ?? null,
         cellKey,
-        tile?.owner ?? owner,
+        tile.owner ?? owner,
         boardHeight,
       )
-    )
-      continue;
+    ) {
+      return null;
+    }
+    if (
+      !conditionalSiteProvides(siteName, cellKey, ctx.board, ctx.permanents)
+    ) {
+      return null;
+    }
+  }
 
-    // Check conditional sites (Pristine Paradise, Colour Out of Space)
-    if (!conditionalSiteProvides(siteName, cellKey, board, permanents))
-      continue;
+  return {
+    siteName,
+    tileOwner: tile.owner ?? owner,
+    floodedByAtlanteanFate,
+    modifiers,
+  };
+};
 
-    // Check if this is an element choice site (Valley of Delight)
-    // These provide mana only after a choice is made
-    if (ELEMENT_CHOICE_SITES.has(siteName)) {
+export const computeThresholdTotals = (ctx: ResourceContext): Thresholds => {
+  const { board, permanents, who, specialSiteState, babelTowers } = ctx;
+  const owner = playerKeyToOwner(who);
+  const totals = emptyThresholds();
+
+  // Elementalist avatar grants +1 to each threshold (also while worn as an
+  // Imposter mask, since the mask grants the avatar's abilities).
+  if (isElementalist(effectiveAvatarNameFromContext(ctx, who))) {
+    totals.air += 1;
+    totals.water += 1;
+    totals.earth += 1;
+    totals.fire += 1;
+  }
+
+  for (const [cellKey, tile] of Object.entries(board?.sites ?? {})) {
+    const site = evaluateSiteForOwner(ctx, cellKey, tile, owner);
+    if (!site) continue;
+    const { siteName, tileOwner, floodedByAtlanteanFate, modifiers } = site;
+
+    // Occupants / neighbours that strip threshold from this site.
+    if (siteHasNoThresholdOccupant(cellKey, permanents)) continue;
+    if (siteSilencedByAdjacentSilencer(cellKey, board, permanents)) continue;
+
+    const siteThresholds = emptyThresholds();
+
+    if (floodedByAtlanteanFate) {
+      // Flooded sites are water sites and only provide Water threshold.
+      siteThresholds.water += 1;
+    } else if (ELEMENT_CHOICE_SITES.has(siteName)) {
+      // Valley of Delight: provides the chosen element, nothing before a choice.
       const choice = specialSiteState?.valleyChoices.find(
         (c) => c.cellKey === cellKey,
       );
-      if (choice) {
-        mana += 1; // Valley of Delight provides 1 mana after choice
+      if (choice) siteThresholds[choice.element] += 1;
+    } else if (CONDITIONAL_THRESHOLD_SITES[siteName]) {
+      // The Empyrean: (A)(E)(F)(W) if you control a nearby Angel or Ward.
+      if (hasNearbyAngelOrWard(cellKey, board, permanents, tileOwner)) {
+        accumulateThresholds(
+          siteThresholds,
+          CONDITIONAL_THRESHOLD_SITES[siteName].thresholds,
+        );
       }
-      continue;
-    }
-
-    // Check City bonus sites (+1 mana if you have the required threshold)
-    const cityConfig = CITY_BONUS_SITES[siteName];
-    if (cityConfig && thresholds) {
-      const hasThreshold = (thresholds[cityConfig.requiredElement] || 0) >= 1;
-      if (hasThreshold) {
-        mana += 1 + cityConfig.extraMana; // Base 1 + extra
-      } else {
-        mana += 1; // Just base mana without bonus
+    } else if (MULTI_THRESHOLD_SITES[siteName]) {
+      accumulateThresholds(siteThresholds, MULTI_THRESHOLD_SITES[siteName]);
+    } else if (isBaseOfBabel(siteName)) {
+      // Base provides earth; a built Tower (Apex atop) also provides air.
+      siteThresholds.earth += 1;
+      if (babelTowers?.some((t) => t.cellKey === (cellKey as CellKey))) {
+        siteThresholds.air += 1;
       }
-      continue;
+    } else if (siteName.includes("apex of babel")) {
+      siteThresholds.air += 1;
+    } else {
+      accumulateThresholds(siteThresholds, tile?.card?.thresholds ?? null);
     }
 
-    // Check Myrrh's Trophy Room - extra mana per Unique in opponent's graveyard
-    const cemeteryConfig = CEMETERY_MANA_SITES[siteName];
-    if (cemeteryConfig && zones) {
-      const oppGraveyard = zones[opponent]?.graveyard || [];
-      const uniqueCount = countUniqueMinionsInZone(oppGraveyard);
-      mana += 1 + uniqueCount * cemeteryConfig.perUnique;
-      continue;
-    }
-
-    // The Empyrean - provides mana only if condition met
-    const empyreanConfig =
-      CONDITIONAL_THRESHOLD_SITES[
-        siteName as keyof typeof CONDITIONAL_THRESHOLD_SITES
-      ];
-    if (empyreanConfig) {
-      if (
-        hasNearbyAngelOrWard(cellKey, board, permanents, tile?.owner ?? owner)
-      ) {
-        mana += 1;
-      }
-      continue;
-    }
-
-    // Ghost Town and other genesis mana sites provide base 0 mana
-    // The temporary bonus is added below
-    if (siteName in GENESIS_MANA_SITES) {
-      // No base mana from Ghost Town
-      continue;
-    }
-
-    // Tower of Babel provides 2 mana (merged from Base + Apex)
+    // Flooded ability (Flooded token / Realm flood): land sites become water
+    // sites. A site that already provides water is unchanged.
     if (
-      isTowerOfBabel(siteName) ||
-      (babelTowers &&
-        isBaseOfBabel(siteName) &&
-        babelTowers.some((t) => t.cellKey === (cellKey as CellKey)))
+      !floodedByAtlanteanFate &&
+      siteHasFloodedAbility(cellKey, permanents, specialSiteState) &&
+      siteThresholds.water <= 0
     ) {
-      mana += 2;
-      continue;
+      siteThresholds.water += 1;
     }
 
-    // Standard mana from site
-    mana += 1;
+    // Drought: affected sites provide no water threshold.
+    if (modifiers.noWaterThreshold) siteThresholds.water = 0;
+
+    // Shrine of the Dragonlord on this site: additional (E)(F)(W)(A).
+    accumulateThresholds(
+      siteThresholds,
+      getSiteEnhancerBonus(cellKey, permanents).thresholds,
+    );
+
+    // Sow the Earth: this site provides double threshold.
+    accumulateThresholds(totals, siteThresholds, modifiers.multiplier);
   }
 
-  // Add genesis mana bonuses (temporary mana from Genesis this turn)
+  // Add bloom bonuses (temporary threshold from Genesis / Annual Fair this turn)
+  if (specialSiteState?.bloomBonuses) {
+    for (const bonus of specialSiteState.bloomBonuses) {
+      if (bonus.owner === owner) {
+        accumulateThresholds(totals, bonus.thresholds);
+      }
+    }
+  }
+
+  // Add threshold from permanents (cores while carried, Arthurian families, ...)
+  for (const arr of Object.values(permanents ?? {})) {
+    const list = Array.isArray(arr) ? arr : [];
+    for (const p of list) {
+      if (!p || p.owner !== owner) continue;
+      const grant = THRESHOLD_GRANT_BY_NAME[permanentName(p)];
+      if (!grant) continue;
+      const cardType = String(p.card?.type || "").toLowerCase();
+      // Artifacts (cores) only provide threshold while carried (attached).
+      if (cardType.includes("artifact") && !p.attachedTo) continue;
+      accumulateThresholds(totals, grant);
+    }
+  }
+
+  return totals;
+};
+
+// Per-seat memo: thresholds only change when one of these slices changes
+// identity, so callers that poll (HUD, context menu) get a stable object back.
+type ThresholdCacheEntry = {
+  board: BoardState;
+  permanents: Permanents;
+  avatars: GameState["avatars"];
+  imposterMasks: GameState["imposterMasks"];
+  specialSiteState: SpecialSiteState;
+  babelTowers: BabelTowerMerge[];
+  result: Thresholds;
+};
+const thresholdCache: Partial<Record<PlayerKey, ThresholdCacheEntry>> = {};
+
+export const getCachedThresholdTotals = (
+  state: ResourceStateSlice,
+  who: PlayerKey,
+): Thresholds => {
+  const hit = thresholdCache[who];
+  if (
+    hit &&
+    hit.board === state.board &&
+    hit.permanents === state.permanents &&
+    hit.avatars === state.avatars &&
+    hit.imposterMasks === state.imposterMasks &&
+    hit.specialSiteState === state.specialSiteState &&
+    hit.babelTowers === state.babelTowers
+  ) {
+    return hit.result;
+  }
+  const result = computeThresholdTotals(resourceContextFromState(state, who));
+  thresholdCache[who] = {
+    board: state.board,
+    permanents: state.permanents,
+    avatars: state.avatars,
+    imposterMasks: state.imposterMasks,
+    specialSiteState: state.specialSiteState,
+    babelTowers: state.babelTowers,
+    result,
+  };
+  return result;
+};
+
+const avatarCellKey = (
+  avatar: AvatarState | null | undefined,
+): CellKey | null => {
+  if (!avatar?.pos) return null;
+  const [x, y] = avatar.pos;
+  return toCellKey(x, y);
+};
+
+export const computeAvailableMana = (ctx: ResourceContext): number => {
+  const {
+    board,
+    permanents,
+    who,
+    zones,
+    specialSiteState,
+    currentTurn,
+    etherCoresInVoidAtTurnStart,
+    babelTowers,
+    coresCarriedAtTurnStart,
+  } = ctx;
+  const owner = playerKeyToOwner(who);
+  const opponent = opponentOf(who);
+  let mana = 0;
+
+  let ownThresholds: Thresholds | null = null;
+  const getOwnThresholds = () => {
+    if (!ownThresholds) ownThresholds = computeThresholdTotals(ctx);
+    return ownThresholds;
+  };
+  let opponentThresholds: Thresholds | null = null;
+  const getOpponentThresholds = () => {
+    if (!opponentThresholds) {
+      opponentThresholds = computeThresholdTotals({ ...ctx, who: opponent });
+    }
+    return opponentThresholds;
+  };
+
+  for (const [cellKey, tile] of Object.entries(board?.sites ?? {})) {
+    if (!tile) continue;
+    const rawName = String(tile.card?.name || "").toLowerCase();
+
+    // Opponent's City of Plenty: when its owner has the water threshold it
+    // "also provides (1) for your opponent" (that is, for us).
+    const opponentSiteConfig = OPPONENT_MANA_SITES[rawName];
+    if (opponentSiteConfig && tile.owner !== owner) {
+      const oppSite = evaluateSiteForOwner(ctx, cellKey, tile, tile.owner);
+      if (oppSite && !oppSite.floodedByAtlanteanFate) {
+        const oppHas =
+          (getOpponentThresholds()[opponentSiteConfig.requiredElement] || 0) >=
+          1;
+        if (oppHas) mana += opponentSiteConfig.opponentMana;
+      }
+      continue;
+    }
+
+    const site = evaluateSiteForOwner(ctx, cellKey, tile, owner);
+    if (!site) continue;
+    if (!siteProvidesMana(tile.card ?? null)) continue;
+    const { siteName, tileOwner, floodedByAtlanteanFate, modifiers } = site;
+
+    let base = 0;
+    if (floodedByAtlanteanFate) {
+      // Flooded: a plain water site that lost all other abilities.
+      base = 1;
+    } else if (ELEMENT_CHOICE_SITES.has(siteName)) {
+      // Valley of Delight provides 1 mana only after a choice is made
+      const choice = specialSiteState?.valleyChoices.find(
+        (c) => c.cellKey === cellKey,
+      );
+      base = choice ? 1 : 0;
+    } else if (CITY_BONUS_SITES[siteName]) {
+      const cityConfig = CITY_BONUS_SITES[siteName];
+      const hasThreshold =
+        (getOwnThresholds()[cityConfig.requiredElement] || 0) >= 1;
+      base = hasThreshold ? 1 + cityConfig.extraMana : 1;
+    } else if (CEMETERY_MANA_SITES[siteName]) {
+      // Myrrh's Trophy Room - extra mana per Unique minion in opponent's cemetery
+      const oppGraveyard = zones?.[opponent]?.graveyard || [];
+      const uniqueCount = countUniqueMinionsInZone(oppGraveyard);
+      base = 1 + uniqueCount * CEMETERY_MANA_SITES[siteName].perUnique;
+    } else if (CONDITIONAL_THRESHOLD_SITES[siteName]) {
+      // The Empyrean - provides mana only if condition met
+      base = hasNearbyAngelOrWard(cellKey, board, permanents, tileOwner)
+        ? 1
+        : 0;
+    } else if (siteName in GENESIS_MANA_SITES) {
+      // Ghost Town: base 0, the Genesis bonus is added below
+      base = 0;
+    } else if (
+      isTowerOfBabel(siteName) ||
+      (isBaseOfBabel(siteName) &&
+        babelTowers?.some((t) => t.cellKey === (cellKey as CellKey)))
+    ) {
+      // A built Tower of Babel provides 2 (Base + Apex)
+      base = 2;
+    } else {
+      base = 1;
+    }
+
+    if (base <= 0) continue;
+
+    // Shrine of the Dragonlord on this site: additional (1).
+    base += getSiteEnhancerBonus(cellKey, permanents).mana;
+    // Abundance: each affected site provides one additional mana.
+    base += modifiers.extraMana;
+    // Sow the Earth: this site provides double mana.
+    mana += base * modifiers.multiplier;
+  }
+
+  // Add genesis mana bonuses (temporary mana this turn: Ghost Town, Towers,
+  // Beacon, Temple of Moloch)
   if (specialSiteState?.genesisMana) {
     for (const bonus of specialSiteState.genesisMana) {
       if (bonus.owner === owner) {
@@ -740,62 +843,60 @@ export const computeAvailableMana = (
   }
 
   // Add mana from permanents
+  const enemyAvatarCell = avatarCellKey(ctx.avatars?.[opponent]);
   for (const [cellKey, arr] of Object.entries(permanents ?? {})) {
     const list = Array.isArray(arr) ? arr : [];
-    const isVoidCell = !board?.sites?.[cellKey]; // No site at this cell = void
+    const isVoidCell = !board?.sites?.[cellKey];
     for (const p of list) {
-      try {
-        if (!p || p.owner !== owner) continue;
-        const nm = String(p.card?.name || "").toLowerCase();
-        const cardType = String(p.card?.type || "").toLowerCase();
-        const isArtifact = cardType.includes("artifact");
-        // Check for void mana providers (e.g., Ether Core)
-        // Ether Core only provides 3 mana if:
-        // 1. Cast this turn AND currently in void, OR
-        // 2. Started the turn in the void (tracked by etherCoresInVoidAtTurnStart)
-        // If it started on a site and was moved to void, it provides no mana this turn.
-        if (isVoidCell && VOID_MANA_PROVIDERS[nm]) {
-          const voidManaAmount = VOID_MANA_PROVIDERS[nm];
-          const instanceId = p.instanceId ?? null;
-          const enteredThisTurn =
-            currentTurn !== undefined &&
-            p.enteredOnTurn !== undefined &&
-            p.enteredOnTurn === currentTurn;
-          const startedInVoid =
-            instanceId !== null &&
-            etherCoresInVoidAtTurnStart?.includes(instanceId);
+      if (!p || p.owner !== owner) continue;
+      const nm = permanentName(p);
+      const cardType = String(p.card?.type || "").toLowerCase();
+      const isArtifact = cardType.includes("artifact");
+      const instanceId = p.instanceId ?? null;
+      const enteredThisTurn =
+        currentTurn !== undefined &&
+        p.enteredOnTurn !== undefined &&
+        p.enteredOnTurn === currentTurn;
 
-          // Only provide mana if cast this turn (while in void) or started turn in void
-          if (enteredThisTurn || startedInVoid) {
-            mana += voidManaAmount;
-          }
-          // If neither condition is met, Ether Core provides 0 mana this turn
-          continue;
+      // Void mana providers (Ether Core): only if cast this turn while in the
+      // void, or if it started the turn in the void.
+      if (isVoidCell && VOID_MANA_PROVIDERS[nm]) {
+        const startedInVoid =
+          instanceId !== null &&
+          !!etherCoresInVoidAtTurnStart?.includes(instanceId);
+        if (enteredThisTurn || startedInVoid) {
+          mana += VOID_MANA_PROVIDERS[nm];
         }
-        // Regular mana providers
-        if (MANA_PROVIDER_BY_NAME.has(nm)) {
-          // ALL artifacts (including cores) only provide mana when attached (being carried)
-          if (isArtifact && !p.attachedTo) {
-            continue;
-          }
-          // Artifact cores additionally need mana timing check:
-          // only provide mana if summoned this turn OR was carried at turn start
-          if (isArtifact && nm.includes("core")) {
-            const instanceId = p.instanceId ?? null;
-            const enteredThisTurn =
-              currentTurn !== undefined &&
-              p.enteredOnTurn !== undefined &&
-              p.enteredOnTurn === currentTurn;
-            const wasCarriedAtStart =
-              instanceId !== null &&
-              coresCarriedAtTurnStart?.includes(instanceId);
-            if (!enteredThisTurn && !wasCarriedAtStart) {
-              continue;
-            }
-          }
-          mana += 1;
+        continue;
+      }
+
+      // Finwife: provides (2) for each nearby enemy Avatar.
+      const perEnemyAvatar = PER_NEARBY_ENEMY_AVATAR_PROVIDERS[nm];
+      if (perEnemyAvatar) {
+        if (
+          enemyAvatarCell &&
+          getNearbyCells(cellKey, board.size.w, board.size.h).includes(
+            enemyAvatarCell,
+          )
+        ) {
+          mana += perEnemyAvatar;
         }
-      } catch {}
+        continue;
+      }
+
+      if (!MANA_PROVIDER_BY_NAME.has(nm)) continue;
+
+      // Artifacts (cores, Key to the City) only provide while carried.
+      if (isArtifact && !p.attachedTo) continue;
+      // Cores additionally need to have been summoned this turn or carried
+      // at turn start.
+      if (isArtifact && nm.includes("core")) {
+        const wasCarriedAtStart =
+          instanceId !== null &&
+          !!coresCarriedAtTurnStart?.includes(instanceId);
+        if (!enteredThisTurn && !wasCarriedAtStart) continue;
+      }
+      mana += 1;
     }
   }
 

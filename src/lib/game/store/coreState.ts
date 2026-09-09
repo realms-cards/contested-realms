@@ -20,13 +20,11 @@ export const createInitialPlayers = (): GameState["players"] => ({
     life: 20,
     lifeState: "alive",
     mana: 0,
-    thresholds: { air: 0, water: 0, earth: 0, fire: 0 },
   },
   p2: {
     life: 20,
     lifeState: "alive",
     mana: 0,
-    thresholds: { air: 0, water: 0, earth: 0, fire: 0 },
   },
 });
 
@@ -542,6 +540,7 @@ export const createCoreSlice: StateCreator<
       // Reset pathfinder and geomancer usage for both players on turn change
       const pathfinderUsedNext = { p1: false, p2: false };
       const geomancerRubbleUsedNext = { p1: false, p2: false };
+      const templeOfMolochUsedNext = { p1: false, p2: false };
 
       // Don't send turn in patch - server increments turn when currentPlayer changes
       // Include avatars to ensure correct position is broadcast (e.g., after Pathfinder move)
@@ -551,6 +550,7 @@ export const createCoreSlice: StateCreator<
         hasDrawnThisTurn: false, // Reset draw tracking for new turn
         pathfinderUsed: pathfinderUsedNext,
         geomancerRubbleUsed: geomancerRubbleUsedNext,
+        templeOfMolochUsed: templeOfMolochUsedNext,
         avatars: avatarsNext,
       };
       const deltaPatch =
@@ -569,6 +569,7 @@ export const createCoreSlice: StateCreator<
         avatars: avatarsNext,
         pathfinderUsed: pathfinderUsedNext,
         geomancerRubbleUsed: geomancerRubbleUsedNext,
+        templeOfMolochUsed: templeOfMolochUsedNext,
         selectedCard: null,
       });
       try {
@@ -733,6 +734,7 @@ export const createCoreSlice: StateCreator<
 
     const pathfinderUsedNext = { p1: false, p2: false };
     const geomancerRubbleUsedNext = { p1: false, p2: false };
+    const templeOfMolochUsedNext = { p1: false, p2: false };
 
     // Track Ether Cores in void and carried cores at turn start
     const etherCoresInVoidAtTurnStartNext: string[] = [];
@@ -769,6 +771,7 @@ export const createCoreSlice: StateCreator<
       assimilatorSnailTransforms: assimilatorSnailTransformsNext,
       pathfinderUsed: pathfinderUsedNext,
       geomancerRubbleUsed: geomancerRubbleUsedNext,
+      templeOfMolochUsed: templeOfMolochUsedNext,
       etherCoresInVoidAtTurnStart: etherCoresInVoidAtTurnStartNext,
       coresCarriedAtTurnStart: coresCarriedAtTurnStartNext,
       permanents,
@@ -793,6 +796,7 @@ export const createCoreSlice: StateCreator<
       assimilatorSnailTransforms: assimilatorSnailTransformsNext,
       pathfinderUsed: pathfinderUsedNext,
       geomancerRubbleUsed: geomancerRubbleUsedNext,
+      templeOfMolochUsed: templeOfMolochUsedNext,
       etherCoresInVoidAtTurnStart: etherCoresInVoidAtTurnStartNext,
       coresCarriedAtTurnStart: coresCarriedAtTurnStartNext,
       selectedCard: null,

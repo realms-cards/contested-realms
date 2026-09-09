@@ -26,7 +26,7 @@ The current rules engine (`server/rules/index.js`) implements basic Sorcery game
 **Current Implementation:**
 - ✅ Untaps permanents owned by current player
 - ✅ Untaps avatar of current player
-- ✅ Resets `spentThisTurn` resource counter
+- ✅ Resets the `players[seat].mana` spend ledger to 0
 - ✅ Clears summoning sickness (`summonedThisTurn` flag)
 - ✅ **RECENTLY FIXED:** Turn tracking prevents spurious untaps
 
@@ -92,17 +92,15 @@ if (sitesOwned > 0 && !isAdjacentToOwnedSite(game, meNum, key)) {
 **Rules Enforced:**
 1. ✅ **Cost Calculation:** Cards have costs from metadata
 2. ✅ **Available Mana:** Owned sites + mana-providing permanents
-3. ✅ **Spend Tracking:** `spentThisTurn` counter prevents overspending
+3. ✅ **Spend Tracking:** the `players[seat].mana` ledger (shared with client and bot) prevents overspending
 4. ✅ **Avatar Tap Cost:** Playing a site requires untapped avatar
-5. ✅ **Auto-patch Generation:** Automatically taps avatar and updates `spentThisTurn`
+5. ✅ **Auto-patch Generation:** Automatically taps avatar and books the cost on `players[seat].mana` when the client did not
 
 **Code Example:**
 ```javascript
-// Mana spend check
-const ownedSiteCount = countOwnedManaSites(game, meNum);
-const manaProviders = countManaProvidersFromPermanents(game, meNum);
-const spentPrev = game.resources[meKey].spentThisTurn || 0;
-const available = Math.max(0, ownedSiteCount + manaProviders - spentPrev);
+// Mana spend check (rules-resources.ts mirrors the client's computeAvailableMana)
+const ledgerPrev = getManaLedger(game, meKey); // players[seat].mana, negative after spending
+const available = Math.max(0, computeAvailableMana(game, meKey) + ledgerPrev);
 
 if (totalCost > available) {
   return { ok: false, error: 'Insufficient resources to pay costs' };
@@ -387,7 +385,7 @@ Would require major architectural changes:
 **Current Flow:**
 1. Calculate total cost of action
 2. Check if player can afford it
-3. Generate auto-patch (update `spentThisTurn`, tap avatar)
+3. Generate auto-patch (book cost on `players[seat].mana` if the client did not, tap avatar)
 4. Return success + auto-patch
 
 **Assessment:** ✅ **WORKS CORRECTLY**

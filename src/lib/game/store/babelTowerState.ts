@@ -280,14 +280,9 @@ export const createBabelTowerSlice: StateCreator<
       get().trySendPatch(patch);
     }
 
-    // Trigger Apex's genesis effect (gain 1 mana this turn since Base was already providing)
-    // The Tower now provides 2 mana, and since Base already gave 1, player gains +1 effective
-    get().registerGenesisMana(
-      targetCell,
-      "The Tower of Babel",
-      1,
-      baseTile.owner,
-    );
+    // No genesis mana here: computeAvailableMana already switches the Base
+    // cell from 1 to 2 mana once the merge is registered in babelTowers, and
+    // the Apex card text has no "gain (1)" clause.
 
     // Send toast
     if (transport?.sendMessage) {

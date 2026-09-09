@@ -1285,6 +1285,14 @@ export const createNetworkSlice: StateCreator<
       } else if (replaceKeys.has("geomancerRubbleUsed")) {
         next.geomancerRubbleUsed = { p1: false, p2: false };
       }
+      // Temple of Moloch once-per-turn usage
+      if (p.templeOfMolochUsed !== undefined) {
+        next.templeOfMolochUsed = replaceKeys.has("templeOfMolochUsed")
+          ? { ...p.templeOfMolochUsed }
+          : { ...state.templeOfMolochUsed, ...p.templeOfMolochUsed };
+      } else if (replaceKeys.has("templeOfMolochUsed")) {
+        next.templeOfMolochUsed = { p1: false, p2: false };
+      }
       // Special site state (Valley of Delight, Mismanaged Mortuary, etc.)
       // Always replace, don't merge (arrays inside)
       if (p.specialSiteState !== undefined) {
@@ -1800,6 +1808,13 @@ export const createNetworkSlice: StateCreator<
       // Pathfinder used state - applyPatch version
       if (p.pathfinderUsed !== undefined) {
         next.pathfinderUsed = p.pathfinderUsed;
+      }
+      // Temple of Moloch used state - applyPatch version
+      if (p.templeOfMolochUsed !== undefined) {
+        next.templeOfMolochUsed = {
+          ...state.templeOfMolochUsed,
+          ...p.templeOfMolochUsed,
+        };
       }
       // Special site state (Valley of Delight, Mismanaged Mortuary, etc.) - applyPatch version
       // Use replaceKeys to fully replace the state (arrays don't merge well)

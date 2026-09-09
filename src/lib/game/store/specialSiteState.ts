@@ -1,5 +1,6 @@
 import type { StateCreator } from "zustand";
 import { TILE_SIZE } from "@/lib/game/constants";
+import { TEMPLE_OF_MOLOCH_GAIN } from "@/lib/game/mana-providers";
 import type {
   BloomSiteBonus,
   CellKey,
@@ -61,6 +62,7 @@ export const createSpecialSiteSlice: StateCreator<
     | "registerBloomBonus"
     | "registerGenesisMana"
     | "clearTurnBonuses"
+    | "sacrificeToTempleOfMoloch"
     | "removeSiteChoice"
     | "registerMismanagedMortuary"
     | "getEffectiveGraveyardSeat"
@@ -214,6 +216,55 @@ export const createSpecialSiteSlice: StateCreator<
 
     set({ specialSiteState: newState });
     state.trySendPatch({ specialSiteState: newState });
+  },
+
+  sacrificeToTempleOfMoloch: (at: CellKey, index: number) => {
+    const state = get();
+    const site = state.board.sites[at];
+    const siteName = String(site?.card?.name || "").toLowerCase();
+    if (siteName !== "temple of moloch") {
+      state.log("Temple of Moloch: the minion is not standing on the Temple");
+      return false;
+    }
+    const perm = state.permanents[at]?.[index];
+    if (!perm) return false;
+    const type = String(perm.card?.type || "").toLowerCase();
+    if (!type.includes("minion")) {
+      state.log("Temple of Moloch: only minions can be sacrificed");
+      return false;
+    }
+    const ownerSeat = seatFromOwner(perm.owner);
+    // "Once on each player's turn": only the active player may use it, once.
+    const activeSeat: PlayerKey = state.currentPlayer === 1 ? "p1" : "p2";
+    if (ownerSeat !== activeSeat) {
+      state.log("Temple of Moloch: can only be used on your own turn");
+      return false;
+    }
+    if (state.templeOfMolochUsed[ownerSeat]) {
+      state.log("Temple of Moloch: already used this turn");
+      return false;
+    }
+
+    const minionName = perm.card?.name || "minion";
+    // Sacrifice: the minion goes to its owner's cemetery.
+    state.movePermanentToZone(at, index, "graveyard");
+
+    const usedNext = { ...get().templeOfMolochUsed, [ownerSeat]: true };
+    set({ templeOfMolochUsed: usedNext });
+    get().trySendPatch({ templeOfMolochUsed: usedNext });
+
+    // Gain (2) this turn via the temporary genesis-mana mechanism, which is
+    // cleared by clearTurnBonuses at end of turn.
+    get().registerGenesisMana(
+      at,
+      "Temple of Moloch",
+      TEMPLE_OF_MOLOCH_GAIN,
+      perm.owner,
+    );
+    get().log(
+      `${ownerSeat.toUpperCase()} sacrifices ${minionName} to Temple of Moloch`,
+    );
+    return true;
   },
 
   clearTurnBonuses: () => {

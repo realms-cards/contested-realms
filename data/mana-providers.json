@@ -1,0 +1,268 @@
+{
+  "$comment": "Single source of truth for mana/threshold provider rules. Consumed by src/lib/game/mana-providers.ts (client), server/modules/rules-resources.ts (server), and bots/engine/index.js (bot). All names are lowercase card names. Keep in sync with data/cards_raw.json rules text.",
+  "manaProviders": [
+    "amethyst core",
+    "aquamarine core",
+    "avalon",
+    "key to the city",
+    "onyx core",
+    "ruby core",
+    "valley of delight",
+    "älvalinne dryads"
+  ],
+  "perNearbyEnemyAvatarProviders": {
+    "finwife": 2
+  },
+  "siteEnhancerArtifacts": {
+    "shrine of the dragonlord": {
+      "mana": 1,
+      "thresholds": {
+        "air": 1,
+        "earth": 1,
+        "fire": 1,
+        "water": 1
+      }
+    }
+  },
+  "auraSiteModifiers": {
+    "abundance": {
+      "extraMana": 1
+    },
+    "drought": {
+      "noWaterThreshold": true
+    },
+    "sow the earth": {
+      "multiplier": 2
+    }
+  },
+  "siteNoThresholdOccupants": [
+    "granary rats"
+  ],
+  "adjacentSilencerNoThreshold": [
+    "sinterfee"
+  ],
+  "opponentManaSites": {
+    "city of plenty": {
+      "requiredElement": "water",
+      "opponentMana": 1
+    }
+  },
+  "elementChoiceSites": [
+    "valley of delight"
+  ],
+  "sharedManaSites": [
+    "avalon"
+  ],
+  "cityBonusSites": {
+    "city of glass": {
+      "requiredElement": "air",
+      "extraMana": 1
+    },
+    "city of plenty": {
+      "requiredElement": "water",
+      "extraMana": 1
+    },
+    "city of souls": {
+      "requiredElement": "earth",
+      "extraMana": 1
+    },
+    "city of traitors": {
+      "requiredElement": "fire",
+      "extraMana": 1
+    }
+  },
+  "genesisBloomSites": {
+    "twilight bloom": {
+      "earth": 1,
+      "fire": 1,
+      "water": 1
+    },
+    "algae bloom": {
+      "air": 1,
+      "earth": 1,
+      "fire": 1
+    },
+    "autumn bloom": {
+      "air": 1,
+      "fire": 1,
+      "water": 1
+    },
+    "desert bloom": {
+      "air": 1,
+      "earth": 1,
+      "water": 1
+    }
+  },
+  "genesisManaSites": {
+    "ghost town": 1
+  },
+  "towerGenesisSites": [
+    "dark tower",
+    "lone tower",
+    "gothic tower"
+  ],
+  "beaconGenesisSites": [
+    "beacon"
+  ],
+  "breakWardsGenesisSites": [
+    "accursed tower",
+    "accursed desert"
+  ],
+  "conditionalThresholdSites": {
+    "the empyrean": {
+      "condition": "nearby_angel_or_ward",
+      "thresholds": {
+        "air": 1,
+        "earth": 1,
+        "fire": 1,
+        "water": 1
+      }
+    }
+  },
+  "cemeteryManaSites": {
+    "myrrh's trophy room": {
+      "perUnique": 1
+    }
+  },
+  "activatedManaSites": [
+    "annual fair",
+    "temple of moloch"
+  ],
+  "templeOfMolochGain": 2,
+  "thresholdGrants": {
+    "amethyst core": {
+      "air": 1
+    },
+    "aquamarine core": {
+      "water": 1
+    },
+    "onyx core": {
+      "earth": 1
+    },
+    "ruby core": {
+      "fire": 1
+    },
+    "blacksmith family": {
+      "fire": 1
+    },
+    "castle servants": {
+      "air": 1
+    },
+    "common cottagers": {
+      "earth": 1
+    },
+    "fisherman's family": {
+      "water": 1
+    },
+    "island leviathan": {
+      "water": 1
+    },
+    "horns of behemoth": {
+      "fire": 1
+    }
+  },
+  "nonManaSites": [
+    "rubble",
+    "wedding hall"
+  ],
+  "backRowOnlySites": [
+    "caerleon-upon-usk",
+    "glastonbury tor",
+    "joyous garde",
+    "tintagel"
+  ],
+  "multiThresholdSites": {
+    "tintagel": {
+      "air": 1,
+      "earth": 1,
+      "water": 1
+    },
+    "caerleon-upon-usk": {
+      "earth": 1,
+      "fire": 1,
+      "water": 1
+    },
+    "glastonbury tor": {
+      "air": 1,
+      "earth": 1,
+      "fire": 1
+    },
+    "joyous garde": {
+      "air": 1,
+      "fire": 1,
+      "water": 1
+    },
+    "avalon": {
+      "air": 1,
+      "earth": 1,
+      "fire": 1,
+      "water": 1
+    },
+    "the colour out of space": {
+      "air": 1,
+      "earth": 1,
+      "fire": 1,
+      "water": 1
+    }
+  },
+  "conditionalManaSites": {
+    "pristine paradise": {
+      "condition": "empty"
+    },
+    "the colour out of space": {
+      "condition": "adjacent_to_void"
+    }
+  },
+  "voidManaProviders": {
+    "ether core": 3
+  },
+  "ordinarySiteNames": [
+    "accursed desert",
+    "accursed tower",
+    "algae bloom",
+    "arid desert",
+    "autumn bloom",
+    "autumn river",
+    "blessed village",
+    "blessed well",
+    "bog",
+    "bonfire",
+    "common village",
+    "croaking swamp",
+    "dark tower",
+    "den of evil",
+    "desert bloom",
+    "forge",
+    "gothic tower",
+    "hamlet",
+    "hillside chapel",
+    "humble village",
+    "hunter's lodge",
+    "leadworks",
+    "leyline henge",
+    "lone tower",
+    "lookout",
+    "open grave",
+    "open mausoleum",
+    "pond",
+    "red desert",
+    "remote desert",
+    "rubble",
+    "rustic village",
+    "silent hills",
+    "simple village",
+    "spire",
+    "spore spouts",
+    "spring river",
+    "stinging kelp",
+    "stream",
+    "summer river",
+    "treetop hideout",
+    "troubled town",
+    "twilight bloom",
+    "valley",
+    "vast desert",
+    "wasteland",
+    "winter river"
+  ]
+}

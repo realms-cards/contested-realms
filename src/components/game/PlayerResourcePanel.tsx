@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import { MANA_PROVIDER_BY_NAME } from "@/lib/game/mana-providers";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
 import {
@@ -9,7 +8,6 @@ import {
   computeThresholdTotals,
   getAvatarAdjustedManaCost,
   getCardManaCost,
-  siteProvidesMana,
 } from "@/lib/game/store/utils/resourceHelpers";
 import { useSmallScreen, useTouchDevice } from "@/lib/hooks/useTouchDevice";
 
@@ -288,78 +286,64 @@ export function PlayerResourceColumn({
   const templarDiscountUsed = useGameStore((s) => s.templarDiscountUsed);
   const portalState = useGameStore((s) => s.portalState);
 
-  // Subscribe to granular state slices for threshold reactivity
+  // Subscribe to granular state slices for threshold/mana reactivity
   const boardSize = useGameStore((s) => s.board.size);
   const boardSites = useGameStore((s) => s.board.sites);
   const permanents = useGameStore((s) => s.permanents);
-  const avatar = useGameStore((s) => s.avatars[player]);
   const specialSiteState = useGameStore((s) => s.specialSiteState);
-
   const babelTowers = useGameStore((s) => s.babelTowers);
-
-  // Compute thresholds from subscribed state
-  const thresholds = useMemo(() => {
-    const result = computeThresholdTotals(
-      { size: boardSize, sites: boardSites },
-      permanents,
-      player,
-      avatar,
-      specialSiteState,
-      babelTowers,
-    );
-    return result;
-  }, [
-    boardSize,
-    boardSites,
-    permanents,
-    player,
-    avatar,
-    specialSiteState,
-    babelTowers,
-  ]);
-
-  // Compute mana from sites + permanents (including cores)
-  const owner = player === "p1" ? 1 : 2;
   const zones = useGameStore((s) => s.zones);
-  const { baseMana, mana } = useMemo(() => {
-    // Base mana: count sites that provide mana + permanents that provide mana (cores)
-    let total = 0;
-    for (const site of Object.values(boardSites)) {
-      if (!site || site.owner !== owner) continue;
-      if (siteProvidesMana(site.card ?? null)) {
-        total++;
-      }
-    }
-    // Add mana from permanents (cores provide mana only when carried/attached)
-    for (const arr of Object.values(permanents ?? {})) {
-      const list = Array.isArray(arr) ? arr : [];
-      for (const p of list) {
-        if (!p || p.owner !== owner) continue;
-        const nm = String(p.card?.name || "").toLowerCase();
-        const cardType = String(p.card?.type || "").toLowerCase();
-        // Artifact mana providers only count when attached (carried)
-        if (
-          MANA_PROVIDER_BY_NAME.has(nm) &&
-          cardType.includes("artifact") &&
-          p.attachedTo
-        ) {
-          total++;
-        }
-      }
-    }
-    // Available mana: use computeAvailableMana which includes permanents (cores)
-    const available = computeAvailableMana(
-      { size: boardSize, sites: boardSites },
+  const turn = useGameStore((s) => s.turn);
+  const etherCoresInVoidAtTurnStart = useGameStore(
+    (s) => s.etherCoresInVoidAtTurnStart,
+  );
+  const coresCarriedAtTurnStart = useGameStore(
+    (s) => s.coresCarriedAtTurnStart,
+  );
+
+  // Same context the store's getAvailableMana / getThresholdTotals use, so
+  // the panel can never disagree with the affordability check.
+  const resourceCtx = useMemo(
+    () => ({
+      board: { size: boardSize, sites: boardSites },
+      permanents,
+      who: player,
+      avatars,
+      imposterMasks,
+      specialSiteState,
+      babelTowers,
+      zones,
+      currentTurn: turn,
+      etherCoresInVoidAtTurnStart,
+      coresCarriedAtTurnStart,
+    }),
+    [
+      boardSize,
+      boardSites,
       permanents,
       player,
-      zones,
+      avatars,
+      imposterMasks,
       specialSiteState,
-      thresholds,
-      undefined,
-      undefined,
       babelTowers,
-    );
-    let displayedMana = Math.max(0, available + manaOffset);
+      zones,
+      turn,
+      etherCoresInVoidAtTurnStart,
+      coresCarriedAtTurnStart,
+    ],
+  );
+
+  const thresholds = useMemo(
+    () => computeThresholdTotals(resourceCtx),
+    [resourceCtx],
+  );
+
+  const { baseMana, mana } = useMemo(() => {
+    // Total mana this turn from sites and permanents (before spending)
+    const total = computeAvailableMana(resourceCtx);
+    // Available = total + spend ledger, minus the projected cost of the card
+    // currently being dragged/placed.
+    let displayedMana = Math.max(0, total + manaOffset);
     if (
       selectedCard?.who === player &&
       (dragFromHand || Boolean(castPlacementMode))
@@ -388,25 +372,18 @@ export function PlayerResourceColumn({
     return { baseMana: total, mana: displayedMana };
   }, [
     avatars,
-    boardSites,
-    boardSize,
     castPlacementMode,
     dragFromHand,
     harbingerPortalDiscountUsed,
     hoverCell,
     imposterMasks,
+    manaOffset,
     metaByCardId,
-    permanents,
-    owner,
     player,
     portalState,
+    resourceCtx,
     selectedCard,
-    zones,
-    specialSiteState,
     templarDiscountUsed,
-    thresholds,
-    manaOffset,
-    babelTowers,
   ]);
 
   // Can adjust if we're the actor (or offline) and not dragging

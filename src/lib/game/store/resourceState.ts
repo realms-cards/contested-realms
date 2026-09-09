@@ -3,18 +3,12 @@ import type { CellKey, GameState, ServerPatchT, SiteTile } from "./types";
 import {
   computeAvailableMana,
   getCachedThresholdTotals,
-  siteProvidesMana,
+  resourceContextFromState,
 } from "./utils/resourceHelpers";
 
 type ResourceSlice = Pick<
   GameState,
-  | "getPlayerSites"
-  | "getUntappedSitesCount"
-  | "getBaseMana"
-  | "getAvailableMana"
-  | "getThresholdTotals"
-  | "addMana"
-  | "addThreshold"
+  "getPlayerSites" | "getAvailableMana" | "getThresholdTotals" | "addMana"
 >;
 
 export const createResourceSlice: StateCreator<
@@ -31,58 +25,12 @@ export const createResourceSlice: StateCreator<
     ) as Array<[CellKey, SiteTile]>;
   },
 
-  getUntappedSitesCount: (who) => {
-    const state = get();
-    const owner = who === "p1" ? 1 : 2;
-    let count = 0;
-    for (const site of Object.values(state.board.sites)) {
-      if (!site) continue;
-      if (site.owner === owner && !site.tapped) count++;
-    }
-    return count;
-  },
-
-  getBaseMana: (who) => {
-    // Total mana = count of all sites that provide mana (sites don't tap)
-    const state = get();
-    const owner = who === "p1" ? 1 : 2;
-    let total = 0;
-    const siteKeys = Object.keys(state.board.sites);
-    for (const site of Object.values(state.board.sites)) {
-      if (!site) continue;
-      if (site.owner === owner && siteProvidesMana(site.card ?? null)) {
-        total++;
-      }
-    }
-    // DEBUG: Log if base mana seems abnormally high (more than 20 sites is impossible)
-    if (total > 20) {
-      console.warn("[getBaseMana] Abnormal site count!", {
-        who,
-        owner,
-        total,
-        siteKeysCount: siteKeys.length,
-        siteKeys: siteKeys.slice(0, 30), // Log first 30 keys
-      });
-    }
-    return total;
-  },
-
   getAvailableMana: (who) => {
-    // Available mana = base mana from sites (with special site handling) + offset
+    // Available mana = mana from sites and permanents + the spend offset.
+    // `players[who].mana` is the single spend ledger: negative when mana has
+    // been spent this turn, positive for manual/temporary gains.
     const state = get();
-    const thresholds = getCachedThresholdTotals(state, who);
-    const base = computeAvailableMana(
-      state.board,
-      state.permanents,
-      who,
-      state.zones,
-      state.specialSiteState,
-      thresholds,
-      state.turn,
-      state.etherCoresInVoidAtTurnStart,
-      state.babelTowers,
-      state.coresCarriedAtTurnStart,
-    );
+    const base = computeAvailableMana(resourceContextFromState(state, who));
     const offset = Number(state.players[who]?.mana || 0);
     return Math.max(0, base + offset);
   },
@@ -118,42 +66,6 @@ export const createResourceSlice: StateCreator<
         players: { [who]: newState.players[who] } as GameState["players"],
       };
       get().trySendPatch(patch);
-
-      return newState;
-    }),
-
-  addThreshold: (who, element, delta) =>
-    set((state) => {
-      const currentThreshold = state.players[who].thresholds[element];
-      const newThreshold = Math.max(0, currentThreshold + delta);
-
-      const newState = {
-        players: {
-          ...state.players,
-          [who]: {
-            ...state.players[who],
-            thresholds: {
-              ...state.players[who].thresholds,
-              [element]: newThreshold,
-            },
-          },
-        },
-      };
-
-      // Only send the affected player's data to avoid overwriting opponent's state
-      const patch: ServerPatchT = {
-        players: { [who]: newState.players[who] } as GameState["players"],
-      };
-      get().trySendPatch(patch);
-
-      if (currentThreshold !== newThreshold) {
-        const changeText = delta > 0 ? `gains` : `loses`;
-        get().log(
-          `${who.toUpperCase()} ${changeText} ${Math.abs(
-            delta,
-          )} ${element} threshold (${currentThreshold} → ${newThreshold})`,
-        );
-      }
 
       return newState;
     }),

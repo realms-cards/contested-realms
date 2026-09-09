@@ -1,178 +1,187 @@
-// Lowercase names of cards that explicitly state they "provide ①" in rulesText.
-// Generated from a scan of data/cards_raw.json; keep small and curated.
-// Note: Arthurian Families (Blacksmith, Castle Servants, etc.) provide THRESHOLD only, not mana.
-// Note: Back-row-only sites are in BACK_ROW_ONLY_SITES and checked separately.
-export const MANA_PROVIDER_BY_NAME = new Set<string>([
-  "abundance",
-  "amethyst core",
-  "aquamarine core",
-  "atlantean fate",
-  "avalon",
-  "drought",
-  "finwife",
-  "onyx core",
-  "ruby core",
-  "shrine of the dragonlord",
-  "valley of delight",
-  "älvalinne dryads",
-]);
+// Typed view over data/mana-providers.json, the single source of truth for
+// which cards provide mana and threshold and under which conditions.
+// The server (server/modules/rules-resources.ts) and the bot engine
+// (bots/engine/index.js) read the same JSON so all three stay in sync.
+import providerData from "../../../data/mana-providers.json";
 
 // Element type for special sites
 export type ElementChoice = "air" | "water" | "earth" | "fire";
 
+export type PartialThresholds = Partial<Record<ElementChoice, number>>;
+
+export type ConditionalSiteCondition = "empty" | "adjacent_to_void";
+
+type ProviderData = {
+  manaProviders: string[];
+  perNearbyEnemyAvatarProviders: Record<string, number>;
+  siteEnhancerArtifacts: Record<
+    string,
+    { mana: number; thresholds: PartialThresholds }
+  >;
+  auraSiteModifiers: Record<
+    string,
+    { extraMana?: number; noWaterThreshold?: boolean; multiplier?: number }
+  >;
+  siteNoThresholdOccupants: string[];
+  adjacentSilencerNoThreshold: string[];
+  opponentManaSites: Record<
+    string,
+    { requiredElement: ElementChoice; opponentMana: number }
+  >;
+  elementChoiceSites: string[];
+  sharedManaSites: string[];
+  cityBonusSites: Record<
+    string,
+    { requiredElement: ElementChoice; extraMana: number }
+  >;
+  genesisBloomSites: Record<string, PartialThresholds>;
+  genesisManaSites: Record<string, number>;
+  towerGenesisSites: string[];
+  beaconGenesisSites: string[];
+  breakWardsGenesisSites: string[];
+  conditionalThresholdSites: Record<
+    string,
+    { condition: string; thresholds: PartialThresholds }
+  >;
+  cemeteryManaSites: Record<string, { perUnique: number }>;
+  activatedManaSites: string[];
+  templeOfMolochGain: number;
+  thresholdGrants: Record<string, PartialThresholds>;
+  nonManaSites: string[];
+  backRowOnlySites: string[];
+  multiThresholdSites: Record<string, PartialThresholds>;
+  conditionalManaSites: Record<string, { condition: ConditionalSiteCondition }>;
+  voidManaProviders: Record<string, number>;
+  ordinarySiteNames: string[];
+};
+
+const data = providerData as ProviderData;
+
+// Lowercase names of permanents that "provide ①" to their controller.
+// Artifacts in this list only provide while carried (attached to a unit).
+export const MANA_PROVIDER_BY_NAME = new Set<string>(data.manaProviders);
+
+// Minions whose mana scales with nearby enemy Avatars.
+// "Finwife" - Provides (2) for each nearby enemy Avatar.
+export const PER_NEARBY_ENEMY_AVATAR_PROVIDERS: Record<string, number> =
+  data.perNearbyEnemyAvatarProviders;
+
+// Artifacts that sit on a site (unattached) and make THAT site provide extra.
+// "Shrine of the Dragonlord" - This site provides an additional (1) and (E)(F)(W)(A).
+export const SITE_ENHANCER_ARTIFACTS: Record<
+  string,
+  { mana: number; thresholds: PartialThresholds }
+> = data.siteEnhancerArtifacts;
+
+// Auras that modify the site they sit on.
+// "Abundance" - Each affected site provides one additional mana.
+// "Drought" - Affected sites aren't water sites, and provide no water threshold.
+// "Sow the Earth" - This site provides double mana and threshold.
+export const AURA_SITE_MODIFIERS: Record<
+  string,
+  { extraMana?: number; noWaterThreshold?: boolean; multiplier?: number }
+> = data.auraSiteModifiers;
+
+// Minions that stop the site they stand on from providing threshold.
+// "Granary Rats" - This site doesn't provide threshold.
+export const SITE_NO_THRESHOLD_OCCUPANTS = new Set<string>(
+  data.siteNoThresholdOccupants,
+);
+
+// Minions whose Genesis silences an adjacent site so it provides no threshold.
+// "Sinterfee" - the silenced site provides no threshold while Sinterfee is in the realm.
+// Modelled as: a site carrying a Silenced token that is adjacent to a Sinterfee.
+export const ADJACENT_SILENCER_NO_THRESHOLD = new Set<string>(
+  data.adjacentSilencerNoThreshold,
+);
+
+// Sites that also give the OPPONENT mana when their bonus is active.
+// "City of Plenty" - (W) Provides (2) instead but also provides (1) for your opponent.
+export const OPPONENT_MANA_SITES: Record<
+  string,
+  { requiredElement: ElementChoice; opponentMana: number }
+> = data.opponentManaSites;
+
 // Sites that require player choice for element (Genesis trigger)
 // "Valley of Delight" - Choose one: (A), (E), (F), (W). This site provides that permanently.
-export const ELEMENT_CHOICE_SITES = new Set<string>(["valley of delight"]);
+export const ELEMENT_CHOICE_SITES = new Set<string>(data.elementChoiceSites);
 
 // Sites that provide all 4 elements to BOTH players (shared mana)
 // "Avalon" - Provides mana and threshold for everyone.
-export const SHARED_MANA_SITES = new Set<string>(["avalon"]);
+export const SHARED_MANA_SITES = new Set<string>(data.sharedManaSites);
 
 // Sites that provide +1 extra mana when you have a specific threshold
-// Format: { siteName: { requiredElement, extraMana } }
 export const CITY_BONUS_SITES: Record<
   string,
   { requiredElement: ElementChoice; extraMana: number }
-> = {
-  "city of glass": { requiredElement: "air", extraMana: 1 },
-  "city of plenty": { requiredElement: "water", extraMana: 1 },
-  "city of souls": { requiredElement: "earth", extraMana: 1 },
-  "city of traitors": { requiredElement: "fire", extraMana: 1 },
-};
+> = data.cityBonusSites;
 
 // Genesis bloom sites - provide temporary threshold boost on the turn they're played
-// Format: { siteName: { thresholds to add this turn } }
-export const GENESIS_BLOOM_SITES: Record<
-  string,
-  Partial<{ air: number; water: number; earth: number; fire: number }>
-> = {
-  "twilight bloom": { earth: 1, fire: 1, water: 1 }, // (E)(F)(W) this turn
-  "algae bloom": { air: 1, earth: 1, fire: 1 }, // (A)(E)(F) this turn
-  "autumn bloom": { air: 1, fire: 1, water: 1 }, // (A)(F)(W) this turn
-  "desert bloom": { air: 1, earth: 1, water: 1 }, // (A)(E)(W) this turn
-};
+export const GENESIS_BLOOM_SITES: Record<string, PartialThresholds> =
+  data.genesisBloomSites;
 
 // Genesis sites that provide temporary mana boost
-export const GENESIS_MANA_SITES: Record<string, number> = {
-  "ghost town": 1, // Genesis → Gain (1) this turn
-};
+export const GENESIS_MANA_SITES: Record<string, number> = data.genesisManaSites;
 
 // Tower sites that provide +1 mana on genesis if you control only one copy
-// "Dark Tower", "Lone Tower", "Gothic Tower"
 // Genesis → If you control only one [Tower Name], gain (1) this turn.
-// Note: "Accursed Tower" is NOT here — its genesis is "Break nearby Wards"
-// (no mana bonus); see BREAK_WARDS_GENESIS_SITES below.
-export const TOWER_GENESIS_SITES = new Set<string>([
-  "dark tower",
-  "lone tower",
-  "gothic tower",
-]);
+export const TOWER_GENESIS_SITES = new Set<string>(data.towerGenesisSites);
 
-// Sites with genesis effects that depend on nearby enemy units
 // "Beacon" - Genesis → Gain (1) for each nearby site with an enemy atop it.
-export const BEACON_GENESIS_SITES = new Set<string>(["beacon"]);
+export const BEACON_GENESIS_SITES = new Set<string>(data.beaconGenesisSites);
 
 // Sites whose Genesis breaks nearby Wards (runs through auto-resolve confirmation)
-// "Accursed Tower", "Accursed Desert" - Genesis → Break nearby Wards.
-export const BREAK_WARDS_GENESIS_SITES = new Set<string>([
-  "accursed tower",
-  "accursed desert",
-]);
+export const BREAK_WARDS_GENESIS_SITES = new Set<string>(
+  data.breakWardsGenesisSites,
+);
 
 // Sites with conditional threshold based on nearby units/state
-// These need special runtime checks
-export const CONDITIONAL_THRESHOLD_SITES = {
-  // "The Empyrean" - Provides (A)(E)(F)(W) if you control a nearby Angel or Ward.
-  "the empyrean": {
-    condition: "nearby_angel_or_ward",
-    thresholds: { air: 1, earth: 1, fire: 1, water: 1 },
-  },
-} as const;
+// "The Empyrean" - Provides (A)(E)(F)(W) if you control a nearby Angel or Ward.
+export const CONDITIONAL_THRESHOLD_SITES: Record<
+  string,
+  { condition: string; thresholds: PartialThresholds }
+> = data.conditionalThresholdSites;
 
-// Sites with conditional mana based on cemetery state
-export const CEMETERY_MANA_SITES: Record<string, { perUnique: number }> = {
-  // "Myrrh's Trophy Room" - Provides an additional (1) for each Unique minion in opponent's cemetery.
-  "myrrh's trophy room": { perUnique: 1 },
-};
+// "Myrrh's Trophy Room" - Provides an additional (1) for each Unique minion in opponent's cemetery.
+export const CEMETERY_MANA_SITES: Record<string, { perUnique: number }> =
+  data.cemeteryManaSites;
 
 // Activated ability sites (pay cost to gain mana/threshold this turn)
 // "Annual Fair" - (1) → Gain (A), (E), (F), or (W) this turn.
-// "Temple of Moloch" - Once per turn, sacrifice minion here to gain (2).
-export const ACTIVATED_MANA_SITES = new Set<string>([
-  "annual fair",
-  "temple of moloch",
-]);
+// "Temple of Moloch" - Once on each player's turn, sacrifice a minion here to gain (2).
+export const ACTIVATED_MANA_SITES = new Set<string>(data.activatedManaSites);
+export const TEMPLE_OF_MOLOCH_GAIN = data.templeOfMolochGain;
 
 // Permanents that grant element thresholds.
 // Cores provide both threshold AND mana (via MANA_PROVIDER_BY_NAME) but ONLY when carried (attached).
 // Arthurian Families provide threshold ONLY (no mana).
-export const THRESHOLD_GRANT_BY_NAME: Record<
-  string,
-  Partial<{ air: number; water: number; earth: number; fire: number }>
-> = {
-  // Cores (Artifact) - provide threshold + mana only when carried (attached to a unit)
-  "amethyst core": { air: 1 },
-  "aquamarine core": { water: 1 },
-  "onyx core": { earth: 1 },
-  "ruby core": { fire: 1 },
-  // Arthurian Families (Minion) - provide threshold ONLY (no mana)
-  "blacksmith family": { fire: 1 },
-  "castle servants": { air: 1 },
-  "common cottagers": { earth: 1 },
-  "fisherman's family": { water: 1 },
-  // Transformed sites (site → minion permanent) - still provide affinity threshold, no mana
-  "island leviathan": { water: 1 },
-  "horns of behemoth": { fire: 1 },
-};
+export const THRESHOLD_GRANT_BY_NAME: Record<string, PartialThresholds> =
+  data.thresholdGrants;
 
-// Sites that should NOT provide mana at all.
-export const NON_MANA_SITE_IDENTIFIERS = new Set<string>([
-  "rubble",
-  "wedding hall", // "Provides no mana, but if Arthur and Guinevere start your turn here, you win."
-]);
+// Sites that should NOT provide mana at all (they may still provide threshold).
+export const NON_MANA_SITE_IDENTIFIERS = new Set<string>(data.nonManaSites);
 
 // Sites that only provide mana/threshold while in the owner's back row.
-// These need position-based checking in computeAvailableMana.
-export const BACK_ROW_ONLY_SITES = new Set<string>([
-  "caerleon-upon-usk",
-  "glastonbury tor",
-  "joyous garde",
-  "tintagel",
-]);
+export const BACK_ROW_ONLY_SITES = new Set<string>(data.backRowOnlySites);
 
-// Multi-threshold sites - sites that provide multiple element thresholds
-// These override the standard single-threshold calculation
-export const MULTI_THRESHOLD_SITES: Record<
-  string,
-  Partial<{ air: number; water: number; earth: number; fire: number }>
-> = {
-  // Arthurian back-row sites (only work in back row - checked via BACK_ROW_ONLY_SITES)
-  tintagel: { air: 1, earth: 1, water: 1 }, // (A)(E)(W)
-  "caerleon-upon-usk": { earth: 1, fire: 1, water: 1 }, // (E)(F)(W)
-  "glastonbury tor": { air: 1, earth: 1, fire: 1 }, // (A)(E)(F)
-  "joyous garde": { air: 1, fire: 1, water: 1 }, // (A)(F)(W)
-  // Avalon provides all 4 elements to everyone (also in SHARED_MANA_SITES)
-  avalon: { air: 1, earth: 1, fire: 1, water: 1 }, // (A)(E)(F)(W)
-  // Colour Out of Space - provides all 4 elements when adjacent to void (conditional check applied first)
-  "the colour out of space": { air: 1, earth: 1, fire: 1, water: 1 }, // (A)(E)(F)(W)
-};
+// Multi-threshold sites - override the standard single-threshold calculation
+export const MULTI_THRESHOLD_SITES: Record<string, PartialThresholds> =
+  data.multiThresholdSites;
 
 // Sites with conditional mana based on board state (need special handling).
-// These MUST pass their condition check to provide mana/threshold.
-export const CONDITIONAL_MANA_SITES = {
-  // "pristine paradise" - Provides no mana or threshold unless completely empty.
-  "pristine paradise": { condition: "empty" as const },
-  // "the colour out of space" - Provides no mana or threshold if not adjacent to the void.
-  "the colour out of space": { condition: "adjacent_to_void" as const },
-};
+export const CONDITIONAL_MANA_SITES: Record<
+  string,
+  { condition: ConditionalSiteCondition }
+> = data.conditionalManaSites;
 
-export type ConditionalSiteCondition = "empty" | "adjacent_to_void";
-
-// Artifacts that provide mana while in the void (not on board).
+// Artifacts that provide mana while in the void (not on a site).
 // Ether Core: "Provides (3) while in the void."
-export const VOID_MANA_PROVIDERS: Record<string, number> = {
-  "ether core": 3,
-};
+export const VOID_MANA_PROVIDERS: Record<string, number> =
+  data.voidManaProviders;
+
+// Ordinary-rarity site names (fallback when a CardRef carries no rarity).
+// Used by Atlantean Fate flooding, which only affects non-Ordinary sites.
+export const ORDINARY_SITE_NAME_SET = new Set<string>(data.ordinarySiteNames);
 
 // Helper to check if a site name is a special site
 export const isSpecialSite = (name: string | null | undefined): boolean => {

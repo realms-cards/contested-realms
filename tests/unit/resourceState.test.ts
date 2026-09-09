@@ -23,31 +23,6 @@ describe("resourceState slice", () => {
     cleanup();
   });
 
-  it("addThreshold clamps at zero and logs the change", () => {
-    const { store, cleanup } = createStoreInstance();
-    store.setState((prev: GameState) => ({
-      players: {
-        ...prev.players,
-        p1: {
-          ...prev.players.p1,
-          thresholds: { ...prev.players.p1.thresholds, air: 2 },
-        },
-      },
-    }));
-    const state = store.getState();
-    const patchSpy = vi.spyOn(state, "trySendPatch").mockReturnValue(true);
-    const logSpy = vi.spyOn(state, "log");
-
-    state.addThreshold("p1", "air", -5);
-
-    expect(store.getState().players.p1.thresholds.air).toBe(0);
-    expect(patchSpy).toHaveBeenCalled();
-    expect(logSpy).toHaveBeenCalledWith(
-      expect.stringMatching(/P1.*loses/i)
-    );
-    cleanup();
-  });
-
   it("derives mana and thresholds from board, permanents, and player mana", () => {
     const { store, cleanup } = createStoreInstance();
     const manaSiteCard = {
@@ -65,6 +40,14 @@ describe("resourceState slice", () => {
       name: "Opposing Fort",
       type: "Site",
     };
+    const bearer: PermanentItem = {
+      owner: 1,
+      card: {
+        cardId: 98,
+        name: "Knight",
+        type: "Minion",
+      },
+    };
     const manaPermanent: PermanentItem = {
       owner: 1,
       card: {
@@ -72,6 +55,9 @@ describe("resourceState slice", () => {
         name: "Amethyst Core",
         type: "Artifact",
       },
+      instanceId: "core-1",
+      attachedTo: { at: "0,0", index: 0 },
+      enteredOnTurn: 1,
     };
 
     store.setState((prev: GameState) => ({
@@ -84,8 +70,9 @@ describe("resourceState slice", () => {
         },
       },
       permanents: {
-        "0,0": [manaPermanent],
+        "0,0": [bearer, manaPermanent],
       },
+      turn: 1,
       players: {
         ...prev.players,
         p1: { ...prev.players.p1, mana: 2 },
@@ -96,8 +83,9 @@ describe("resourceState slice", () => {
     const ownedSites = state.getPlayerSites("p1");
 
     expect(ownedSites).toHaveLength(2);
-    expect(state.getUntappedSitesCount("p1")).toBe(1);
-    expect(state.getAvailableMana("p1")).toBe(4);
+    // Sites never tap in Sorcery: both owned sites count, plus the carried
+    // core summoned this turn, plus the +2 ledger offset.
+    expect(state.getAvailableMana("p1")).toBe(5);
 
     const thresholds = state.getThresholdTotals("p1");
     expect(thresholds.air).toBeGreaterThanOrEqual(1);

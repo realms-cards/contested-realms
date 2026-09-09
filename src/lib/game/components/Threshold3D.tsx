@@ -31,22 +31,33 @@ export default function Threshold3D({
   const boardSize = useGameStore((s) => s.board.size);
   const boardSites = useGameStore((s) => s.board.sites);
   const permanents = useGameStore((s) => s.permanents);
-  const avatar = useGameStore((s) => s.avatars[owner]);
+  const avatars = useGameStore((s) => s.avatars);
+  const imposterMasks = useGameStore((s) => s.imposterMasks);
   const specialSiteState = useGameStore((s) => s.specialSiteState);
   const babelTowers = useGameStore((s) => s.babelTowers);
 
   // Compute thresholds from the subscribed state
   const thresholds = useMemo(
     () =>
-      computeThresholdTotals(
-        { size: boardSize, sites: boardSites },
+      computeThresholdTotals({
+        board: { size: boardSize, sites: boardSites },
         permanents,
-        owner,
-        avatar,
+        who: owner,
+        avatars,
+        imposterMasks,
         specialSiteState,
-        babelTowers
-      ),
-    [boardSize, boardSites, permanents, owner, avatar, specialSiteState, babelTowers]
+        babelTowers,
+      }),
+    [
+      boardSize,
+      boardSites,
+      permanents,
+      owner,
+      avatars,
+      imposterMasks,
+      specialSiteState,
+      babelTowers,
+    ]
   );
 
   // Layout

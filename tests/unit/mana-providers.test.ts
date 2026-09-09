@@ -14,9 +14,12 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  AURA_SITE_MODIFIERS,
   MANA_PROVIDER_BY_NAME,
-  THRESHOLD_GRANT_BY_NAME,
   NON_MANA_SITE_IDENTIFIERS,
+  PER_NEARBY_ENEMY_AVATAR_PROVIDERS,
+  SITE_ENHANCER_ARTIFACTS,
+  THRESHOLD_GRANT_BY_NAME,
 } from "@/lib/game/mana-providers";
 
 describe("Mana Providers", () => {
@@ -27,7 +30,7 @@ describe("Mana Providers", () => {
 
     it("should contain known mana providers", () => {
       // Test a sample of known mana providers
-      expect(MANA_PROVIDER_BY_NAME.has("abundance")).toBe(true);
+      expect(MANA_PROVIDER_BY_NAME.has("älvalinne dryads")).toBe(true);
       expect(MANA_PROVIDER_BY_NAME.has("avalon")).toBe(true);
       expect(MANA_PROVIDER_BY_NAME.has("amethyst core")).toBe(true);
     });
@@ -40,9 +43,23 @@ describe("Mana Providers", () => {
     });
 
     it("should contain Site cards as mana providers", () => {
-      expect(MANA_PROVIDER_BY_NAME.has("shrine of the dragonlord")).toBe(true);
       expect(MANA_PROVIDER_BY_NAME.has("valley of delight")).toBe(true);
-      expect(MANA_PROVIDER_BY_NAME.has("drought")).toBe(true);
+      expect(MANA_PROVIDER_BY_NAME.has("avalon")).toBe(true);
+    });
+
+    it("should not list cards whose text does not provide mana", () => {
+      // Drought removes water threshold; Atlantean Fate floods sites.
+      expect(MANA_PROVIDER_BY_NAME.has("drought")).toBe(false);
+      expect(MANA_PROVIDER_BY_NAME.has("atlantean fate")).toBe(false);
+      // These are modelled by dedicated rules, not the flat provider list.
+      expect(MANA_PROVIDER_BY_NAME.has("abundance")).toBe(false);
+      expect(MANA_PROVIDER_BY_NAME.has("finwife")).toBe(false);
+      expect(MANA_PROVIDER_BY_NAME.has("shrine of the dragonlord")).toBe(false);
+      expect(AURA_SITE_MODIFIERS["abundance"]).toEqual({ extraMana: 1 });
+      expect(AURA_SITE_MODIFIERS["drought"]).toEqual({ noWaterThreshold: true });
+      expect(PER_NEARBY_ENEMY_AVATAR_PROVIDERS["finwife"]).toBe(2);
+      expect(SITE_ENHANCER_ARTIFACTS["shrine of the dragonlord"].mana).toBe(1);
+      expect(MANA_PROVIDER_BY_NAME.has("key to the city")).toBe(true);
     });
 
     it("should contain Permanent cards as mana providers", () => {
@@ -61,14 +78,13 @@ describe("Mana Providers", () => {
     });
 
     it("should not contain uppercase names", () => {
-      expect(MANA_PROVIDER_BY_NAME.has("ABUNDANCE")).toBe(false);
-      expect(MANA_PROVIDER_BY_NAME.has("Abundance")).toBe(false);
+      expect(MANA_PROVIDER_BY_NAME.has("AVALON")).toBe(false);
       expect(MANA_PROVIDER_BY_NAME.has("Avalon")).toBe(false);
     });
 
     it("should have at least 10 entries", () => {
       // Mana providers are now curated to cards that explicitly "provide" mana
-      expect(MANA_PROVIDER_BY_NAME.size).toBeGreaterThanOrEqual(10);
+      expect(MANA_PROVIDER_BY_NAME.size).toBeGreaterThanOrEqual(8);
     });
 
     it("should allow efficient lookup with has()", () => {
@@ -221,7 +237,7 @@ describe("Mana Providers", () => {
 
       expect(manaProvidersWithoutThresholds.length).toBeGreaterThan(0);
       expect(manaProvidersWithoutThresholds).toContain("avalon");
-      expect(manaProvidersWithoutThresholds).toContain("abundance");
+      expect(manaProvidersWithoutThresholds).toContain("key to the city");
     });
 
     it("should map elements correctly for each Core", () => {

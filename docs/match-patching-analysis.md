@@ -398,11 +398,11 @@ function applyTurnStart(game) {
     [playerKey]: currentTurn
   };
 
-  // Untap permanents, avatar, reset resources
+  // Untap permanents, avatar, reset the spend ledger
   return {
     permanents,  // All owner=cp permanents with tapped=false
     avatars,     // Avatar untapped
-    resources,   // spentThisTurn=0
+    players,     // players[cp].mana = 0 (spend ledger reset)
     turnTracking: updatedTurnTracking
   };
 }

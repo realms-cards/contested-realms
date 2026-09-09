@@ -129,14 +129,8 @@ export function tutorialStateToStore(tutorial: TutorialGameState): Record<string
   const p1ManaOffset = (tutorial.p1.mana ?? 0) - p1SiteCount;
   const p2ManaOffset = (tutorial.p2.life !== undefined ? (tutorial.p2.mana ?? 0) : 0) - p2SiteCount;
 
-  // Build thresholds - fill in zeros for missing elements
-  const fullThresholds = (partial?: Partial<Record<string, number>>) => ({
-    air: 0,
-    water: 0,
-    earth: 0,
-    fire: 0,
-    ...partial,
-  });
+  // Thresholds are derived from the sites on the board (see
+  // computeThresholdTotals); lessons seed them by placing sites.
 
   return {
     board: {
@@ -149,13 +143,11 @@ export function tutorialStateToStore(tutorial: TutorialGameState): Record<string
         life: tutorial.p1.life,
         lifeState: tutorial.p1.life <= 0 ? "dd" : "alive",
         mana: p1ManaOffset,
-        thresholds: fullThresholds(tutorial.p1.thresholds),
       },
       p2: {
         life: tutorial.p2.life,
         lifeState: tutorial.p2.life <= 0 ? "dd" : "alive",
         mana: p2ManaOffset,
-        thresholds: fullThresholds(tutorial.p2.thresholds),
       },
     },
     avatars: {
@@ -240,16 +232,7 @@ export function applyTutorialPatches(
         break;
       }
       case "set_thresholds": {
-        const pk = patch.player;
-        if (state.players[pk]) {
-          state.players[pk].thresholds = {
-            air: 0,
-            water: 0,
-            earth: 0,
-            fire: 0,
-            ...patch.value,
-          };
-        }
+        // Thresholds are derived from placed sites; nothing to set on players.
         break;
       }
       case "set_phase": {

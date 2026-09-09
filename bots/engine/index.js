@@ -828,16 +828,9 @@ function playUnitPatch(state, seat, placedCell, specificCard = null) {
     ...existing,
     { owner: myNum, card: pick.card, tapped: false, summonedThisTurn: true },
   ];
-  // Track mana spent locally so engine knows remaining mana for multi-action turns
-  const cost = getCardManaCost(pick.card);
-  if (cost > 0) {
-    const resources = (state && state.resources) || {};
-    const myRes = resources[seat] || {};
-    const prevSpent = Number(myRes.spentThisTurn) || 0;
-    patch.resources = {};
-    patch.resources[seat] = { spentThisTurn: prevSpent + cost };
-  }
-  return patch;
+  // Track mana spent on the shared ledger so engine knows remaining mana for
+  // multi-action turns (and the server / opponent HUD see the spend).
+  return withLedgerSpend(state, seat, patch, getCardManaCost(pick.card));
 }
 
 // Site Type Detection - identify Site cards
@@ -919,16 +912,8 @@ function playSpellPatch(state, seat, specificCard = null) {
 
   // Track mana spent for spells
   const spellCost = getCardManaCost(pick.card);
-  const addResourceTracking = (patch) => {
-    if (spellCost > 0) {
-      const resources = (state && state.resources) || {};
-      const myRes = resources[seat] || {};
-      const prevSpent = Number(myRes.spentThisTurn) || 0;
-      patch.resources = {};
-      patch.resources[seat] = { spentThisTurn: prevSpent + spellCost };
-    }
-    return patch;
-  };
+  const addResourceTracking = (patch) =>
+    withLedgerSpend(state, seat, patch, spellCost);
 
   if (cardType.includes("aura") || cardType.includes("enchantment")) {
     // Place aura on battlefield at owned site
@@ -1334,38 +1319,31 @@ function generateMoveCandidates(state, seat) {
   return candidates;
 }
 
-// Minimal providers (copied subset from server rules to avoid imports)
-const MANA_PROVIDER_BY_NAME = new Set([
-  "abundance",
-  "amethyst core",
-  "aquamarine core",
-  "atlantean fate",
-  "avalon",
-  "blacksmith family",
-  "caerleon-upon-usk",
-  "castle servants",
-  "common cottagers",
-  "finwife",
-  "fisherman's family",
-  "glastonbury tor",
-  "joyous garde",
-  "onyx core",
-  "pristine paradise",
-  "ruby core",
-  "shrine of the dragonlord",
-  "the colour out of space",
-  "tintagel",
-  "valley of delight",
-  "wedding hall",
-  "älvalinne dryads",
-]);
+// Provider lists come from the shared data/mana-providers.json (same source
+// as the client and server) so the bot never drifts from the real rules.
+const PROVIDER_DATA = require("../../data/mana-providers.json");
+const MANA_PROVIDER_BY_NAME = new Set(PROVIDER_DATA.manaProviders);
+const THRESHOLD_GRANT_BY_NAME = PROVIDER_DATA.thresholdGrants;
+const NON_MANA_SITE_NAMES = new Set(PROVIDER_DATA.nonManaSites);
 
-const THRESHOLD_GRANT_BY_NAME = {
-  "amethyst core": { air: 1 },
-  "aquamarine core": { water: 1 },
-  "onyx core": { earth: 1 },
-  "ruby core": { fire: 1 },
-};
+// players[seat].mana is the spend ledger shared with the client and server:
+// negative while mana has been spent this turn, reset to 0 at turn start.
+function getManaLedger(state, seat) {
+  const players = (state && state.players) || {};
+  const v = Number(players[seat] && players[seat].mana);
+  return Number.isFinite(v) ? v : 0;
+}
+function getManaSpentThisTurn(state, seat) {
+  return Math.max(0, -getManaLedger(state, seat));
+}
+function withLedgerSpend(state, seat, patch, cost) {
+  if (!(cost > 0)) return patch;
+  const players = (state && state.players) || {};
+  const prev = players[seat] || {};
+  patch.players = patch.players || {};
+  patch.players[seat] = { ...prev, mana: getManaLedger(state, seat) - cost };
+  return patch;
+}
 
 // Fallback thresholds for standard sites by name when card.thresholds is missing
 const SITE_THRESHOLD_BY_NAME = {
@@ -1412,7 +1390,10 @@ function countThresholdsForSeat(state, seat) {
         p.card && p.card.name ? String(p.card.name) : ""
       ).toLowerCase();
       const grant = THRESHOLD_GRANT_BY_NAME[nm];
-      if (grant) accumulateThresholds(out, grant);
+      if (!grant) continue;
+      const cardType = String((p.card && p.card.type) || "").toLowerCase();
+      if (cardType.includes("artifact") && !p.attachedTo) continue;
+      accumulateThresholds(out, grant);
     }
   }
   return out;
@@ -1425,8 +1406,11 @@ function countOwnedManaSites(state, seat) {
   for (const key of Object.keys(sites)) {
     const tile = sites[key];
     if (!tile || Number(tile.owner) !== myNum) continue;
-    // Assume most sites provide 1
-    if (tile.card) n++;
+    // Assume most sites provide 1 (Rubble / Wedding Hall provide none)
+    if (!tile.card) continue;
+    if (NON_MANA_SITE_NAMES.has(String(tile.card.name || "").toLowerCase()))
+      continue;
+    n++;
   }
   return n;
 }
@@ -1443,7 +1427,10 @@ function countManaProvidersFromPermanents(state, seat) {
         const nm = (
           p.card && p.card.name ? String(p.card.name) : ""
         ).toLowerCase();
-        if (MANA_PROVIDER_BY_NAME.has(nm)) n++;
+        if (!MANA_PROVIDER_BY_NAME.has(nm)) continue;
+        const cardType = String((p.card && p.card.type) || "").toLowerCase();
+        if (cardType.includes("artifact") && !p.attachedTo) continue;
+        n++;
       } catch {}
     }
   }
@@ -1494,7 +1481,10 @@ function countUntappedMana(state, seat) {
         const nm = (
           p.card && p.card.name ? String(p.card.name) : ""
         ).toLowerCase();
-        if (MANA_PROVIDER_BY_NAME.has(nm)) mana++;
+        if (!MANA_PROVIDER_BY_NAME.has(nm)) continue;
+        const cardType = String((p.card && p.card.type) || "").toLowerCase();
+        if (cardType.includes("artifact") && !p.attachedTo) continue;
+        mana++;
       } catch {}
     }
   }
@@ -1528,10 +1518,7 @@ function canAffordCard(state, seat, card) {
 
   // Check mana cost WITH awareness of mana already spent this turn
   const totalMana = countUntappedMana(state, seat);
-  const resources = (state && state.resources) || {};
-  const myRes = resources[seat] || {};
-  const manaSpent = Number(myRes.spentThisTurn) || 0;
-  const available = totalMana - manaSpent; // Subtract mana spent earlier this turn
+  const available = totalMana + getManaLedger(state, seat); // ledger is negative after spending
   const cost = getCardManaCost(card);
   if (available < cost) return false;
 
@@ -1652,12 +1639,9 @@ function buildGameStateModel(serverState, seat) {
   const manaAvailableMy = sitesUntappedMy + providersUntappedMy;
   const manaAvailableOpp = sitesUntappedOpp + providersUntappedOpp;
 
-  // Extract mana spent this turn from resources
-  const resources = (serverState && serverState.resources) || {};
-  const myRes = resources[me] || {};
-  const oppRes = resources[opp] || {};
-  const manaSpentMy = Number(myRes.spentThisTurn) || 0;
-  const manaSpentOpp = Number(oppRes.spentThisTurn) || 0;
+  // Mana spent this turn comes from the shared players[seat].mana ledger
+  const manaSpentMy = getManaSpentThisTurn(serverState, me);
+  const manaSpentOpp = getManaSpentThisTurn(serverState, opp);
 
   // Get thresholds
   const thresholdsMy = countThresholdsForSeat(serverState, me);
@@ -2307,18 +2291,8 @@ function extractFeatures(prevState, nextState, seat) {
     }
   }
   const meKey = me;
-  const prevSpent =
-    (prevState &&
-      prevState.resources &&
-      prevState.resources[meKey] &&
-      Number(prevState.resources[meKey].spentThisTurn)) ||
-    0;
-  const nextSpent =
-    (nextState &&
-      nextState.resources &&
-      nextState.resources[meKey] &&
-      Number(nextState.resources[meKey].spentThisTurn)) ||
-    0;
+  const prevSpent = getManaSpentThisTurn(prevState, meKey);
+  const nextSpent = getManaSpentThisTurn(nextState, meKey);
   const available =
     countOwnedManaSites(nextState, me) +
     countManaProvidersFromPermanents(nextState, me);
@@ -2967,8 +2941,7 @@ function generateCandidates(state, seat, options = {}) {
   // Diagnostic: log candidate generation summary
   try {
     const mana = countUntappedMana(base, seat);
-    const res = (base && base.resources && base.resources[seat]) || {};
-    const spent = Number(res.spentThisTurn) || 0;
+    const spent = getManaSpentThisTurn(base, seat);
     console.log(`[Engine] Candidates: ${playableUnits.length} units (${allUnits.length} total), ${playableSpells.length} spells, sites=${ownedSitesNow}, mana=${mana}, spent=${spent}, hand=${hand.length}`);
     if (playableUnits.length > 0) {
       console.log(`[Engine] Playable units:`, playableUnits.map(u => `${u.name || '?'}(cost=${getCardManaCost(u)})`).join(', '));

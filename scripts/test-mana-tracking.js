@@ -31,20 +31,17 @@ const mockState = {
     p1: { pos: [2, 4], tapped: false },
     p2: { pos: [2, 0], tapped: false }
   },
+  // players[seat].mana is the spend ledger (negative once mana is spent)
   players: {
-    p1: { life: 20 },
-    p2: { life: 20 }
-  },
-  resources: {
-    p1: { spentThisTurn: 0 }, // Start of turn - nothing spent yet
-    p2: { spentThisTurn: 0 }
+    p1: { life: 20, mana: 0 }, // Start of turn - nothing spent yet
+    p2: { life: 20, mana: 0 }
   },
   currentPlayer: 1,
   phase: 'Main',
   turnIndex: 7
 };
 
-console.log('=== Test 1: Fresh turn state (spentThisTurn = 0) ===');
+console.log('=== Test 1: Fresh turn state (mana ledger = 0) ===');
 console.log('State: 3 untapped sites, 0 mana spent');
 console.log('Hand: Pit Vipers (cost 3), Lucky Charm (cost 0)');
 console.log('');
@@ -69,12 +66,12 @@ const result = engine.search(mockState, 'p1', theta, rng, {
   }
 });
 
-console.log('\n=== Test 2: After spending 3 mana (spentThisTurn = 3) ===');
+console.log('\n=== Test 2: After spending 3 mana (mana ledger = -3) ===');
 const stateAfterSpending = {
   ...mockState,
-  resources: {
-    p1: { spentThisTurn: 3 }, // Already spent 3 mana this turn
-    p2: { spentThisTurn: 0 }
+  players: {
+    p1: { life: 20, mana: -3 }, // Already spent 3 mana this turn
+    p2: { life: 20, mana: 0 }
   }
 };
 

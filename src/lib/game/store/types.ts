@@ -37,8 +37,11 @@ export type LifeState = "alive" | "dd" | "dead";
 export type PlayerState = {
   life: number;
   lifeState: LifeState; // 'alive', 'dd' (Death's Door), 'dead'
-  mana: number; // manual offset to available mana (can be negative when cards are played)
-  thresholds: Thresholds;
+  // Spend ledger: offset applied to computed available mana. Negative when
+  // mana has been spent this turn, positive for manual or temporary gains.
+  // Reset to 0 for a player at the start of their turn. This is the ONLY
+  // place mana spending is tracked (client, server, and bot all use it).
+  mana: number;
 };
 
 export type BoardSize = { w: number; h: number };
@@ -2550,6 +2553,9 @@ export type GameState = {
   // Geomancer (tap: replace adjacent Rubble with topmost atlas site)
   pendingGeomancerPlay: PendingGeomancerPlay | null;
   geomancerRubbleUsed: Record<PlayerKey, boolean>;
+  // Temple of Moloch: "Once on each player's turn, they may sacrifice a minion
+  // here to gain (2)." Tracks which seat has used it this turn.
+  templeOfMolochUsed: Record<PlayerKey, boolean>;
   beginGeomancerRubble: (who: PlayerKey) => void;
   selectGeomancerTarget: (targetCell: CellKey) => void;
   cancelGeomancerPlay: () => void;
@@ -2816,11 +2822,6 @@ export type GameState = {
   flushPendingPatches: () => void;
   addLife: (who: PlayerKey, delta: number, isAvatarDamage?: boolean) => void;
   addMana: (who: PlayerKey, delta: number) => void;
-  addThreshold: (
-    who: PlayerKey,
-    element: keyof Thresholds,
-    delta: number,
-  ) => void;
   nextPhase: () => void; // legacy manual stepping
   endTurn: () => void; // auto-resolve to next player's Main
   // End turn confirmation (when avatar is untapped)
@@ -3385,6 +3386,9 @@ export type GameState = {
   ) => void;
   // Clear turn-based bonuses (called at end of turn)
   clearTurnBonuses: () => void;
+  // Temple of Moloch: sacrifice the minion at (at, index) standing on a Temple
+  // of Moloch to gain (2) this turn. Once per player per turn.
+  sacrificeToTempleOfMoloch: (at: CellKey, index: number) => boolean;
   // --- Turn Effect Queue (ordered EOT/SOT processing) ---
   turnEffectQueue: TurnEffectEntry[];
   turnEffectQueueActive: boolean;
@@ -3541,9 +3545,7 @@ export type GameState = {
   detachToken: (at: CellKey, index: number) => void;
   // Derived selectors (pure getters)
   getPlayerSites: (who: PlayerKey) => Array<[CellKey, SiteTile]>;
-  getUntappedSitesCount: (who: PlayerKey) => number;
-  getBaseMana: (who: PlayerKey) => number; // total mana from untapped sites (before spending)
-  getAvailableMana: (who: PlayerKey) => number; // remaining mana (base + offset from spending)
+  getAvailableMana: (who: PlayerKey) => number; // remaining mana (computed + spend ledger)
   getThresholdTotals: (who: PlayerKey) => Thresholds;
   // History / Undo
   history: SerializedGame[];
@@ -3661,6 +3663,7 @@ export type ServerPatchT = Partial<{
   pathfinderUsed: GameState["pathfinderUsed"];
   pendingPathfinderPlay: GameState["pendingPathfinderPlay"];
   geomancerRubbleUsed: GameState["geomancerRubbleUsed"];
+  templeOfMolochUsed: GameState["templeOfMolochUsed"];
   pendingGeomancerPlay: GameState["pendingGeomancerPlay"];
   babelTowers: GameState["babelTowers"];
   pendingBabelPlacement: GameState["pendingBabelPlacement"];

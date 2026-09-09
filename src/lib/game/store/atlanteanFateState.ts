@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { ORDINARY_SITE_NAME_SET } from "@/lib/game/mana-providers";
 import type { CustomMessage } from "@/lib/net/transport";
 import type {
   AtlanteanFateAura,
@@ -195,55 +196,7 @@ export function isAuraSubtype(
  * Complete list of Ordinary rarity sites from cards_raw.json.
  * Used as fallback when rarity data isn't available on CardRef or metaByCardId.
  */
-const ORDINARY_SITE_NAMES = new Set([
-  "accursed desert",
-  "accursed tower",
-  "algae bloom",
-  "arid desert",
-  "autumn bloom",
-  "autumn river",
-  "blessed village",
-  "blessed well",
-  "bog",
-  "bonfire",
-  "common village",
-  "croaking swamp",
-  "dark tower",
-  "den of evil",
-  "desert bloom",
-  "forge",
-  "gothic tower",
-  "hamlet",
-  "hillside chapel",
-  "humble village",
-  "hunter's lodge",
-  "leadworks",
-  "leyline henge",
-  "lone tower",
-  "lookout",
-  "open grave",
-  "open mausoleum",
-  "pond",
-  "red desert",
-  "remote desert",
-  "rubble",
-  "rustic village",
-  "silent hills",
-  "simple village",
-  "spire",
-  "spore spouts",
-  "spring river",
-  "stinging kelp",
-  "stream",
-  "summer river",
-  "treetop hideout",
-  "troubled town",
-  "twilight bloom",
-  "valley",
-  "vast desert",
-  "wasteland",
-  "winter river",
-]);
+const ORDINARY_SITE_NAMES = ORDINARY_SITE_NAME_SET;
 
 /**
  * Check if a site is "ordinary" (basic elemental site that just provides mana/threshold).

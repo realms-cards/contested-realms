@@ -3,6 +3,11 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { AnyRecord, MatchPatch } from "../types";
+import {
+  computeAvailableMana,
+  getAvatarAdjustedManaCost,
+  getManaLedger,
+} from "./rules-resources";
 import { markAndCountNewPlacements } from "./rules-validation";
 
 type SeatKey = "p1" | "p2";
@@ -95,89 +100,8 @@ function getCostForCard(card: AnyRecord | null | undefined): number {
   return 0;
 }
 
-// Curated metadata (mirrors client `src/lib/game/mana-providers.ts`)
-const MANA_PROVIDER_BY_NAME: ReadonlySet<string> = new Set([
-  "abundance",
-  "amethyst core",
-  "aquamarine core",
-  "atlantean fate",
-  "avalon",
-  "blacksmith family",
-  "caerleon-upon-usk",
-  "castle servants",
-  "common cottagers",
-  "drought",
-  "finwife",
-  "fisherman's family",
-  "glastonbury tor",
-  "joyous garde",
-  "onyx core",
-  "pristine paradise",
-  "ruby core",
-  "shrine of the dragonlord",
-  "the colour out of space",
-  "tintagel",
-  "valley of delight",
-  "wedding hall",
-  "älvalinne dryads",
-]);
-
-// Sites that do NOT provide 1 mana (keep empty until cataloged)
-const NON_MANA_SITE_IDENTIFIERS: ReadonlySet<string> = new Set([]);
-
-function siteProvidesMana(card: AnyRecord | null | undefined): boolean {
-  if (!card) return false;
-  const name = (card.name || "").toString().toLowerCase();
-  const slug = (card.slug || "").toString().toLowerCase();
-  if (NON_MANA_SITE_IDENTIFIERS.has(name)) return false;
-  if (slug && NON_MANA_SITE_IDENTIFIERS.has(slug)) return false;
-  return true;
-}
-
-function countOwnedManaSites(game: AnyRecord, playerNum: number): number {
-  let n = 0;
-  const board = (game.board || {}) as AnyRecord;
-  const sites = (board.sites || {}) as Record<string, AnyRecord>;
-  for (const key of Object.keys(sites)) {
-    try {
-      const tile = sites[key];
-      if (!tile || Number(tile.owner) !== playerNum) continue;
-      const card = (tile.card || null) as AnyRecord | null;
-      if (siteProvidesMana(card)) n++;
-    } catch {
-      // ignore tile
-    }
-  }
-  return n;
-}
-
-function countManaProvidersFromPermanents(
-  game: AnyRecord,
-  playerNum: number,
-): number {
-  let n = 0;
-  const per = (game.permanents as Record<string, unknown[]>) || {};
-  for (const cellKey of Object.keys(per)) {
-    const arrRaw = per[cellKey];
-    const arr = Array.isArray(arrRaw) ? arrRaw : [];
-    for (const p of arr) {
-      try {
-        const perm = (p || {}) as AnyRecord;
-        if (!perm || Number(perm.owner) !== playerNum) continue;
-        const nm = (
-          perm.card && (perm.card as AnyRecord).name
-            ? String((perm.card as AnyRecord).name)
-            : ""
-        ).toLowerCase();
-        if (MANA_PROVIDER_BY_NAME.has(nm)) n++;
-      } catch {
-        // ignore malformed entries
-      }
-    }
-  }
-  return n;
-}
-
+// Validates and books the mana cost of newly played permanents, and taps the
+// avatar when a site is played. Mana rules live in rules-resources.ts.
 export function ensureCosts(
   game: AnyRecord,
   action: MatchPatch,
@@ -210,9 +134,35 @@ export function ensureCosts(
       const info = markAndCountNewPlacements(game, action, meNum);
       newPermanentsInfo.newItems = info.newItems;
       newPermanentsInfo.isNew = info.isNew;
-      for (const p of info.newItems) {
-        const card = (p.card || null) as AnyRecord | null;
-        if (card) totalCost += getCostForCard(card);
+      // Walk the patch so each new permanent is priced at its cell (Harbinger
+      // portal discount) with the same once-per-turn avatar discounts the
+      // client applies.
+      const used = { harbinger: false, templar: false };
+      const perPatch = (action as AnyRecord).permanents as Record<
+        string,
+        unknown
+      >;
+      for (const cellKey of Object.keys(perPatch)) {
+        const arr = Array.isArray(perPatch[cellKey])
+          ? (perPatch[cellKey] as unknown[])
+          : [];
+        for (const raw of arr) {
+          const p = raw as AnyRecord;
+          if (!p || !info.isNew.has(p)) continue;
+          const card = (p.card || null) as AnyRecord | null;
+          if (!card) continue;
+          const adjusted = getAvatarAdjustedManaCost(
+            game,
+            meKey,
+            card,
+            cellKey,
+            getCostForCard(card),
+            used,
+          );
+          if (adjusted.harbingerPortalDiscountApplied) used.harbinger = true;
+          if (adjusted.templarDiscountApplied) used.templar = true;
+          totalCost += adjusted.manaCost;
+        }
       }
     }
 
@@ -245,27 +195,37 @@ export function ensureCosts(
       }
     }
 
-    const autoResources: Record<string, AnyRecord> = {};
+    const autoPlayers: Record<string, AnyRecord> = {};
     const autoAvatars: Record<string, AnyRecord> = {};
     let hasAuto = false;
 
     if (totalCost > 0) {
-      const ownedSiteCount = countOwnedManaSites(game, meNum);
-      const manaProviders = countManaProvidersFromPermanents(game, meNum);
-      const resourcesPrev = (game.resources || {}) as AnyRecord;
-      const meResPrev = (resourcesPrev[meKey] || {}) as AnyRecord;
-      const spentPrevRaw = meResPrev.spentThisTurn;
-      const spentPrev = Number(spentPrevRaw) || 0;
-      const available = Math.max(0, ownedSiteCount + manaProviders - spentPrev);
-      if (totalCost > available) {
+      // players[seat].mana is the single spend ledger. A human client sends
+      // its updated ledger inside the same patch as the permanent; a bot (or
+      // legacy client) does not, so the server books the cost itself.
+      const ledgerPrev = getManaLedger(game, meKey);
+      const playersPatch = (action as AnyRecord).players as
+        | Record<string, AnyRecord | undefined>
+        | undefined;
+      const ledgerPatchRaw = playersPatch?.[meKey]?.mana;
+      const clientPaid =
+        typeof ledgerPatchRaw === "number" &&
+        Number.isFinite(ledgerPatchRaw) &&
+        ledgerPatchRaw !== ledgerPrev;
+      const ledgerNext = clientPaid
+        ? (ledgerPatchRaw as number)
+        : ledgerPrev - totalCost;
+      const available = computeAvailableMana(game, meKey) + ledgerPrev;
+      if (totalCost > Math.max(0, available)) {
         return {
           ok: false,
           error: "Insufficient resources to pay costs",
         };
       }
-      const newSpent = spentPrev + totalCost;
-      autoResources[meKey] = { spentThisTurn: newSpent };
-      hasAuto = true;
+      if (!clientPaid) {
+        autoPlayers[meKey] = { mana: ledgerNext };
+        hasAuto = true;
+      }
     }
 
     if (placingNewSite) {
@@ -293,10 +253,9 @@ export function ensureCosts(
     }
 
     if (hasAuto) {
-      const auto: AnyRecord = {
-        resources: autoResources,
-        avatars: autoAvatars,
-      };
+      const auto: AnyRecord = {};
+      if (Object.keys(autoPlayers).length > 0) auto.players = autoPlayers;
+      if (Object.keys(autoAvatars).length > 0) auto.avatars = autoAvatars;
       return { ok: true, autoPatch: auto };
     }
 

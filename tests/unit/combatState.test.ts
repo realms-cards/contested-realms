@@ -8,13 +8,6 @@ import {
   type Thresholds,
 } from "@/lib/game/store";
 
-const zeroThresholds = (): Thresholds => ({
-  air: 0,
-  water: 0,
-  earth: 0,
-  fire: 0,
-});
-
 const makePermanent = (
   cardId: number,
   name: string,
@@ -105,8 +98,8 @@ describe("combat state", () => {
           [attackerKey]: [makePermanent(500, "Skirmisher", 1)],
         },
         players: {
-          p1: { life: 20, lifeState: "alive", mana: 0, thresholds: zeroThresholds() },
-          p2: { life: 12, lifeState: "alive", mana: 0, thresholds: zeroThresholds() },
+          p1: { life: 20, lifeState: "alive", mana: 0 },
+          p2: { life: 12, lifeState: "alive", mana: 0 },
         },
         pendingCombat: {
           id: "cmb_avatar",

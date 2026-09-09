@@ -19,13 +19,14 @@ interface Avatars {
   p2: Avatar;
 }
 
-interface Resource {
-  spentThisTurn?: number;
+interface PlayerState {
+  // Spend ledger shared with the client and bot: reset to 0 at turn start.
+  mana?: number;
 }
 
-interface Resources {
-  p1?: Resource;
-  p2?: Resource;
+interface Players {
+  p1?: PlayerState;
+  p2?: PlayerState;
 }
 
 interface Permanent {
@@ -47,7 +48,7 @@ interface GameState {
   turnTracking?: TurnTracking;
   permanents?: Permanents;
   avatars?: Avatars;
-  resources?: Resources;
+  players?: Players;
 }
 
 /**
@@ -122,18 +123,19 @@ export function applyTurnStart(game: AnyRecord): MatchPatch | null {
     const nextKey: PlayerKey = cp === 1 ? "p1" : "p2";
     avatars[nextKey] = { ...(avatars[nextKey] || {}), tapped: false };
 
-    // Reset per-turn spend for current player (sites do not tap in Sorcery)
-    const resPrev: Resources = g.resources || {};
+    // Reset the current player's spend ledger (sites do not tap in Sorcery).
+    // players[seat].mana is the single ledger used by client, server and bot.
+    const playersPrev: Players = g.players || {};
     const meKey: PlayerKey = cp === 1 ? "p1" : "p2";
-    const meResPrev = resPrev[meKey] || {};
-    const meRes = { ...meResPrev, spentThisTurn: 0 };
-    const resources: Resources = { ...resPrev, [meKey]: meRes };
+    const players: Players = {
+      [meKey]: { ...(playersPrev[meKey] || {}), mana: 0 },
+    };
 
     // Do not modify board.sites at turn start (sites do not tap)
     return {
       permanents,
       avatars,
-      resources,
+      players,
       turnTracking: updatedTurnTracking,
     } as MatchPatch;
   } catch {
