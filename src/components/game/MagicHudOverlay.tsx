@@ -7,6 +7,10 @@ import {
   seatFromOwner,
   opponentSeat,
 } from "@/lib/game/store/utils/boardHelpers";
+import {
+  describeMagicMode,
+  describeMagicRange,
+} from "@/lib/game/store/utils/magicTargeting";
 
 export default function MagicHudOverlay() {
   const pendingMagic = useGameStore((s) => s.pendingMagic);
@@ -132,11 +136,34 @@ export default function MagicHudOverlay() {
       }
 
       if (status === "choosingCaster") return `Select a Spellcaster`;
-      if (status === "choosingTarget") return `Select a target`;
+      if (status === "choosingTarget") {
+        const range = describeMagicRange(pm.hints);
+        const where = range ? ` ${range}` : "";
+        switch (pm.hints?.mode) {
+          case "projectile":
+            return "Choose a direction: click a tile or unit in line with the caster";
+          case "site":
+            return `Select a site${where}`;
+          case "area":
+            return `Area effect${where}: confirm to cast`;
+          case "none":
+            return `No target needed: confirm to cast`;
+          default:
+            return `Select a unit or avatar${where}`;
+        }
+      }
       if (status === "confirm") return `Cast ${cardName}`;
       if (status === "resolving") return `Resolving ${cardName}…`;
       return `Casting ${cardName}`;
     })();
+
+    const modeChip = (
+      <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-200">
+        {describeMagicMode(pm.hints)}
+      </span>
+    );
+    const needsTarget =
+      pm.hints?.mode !== "area" && pm.hints?.mode !== "none";
 
     const casterChip = (() => {
       const c = pm.caster;
@@ -249,12 +276,13 @@ export default function MagicHudOverlay() {
             </span>
           )}
           <span className="hidden md:inline-flex items-center gap-2 text-sm opacity-90">
+            {modeChip}
             {casterChip}
             {cardChip}
           </span>
           {actorIsActive && status === "choosingTarget" ? (
             <>
-              {pm.target ? (
+              {pm.target || !needsTarget ? (
                 <button
                   className="mx-1 rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1 select-none"
                   onClick={() => {

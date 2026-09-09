@@ -41,6 +41,7 @@ type PreferenceSlice = Pick<
   | "magicGuideSeatPrefs"
   | "combatGuidesActive"
   | "magicGuidesActive"
+  | "announceGuidePrefs"
   | "actionNotifications"
   | "setActionNotifications"
 >;
@@ -58,15 +59,15 @@ export const createPreferenceSlice: StateCreator<
   interactionGuides: initialInteractionGuides,
   magicGuides: initialMagicGuides,
   actionNotifications: initialActionNotifications,
-  // Initialize per-seat prefs from the local toggle; will be refined once
-  // remote guide preference sync is wired in.
-  combatGuideSeatPrefs: {
-    p1: initialInteractionGuides,
-    p2: initialInteractionGuides,
-  },
-  magicGuideSeatPrefs: { p1: initialMagicGuides, p2: initialMagicGuides },
-  combatGuidesActive: initialInteractionGuides && initialInteractionGuides,
-  magicGuidesActive: initialMagicGuides && initialMagicGuides,
+  // Per-seat prefs are exchanged over `guidePref` messages once an online seat
+  // is assigned (see sessionState.setActorKey and the guidePref handler). The
+  // effective flags stay off until both seats have opted in: the guided flows
+  // need a second client to answer, so hotseat / local play never activates
+  // them even when the local toggle is on.
+  combatGuideSeatPrefs: { p1: false, p2: false },
+  magicGuideSeatPrefs: { p1: false, p2: false },
+  combatGuidesActive: false,
+  magicGuidesActive: false,
 
   setInteractionGuides: (on) => {
     const next = !!on;
@@ -74,36 +75,13 @@ export const createPreferenceSlice: StateCreator<
     const actorKey = get().actorKey;
     const prevActive = !!get().combatGuidesActive;
 
-    if (!transport || (actorKey !== "p1" && actorKey !== "p2")) {
-      // Offline / hotseat / spectator: treat toggle as a local-only flag.
-      const nextActive = next && next;
+    if (!transport?.sendMessage || (actorKey !== "p1" && actorKey !== "p2")) {
+      // Offline / hotseat / spectator: remember the preference only. It is
+      // announced to the opponent once a seat is assigned.
       set({
         interactionGuides: next,
-        combatGuideSeatPrefs: { p1: next, p2: next },
-        combatGuidesActive: nextActive,
+        combatGuidesActive: false,
       } as Partial<GameState> as GameState);
-      if (prevActive !== nextActive) {
-        try {
-          get().log(
-            nextActive
-              ? "Combat guides enabled (both players opted in)"
-              : "Combat guides disabled"
-          );
-        } catch {}
-        try {
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(
-              new CustomEvent("app:toast", {
-                detail: {
-                  message: nextActive
-                    ? "Combat guides enabled (both players opted in)"
-                    : "Combat guides disabled",
-                },
-              })
-            );
-          }
-        } catch {}
-      }
     } else {
       // Online: treat this as a per-seat preference and derive the effective flag
       // from both seats' prefs once guidePref messages are exchanged.
@@ -135,12 +113,7 @@ export const createPreferenceSlice: StateCreator<
       }
 
       try {
-        transport?.sendMessage?.({
-          type: "guidePref",
-          seat: actorKey,
-          combatGuides: next,
-          magicGuides: !!get().magicGuides,
-        } as unknown as CustomMessage);
+        get().announceGuidePrefs(false);
       } catch {}
     }
     try {
@@ -156,36 +129,12 @@ export const createPreferenceSlice: StateCreator<
     const actorKey = get().actorKey;
     const prevActive = !!get().magicGuidesActive;
 
-    if (!transport || (actorKey !== "p1" && actorKey !== "p2")) {
-      // Offline / hotseat / spectator: local-only toggle.
-      const nextActive = next && next;
+    if (!transport?.sendMessage || (actorKey !== "p1" && actorKey !== "p2")) {
+      // Offline / hotseat / spectator: remember the preference only.
       set({
         magicGuides: next,
-        magicGuideSeatPrefs: { p1: next, p2: next },
-        magicGuidesActive: nextActive,
+        magicGuidesActive: false,
       } as Partial<GameState> as GameState);
-      if (prevActive !== nextActive) {
-        try {
-          get().log(
-            nextActive
-              ? "Magic guides enabled (both players opted in)"
-              : "Magic guides disabled"
-          );
-        } catch {}
-        try {
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(
-              new CustomEvent("app:toast", {
-                detail: {
-                  message: nextActive
-                    ? "Magic guides enabled (both players opted in)"
-                    : "Magic guides disabled",
-                },
-              })
-            );
-          }
-        } catch {}
-      }
     } else {
       // Online: per-seat preference; effective flag depends on both seats.
       let nextActive = prevActive;
@@ -216,18 +165,29 @@ export const createPreferenceSlice: StateCreator<
       }
 
       try {
-        transport?.sendMessage?.({
-          type: "guidePref",
-          seat: actorKey,
-          combatGuides: !!get().interactionGuides,
-          magicGuides: next,
-        } as unknown as CustomMessage);
+        get().announceGuidePrefs(false);
       } catch {}
     }
     try {
       if (typeof window !== "undefined") {
         localStorage.setItem("sorcery:magicGuides", next ? "1" : "0");
       }
+    } catch {}
+  },
+
+  announceGuidePrefs: (reply) => {
+    const transport = get().transport;
+    const actorKey = get().actorKey;
+    if (!transport?.sendMessage) return;
+    if (actorKey !== "p1" && actorKey !== "p2") return;
+    try {
+      transport.sendMessage({
+        type: "guidePref",
+        seat: actorKey,
+        combatGuides: !!get().interactionGuides,
+        magicGuides: !!get().magicGuides,
+        reply: !!reply,
+      } as unknown as CustomMessage);
     } catch {}
   },
 

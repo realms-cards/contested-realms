@@ -1193,6 +1193,7 @@ export default function Board({
   const magicContext = useMemo(
     () => ({
       pendingMagic,
+      avatars,
       setMagicTargetChoice,
       setMagicCasterChoice,
       computeProjectileFirstHits,
@@ -1200,6 +1201,7 @@ export default function Board({
     }),
     [
       pendingMagic,
+      avatars,
       setMagicTargetChoice,
       setMagicCasterChoice,
       computeProjectileFirstHits,
@@ -1714,6 +1716,7 @@ export default function Board({
             }}
             magicContext={{
               pendingMagic,
+              avatars,
               setMagicCasterChoice,
               setMagicTargetChoice,
               computeProjectileFirstHits,

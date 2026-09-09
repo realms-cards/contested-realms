@@ -17,6 +17,7 @@ import type {
   SiteTile,
 } from "@/lib/game/store/types";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
+import { buildProjectileTarget } from "@/lib/game/store/utils/magicTargeting";
 
 const HIGHLIGHT_TARGET = "#ef4444";
 const HIGHLIGHT_SWITCH_SOURCE = "#f59e0b"; // amber for switch site selection
@@ -129,10 +130,7 @@ export function SiteCard({
   babelTowers,
   pendingEarthquake,
 }: SiteCardProps) {
-  // These props are kept for future re-enablement of magic targeting hints
   void magicGuidesActive;
-  void computeProjectileFirstHits;
-  void avatars;
   void _touchPreviewTimerRef;
   void _touchContextTimerRef;
   if (!maybeSite) return null;
@@ -309,8 +307,21 @@ export function SiteCard({
     if (!amActor || !actorIsActive) return;
     e.stopPropagation();
     if (pendingMagic.status === "choosingTarget") {
-      // Allow targeting any location on the board without scope restrictions
-      // The actual spell effect validation happens server-side during resolution
+      if (pendingMagic.hints?.mode === "projectile") {
+        // Projectiles travel in a straight line from the caster: clicking a
+        // tile picks the direction; the first unit on that line is hit.
+        const target = buildProjectileTarget(
+          pendingMagic,
+          avatars,
+          { x: tileX, y: tileY },
+          null,
+          computeProjectileFirstHits,
+        );
+        if (target) setMagicTargetChoice(target);
+        return;
+      }
+      // Any location may be chosen; the overlay only shows the intention.
+      // The actual spell effect validation happens during resolution.
       setMagicTargetChoice({ kind: "location", at: tileKey });
     }
   }

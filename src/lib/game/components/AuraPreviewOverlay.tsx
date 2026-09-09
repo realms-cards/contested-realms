@@ -29,6 +29,30 @@ const P1_COLOR = new THREE.Color("#3b82f6"); // blue
 const P2_COLOR = new THREE.Color("#ef4444"); // red
 
 /**
+ * Drives the pulse for one highlighted tile.
+ *
+ * This lives in its own component so the `useFrame` subscription exists only
+ * while a tile is actually highlighted. The overlay is mounted once per tile,
+ * and idle per-tile subscriptions defeat `frameloop="demand"` by keeping the
+ * whole board rendering at the monitor's refresh rate.
+ */
+function AuraPulse({
+  fillRef,
+}: {
+  fillRef: React.RefObject<THREE.Mesh | null>;
+}) {
+  useFrame(({ clock }) => {
+    const mesh = fillRef.current;
+    if (!mesh) return;
+    const mat = mesh.material as THREE.MeshBasicMaterial;
+    // Pulse between 0.15 and 0.35 opacity
+    mat.opacity = 0.25 + Math.sin(clock.getElapsedTime() * 3) * 0.1;
+    requestCosmeticFrame();
+  });
+  return null;
+}
+
+/**
  * Renders a pulsing highlight on each tile affected by an Aura spell.
  * Each affected tile gets its own highlight aligned to the tile grid.
  */
@@ -102,19 +126,6 @@ export function AuraPreviewOverlay({
     return pendingMagic.spell.owner === 2 ? P2_COLOR : P1_COLOR;
   }, [pendingMagic]);
 
-  // Animate the fill with pulsing effect
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
-    if (fillRef.current) {
-      const mat = fillRef.current.material as THREE.MeshBasicMaterial;
-      // Pulse between 0.15 and 0.35 opacity
-      mat.opacity = 0.25 + Math.sin(t * 3) * 0.1;
-      // Aura preview pulses only while this tile is actually highlighted
-      // (this component is mounted for every tile; frameloop="demand").
-      requestCosmeticFrame();
-    }
-  });
-
   if (!isAffectedTile) {
     return null;
   }
@@ -125,6 +136,7 @@ export function AuraPreviewOverlay({
   return (
     <group position={[0, 0.011, 0]} rotation-x={-Math.PI / 2}>
       {/* Pulsing fill for this tile */}
+      <AuraPulse fillRef={fillRef} />
       <mesh ref={fillRef} position={[0, 0, 0]}>
         <planeGeometry args={[TILE_SIZE - 0.02, TILE_SIZE - 0.02]} />
         <meshBasicMaterial

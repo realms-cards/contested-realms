@@ -286,9 +286,30 @@ export function detectRangedAbilitySync(cardName: string): boolean {
 
 // --- Magic spellcasting + targeting hints (heuristic, v1) --------------------
 
+/** What the caster has to pick on the board for a Magic spell. */
+export type MagicTargetMode =
+  | "projectile" // a straight line from the caster; first unit hit is the target
+  | "site" // a location / site
+  | "single" // one unit or avatar
+  | "area" // no pick: the effect covers every unit in range of the caster
+  | "none"; // no board target at all (draw, gain life, ...)
+
+/** How far from the caster the pick / effect reaches. */
+export type MagicTargetRange =
+  | "here"
+  | "adjacent"
+  | "nearby"
+  | "two-steps"
+  | "global";
+
 export type MagicTargetHints = {
+  /** Legacy scope; kept for older consumers. Derived from `mode`/`range`. */
   scope: "here" | "adjacent" | "nearby" | "global" | "projectile" | null;
+  mode: MagicTargetMode;
+  range: MagicTargetRange;
   allow: { location?: boolean; permanent?: boolean; avatar?: boolean };
+  /** False when no rules text was available, so the hints are only a guess. */
+  fromText: boolean;
 };
 
 export async function detectSpellcaster(cardName: string): Promise<boolean> {
@@ -335,6 +356,18 @@ export async function extractMagicTargetingHints(
   }
 }
 
+const UNIT_WORDS =
+  "(?:unit|minion|creature|permanent|artifact|aura|relic|totem|token|ally|avatar|beast|mortal|demon|undead|spirit|monster)";
+
+/**
+ * Classify a Magic spell's targeting from its rules text so the board can
+ * show the caster's intention: a projectile line, a site, a single unit, an
+ * area around the caster, or nothing at all.
+ *
+ * Heuristic by design: Sorcery rules text is written for humans. Precedence:
+ * projectile > explicit "target <unit>" > "target site/location" >
+ * indefinite "an ally/unit" > "each/all" area > none.
+ */
 export function extractMagicTargetingHintsSync(
   cardName: string,
   rulesText?: string | null
@@ -343,25 +376,67 @@ export function extractMagicTargetingHintsSync(
     rulesText ||
     abilityCache.get(cardName.toLowerCase())?.rulesText ||
     ""
-  ).toLowerCase();
+  )
+    .replace(/[’']/g, "'")
+    .toLowerCase();
   const nameLc = (cardName || "").toLowerCase();
-  const hints: MagicTargetHints = {
-    scope: null,
-    allow: { location: false, permanent: true, avatar: true },
+
+  const range: MagicTargetRange = /\bnearby\b/.test(txt)
+    ? "nearby"
+    : /\badjacent\b/.test(txt)
+      ? "adjacent"
+      : /\btwo steps\b/.test(txt)
+        ? "two-steps"
+        : /\bhere\b/.test(txt)
+          ? "here"
+          : "global";
+
+  const projectile =
+    /\bprojectile\b/.test(txt) ||
+    (!txt && /\b(grapple|shot|missile|arrow|bolt)\b/.test(nameLc));
+  const targetUnit = new RegExp(
+    `\\btarget\\s+(?:\\w+\\s+){0,2}${UNIT_WORDS}s?\\b`
+  ).test(txt);
+  const targetSite =
+    /\btarget\s+(?:\w+\s+){0,2}(?:site|location)s?\b/.test(txt) ||
+    /\b(?:at|to|from)\s+a\s+(?:\w+\s+)?location\b/.test(txt) ||
+    /\bchoose\s+(?:a|two|three)\s+(?:\w+\s+)?sites?\b/.test(txt);
+  const indefiniteUnit = new RegExp(
+    `\\b(?:an?|another)\\s+(?:\\w+\\s+){0,2}${UNIT_WORDS}\\b`
+  ).test(txt);
+  const area =
+    /\b(?:each|all|every|everything|any number of)\b/.test(txt) ||
+    /\bin the area of effect\b/.test(txt);
+
+  let mode: MagicTargetMode = "none";
+  if (projectile) mode = "projectile";
+  else if (targetUnit) mode = "single";
+  else if (targetSite) mode = "site";
+  else if (indefiniteUnit) mode = "single";
+  else if (area) mode = "area";
+  else if (!txt) mode = "single"; // unknown text: let the caster pick freely
+
+  const scope: MagicTargetHints["scope"] =
+    mode === "projectile"
+      ? "projectile"
+      : range === "two-steps"
+        ? "nearby"
+        : range;
+
+  const mentionsUnit = new RegExp(`\\b${UNIT_WORDS}s?\\b`).test(txt);
+  const mentionsAvatar = /\b(avatar|player|opponent|unit)s?\b/.test(txt);
+  const allow: MagicTargetHints["allow"] = {
+    location:
+      mode === "site" ||
+      mode === "area" ||
+      mode === "projectile" ||
+      /\b(tile|site|location)s?\b/.test(txt),
+    permanent: mode === "single" || mode === "projectile" || mentionsUnit || !txt,
+    avatar:
+      mode === "single" || mode === "projectile" || mentionsAvatar || !txt,
   };
-  const projectileByName = /\b(grapple|shot|missile|arrow|bolt)\b/.test(nameLc);
-  if (txt.includes("projectile") || projectileByName)
-    hints.scope = "projectile";
-  else if (txt.includes("adjacent")) hints.scope = "adjacent";
-  else if (txt.includes("nearby") || txt.includes("near"))
-    hints.scope = "nearby";
-  else if (txt.includes("here")) hints.scope = "here";
-  else hints.scope = "global";
-  if (/(tile|site|here|there|location)/.test(txt)) hints.allow.location = true;
-  if (/(unit|minion|creature|permanent|artifact|relic|totem)/.test(txt))
-    hints.allow.permanent = true;
-  if (/(avatar|player|opponent)/.test(txt)) hints.allow.avatar = true;
-  return hints;
+
+  return { scope, mode, range, allow, fromText: txt.length > 0 };
 }
 
 // --- Stealth keyword detection ---

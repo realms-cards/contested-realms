@@ -447,6 +447,8 @@ export function BoardTile({
           tileY={tileY}
           pendingMagic={pendingMagic}
           avatars={avatars}
+          permanents={permanents}
+          hasSite={Boolean(site)}
           highlightColor={magicHighlightColor}
           magicGuidesActive={magicGuidesActive}
         />

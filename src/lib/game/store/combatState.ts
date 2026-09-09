@@ -855,6 +855,24 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       }
     }
 
+    // Attacking taps the attacker. Applied here by the resolving client (the
+    // combatResolve echo is suppressed); the opponent's copy taps through the
+    // permanents patch. Avatars are not permanents and the attacker may have
+    // died during resolution, so look it up by instanceId first.
+    if (!pending.attacker.isAvatar) {
+      try {
+        const attackerSeat = seatFromOwner(pending.attacker.owner);
+        const mine = !get().actorKey || get().actorKey === attackerSeat;
+        const list = permanents[pending.attacker.at] || [];
+        const instanceId = pending.attacker.instanceId ?? null;
+        const idx = instanceId
+          ? list.findIndex((p) => p?.instanceId === instanceId)
+          : pending.attacker.index;
+        if (mine && idx >= 0 && list[idx] && !list[idx].tapped) {
+          get().setTapPermanent(pending.attacker.at, idx, true);
+        }
+      } catch {}
+    }
     if (transport?.sendMessage) {
       try {
         transport.sendMessage({
@@ -1500,9 +1518,15 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
     })();
 
     // Sort kills by index descending within each cell to avoid index shifting issues
-    // When removing items, higher indices should be removed first
+    // When removing items, higher indices should be removed first.
+    // Each client applies its own kills; the combatAutoApply broadcast carries
+    // the rest to the opponent. A CPU opponent has no client, so apply its
+    // kills here as well (movePermanentToZone permits this for CPU seats).
+    const cpuOpponentId = get().opponentPlayerId;
+    const applyAllKills =
+      typeof cpuOpponentId === "string" && cpuOpponentId.startsWith("cpu_");
     const myKills = killList
-      .filter((k) => !mySeat || k.owner === mySeat)
+      .filter((k) => !mySeat || applyAllKills || k.owner === mySeat)
       .sort((a, b) => {
         if (a.at !== b.at) return 0; // Only sort within same cell
         return b.index - a.index; // Descending order
@@ -1900,7 +1924,12 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
   cancelCombat: () => {
     const pending = get().pendingCombat;
     if (!pending) return;
-    set({ pendingCombat: null } as Partial<GameState> as GameState);
+    set({
+      pendingCombat: null,
+      attackChoice: null,
+      attackTargetChoice: null,
+      attackConfirm: null,
+    } as Partial<GameState> as GameState);
     const transport = get().transport;
     if (transport?.sendMessage) {
       try {

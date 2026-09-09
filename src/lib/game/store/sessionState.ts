@@ -1,5 +1,4 @@
 import type { StateCreator } from "zustand";
-import type { CustomMessage } from "@/lib/net/transport";
 import type { GameState, PlayerKey, SerializedGame } from "./types";
 import {
   loadHistoryFromStorage,
@@ -62,6 +61,8 @@ export const createSessionSlice: StateCreator<
 
   actorKey: null,
   setActorKey: (key) => {
+    const prevKey = get().actorKey;
+    if (prevKey === key) return;
     set((state) => {
       if (state.actorKey === key) return state as GameState;
       if (!key) {
@@ -84,8 +85,10 @@ export const createSessionSlice: StateCreator<
       } as Partial<GameState> as GameState;
     });
     if (key) {
-      // Online mode: reset opponent's guide prefs to false (unknown until they sync)
-      // and send our own guide preferences so the opponent knows our state.
+      // A new seat was assigned: the opponent's guide prefs are unknown until
+      // they sync, so reset them and announce ours. The opponent answers a
+      // fresh announcement with its own pref (see the guidePref handler), so
+      // both sides converge regardless of join order or reloads.
       const opponentSeat: PlayerKey = key === "p1" ? "p2" : "p1";
       const localCombat = !!get().interactionGuides;
       const localMagic = !!get().magicGuides;
@@ -107,20 +110,19 @@ export const createSessionSlice: StateCreator<
           magicGuidesActive: magicPrefs.p1 && magicPrefs.p2,
         } as Partial<GameState> as GameState;
       });
-      // Send initial guide preferences so the opponent can update their state
       try {
-        const transport = get().transport;
-        transport?.sendMessage?.({
-          type: "guidePref",
-          seat: key,
-          combatGuides: localCombat,
-          magicGuides: localMagic,
-        } as unknown as CustomMessage);
+        get().announceGuidePrefs(false);
       } catch {}
 
       try {
         get().flushPendingPatches();
       } catch {}
+    } else {
+      // Leaving the online session: guided flows need a seat.
+      set({
+        combatGuidesActive: false,
+        magicGuidesActive: false,
+      } as Partial<GameState> as GameState);
     }
   },
 

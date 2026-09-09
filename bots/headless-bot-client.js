@@ -445,7 +445,24 @@ class BotClient {
         if (!payload || typeof payload !== "object") return;
         const type = payload.type;
         if (!type) return;
-        if (type === "guidePref") return; // Acknowledge guide preferences, no action needed
+        if (type === "guidePref") {
+          // The human (re)announced its guide prefs, e.g. after a reload. Our
+          // one-shot opt-in at match start may have been missed, so answer
+          // with ours. Replies are never answered (no ping-pong).
+          try {
+            const meKey = this.playerIndex === 1 ? "p2" : "p1";
+            if (payload.seat !== meKey && !payload.reply) {
+              this.socket.emit("message", {
+                type: "guidePref",
+                seat: meKey,
+                combatGuides: true,
+                magicGuides: true,
+                reply: true,
+              });
+            }
+          } catch {}
+          return;
+        }
         // Try resolver messages first (custom card interactions)
         if (this._handleResolverMessage(type, payload)) return;
         this._handleCombatMessage(type, payload);
@@ -1395,11 +1412,13 @@ class BotClient {
       // 2. magicSetCaster — avatar is the caster
       setTimeout(() => {
         try {
-          const avatarPos = (this._game && this._game.avatars && this._game.avatars[meKey] && this._game.avatars[meKey].pos) || [2, 2];
+          // Caster shape must match the client's MagicCaster union
+          // ({ kind: "avatar", seat }), otherwise the server normalises it to
+          // null and the human's HUD shows "Select a Spellcaster".
           this.socket.emit("message", {
             type: "magicSetCaster",
             id: magicId,
-            caster: { at: `${avatarPos[0]},${avatarPos[1]}`, index: -1, isAvatar: true, avatarSeat: meKey },
+            caster: { kind: "avatar", seat: meKey },
             ts: Date.now(),
           });
         } catch {}

@@ -269,7 +269,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const hasFrontierSettlersAbility = useGameStore(
     (s) => s.hasFrontierSettlersAbility,
   );
-  const interactionGuides = useGameStore((s) => s.interactionGuides);
+  const combatGuidesActive = useGameStore((s) => s.combatGuidesActive);
 
   // Assimilator Snail activated ability
   const assimilatorSnailUsed = useGameStore((s) => s.assimilatorSnailUsed);
@@ -1376,7 +1376,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
             })
           : [];
 
-      if (canAttackHere && item && interactionGuides) {
+      if (canAttackHere && item && combatGuidesActive) {
         // Insert button to render later
         extraActions.push({
           actionId: "__attack_here__",
@@ -1387,7 +1387,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         });
       }
 
-      if (rangedTargets.length > 0 && item && interactionGuides) {
+      if (rangedTargets.length > 0 && item && combatGuidesActive) {
         for (const p of rangedTargets) {
           const cellNo = getCellNumber(p.x, p.y, board.size.w, board.size.h);
           extraActions.push({
@@ -1671,7 +1671,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     // Avatar "Attack here" action - same as minions
     const avatarPos2 =
       Array.isArray(a?.pos) && a.pos.length === 2 ? a.pos : null;
-    if (isMine && avatarPos2 && interactionGuides) {
+    if (isMine && avatarPos2 && combatGuidesActive) {
       const [avX, avY] = avatarPos2;
       const avatarTileKey2 = toCellKey(avX, avY);
       const avatarOwner2: 1 | 2 = t.who === "p1" ? 1 : 2;

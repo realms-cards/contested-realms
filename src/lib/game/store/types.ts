@@ -1,3 +1,4 @@
+import type { MagicTargetHints } from "@/lib/game/cardAbilities";
 import type {
   InteractionDecision,
   InteractionEnvelope,
@@ -526,10 +527,7 @@ export type PendingMagic = {
     | "resolving"
     | "cancelled"
     | "resolved";
-  hints?: {
-    scope: "here" | "adjacent" | "nearby" | "global" | "projectile" | null;
-    allow: { location?: boolean; permanent?: boolean; avatar?: boolean };
-  } | null;
+  hints?: MagicTargetHints | null;
   createdAt: number;
   summaryText?: string | null;
   guidesSuppressed?: boolean | null;
@@ -1809,6 +1807,10 @@ export type GameState = {
   // Effective guide state: enabled only when both seats have their toggles on
   combatGuidesActive: boolean;
   magicGuidesActive: boolean;
+  // Broadcast the local guide preferences for our seat. `reply` marks the
+  // message as an answer to the opponent's announcement so it is not answered
+  // again (prevents ping-pong).
+  announceGuidePrefs: (reply: boolean) => void;
   // Action notifications (toasts for play/draw/move actions)
   actionNotifications: boolean;
   setActionNotifications: (on: boolean) => void;

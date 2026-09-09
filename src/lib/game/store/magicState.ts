@@ -58,9 +58,13 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
       return;
     }
 
-    const hints = extractMagicTargetingHintsSync(spell.card?.name || "", null);
-    // NOTE: Targeting hints may not be accurate for every spell type yet.
-    // See reference/SorceryRulebook.pdf for spell targeting rules.
+    // Targeting intention (projectile / site / single / area / none) comes from
+    // the rules text. Cards enriched at deck load carry it as `card.text`;
+    // otherwise the fetch below refines the hints once the text arrives.
+    const hints = extractMagicTargetingHintsSync(
+      spell.card?.name || "",
+      spell.card?.text ?? null,
+    );
     // Guides only show when both players have opted in (magicGuidesActive).
 
     // Suppress guides for cards with custom resolvers - they have their own UI
@@ -94,8 +98,16 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
             set((s) => {
               if (!s.pendingMagic || s.pendingMagic.id !== id)
                 return s as GameState;
+              const nextHints =
+                !s.pendingMagic.hints?.fromText && rulesText
+                  ? extractMagicTargetingHintsSync(cardName, rulesText)
+                  : s.pendingMagic.hints;
               return {
-                pendingMagic: { ...s.pendingMagic, summaryText: rulesText },
+                pendingMagic: {
+                  ...s.pendingMagic,
+                  summaryText: rulesText,
+                  hints: nextHints,
+                },
               } as Partial<GameState> as GameState;
             });
           } catch {}

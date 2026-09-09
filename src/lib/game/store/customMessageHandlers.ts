@@ -51,6 +51,25 @@ const ECHO_SUPPRESSED_TYPES: ReadonlySet<string> = new Set([
   // CPU auto-resolve timer / rewrite an assignment it just set.
   "magicConfirm",
   "combatAssign",
+  // Magic guide flow: the caster applied every step locally. The echo of
+  // magicBegin would reset the pending spell to "choosingCaster" (losing the
+  // preset caster / target), and magicResolve / magicCancel would move the
+  // spell card a second time.
+  "magicBegin",
+  "magicSetCaster",
+  "magicSetTarget",
+  "magicSummary",
+  "magicResolve",
+  "magicCancel",
+  // Combat guide flow: the resolving client applies life damage, permanent
+  // damage and its own kills before broadcasting; re-applying the echo would
+  // double the damage and move a second permanent by stale index.
+  "attackDeclare",
+  "combatSetDefenders",
+  "combatDamage",
+  "combatLifeDamage",
+  "combatAutoApply",
+  "combatResolve",
 ]);
 
 /**
@@ -134,6 +153,8 @@ export function handleCustomMessage(
     if (!seat) return;
     const combat = !!(msg as { combatGuides?: unknown }).combatGuides;
     const magic = !!(msg as { magicGuides?: unknown }).magicGuides;
+    const isReply = !!(msg as { reply?: unknown }).reply;
+    const mySeat = get().actorKey;
     set((s) => {
       const prevCombatPrefs = {
         p1: !!s.combatGuideSeatPrefs?.p1,
@@ -160,12 +181,34 @@ export function handleCustomMessage(
         magicGuidesActive: nextMagicActive,
       } as Partial<GameState> as GameState;
     });
+    // The opponent announced (or re-announced after a reload) its prefs. It
+    // may never have heard ours (join order, reconnect), so answer with our
+    // own. Replies are not answered again.
+    if (
+      !isReply &&
+      (mySeat === "p1" || mySeat === "p2") &&
+      seat !== mySeat
+    ) {
+      try {
+        get().announceGuidePrefs(true);
+      } catch {}
+    }
     return;
   }
   if (t === "magicDamage") {
     const dmgAny = (msg as { damage?: unknown }).damage as unknown;
     if (!Array.isArray(dmgAny)) return;
     const mySeat = get().actorKey as PlayerKey | null;
+    // Owner-applies: each client damages only what it owns. A CPU opponent
+    // has no client of its own, so the human client also applies damage to
+    // the bot's seat.
+    const oppId = get().opponentPlayerId;
+    const cpuSeat: PlayerKey | null =
+      mySeat && typeof oppId === "string" && oppId.startsWith("cpu_")
+        ? opponentSeat(mySeat)
+        : null;
+    const appliesTo = (seat: PlayerKey | null): boolean =>
+      !!seat && !!mySeat && (seat === mySeat || seat === cpuSeat);
     for (const d of dmgAny) {
       if (!d || typeof d !== "object") continue;
       const rec = d as Record<string, unknown>;
@@ -181,7 +224,7 @@ export function handleCustomMessage(
             ?.owner;
           const ownerSeat =
             ownerNum === 1 ? "p1" : ownerNum === 2 ? "p2" : null;
-          if (mySeat && ownerSeat === mySeat) {
+          if (appliesTo(ownerSeat)) {
             get().applyDamageToPermanent(
               at as CellKey,
               Number(idx),
@@ -190,8 +233,10 @@ export function handleCustomMessage(
           }
         } catch {}
       } else if (kind === "avatar") {
-        const seat = (rec.seat as PlayerKey | undefined) ?? undefined;
-        if (seat && mySeat && seat === mySeat) {
+        const seatRaw = rec.seat;
+        const seat: PlayerKey | null =
+          seatRaw === "p1" || seatRaw === "p2" ? seatRaw : null;
+        if (appliesTo(seat) && seat) {
           try {
             get().addLife(seat, -Math.max(0, Math.floor(amt)), true);
           } catch {}
@@ -224,11 +269,12 @@ export function handleCustomMessage(
     )
       return;
     const cardName = card?.name || "";
-    const hints = extractMagicTargetingHintsSync(cardName, null);
+    const hints = extractMagicTargetingHintsSync(cardName, card?.text ?? null);
     const magicGuidesActive = get().magicGuidesActive;
+    const magicId = String(id);
     set({
       pendingMagic: {
-        id: String(id),
+        id: magicId,
         tile: { x, y },
         spell: {
           at: at as CellKey,
@@ -245,6 +291,33 @@ export function handleCustomMessage(
         guidesSuppressed: !magicGuidesActive || hasCustomResolver(cardName),
       },
     } as Partial<GameState> as GameState);
+    // The relayed card may lack rules text (e.g. cast by the CPU bot); fetch
+    // it so this side shows the same intention as the caster.
+    if (!hints.fromText && cardName && typeof fetch === "function") {
+      void (async () => {
+        try {
+          const res = await fetch(
+            `/api/cards/rules?name=${encodeURIComponent(cardName)}`,
+          );
+          if (!res.ok) return;
+          const data = (await res.json()) as { rulesText?: string | null };
+          const rulesText = data?.rulesText ?? null;
+          if (!rulesText) return;
+          set((s) => {
+            if (!s.pendingMagic || s.pendingMagic.id !== magicId)
+              return s as GameState;
+            if (s.pendingMagic.hints?.fromText) return s as GameState;
+            return {
+              pendingMagic: {
+                ...s.pendingMagic,
+                hints: extractMagicTargetingHintsSync(cardName, rulesText),
+                summaryText: s.pendingMagic.summaryText ?? rulesText,
+              },
+            } as Partial<GameState> as GameState;
+          });
+        } catch {}
+      })();
+    }
     return;
   }
   if (t === "magicSetCaster") {
@@ -473,7 +546,14 @@ export function handleCustomMessage(
       | { x?: unknown; y?: unknown }
       | undefined;
     const attacker = (msg as { attacker?: unknown }).attacker as
-      | { at?: unknown; index?: unknown; instanceId?: unknown; owner?: unknown }
+      | {
+          at?: unknown;
+          index?: unknown;
+          instanceId?: unknown;
+          owner?: unknown;
+          isAvatar?: unknown;
+          avatarSeat?: unknown;
+        }
       | undefined;
     const x = Number(tile?.x);
     const y = Number(tile?.y);
@@ -481,6 +561,11 @@ export function handleCustomMessage(
       typeof attacker?.at === "string" ? (attacker?.at as string) : null;
     const indexVal = Number(attacker?.index);
     const ownerVal = Number(attacker?.owner);
+    const interceptIsAvatar = attacker?.isAvatar === true;
+    const interceptAvatarSeat: PlayerKey | undefined =
+      attacker?.avatarSeat === "p1" || attacker?.avatarSeat === "p2"
+        ? attacker.avatarSeat
+        : undefined;
     const id =
       typeof idRaw === "string" && idRaw
         ? idRaw
@@ -509,6 +594,8 @@ export function handleCustomMessage(
           index: Number(indexVal),
           instanceId: (attacker?.instanceId as string | null) ?? null,
           owner: ownerVal as 1 | 2,
+          isAvatar: interceptIsAvatar || undefined,
+          avatarSeat: interceptAvatarSeat,
         },
         target: null,
         defenderSeat,
@@ -795,10 +882,14 @@ export function handleCustomMessage(
                 currentIndex,
               );
             } else {
+              // Already gone (applied by an earlier patch or message). Falling
+              // back to the stale index would destroy whichever permanent has
+              // since shifted into that slot.
               console.warn(
-                "[combatAutoApply] Permanent not found by instanceId, using original index:",
+                "[combatAutoApply] Permanent not found by instanceId, skipping:",
                 kill,
               );
+              continue;
             }
           }
           console.log(
@@ -1019,10 +1110,25 @@ export function handleCustomMessage(
     const aAt =
       typeof attacker?.at === "string" ? (attacker.at as string) : null;
     const aIdx = Number(attacker?.index);
+    const aInstanceId =
+      typeof (attacker as { instanceId?: unknown } | undefined)?.instanceId ===
+      "string"
+        ? ((attacker as { instanceId?: string }).instanceId as string)
+        : null;
     // Don't tap avatar attackers as permanents
     if (aAt && Number.isFinite(aIdx) && !isAvatarAttacker) {
       try {
-        get().setTapPermanent(aAt as CellKey, Number(aIdx), true);
+        // The attacker may have died (kills are applied before resolve), so
+        // resolve the current index by instanceId and skip when it is gone.
+        const list = (get().permanents as Permanents)[aAt] || [];
+        let tapIdx: number | null = Number(aIdx);
+        if (aInstanceId) {
+          const found = list.findIndex((p) => p?.instanceId === aInstanceId);
+          tapIdx = found >= 0 ? found : null;
+        }
+        if (tapIdx !== null && list[tapIdx]) {
+          get().setTapPermanent(aAt as CellKey, tapIdx, true);
+        }
       } catch {}
     }
     // Do not tap defenders here
@@ -1304,7 +1410,13 @@ export function handleCustomMessage(
     return;
   }
   if (t === "combatCancel") {
-    set({ pendingCombat: null });
+    if (!get().pendingCombat) return;
+    set({
+      pendingCombat: null,
+      attackChoice: null,
+      attackTargetChoice: null,
+      attackConfirm: null,
+    } as Partial<GameState> as GameState);
     try {
       get().log("Combat cancelled");
     } catch {}

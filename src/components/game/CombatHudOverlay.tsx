@@ -1217,14 +1217,27 @@ export default function CombatHudOverlay() {
                 )}
               </span>
               <SuggestionDefense />
-              <button
-                className={`rounded bg-emerald-600/90 hover:bg-emerald-500 ${btnSm}`}
-                onClick={() => {
-                  commitDefenders();
-                }}
-              >
-                Done
-              </button>
+              {pendingCombat.target == null &&
+              (pendingCombat.defenders?.length || 0) === 0 ? (
+                // Intercept offer with nobody assigned: the mover simply
+                // passes through. Committing an empty defence would fall
+                // through to the site-damage branch of autoResolveCombat.
+                <button
+                  className={`rounded bg-white/15 hover:bg-white/25 ${btnSm}`}
+                  onClick={() => cancelCombat()}
+                >
+                  Let pass
+                </button>
+              ) : (
+                <button
+                  className={`rounded bg-emerald-600/90 hover:bg-emerald-500 ${btnSm}`}
+                  onClick={() => {
+                    commitDefenders();
+                  }}
+                >
+                  Done
+                </button>
+              )}
             </div>
           ) : (
             (() => {

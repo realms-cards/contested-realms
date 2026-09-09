@@ -36,12 +36,29 @@ export default function MatchInfoPopup({
   const setInteractionGuides = useGameStore((s) => s.setInteractionGuides);
   const magicGuides = useGameStore((s) => s.magicGuides);
   const setMagicGuides = useGameStore((s) => s.setMagicGuides);
+  // Guides need both players; the local toggle is only half of it.
+  const combatGuidesActive = useGameStore((s) => s.combatGuidesActive);
+  const magicGuidesActive = useGameStore((s) => s.magicGuidesActive);
+  const hasSeat = useGameStore((s) => s.actorKey !== null);
   const actionNotifications = useGameStore((s) => s.actionNotifications);
   const setActionNotifications = useGameStore((s) => s.setActionNotifications);
   const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
   const setCardPreviewsEnabled = useGameStore((s) => s.setCardPreviewsEnabled);
 
   const [linkCopied, setLinkCopied] = useState(false);
+
+  /**
+   * The toggle is this player's opt-in. The guided overlays only run once both
+   * players have opted in over the same match, so say which of the two it is.
+   */
+  const guideHint = (local: boolean, active: boolean) => {
+    if (!local || active) return null;
+    return (
+      <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-300/80">
+        {hasSeat ? "waiting for opponent" : "online only"}
+      </span>
+    );
+  };
 
   const copySpectateLink = useCallback(() => {
     if (!matchId) return;
@@ -184,7 +201,10 @@ export default function MatchInfoPopup({
               {!spectatorMode && (
                 <>
                   <div className="flex items-center justify-between pt-1">
-                    <span>Combat Guides</span>
+                    <span>
+                      Combat Guides
+                      {guideHint(interactionGuides, combatGuidesActive)}
+                    </span>
                     <button
                       className={`rounded-full px-3 py-1 text-xs transition-colors ${
                         interactionGuides
@@ -198,7 +218,10 @@ export default function MatchInfoPopup({
                     </button>
                   </div>
                   <div className="flex items-center justify-between pt-1">
-                    <span>Magic Guides</span>
+                    <span>
+                      Magic Guides
+                      {guideHint(magicGuides, magicGuidesActive)}
+                    </span>
                     <button
                       className={`rounded-full px-3 py-1 text-xs transition-colors ${
                         magicGuides

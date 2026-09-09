@@ -32,6 +32,7 @@ import type {
   PlayerKey,
 } from "@/lib/game/store/types";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
+import { buildProjectileTarget } from "@/lib/game/store/utils/magicTargeting";
 import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
 type HoverContext = {
@@ -65,6 +66,7 @@ type CombatContext = {
 
 type MagicContext = {
   pendingMagic: GameState["pendingMagic"];
+  avatars: GameState["avatars"];
   setMagicCasterChoice: GameState["setMagicCasterChoice"];
   setMagicTargetChoice: GameState["setMagicTargetChoice"];
   computeProjectileFirstHits: () => Record<
@@ -274,13 +276,12 @@ export function AvatarCard({
     combatContext;
   const {
     pendingMagic,
+    avatars: allAvatars,
     setMagicCasterChoice,
     setMagicTargetChoice,
     computeProjectileFirstHits,
     magicGuidesActive,
   } = magicContext;
-  // These are kept for future re-enablement of magic targeting hints
-  void computeProjectileFirstHits;
   void magicGuidesActive;
   const { moveAvatarToWithOffset, incrementCounter, decrementCounter } =
     avatarActions;
@@ -411,8 +412,20 @@ export function AvatarCard({
       return true;
     }
     if (pendingMagic.status === "choosingTarget") {
-      // Allow targeting any avatar without scope restrictions
-      // The actual spell effect validation happens server-side during resolution
+      if (pendingMagic.hints?.mode === "projectile") {
+        const pos = Array.isArray(avatar.pos) ? avatar.pos : null;
+        if (!pos) return true;
+        const target = buildProjectileTarget(
+          pendingMagic,
+          allAvatars,
+          { x: Number(pos[0]), y: Number(pos[1]) },
+          { kind: "avatar", seat },
+          computeProjectileFirstHits,
+        );
+        if (target) setMagicTargetChoice(target);
+        return true;
+      }
+      // Any avatar may be chosen; the overlay only shows the intention.
       setMagicTargetChoice({ kind: "avatar", seat });
       return true;
     }

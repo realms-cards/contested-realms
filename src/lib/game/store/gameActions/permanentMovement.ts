@@ -399,9 +399,17 @@ export const createPermanentMovementSlice: StateCreator<
         const isActingPlayer =
           (state.actorKey === "p1" && state.currentPlayer === 1) ||
           (state.actorKey === "p2" && state.currentPlayer === 2);
+        // A CPU opponent has no client of its own: this client also applies
+        // combat / magic kills to the bot's permanents, even on the bot's turn.
+        const opponentIsCpu =
+          typeof state.opponentPlayerId === "string" &&
+          state.opponentPlayerId.startsWith("cpu_");
         const canMoveToDestructiveZone =
           target === "graveyard" || target === "banished";
-        if (!isOwner && !(isActingPlayer && canMoveToDestructiveZone)) {
+        if (
+          !isOwner &&
+          !((isActingPlayer || opponentIsCpu) && canMoveToDestructiveZone)
+        ) {
           get().log("Cannot move opponent's permanent to a zone");
           return state as GameState;
         }

@@ -3858,11 +3858,13 @@ io.on("connection", async (socket: SocketClient) => {
       } catch {}
     } else if (type === "combatCancel") {
       try {
-        const _match = await getOrLoadMatch(matchId);
+        const match = await getOrLoadMatch(matchId);
         const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p1";
         const out = {
           type: "combatCancel",
           id: (payload as { id?: unknown })?.id ?? rid("cmb"),
+          playerKey,
           ts: Date.now(),
         } as const;
         io.to(room).emit("message", out);
@@ -4099,11 +4101,15 @@ io.on("connection", async (socket: SocketClient) => {
         const magicRaw = (payload as { magicGuides?: unknown })?.magicGuides;
         const combatGuides = !!combatRaw;
         const magicGuides = !!magicRaw;
+        // `reply` marks an answer to the opponent's announcement; clients do
+        // not answer replies, which keeps the pref exchange from ping-ponging.
+        const reply = !!(payload as { reply?: unknown })?.reply;
         const out = {
           type: "guidePref",
           seat,
           combatGuides,
           magicGuides,
+          reply,
           ts: Date.now(),
         } as const;
         io.to(room).emit("message", out);

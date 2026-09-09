@@ -40,6 +40,7 @@ import type {
   PlayerKey,
 } from "@/lib/game/store/types";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
+import { buildProjectileTarget } from "@/lib/game/store/utils/magicTargeting";
 import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
 // Silenced token uses the Silence spell's card art
@@ -117,6 +118,7 @@ type CombatContext = {
 
 type MagicContext = {
   pendingMagic: GameState["pendingMagic"];
+  avatars: GameState["avatars"];
   setMagicTargetChoice: GameState["setMagicTargetChoice"];
   setMagicCasterChoice: GameState["setMagicCasterChoice"];
   computeProjectileFirstHits: ComputeProjectileHits;
@@ -446,13 +448,12 @@ export function PermanentStack({
   } = combatContext;
   const {
     pendingMagic,
+    avatars: magicAvatars,
     setMagicTargetChoice,
     setMagicCasterChoice,
     computeProjectileFirstHits,
     magicGuidesActive,
   } = magicContext;
-  // These are kept for future re-enablement of magic targeting hints
-  void computeProjectileFirstHits;
   const { pendingChaosTwister, selectChaosTwisterMinion, metaByCardId } =
     chaosTwisterContext;
   const { pendingBetrayal, selectBetrayalTarget } = betrayalContext;
@@ -843,8 +844,19 @@ export function PermanentStack({
                       return;
                     }
                     if (pendingMagic.status === "choosingTarget") {
-                      // Allow targeting any permanent on the board without scope restrictions
-                      // The actual spell effect validation happens server-side during resolution
+                      if (pendingMagic.hints?.mode === "projectile") {
+                        const target = buildProjectileTarget(
+                          pendingMagic,
+                          magicAvatars,
+                          { x: tileX, y: tileY },
+                          { kind: "permanent", at: key as CellKey, index: idx },
+                          computeProjectileFirstHits,
+                        );
+                        if (target) setMagicTargetChoice(target);
+                        return;
+                      }
+                      // Any permanent may be chosen; the overlay only shows
+                      // the intention. Validation happens during resolution.
                       setMagicTargetChoice({
                         kind: "permanent",
                         at: key as CellKey,
