@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getServerAuthSession } from '@/lib/auth';
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { logPerformance } from '@/lib/monitoring/performance';
 import { prisma } from '@/lib/prisma';
 
@@ -10,8 +10,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const startTime = performance.now();
   const { id } = await params;
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 

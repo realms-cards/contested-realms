@@ -350,7 +350,7 @@ export default function CubesPage() {
             {sortedMyCubes.length === 0 && filteredMyCubes.length === 0 ? (
               <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-6 text-sm text-slate-300 space-y-2">
                 <div>
-                  No cubes yet. Import from text, Curiosa, or start assembling a
+                  No cubes yet. Import from text, Sorcerytcg, or start assembling a
                   custom draft pool.
                 </div>
               </div>

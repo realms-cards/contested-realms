@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import { getServerAuthSession } from "@/lib/auth";
 import {
   formatValidationErrors,
   resolveImportFormat,
@@ -9,6 +8,10 @@ import {
   parseSorceryDeckText,
   toZones,
 } from "@/lib/decks/parsers/sorcery-decktext";
+import {
+  ensureGuestUser,
+  getRequestPrincipal,
+} from "@/lib/guest/request-principal.server";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -25,17 +28,19 @@ interface JSONObject {
 // - Parses pasted text decklist, maps names to variants, creates a Constructed deck
 // - If some names cannot be resolved, responds 400 with an `unresolved` array (and does not create a deck)
 export async function POST(req: NextRequest) {
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { "content-type": "application/json" },
     });
   }
   try {
+    // Guests importing a deck for a tournament get their shadow User row here
+    await ensureGuestUser(principal);
     // Ensure the authenticated user exists in the database (useful after local DB resets)
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+      where: { id: principal.id },
     });
     if (!user) {
       return new Response(
@@ -224,7 +229,7 @@ export async function POST(req: NextRequest) {
         name: deckName,
         format: resolvedFormat.label,
         imported: true,
-        user: { connect: { id: session.user.id } },
+        user: { connect: { id: principal.id } },
       },
     });
 

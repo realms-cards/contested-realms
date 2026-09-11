@@ -1,13 +1,13 @@
 import { NextRequest } from "next/server";
-import { getServerAuthSession } from "@/lib/auth";
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { prisma } from "@/lib/prisma";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 /** GET /api/open-tournaments/[id]/standings — Current standings */
 export async function GET(_req: NextRequest, { params }: RouteParams) {
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

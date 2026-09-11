@@ -92,7 +92,9 @@ export default function DeckImportCuriosa() {
   };
 
   // Four Cores decks are fetched from a different host, so name it accurately
-  const sourceLabel = /(^|\.)fourcores\.xyz/i.test(url) ? "Four Cores" : "Curiosa";
+  const sourceLabel = /(^|\.)fourcores\.xyz/i.test(url)
+    ? "Four Cores"
+    : "Sorcerytcg";
 
   // Helper to get progress message
   const getProgressMessage = () => {
@@ -114,7 +116,7 @@ export default function DeckImportCuriosa() {
       <div>
         <div className="text-sm font-medium">Import Deck from URL</div>
         <div className="text-xs opacity-70 mt-0.5">
-          Works with Curiosa (sorcerytcg.com) and Four Cores (fourcores.xyz).
+          Works with Sorcerytcg (sorcerytcg.com) and Four Cores (fourcores.xyz).
         </div>
       </div>
       <div className="grid gap-2 sm:grid-cols-5">

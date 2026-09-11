@@ -1,8 +1,10 @@
+import type { InvitationStatus } from "@prisma/client";
 import { NextRequest } from "next/server";
-import { getServerAuthSession } from "@/lib/auth";
 import { withCache, CacheKeys } from "@/lib/cache/redis-cache";
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
+import { getTournamentInviteToken } from "@/lib/tournament/invite-links";
 import { countActiveSeats } from "@/lib/tournament/registration";
 
 export const dynamic = "force-dynamic";
@@ -15,15 +17,47 @@ export async function GET(
 ) {
   const startTime = performance.now();
   const { id } = await params;
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
     });
   }
 
   try {
-    const userId = session.user.id;
+    const userId = principal.id;
+
+    // Private tournaments are only visible to the host, their players and
+    // invitees - or to anyone holding the shareable invite link
+    const access = await prisma.tournament.findUnique({
+      where: { id },
+      select: {
+        isPrivate: true,
+        creatorId: true,
+        inviteToken: true,
+        registrations: { where: { playerId: userId }, select: { id: true } },
+        invitations: {
+          where: {
+            inviteeId: userId,
+            status: { in: ["pending", "accepted"] as InvitationStatus[] },
+          },
+          select: { id: true },
+        },
+      },
+    });
+    const linkToken = getTournamentInviteToken(req.nextUrl.searchParams);
+    const canView =
+      !!access &&
+      (!access.isPrivate ||
+        access.creatorId === userId ||
+        access.registrations.length > 0 ||
+        access.invitations.length > 0 ||
+        (!!access.inviteToken && linkToken === access.inviteToken));
+    if (!canView) {
+      return new Response(JSON.stringify({ error: "Tournament not found" }), {
+        status: 404,
+      });
+    }
 
     // Cache tournament detail with user-specific viewerDeck
     const cacheKey = CacheKeys.tournaments.detail(id) + `:user:${userId}`;
@@ -145,6 +179,10 @@ export async function GET(
           maxPlayers: tournament.maxPlayers,
           currentPlayers: countActiveSeats(tournament.registrations),
           creatorId: tournament.creatorId,
+          isPrivate: tournament.isPrivate,
+          // Only the host gets the shareable link token
+          inviteToken:
+            tournament.creatorId === userId ? tournament.inviteToken : null,
           registeredPlayers: tournament.registrations.map((reg) => {
             const prep =
               (reg.preparationData as Record<string, unknown> | null) || {};
@@ -219,8 +257,8 @@ export async function DELETE(
 ) {
   const startTime = performance.now();
   const { id } = await params;
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
     });

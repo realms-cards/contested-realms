@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { getServerAuthSession } from "@/lib/auth";
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { prisma } from "@/lib/prisma";
 import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
 import {
@@ -82,8 +82,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
     });
@@ -97,7 +97,7 @@ export async function POST(
     const registration = await prisma.tournamentRegistration.findFirst({
       where: {
         tournamentId: id,
-        playerId: session.user.id,
+        playerId: principal.id,
       },
       include: {
         tournament: {
@@ -209,7 +209,7 @@ export async function POST(
         // start, so a deck accepted here cannot be rejected when the match begins
         if (hasSelection) {
           const deck = await prisma.deck.findFirst({
-            where: { id: constructedData.deckId, userId: session.user.id },
+            where: { id: constructedData.deckId, userId: principal.id },
             select: {
               name: true,
               cards: { select: deckCardSelect },
@@ -276,7 +276,7 @@ export async function POST(
     });
 
     console.log(
-      `Preparation updated for player ${session.user.id}: ${newStatus}, deckSubmitted: ${deckSubmitted}`,
+      `Preparation updated for player ${principal.id}: ${newStatus}, deckSubmitted: ${deckSubmitted}`,
     );
 
     // Broadcast preparation progress
@@ -296,7 +296,7 @@ export async function POST(
       ]);
       await tournamentSocketService.broadcastPreparationUpdate(
         id,
-        session.user.id,
+        principal.id,
         newStatus,
         readyCount,
         totalCount,

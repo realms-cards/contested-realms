@@ -1,13 +1,13 @@
 import { NextRequest } from "next/server";
-import { getServerAuthSession } from "@/lib/auth";
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { prisma } from "@/lib/prisma";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 /** GET /api/open-tournaments/[id]/rounds — List rounds */
 export async function GET(_req: NextRequest, { params }: RouteParams) {
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -28,8 +28,8 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 
 /** POST /api/open-tournaments/[id]/rounds — Create next round */
 export async function POST(_req: NextRequest, { params }: RouteParams) {
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -45,7 +45,7 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
   if (!tournament) {
     return Response.json({ error: "Tournament not found" }, { status: 404 });
   }
-  if (tournament.creatorId !== session.user.id) {
+  if (tournament.creatorId !== principal.id) {
     return Response.json({ error: "Only the host can create rounds" }, { status: 403 });
   }
   if (tournament.status !== "active") {

@@ -216,6 +216,35 @@ Site (2)
     expect(riftValley?.set).toBe("Arthurian Legends");
   });
 
+  it("keeps a Maybeboard section out of the deck and its zones", () => {
+    // sorcerytcg deck pages render a "Maybeboard" heading; a copy-paste of the
+    // page carries it along with the cards the owner is only considering
+    const input = `Avatar (1)
+1 Druid
+Site (2)
+2 Steppe
+Maybeboard (3)
+3 Dagger
+Collection (1)
+1 Penitent Knight`;
+
+    const parsed = parseSorceryDeckText(input);
+
+    expect(parsed.totalByCategory.Maybeboard).toBe(3);
+    // The maybeboard must not leak into the section above it
+    expect(parsed.totalByCategory.Site).toBe(2);
+    expect(parsed.totalByCategory.Sideboard).toBe(1);
+    expect(parsed.totalCards).toBe(1 + 2 + 1);
+    expect(parsed.issues.filter((i) => i.type === "warning")).toHaveLength(0);
+
+    const zones = toZones(parsed);
+    expect(zones.find((z) => z.name === "Dagger")).toBeUndefined();
+    expect(zones.find((z) => z.name === "Steppe")?.zone).toBe("Atlas");
+    expect(zones.find((z) => z.name === "Penitent Knight")?.zone).toBe(
+      "Collection"
+    );
+  });
+
   it("does not confuse card names with parentheses that are not set names", () => {
     // Card names with lowercase parentheses should not be treated as set names
     const input = `Magic (1)

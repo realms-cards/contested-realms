@@ -1,6 +1,6 @@
 import { TournamentStatus } from "@prisma/client";
 import { NextRequest } from "next/server";
-import { getServerAuthSession } from "@/lib/auth";
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
 import { countActiveSeats } from "@/lib/tournament/registration";
@@ -11,8 +11,8 @@ export const dynamic = "force-dynamic";
 // Returns tournaments the signed-in user created or participated in, with search and pagination
 export async function GET(req: NextRequest) {
   const startTime = performance.now();
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
     });
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Build where clause
-    const userId = session.user.id;
+    const userId = principal.id;
     const roleClause =
       role === "creator"
         ? { creatorId: userId }

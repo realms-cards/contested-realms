@@ -1,10 +1,10 @@
 import { NextRequest } from "next/server";
-import { getServerAuthSession } from "@/lib/auth";
 import {
   CONSTRUCTED_REQUIREMENTS,
   formatValidationErrors,
   validateDeck,
 } from "@/lib/deck/validation-rules";
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { prisma } from "@/lib/prisma";
 import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
 import {
@@ -24,15 +24,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
     });
   }
 
   try {
-    const userId = (session.user as { id?: string }).id;
+    const userId = principal.id;
     if (!userId) {
       return new Response(
         JSON.stringify({ error: "User ID missing from session" }),
@@ -333,7 +333,7 @@ export async function GET(
     return new Response(
       JSON.stringify({
         tournamentId: id,
-        playerId: session.user.id,
+        playerId: principal.id,
         format: "constructed",
         // New shape
         myDecks: validMyDecks,
@@ -377,15 +377,15 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
     });
   }
 
   try {
-    const userId = (session.user as { id?: string }).id;
+    const userId = principal.id;
     if (!userId) {
       return new Response(
         JSON.stringify({ error: "User ID missing from session" }),

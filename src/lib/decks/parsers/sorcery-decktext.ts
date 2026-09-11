@@ -37,7 +37,8 @@ export type DeckTextCategory =
   | "Minion"
   | "Magic"
   | "Site"
-  | "Sideboard";
+  | "Sideboard"
+  | "Maybeboard";
 
 export interface NameCount {
   name: string;
@@ -60,6 +61,7 @@ const CATEGORY_ORDER: DeckTextCategory[] = [
   "Magic",
   "Site",
   "Sideboard",
+  "Maybeboard",
 ];
 
 function normalizeName(raw: string): string {
@@ -94,6 +96,9 @@ function canonicalizeCategory(raw: string): DeckTextCategory | null {
     case "sideboard":
     case "collection":
       return "Sideboard";
+    case "maybeboard":
+    case "maybe":
+      return "Maybeboard";
     default:
       return null;
   }
@@ -196,6 +201,7 @@ export function parseSorceryDeckText(rawInput: string): ParsedDeckText {
     Magic: new Map(),
     Site: new Map(),
     Sideboard: new Map(),
+    Maybeboard: new Map(),
   };
 
   const issues: { type: "error" | "warning"; message: string }[] = [];
@@ -258,6 +264,7 @@ export function parseSorceryDeckText(rawInput: string): ParsedDeckText {
     Magic: [],
     Site: [],
     Sideboard: [],
+    Maybeboard: [],
   };
   const totalByCategory: Record<DeckTextCategory, number> = {
     Avatar: 0,
@@ -267,6 +274,7 @@ export function parseSorceryDeckText(rawInput: string): ParsedDeckText {
     Magic: 0,
     Site: 0,
     Sideboard: 0,
+    Maybeboard: 0,
   };
 
   for (const cat of CATEGORY_ORDER) {
@@ -281,8 +289,9 @@ export function parseSorceryDeckText(rawInput: string): ParsedDeckText {
     totalByCategory[cat] = items.reduce((a, b) => a + b.count, 0);
   }
 
+  // The maybeboard is the owner's scratch pad, not part of the deck
   const totalCards = CATEGORY_ORDER.reduce(
-    (sum, c) => sum + totalByCategory[c],
+    (sum, c) => (c === "Maybeboard" ? sum : sum + totalByCategory[c]),
     0
   );
 
@@ -314,6 +323,7 @@ export function toZones(parsed: ParsedDeckText): ZoneEntry[] {
   pushCat("Magic", "Spellbook");
   pushCat("Site", "Atlas");
   pushCat("Sideboard", "Collection"); // Collection zone (up to 10 cards)
+  // "Maybeboard" is deliberately absent: those cards are not in the deck
   return z;
 }
 
@@ -336,5 +346,6 @@ export function toCubeEntries(parsed: ParsedDeckText): CubeEntry[] {
   pushCat("Site", "main");
   // Optional sideboard section, if present in the text
   pushCat("Sideboard", "sideboard");
+  // "Maybeboard" is deliberately absent: those cards are not in the cube
   return entries;
 }

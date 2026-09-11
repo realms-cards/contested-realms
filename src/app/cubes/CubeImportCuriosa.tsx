@@ -99,10 +99,10 @@ export default function CubeImportCuriosa() {
   };
 
   const getProgressMessage = () => {
-    if (elapsedSeconds < 3) return "Connecting to Curiosa...";
+    if (elapsedSeconds < 3) return "Connecting to Sorcerytcg...";
     if (elapsedSeconds < 8) return "Fetching data...";
     if (elapsedSeconds < 15) return "Processing cards...";
-    return "Almost done... (Curiosa may be slow)";
+    return "Almost done... (Sorcerytcg may be slow)";
   };
 
   if (!enabled) {
@@ -114,7 +114,7 @@ export default function CubeImportCuriosa() {
       onSubmit={onSubmit}
       className="w-full bg-zinc-900/70 ring-1 ring-white/10 rounded-xl p-4 space-y-3"
     >
-      <div className="text-sm font-medium">Import from Curiosa</div>
+      <div className="text-sm font-medium">Import from Sorcerytcg</div>
       <div className="grid gap-2 sm:grid-cols-5">
         <input
           className="sm:col-span-3 w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"

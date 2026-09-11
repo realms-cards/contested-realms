@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getServerAuthSession } from '@/lib/auth';
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { prisma } from '@/lib/prisma';
 import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
 import { updateStandingsAfterMatch } from '@/lib/tournament/pairing';
@@ -11,13 +11,13 @@ export const dynamic = 'force-dynamic';
 // Allow a player to forfeit (drop) from an in-progress tournament
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 
   try {
-    const userId = session.user.id;
+    const userId = principal.id;
 
     const tournament = await prisma.tournament.findUnique({
       where: { id },

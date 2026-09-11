@@ -4,8 +4,8 @@ import {
   TournamentStatus,
 } from "@prisma/client";
 import { NextRequest } from "next/server";
-import { getServerAuthSession } from "@/lib/auth";
 import { withCache, CacheKeys, invalidateCache } from "@/lib/cache/redis-cache";
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
 import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
@@ -18,8 +18,8 @@ export const dynamic = "force-dynamic";
 // Returns all active tournaments
 export async function GET(req: NextRequest) {
   const startTime = performance.now();
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
     });
@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
     });
 
     // Store userId for use in cache and queries
-    const userId = session.user.id;
+    const userId = principal.id;
 
     // Generate cache key based on query parameters and user
     const cacheKey = CacheKeys.tournaments.list({
@@ -257,8 +257,8 @@ export async function GET(req: NextRequest) {
 // Body: { name: string, format: 'swiss' | 'elimination' | 'round_robin', matchType: 'constructed' | 'sealed' | 'draft', maxPlayers: number, isPrivate?: boolean, sealedConfig?: any, draftConfig?: any }
 export async function POST(req: NextRequest) {
   const startTime = performance.now();
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
     });
@@ -365,7 +365,7 @@ export async function POST(req: NextRequest) {
       matchType,
       maxPlayers,
       isPrivate,
-      creatorId: session.user.id,
+      creatorId: principal.id,
     });
 
     if (!name) {
@@ -409,7 +409,7 @@ export async function POST(req: NextRequest) {
     const existingTournamentRegistrations =
       await prisma.tournamentRegistration.findMany({
         where: {
-          playerId: session.user.id,
+          playerId: principal.id,
           seatStatus: "active",
           tournament: {
             status: { in: ["registering", "preparing", "active"] },
@@ -463,7 +463,7 @@ export async function POST(req: NextRequest) {
     const tournament = await prisma.tournament.create({
       data: {
         name,
-        creatorId: session.user.id,
+        creatorId: principal.id,
         format,
         status: "registering",
         maxPlayers,
@@ -476,12 +476,12 @@ export async function POST(req: NextRequest) {
     // Auto-register the tournament creator
     console.log(
       "Starting auto-registration for tournament creator:",
-      session.user.id
+      principal.id
     );
 
     try {
       const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
+        where: { id: principal.id },
         select: { name: true, email: true },
       });
 
@@ -498,19 +498,19 @@ export async function POST(req: NextRequest) {
         prisma.tournamentRegistration.create({
           data: {
             tournamentId: tournament.id,
-            playerId: session.user.id,
+            playerId: principal.id,
           },
         }),
         prisma.playerStanding.upsert({
           where: {
             tournamentId_playerId: {
               tournamentId: tournament.id,
-              playerId: session.user.id,
+              playerId: principal.id,
             },
           },
           create: {
             tournamentId: tournament.id,
-            playerId: session.user.id,
+            playerId: principal.id,
             displayName,
           },
           update: {
@@ -523,7 +523,7 @@ export async function POST(req: NextRequest) {
 
       console.log("Tournament creator auto-registered successfully:", {
         tournamentId: tournament.id,
-        creatorId: session.user.id,
+        creatorId: principal.id,
       });
     } catch (autoRegError) {
       console.error("Error during auto-registration:", autoRegError);

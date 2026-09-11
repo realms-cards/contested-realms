@@ -1,11 +1,12 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useParams, useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useOnline } from "@/app/online/online-context";
+import GuestGate from "@/components/auth/GuestGate";
 import FloatingChat from "@/components/chat/FloatingChat";
 import TournamentDraft3DScreen from "@/components/game/TournamentDraft3DScreen";
+import { useViewer } from "@/lib/guest/useViewer";
 
 type DraftParticipant = {
   playerId: string;
@@ -30,7 +31,12 @@ type DraftSession = {
 export default function TournamentDraftSessionPage() {
   const params = useParams();
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const viewer = useViewer();
+  const searchParams = useSearchParams();
+  const pathnameForReturn = usePathname();
+  const currentHref = `${pathnameForReturn ?? "/"}${
+    searchParams?.toString() ? `?${searchParams.toString()}` : ""
+  }`;
   const sessionId = String(params?.sessionId || "");
   const { transport } = useOnline();
 
@@ -59,15 +65,10 @@ export default function TournamentDraftSessionPage() {
   }, [sessionId]);
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push(`/auth/signin?callbackUrl=/online/draft/${sessionId}`);
-      return;
-    }
-
-    if (status === "authenticated" && sessionId) {
+    if (viewer.id && sessionId) {
       fetchDraftSession();
     }
-  }, [status, sessionId, router, fetchDraftSession]);
+  }, [viewer.id, sessionId, router, fetchDraftSession]);
 
   // Persist cube-related draft configuration so deck editor can recover cube extras
   useEffect(() => {
@@ -110,14 +111,14 @@ export default function TournamentDraftSessionPage() {
         const data = await res.json();
         if (
           data?.status === "completed" &&
-          session?.user &&
+          viewer.id &&
           !redirectedRef.current
         ) {
           redirectedRef.current = true;
           // Attempt to stash picks for editor if provided
           try {
             if (Array.isArray(data?.myPicks)) {
-              const playerId = session.user.id;
+              const playerId = viewer.id;
               const storageSuffix = playerId
                 ? `${sessionId}_${playerId}`
                 : sessionId;
@@ -230,7 +231,7 @@ export default function TournamentDraftSessionPage() {
             tournament: draftSession?.tournamentId || "",
             matchName: "Draft",
             sessionId,
-            playerId: session.user.id,
+            playerId: viewer.id,
           });
           router.push(`/decks/editor-3d?${params.toString()}`);
         }
@@ -243,7 +244,7 @@ export default function TournamentDraftSessionPage() {
       mounted = false;
       window.clearInterval(id);
     };
-  }, [sessionId, session?.user, draftSession?.tournamentId, router]);
+  }, [sessionId, viewer.id, draftSession?.tournamentId, router]);
 
   // Handle draft completion
   const handleDraftComplete = () => {
@@ -257,7 +258,7 @@ export default function TournamentDraftSessionPage() {
         tournament: draftSession.tournamentId,
         matchName: "Draft",
         sessionId: draftSession.id,
-        playerId: session?.user.id ?? "",
+        playerId: viewer.id ?? "",
       });
       console.log(
         "[DraftSessionPage] Pushing to:",
@@ -271,10 +272,24 @@ export default function TournamentDraftSessionPage() {
     }
   };
 
-  if (status === "loading" || loading) {
+  if (viewer.status === "loading" || (loading && !viewer.isAnonymous)) {
     return (
       <div className="min-h-screen bg-slate-900 text-white grid place-items-center">
         <div className="text-slate-300">Loading draft session…</div>
+      </div>
+    );
+  }
+
+  if (viewer.isAnonymous) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white">
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <GuestGate
+            title="Tournament draft"
+            description="Sign in or continue as a guest to take your seat in the draft."
+            returnTo={currentHref}
+          />
+        </div>
       </div>
     );
   }
@@ -292,10 +307,10 @@ export default function TournamentDraftSessionPage() {
   // Show 3D draft UI for active or waiting sessions (skip redundant lobby)
   if (
     (draftSession.status === "active" || draftSession.status === "waiting") &&
-    session?.user &&
+    viewer.id &&
     transport
   ) {
-    const myPlayerId = session.user.id;
+    const myPlayerId = viewer.id;
     const myParticipant = draftSession.participants.find(
       (p) => p.playerId === myPlayerId
     );
@@ -397,8 +412,8 @@ export default function TournamentDraftSessionPage() {
                     };
                     type DraftStateLike = { picks?: DraftCard[][] };
                     const state = ds as DraftStateLike;
-                    const me = session?.user?.id
-                      ? String(session.user.id)
+                    const me = viewer.id
+                      ? String(viewer.id)
                       : null;
                     const mySeat = me
                       ? draftSession.participants.find((p) => p.playerId === me)
@@ -415,7 +430,7 @@ export default function TournamentDraftSessionPage() {
                       : [];
                     if (mine.length) {
                       try {
-                        const playerId = session?.user?.id || "";
+                        const playerId = viewer.id || "";
                         const storageSuffix = playerId
                           ? `${draftSession.id}_${playerId}`
                           : draftSession.id;

@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import GuestGate from "@/components/auth/GuestGate";
 import { OpenTournamentCreateForm } from "@/components/open-tournament/OpenTournamentCreateForm";
+import { useViewer } from "@/lib/guest/useViewer";
 
 interface OpenTournament {
   id: string;
@@ -30,19 +31,18 @@ interface OpenTournament {
 }
 
 export default function OpenTournamentsPage() {
-  const { data: session, status } = useSession();
+  const viewer = useViewer();
+  const searchParams = useSearchParams();
+  const pathnameForReturn = usePathname();
+  const currentHref = `${pathnameForReturn ?? "/"}${
+    searchParams?.toString() ? `?${searchParams.toString()}` : ""
+  }`;
   const router = useRouter();
   const [tournaments, setTournaments] = useState<OpenTournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"active" | "completed" | "all">("active");
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/signin?callbackUrl=/open-tournaments");
-    }
-  }, [status, router]);
 
   const fetchTournaments = useCallback(async () => {
     setLoading(true);
@@ -63,17 +63,17 @@ export default function OpenTournamentsPage() {
   }, [statusFilter]);
 
   useEffect(() => {
-    if (status === "authenticated") {
+    if (viewer.id) {
       fetchTournaments();
     }
-  }, [status, fetchTournaments]);
+  }, [viewer.id, fetchTournaments]);
 
   const handleCreated = (tournamentId: string) => {
     setShowCreate(false);
     router.push(`/open-tournaments/${tournamentId}`);
   };
 
-  if (status === "loading") {
+  if (viewer.status === "loading") {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading...</div>
@@ -81,7 +81,19 @@ export default function OpenTournamentsPage() {
     );
   }
 
-  if (!session) return null;
+  if (viewer.isAnonymous) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white">
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <GuestGate
+            title="Open tournaments"
+            description="Sign in to run a host-managed event, or continue as a guest to join one through an invite link."
+            returnTo={currentHref}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">

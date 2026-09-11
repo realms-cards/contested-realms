@@ -5,6 +5,7 @@ import {
   formatValidationErrors,
   validateDeck,
 } from "@/lib/deck/validation-rules";
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
 
@@ -56,11 +57,11 @@ type DeckListResponse = {
 export async function GET() {
   const startTime = performance.now();
   const authStart = performance.now();
-  const session = await getServerAuthSession();
+  const principal = await getRequestPrincipal();
   const authTime = performance.now() - authStart;
-  // Without a session (guests playing through an invite link) only the
-  // system precon decks are listed - they are all a guest can pick from.
-  const userId = session?.user?.id ?? null;
+  // Anonymous visitors only see the system precon decks; guests additionally
+  // see the decks they imported for a tournament (owned by their shadow user).
+  const userId = principal?.id ?? null;
   try {
     // Use Redis cache for the entire response (user-specific)
     const cacheKey = CacheKeys.decks.list(userId ?? "guest");

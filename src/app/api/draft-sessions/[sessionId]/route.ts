@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getServerAuthSession } from '@/lib/auth';
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { logPerformance } from '@/lib/monitoring/performance';
 import { prisma } from '@/lib/prisma';
 
@@ -13,9 +13,9 @@ export async function GET(
 ) {
   const startTime = performance.now();
   const { sessionId } = await params;
-  const session = await getServerAuthSession();
+  const principal = await getRequestPrincipal();
 
-  if (!session?.user) {
+  if (!principal) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { 'content-type': 'application/json' },
@@ -45,7 +45,7 @@ export async function GET(
     }
 
     // Check if user is a participant
-    const userId = session.user.id;
+    const userId = principal.id;
     const isParticipant = draftSession.participants.some(
       (p) => p.playerId === userId
     );

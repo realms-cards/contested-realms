@@ -1,6 +1,10 @@
+import type { InvitationStatus } from "@prisma/client";
 import { NextRequest } from "next/server";
-import { getServerAuthSession } from "@/lib/auth";
 import { invalidateCache, CacheKeys } from "@/lib/cache/redis-cache";
+import {
+  ensureGuestUser,
+  getRequestPrincipal,
+} from "@/lib/guest/request-principal.server";
 import { prisma } from "@/lib/prisma";
 import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
 import { TOURNAMENT_PLAYER_LIMITS } from "@/lib/tournament/constants";
@@ -19,8 +23,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
     });
@@ -102,9 +106,9 @@ export async function POST(
   }
 
   try {
-    const userId = session.user.id;
+    const userId = principal.id;
     // Handle empty request body gracefully
-    let body: { displayName?: string } = {};
+    let body: { displayName?: string; inviteToken?: string } = {};
     try {
       const text = await req.text();
       if (text.trim()) {
@@ -117,6 +121,10 @@ export async function POST(
 
     console.log("Tournament join attempt:", { tournamentId: id, userId });
 
+    // Guests get their shadow User row here: registration and standing rows
+    // carry a User foreign key
+    await ensureGuestUser(principal);
+
     // Get user info for display name fallback
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -124,7 +132,7 @@ export async function POST(
     });
 
     if (!user) {
-      console.error("User not found in database:", session.user.id);
+      console.error("User not found in database:", principal.id);
       return new Response(JSON.stringify({ error: "User not found" }), {
         status: 404,
       });
@@ -146,6 +154,40 @@ export async function POST(
       return new Response(JSON.stringify({ error: "Tournament not found" }), {
         status: 404,
       });
+    }
+
+    // Private tournaments: the host, existing players and invitees get in;
+    // everyone else needs the shareable invite link
+    if (tournament.isPrivate && tournament.creatorId !== userId) {
+      const alreadyIn = tournament.registrations.some(
+        (r) => r.playerId === userId,
+      );
+      const tokenOk =
+        !!tournament.inviteToken &&
+        typeof body.inviteToken === "string" &&
+        body.inviteToken === tournament.inviteToken;
+      if (!alreadyIn && !tokenOk) {
+        const invited = await prisma.tournamentInvitation.findFirst({
+          where: {
+            tournamentId: id,
+            inviteeId: userId,
+            status: {
+              in: ["pending", "accepted"] as InvitationStatus[],
+            },
+          },
+          select: { id: true },
+        });
+        if (!invited) {
+          return new Response(
+            JSON.stringify({
+              error:
+                "This tournament is private. Ask the host for an invite link.",
+              code: "private_tournament",
+            }),
+            { status: 403 },
+          );
+        }
+      }
     }
 
     const registrationSettings = getRegistrationSettings(tournament.settings);

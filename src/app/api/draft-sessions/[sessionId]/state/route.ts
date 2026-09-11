@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getServerAuthSession } from '@/lib/auth';
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { prisma } from '@/lib/prisma';
 // Avoid importing the engine here to prevent extra DB queries; we'll parse state directly
 
@@ -22,11 +22,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sess
     }
     userId = uid;
   } else {
-    const session = await getServerAuthSession();
-    if (!session?.user) {
+    const principal = await getRequestPrincipal();
+    if (!principal) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
     }
-    userId = session.user.id;
+    userId = principal.id;
   }
 
   try {

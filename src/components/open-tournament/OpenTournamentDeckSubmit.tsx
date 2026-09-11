@@ -31,7 +31,7 @@ export function OpenTournamentDeckSubmit({
     setSuccess(null);
 
     try {
-      // 1. Import deck from Curiosa to Realms
+      // 1. Import deck from Sorcerytcg to Realms
       const importRes = await fetch("/api/decks/import/curiosa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -39,7 +39,9 @@ export function OpenTournamentDeckSubmit({
       });
       const importData = await importRes.json();
       if (!importRes.ok) {
-        throw new Error(importData.error ?? "Failed to import deck from Curiosa");
+        throw new Error(
+          importData.error ?? "Failed to import deck from Sorcerytcg",
+        );
       }
 
       const deckId = importData.deck?.id ?? importData.id;
@@ -74,7 +76,7 @@ export function OpenTournamentDeckSubmit({
         <div className="text-xs text-green-400 mb-2">
           Deck linked
           {currentDeckData.curiosaUrl ? (
-            <span className="ml-1 text-blue-400">(from Curiosa)</span>
+            <span className="ml-1 text-blue-400">(from Sorcerytcg)</span>
           ) : null}
         </div>
       )}
@@ -95,7 +97,7 @@ export function OpenTournamentDeckSubmit({
           type="url"
           value={curiosaUrl}
           onChange={(e) => setCuriosaUrl(e.target.value)}
-          placeholder="Paste Curiosa deck URL..."
+          placeholder="Paste Sorcerytcg deck URL..."
           className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button
@@ -103,7 +105,7 @@ export function OpenTournamentDeckSubmit({
           disabled={submitting || !curiosaUrl.trim()}
           className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 py-1.5 rounded text-xs font-medium"
         >
-          {submitting ? "Importing..." : "Import from Curiosa"}
+          {submitting ? "Importing..." : "Import from Sorcerytcg"}
         </button>
         <p className="text-xs text-slate-500">
           The deck will be imported to your Realms collection and linked to this event.

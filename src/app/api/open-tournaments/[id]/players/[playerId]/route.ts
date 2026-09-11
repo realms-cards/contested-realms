@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getServerAuthSession } from "@/lib/auth";
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { UpdatePlayerDeckSchema } from "@/lib/open-tournament/validation";
 import { prisma } from "@/lib/prisma";
 
@@ -7,8 +7,8 @@ type RouteParams = { params: Promise<{ id: string; playerId: string }> };
 
 /** PATCH /api/open-tournaments/[id]/players/[playerId] — Update player deck info */
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -23,8 +23,8 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   }
 
   // Allow the player themselves or the host to update deck info
-  const isHost = tournament.creatorId === session.user.id;
-  const isSelf = session.user.id === playerId;
+  const isHost = tournament.creatorId === principal.id;
+  const isSelf = principal.id === playerId;
   if (!isHost && !isSelf) {
     return Response.json({ error: "Not authorized" }, { status: 403 });
   }

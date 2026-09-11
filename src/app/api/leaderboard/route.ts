@@ -83,6 +83,8 @@ export async function GET(req: NextRequest) {
       where: {
         format,
         timeFrame,
+        // Invite-link guests get a shadow User row but never a ranking
+        player: { isGuest: false },
       },
       include: {
         player: {

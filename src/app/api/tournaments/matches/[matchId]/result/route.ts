@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import { getServerAuthSession } from '@/lib/auth';
 import { invalidateCache, CacheKeys } from '@/lib/cache/redis-cache';
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { prisma } from '@/lib/prisma';
 import { tournamentSocketService } from '@/lib/services/tournament-broadcast';
 import { updateStandingsAfterMatch } from '@/lib/tournament/pairing';
@@ -11,8 +11,8 @@ export const dynamic = 'force-dynamic';
 // Body: { winnerId: string, loserId: string, isDraw?: boolean, gameResults?: any[] }
 export async function POST(req: NextRequest, { params }: { params: Promise<{ matchId: string }> }) {
   const { matchId } = await params;
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ mat
     const playerIds = (match.players as Array<{ id: string }>).map(p => p.id);
 
     // Only match participants or the tournament host may report a result
-    const reporterId = session.user.id;
+    const reporterId = principal.id;
     const isHost = match.tournament?.creatorId === reporterId;
     if (!isHost && !playerIds.includes(reporterId)) {
       return new Response(

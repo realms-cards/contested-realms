@@ -236,8 +236,10 @@ function toCuriosaEntry(entry: SorceryDeckEntry): CuriosatrpcDeck | null {
  * Fetch deck data from the sorcerytcg.com tRPC endpoint.
  *
  * A single `deck.get` call returns the deck name plus one flat `decklist`
- * whose rows are tagged with a `board` of `Main`, `Collection` or `Avatar`,
- * replacing the three separate curiosa.io calls this used to make.
+ * whose rows are tagged with a `board` of `Main`, `Collection`, `Avatar` or
+ * `Maybeboard`, replacing the three separate curiosa.io calls this used to
+ * make. Only the first three are part of the deck — `Maybeboard` holds cards
+ * the owner is still considering and must never be imported.
  */
 export async function fetchCuriosatrpc(
   deckId: string | null
@@ -276,6 +278,11 @@ export async function fetchCuriosatrpc(
       // it must not also land in the main list or it would be counted twice
       if (board === "avatar") {
         if (!avatarName && row.card?.name) avatarName = row.card.name;
+        continue;
+      }
+      // Maybeboard rows are the deckbuilder's scratch pad, not part of the
+      // deck; anything we don't recognize is dropped for the same reason
+      if (board !== "main" && board !== "collection" && board !== "sideboard") {
         continue;
       }
       const normalized = toCuriosaEntry(row);

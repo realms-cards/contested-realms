@@ -1,10 +1,11 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useParams, useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
+import GuestGate from "@/components/auth/GuestGate";
 import FloatingChat from "@/components/chat/FloatingChat";
 import { useRealtimeTournamentsOptional } from "@/contexts/RealtimeTournamentContext";
+import { useViewer } from "@/lib/guest/useViewer";
 
 type DraftParticipant = {
   playerId: string;
@@ -22,7 +23,12 @@ type DraftSession = {
 export default function TournamentDraftPage() {
   const params = useParams();
   const router = useRouter();
-  const { status, data: sessionData } = useSession();
+  const viewer = useViewer();
+  const searchParams = useSearchParams();
+  const pathnameForReturn = usePathname();
+  const currentHref = `${pathnameForReturn ?? "/"}${
+    searchParams?.toString() ? `?${searchParams.toString()}` : ""
+  }`;
   const tournamentId = String(params?.id || "");
   const tournamentsCtx = useRealtimeTournamentsOptional();
 
@@ -60,17 +66,10 @@ export default function TournamentDraftPage() {
   }, [tournamentId]);
 
   useEffect(() => {
-    // Require auth
-    if (status === "unauthenticated") {
-      router.push(
-        `/auth/signin?callbackUrl=/tournaments/${tournamentId}/draft`
-      );
-      return;
-    }
-    if (status === "authenticated") {
+    if (viewer.status === "ready" && viewer.id) {
       void joinDraft();
     }
-  }, [status, router, tournamentId, joinDraft]);
+  }, [viewer.status, viewer.id, router, tournamentId, joinDraft]);
 
   useEffect(() => {
     if (!tournamentId) return;
@@ -95,7 +94,7 @@ export default function TournamentDraftPage() {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data?.myPicks)) {
-          const playerId = sessionData?.user?.id;
+          const playerId = viewer.id;
           const storageSuffix = playerId
             ? `${session.id}_${playerId}`
             : session.id;
@@ -119,10 +118,10 @@ export default function TournamentDraftPage() {
       tournament: tournamentId,
       matchName: "Draft",
       sessionId: session.id,
-      playerId: sessionData?.user?.id || "",
+      playerId: viewer.id || "",
     });
     window.location.href = `/decks/editor-3d?${params.toString()}`;
-  }, [session?.id, tournamentId, sessionData?.user?.id]);
+  }, [session?.id, tournamentId, viewer.id]);
 
   useEffect(() => {
     if (redirectedRef.current) return;
@@ -151,7 +150,7 @@ export default function TournamentDraftPage() {
 
     if (session.status === "waiting" || session.status === "active") {
       redirectedRef.current = true;
-      const playerId = sessionData?.user?.id || "";
+      const playerId = viewer.id || "";
       router.replace(
         `/online/draft/${session.id}?tournament=${tournamentId}&playerId=${playerId}`
       );
@@ -161,14 +160,28 @@ export default function TournamentDraftPage() {
     session?.status,
     router,
     tournamentId,
-    sessionData?.user?.id,
+    viewer.id,
     proceedToDeckBuild,
   ]);
 
-  if (status === "loading" || loading) {
+  if (viewer.status === "loading" || (loading && !viewer.isAnonymous)) {
     return (
       <div className="min-h-screen bg-slate-900 text-white grid place-items-center">
         <div className="text-slate-300">Joining draft session…</div>
+      </div>
+    );
+  }
+
+  if (viewer.isAnonymous) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white">
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <GuestGate
+            title="Tournament draft"
+            description="Sign in or continue as a guest to take your seat in the draft."
+            returnTo={currentHref}
+          />
+        </div>
       </div>
     );
   }

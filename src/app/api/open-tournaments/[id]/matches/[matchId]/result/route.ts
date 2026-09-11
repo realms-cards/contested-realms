@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getServerAuthSession } from "@/lib/auth";
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { MATCH_APPROVAL_STATUS } from "@/lib/open-tournament/constants";
 import type { OpenTournamentSettings } from "@/lib/open-tournament/types";
 import {
@@ -13,8 +13,8 @@ type RouteParams = { params: Promise<{ id: string; matchId: string }> };
 
 /** POST — Report a match result */
 export async function POST(req: NextRequest, { params }: RouteParams) {
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     );
   }
 
-  const reporterId = session.user.id;
+  const reporterId = principal.id;
   const isHost = tournament.creatorId === reporterId;
 
   // Only match participants or the host may report a result
@@ -162,8 +162,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
 /** PATCH — Approve or reject a pending result */
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -176,7 +176,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   if (!tournament) {
     return Response.json({ error: "Tournament not found" }, { status: 404 });
   }
-  if (tournament.creatorId !== session.user.id) {
+  if (tournament.creatorId !== principal.id) {
     return Response.json({ error: "Only the host can approve results" }, { status: 403 });
   }
 

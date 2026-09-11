@@ -52,7 +52,6 @@ export default function OnlineDeckSelector({
   const [isLoading, setIsLoading] = useState(false);
   const [impUrl, setImpUrl] = useState("");
   const [impName, setImpName] = useState("");
-  const [impTts, setImpTts] = useState("");
   const [impLoading, setImpLoading] = useState(false);
   const [impError, setImpError] = useState<string | null>(null);
   const [decksLoaded, setDecksLoaded] = useState<boolean>(false);
@@ -206,7 +205,7 @@ export default function OnlineDeckSelector({
   }, [selectedDeckMeta]);
 
   const importFromCuriosa = async () => {
-    if (!impUrl.trim() && !impTts.trim()) return;
+    if (!impUrl.trim()) return;
     setImpLoading(true);
     setImpError(null);
     try {
@@ -216,7 +215,6 @@ export default function OnlineDeckSelector({
         body: JSON.stringify({
           url: impUrl.trim(),
           name: impName.trim() || undefined,
-          tts: impTts.trim() || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -235,7 +233,6 @@ export default function OnlineDeckSelector({
       setSelectedDeck(newDeck.id);
       setImpUrl("");
       setImpName("");
-      setImpTts("");
     } catch {
       setImpError("Network error during import");
     } finally {
@@ -295,12 +292,12 @@ export default function OnlineDeckSelector({
         {curiosaEnabled && !isPrecon && !isGuest && (
           <div className="bg-zinc-900/60 ring-1 ring-zinc-700 rounded p-3 space-y-2">
             <div className="text-sm font-medium">
-              Import from Curiosa or Four Cores
+              Import from Sorcerytcg or Four Cores
             </div>
             <div className="grid gap-2 sm:grid-cols-5">
               <input
                 className="sm:col-span-3 w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
-                placeholder="Curiosa or Four Cores deck URL"
+                placeholder="Sorcerytcg or Four Cores deck URL"
                 value={impUrl}
                 onChange={(e) => setImpUrl(e.target.value)}
                 disabled={impLoading || isLoading}
@@ -313,18 +310,6 @@ export default function OnlineDeckSelector({
                 disabled={impLoading || isLoading}
               />
             </div>
-            <details className="bg-zinc-900/50 rounded ring-1 ring-zinc-700 p-2">
-              <summary className="cursor-pointer text-xs font-medium">
-                Paste Curiosa TTS JSON (fallback if the deck is private)
-              </summary>
-              <textarea
-                className="mt-2 w-full h-24 bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-2 py-2 text-white font-mono text-xs"
-                placeholder="Paste the Tabletop Simulator JSON exported from Curiosa"
-                value={impTts}
-                onChange={(e) => setImpTts(e.target.value)}
-                disabled={impLoading || isLoading}
-              />
-            </details>
             {impError && (
               <div className="text-red-400 text-xs bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">
                 {impError}
@@ -335,9 +320,7 @@ export default function OnlineDeckSelector({
                 type="button"
                 className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
                 onClick={importFromCuriosa}
-                disabled={
-                  (!impUrl.trim() && !impTts.trim()) || impLoading || isLoading
-                }
+                disabled={!impUrl.trim() || impLoading || isLoading}
               >
                 {impLoading ? "Importing..." : "Import"}
               </button>

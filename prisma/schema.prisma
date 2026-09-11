@@ -256,6 +256,8 @@ model User {
   discordId               String?                  @unique
   discordUsername         String?
   discordGuildIds         String?
+  /// Shadow row for an account-less invite-link player (id starts with `guest_`)
+  isGuest                 Boolean                  @default(false)
   accounts                Account[]
   cardLists               CardList[]
   collectionCards         CollectionCard[]
@@ -279,6 +281,8 @@ model User {
   tournamentRegistrations TournamentRegistration[]
   tournamentStatistics    TournamentStatistics[]   @relation("TournamentPlayerStats")
   leagueMemberships       LeagueMembership[]
+
+  @@index([isGuest])
 }
 
 model CustomPlaymat {
@@ -368,6 +372,8 @@ model Tournament {
   updatedAt     DateTime                 @updatedAt
   completedAt   DateTime?
   isPrivate     Boolean                  @default(false)
+  /// Shareable invite link token; possession grants view + join, even when private
+  inviteToken   String?                  @unique
   draftSessions DraftSession[]
   matches       Match[]
   standings     PlayerStanding[]

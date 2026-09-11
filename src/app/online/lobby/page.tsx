@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useOnline } from "@/app/online/online-context";
+import GuestGate from "@/components/auth/GuestGate";
 import LobbyChatConsole from "@/components/chat/LobbyChatConsole";
 import InviteOverlay from "@/components/online/InviteOverlay";
 import LobbiesCentral from "@/components/online/LobbiesCentral";
@@ -22,7 +23,7 @@ import {
   normalizeCubeSummary,
   type CubeSummaryInput,
 } from "@/lib/cubes/normalizers";
-import { createGuestSession, useGuestSession } from "@/lib/guest/guestSession";
+import { useGuestSession } from "@/lib/guest/guestSession";
 import {
   useAvailableSets,
   buildDefaultPackCounts,
@@ -284,9 +285,6 @@ function LobbyPageContent({
     sessionStatus === "unauthenticated" &&
     guestSession.status === "ready" &&
     !guestSession.guest;
-  const [guestName, setGuestName] = useState("");
-  const [guestJoining, setGuestJoining] = useState(false);
-  const [guestError, setGuestError] = useState<string | null>(null);
   const invitePath = inviteLobbyId
     ? buildLobbyInvitePath(inviteLobbyId, {
         tournamentId: inviteTournamentId,
@@ -294,19 +292,6 @@ function LobbyPageContent({
       })
     : "/online/lobby";
   const signInHref = `/auth/signin?callbackUrl=${encodeURIComponent(invitePath)}`;
-  const continueAsGuest = async () => {
-    setGuestJoining(true);
-    setGuestError(null);
-    try {
-      await createGuestSession(guestName);
-    } catch (error) {
-      setGuestError(
-        error instanceof Error ? error.message : "Could not continue as guest",
-      );
-    } finally {
-      setGuestJoining(false);
-    }
-  };
 
   // A disconnect drops the player from their lobby server-side, so the invite
   // param has to stay in the URL while they are in that lobby - it is what
@@ -1465,53 +1450,13 @@ function LobbyPageContent({
       <div className="space-y-6">
         {/* Invite link without an account: pick a name or sign in */}
         {showGuestGate && (
-          <div className="rounded-xl bg-slate-900/60 ring-1 ring-sky-500/40 p-5 space-y-3">
-            <div className="text-lg font-semibold">
-              {inviteLobbyId
-                ? "You\u2019ve been invited to a match"
-                : "Play online"}
-            </div>
-            <p className="text-sm opacity-80">
-              Sign in to play with your saved decks and matchmaking, or
-              continue as a guest: join open games or invite links and play
-              with a precon or a deck loaded from sorcerytcg.com.
-            </p>
-            <form
-              className="flex flex-col gap-2 sm:flex-row sm:items-center"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void continueAsGuest();
-              }}
-            >
-              <input
-                className="flex-1 rounded-lg bg-slate-800/80 ring-1 ring-slate-700 px-3 py-2 text-sm"
-                placeholder="Your name"
-                value={guestName}
-                onChange={(e) => setGuestName(e.target.value)}
-                maxLength={24}
-                autoFocus
-                disabled={guestJoining}
-              />
-              <button
-                type="submit"
-                className="rounded-lg bg-sky-600/90 hover:bg-sky-600 disabled:opacity-50 px-4 py-2 text-sm font-semibold"
-                disabled={guestJoining || guestName.trim().length < 2}
-              >
-                {guestJoining ? "Joining..." : "Continue as guest"}
-              </button>
-              <Link
-                href={signInHref}
-                className="rounded-lg bg-slate-700/80 hover:bg-slate-700 px-4 py-2 text-sm font-semibold text-center"
-              >
-                Sign in
-              </Link>
-            </form>
-            {guestError && (
-              <div className="text-xs text-red-300 bg-red-900/20 ring-1 ring-red-800 rounded px-3 py-2">
-                {guestError}
-              </div>
-            )}
-          </div>
+          <GuestGate
+            title={
+              inviteLobbyId ? "You\u2019ve been invited to a match" : "Play online"
+            }
+            description="Sign in to play with your saved decks and matchmaking, or continue as a guest: join open games or invite links and play with a precon or a deck loaded from sorcerytcg.com."
+            returnTo={invitePath}
+          />
         )}
 
         {isGuest && (

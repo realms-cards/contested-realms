@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getServerAuthSession } from "@/lib/auth";
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import {
   DEFAULT_OPEN_TOURNAMENT_SETTINGS,
   type OpenTournamentSettings,
@@ -13,8 +13,8 @@ export const dynamic = "force-dynamic";
 
 /** GET /api/open-tournaments — List open-format tournaments */
 export async function GET(req: NextRequest) {
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -36,8 +36,8 @@ export async function GET(req: NextRequest) {
     ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
     OR: [
       { isPrivate: false },
-      { creatorId: session.user.id },
-      { registrations: { some: { playerId: session.user.id } } },
+      { creatorId: principal.id },
+      { registrations: { some: { playerId: principal.id } } },
     ],
   };
 
@@ -68,8 +68,8 @@ export async function GET(req: NextRequest) {
 
 /** POST /api/open-tournaments — Create a new open tournament */
 export async function POST(req: NextRequest) {
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
       status: "active", // Open tournaments skip registering/preparing
       maxPlayers: input.maxPlayers,
       isPrivate: input.isPrivate,
-      creatorId: session.user.id,
+      creatorId: principal.id,
       settings: JSON.parse(JSON.stringify(settings)),
     },
     include: {

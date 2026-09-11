@@ -1,15 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import {useParams, usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import GuestGate from "@/components/auth/GuestGate";
 import { OpenTournamentDeckSubmit } from "@/components/open-tournament/OpenTournamentDeckSubmit";
 import { OpenTournamentMatchCard } from "@/components/open-tournament/OpenTournamentMatchCard";
 import { OpenTournamentPairingPanel } from "@/components/open-tournament/OpenTournamentPairingPanel";
 import { OpenTournamentPlayerManager } from "@/components/open-tournament/OpenTournamentPlayerManager";
 import { OpenTournamentStandings } from "@/components/open-tournament/OpenTournamentStandings";
+import TournamentInviteLinkButton from "@/components/tournament/TournamentInviteLinkButton";
+import { useViewer } from "@/lib/guest/useViewer";
 import type { OpenTournamentSettings } from "@/lib/open-tournament/types";
+import { getTournamentInviteToken } from "@/lib/tournament/invite-links";
 
 interface Player {
   id: string;
@@ -70,22 +73,27 @@ interface Tournament {
 export default function OpenTournamentDashboardPage() {
   const params = useParams();
   const id = params?.id as string;
-  const { data: session, status: authStatus } = useSession();
-  const router = useRouter();
+  const viewer = useViewer();
+  const searchParams = useSearchParams();
+  const inviteToken = getTournamentInviteToken(searchParams);
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const pathnameForReturn = usePathname();
+  const currentHref = `${pathnameForReturn ?? "/"}${
+    searchParams?.toString() ? `?${searchParams.toString()}` : ""
+  }`;
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "rounds" | "standings">("overview");
 
-  useEffect(() => {
-    if (authStatus === "unauthenticated") {
-      router.push("/auth/signin");
-    }
-  }, [authStatus, router]);
-
   const fetchTournament = useCallback(async () => {
     try {
-      const res = await fetch(`/api/open-tournaments/${id}`);
+      const res = await fetch(
+        inviteToken
+          ? `/api/open-tournaments/${id}?invite=${encodeURIComponent(inviteToken)}`
+          : `/api/open-tournaments/${id}`,
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to fetch");
       setTournament(data.tournament);
@@ -94,18 +102,32 @@ export default function OpenTournamentDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, inviteToken]);
 
   useEffect(() => {
-    if (authStatus === "authenticated") {
+    if (viewer.id) {
       fetchTournament();
     }
-  }, [authStatus, fetchTournament]);
+  }, [viewer.id, fetchTournament]);
 
-  if (loading || authStatus === "loading") {
+  if (viewer.status === "loading" || (loading && !viewer.isAnonymous)) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading...</div>
+      </div>
+    );
+  }
+
+  if (viewer.isAnonymous) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white">
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <GuestGate
+            title="You\u2019ve been invited to a tournament"
+            description="Sign in, or continue as a guest to take part."
+            returnTo={currentHref}
+          />
+        </div>
       </div>
     );
   }
@@ -118,7 +140,7 @@ export default function OpenTournamentDashboardPage() {
     );
   }
 
-  const isHost = session?.user?.id === tournament.creatorId;
+  const isHost = viewer.id === tournament.creatorId;
   const settings = tournament.settings as unknown as OpenTournamentSettings;
   const activeRound = tournament.rounds.find((r) => r.status === "active");
   const completedRounds = tournament.rounds.filter((r) => r.status === "completed");
@@ -196,6 +218,54 @@ export default function OpenTournamentDashboardPage() {
               </a>
             )}
 
+            {isHost && tournament.status === "active" && (
+              <TournamentInviteLinkButton
+                tournamentId={tournament.id}
+                kind="open"
+                inviteToken={
+                  (tournament as { inviteToken?: string | null }).inviteToken ??
+                  null
+                }
+                className="px-4 py-2 rounded-lg"
+              />
+            )}
+            {/* Invite link visitor who is not seated yet: self-register */}
+            {!isHost &&
+              inviteToken &&
+              tournament.status === "active" &&
+              viewer.id &&
+              !tournament.registrations.some(
+                (r) => r.playerId === viewer.id && r.seatStatus === "active",
+              ) && (
+                <button
+                  onClick={async () => {
+                    setJoining(true);
+                    setJoinError(null);
+                    try {
+                      const res = await fetch(
+                        `/api/open-tournaments/${tournament.id}/join`,
+                        {
+                          method: "POST",
+                          headers: { "content-type": "application/json" },
+                          body: JSON.stringify({ inviteToken }),
+                        },
+                      );
+                      const data = await res.json().catch(() => ({}));
+                      if (!res.ok) throw new Error(data.error ?? "Could not join");
+                      await fetchTournament();
+                    } catch (e) {
+                      setJoinError(e instanceof Error ? e.message : "Could not join");
+                    } finally {
+                      setJoining(false);
+                    }
+                  }}
+                  disabled={joining}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  title={joinError ?? undefined}
+                >
+                  {joining ? "Joining…" : joinError ? "Join failed - retry" : "Join tournament"}
+                </button>
+              )}
             {/* End Event Button (host only) */}
             {isHost && tournament.status === "active" && (
               <button
@@ -267,16 +337,16 @@ export default function OpenTournamentDashboardPage() {
               </div>
 
               {/* Deck Submit (for current user if registered) */}
-              {session?.user?.id &&
+              {viewer.id &&
                 tournament.registrations.some(
-                  (r) => r.playerId === session.user?.id && r.seatStatus === "active",
+                  (r) => r.playerId === viewer.id && r.seatStatus === "active",
                 ) && (
                   <OpenTournamentDeckSubmit
                     tournamentId={tournament.id}
-                    playerId={session.user.id}
+                    playerId={viewer.id}
                     currentDeckData={
                       (tournament.registrations.find(
-                        (r) => r.playerId === session.user?.id,
+                        (r) => r.playerId === viewer.id,
                       )?.preparationData?.open ?? {}) as Record<string, unknown>
                     }
                     onRefresh={fetchTournament}

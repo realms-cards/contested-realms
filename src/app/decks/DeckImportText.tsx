@@ -123,7 +123,7 @@ export default function DeckImportText() {
               unoptimized
             />
             <figcaption className="text-xs text-slate-300/90">
-              Tip: Copy your decklist from Curiosa Decks (or any other text
+              Tip: Copy your decklist from Sorcerytcg Decks (or any other text
               based source), paste it into the text box, optionally set a name,
               then click Import.
             </figcaption>

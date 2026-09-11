@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import { getServerAuthSession } from "@/lib/auth";
 import { invalidateCache, CacheKeys } from "@/lib/cache/redis-cache";
 import {
   formatValidationErrors,
@@ -11,6 +10,10 @@ import {
   fetchExternalDeck,
   resolveExternalDeckRows,
 } from "@/lib/decks/external-deck-resolver";
+import {
+  ensureGuestUser,
+  getRequestPrincipal,
+} from "@/lib/guest/request-principal.server";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -28,14 +31,16 @@ function jsonError(body: Record<string, unknown>, status: number): Response {
 // - Fetches the structured decklist, maps printings to our variants, creates the deck
 // - Validates avatar/site/spellbook counts similar to game loader expectations
 export async function POST(req: NextRequest) {
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return jsonError({ error: "Unauthorized" }, 401);
   }
   try {
+    // Guests importing a deck for a tournament get their shadow User row here
+    await ensureGuestUser(principal);
     // Ensure the authenticated user exists in the database (useful after local DB resets)
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+      where: { id: principal.id },
     });
     if (!user) {
       return jsonError(
@@ -109,7 +114,7 @@ export async function POST(req: NextRequest) {
         imported: true,
         // Sync only supports Curiosa, so Four Cores imports leave this unset
         curiosaSourceId: fetched.source === "curiosa" ? fetched.sourceId : null,
-        user: { connect: { id: session.user.id } },
+        user: { connect: { id: principal.id } },
       },
     });
 
@@ -126,7 +131,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Invalidate deck list cache for this user
-    await invalidateCache(CacheKeys.decks.list(session.user.id));
+    await invalidateCache(CacheKeys.decks.list(principal.id));
     return new Response(
       JSON.stringify({ id: deck.id, name: deck.name, format: deck.format }),
       { status: 201, headers: { "content-type": "application/json" } },

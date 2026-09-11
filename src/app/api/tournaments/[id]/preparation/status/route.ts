@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getServerAuthSession } from '@/lib/auth';
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -8,8 +8,8 @@ export const dynamic = 'force-dynamic';
 // Get preparation status for current player
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const registration = await prisma.tournamentRegistration.findFirst({
       where: {
         tournamentId: id,
-        playerId: session.user.id
+        playerId: principal.id
       },
       include: {
         tournament: {
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                            preparationSummary.playersReady === preparationSummary.total;
 
     return new Response(JSON.stringify({
-      playerId: session.user.id,
+      playerId: principal.id,
       tournamentId: id,
       format: registration.tournament.format,
       tournamentStatus: registration.tournament.status,

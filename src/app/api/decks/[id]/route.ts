@@ -6,6 +6,7 @@ import {
   validateDeck,
   type DeckFormat,
 } from "@/lib/deck/validation-rules";
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -29,8 +30,8 @@ export async function GET(
 ) {
   // Public decks (precons) are readable without a session so guests can
   // load them for an invite-link match; private decks still need the owner.
-  const session = await getServerAuthSession();
-  const viewerId = session?.user?.id ?? null;
+  const principal = await getRequestPrincipal();
+  const viewerId = principal?.id ?? null;
   try {
     const { id } = await params;
     if (!id)

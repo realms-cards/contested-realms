@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getServerAuthSession } from "@/lib/auth";
+import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { AddPlayerSchema } from "@/lib/open-tournament/validation";
 import { prisma } from "@/lib/prisma";
 
@@ -7,8 +7,8 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 /** GET /api/open-tournaments/[id]/players — List players */
 export async function GET(_req: NextRequest, { params }: RouteParams) {
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -56,8 +56,8 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 
 /** POST /api/open-tournaments/[id]/players — Add a player */
 export async function POST(req: NextRequest, { params }: RouteParams) {
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   if (!tournament) {
     return Response.json({ error: "Tournament not found" }, { status: 404 });
   }
-  if (tournament.creatorId !== session.user.id) {
+  if (tournament.creatorId !== principal.id) {
     return Response.json({ error: "Only the host can add players" }, { status: 403 });
   }
   if (tournament.status === "completed" || tournament.status === "cancelled") {
@@ -136,8 +136,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
 /** DELETE /api/open-tournaments/[id]/players — Remove a player */
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
-  const session = await getServerAuthSession();
-  if (!session?.user) {
+  const principal = await getRequestPrincipal();
+  if (!principal) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -150,7 +150,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   if (!tournament) {
     return Response.json({ error: "Tournament not found" }, { status: 404 });
   }
-  if (tournament.creatorId !== session.user.id) {
+  if (tournament.creatorId !== principal.id) {
     return Response.json({ error: "Only the host can remove players" }, { status: 403 });
   }
 

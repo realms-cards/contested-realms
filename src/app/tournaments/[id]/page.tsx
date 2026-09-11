@@ -3,19 +3,22 @@
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useParams, useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
+import GuestGate from "@/components/auth/GuestGate";
 import FloatingChat from "@/components/chat/FloatingChat";
 import CardPreview from "@/components/game/CardPreview";
 import type { Digit } from "@/components/game/manacost";
 import { NumberBadge } from "@/components/game/manacost";
 import TournamentBracket from "@/components/tournament/TournamentBracket";
 import TournamentFlowchart from "@/components/tournament/TournamentFlowchart";
+import TournamentInviteLinkButton from "@/components/tournament/TournamentInviteLinkButton";
 import TournamentRoster from "@/components/tournament/TournamentRoster";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
+import { useViewer } from "@/lib/guest/useViewer";
+import { getTournamentInviteToken } from "@/lib/tournament/invite-links";
 import { prepareTournamentMatchBootstrap } from "@/lib/tournament/matchBootstrap";
 
 const TournamentInviteModal = dynamic(
@@ -49,7 +52,13 @@ interface Tournament {
 export default function TournamentDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const viewer = useViewer();
+  const searchParams = useSearchParams();
+  const inviteToken = getTournamentInviteToken(searchParams);
+  const pathnameForReturn = usePathname();
+  const currentHref = `${pathnameForReturn ?? "/"}${
+    searchParams?.toString() ? `?${searchParams.toString()}` : ""
+  }`;
   const tournamentId = params?.id as string;
   const {
     tournaments,
@@ -57,6 +66,7 @@ export default function TournamentDetailsPage() {
     setCurrentTournament,
     setCurrentTournamentById,
     joinTournament: rtJoinTournament,
+    setInviteToken,
     startTournament: rtStartTournament,
     endTournament: rtEndTournament,
     toggleTournamentRegistrationLock,
@@ -130,12 +140,11 @@ export default function TournamentDetailsPage() {
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const prevTournamentStatusRef = useRef<string | null>(null);
 
-  // Redirect unauthenticated users to signin
+  // Invite links: the token unlocks private tournaments for detail fetches and joins
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push(`/auth/signin?callbackUrl=/tournaments/${tournamentId}`);
-    }
-  }, [status, tournamentId, router]);
+    setInviteToken(inviteToken);
+    return () => setInviteToken(null);
+  }, [inviteToken, setInviteToken]);
 
   // Lightweight toast listener (used by deck submission + phase changes)
   useEffect(() => {
@@ -243,15 +252,15 @@ export default function TournamentDetailsPage() {
   // Derived helpers: my standing and match id (with rank calculation)
   const myStanding = useMemo(() => {
     const standing = statistics?.standings?.find(
-      (s) => s.playerId === session?.user?.id,
+      (s) => s.playerId === viewer.id,
     );
     if (!standing) return null;
     const rank =
       (statistics?.standings?.findIndex(
-        (s) => s.playerId === session?.user?.id,
+        (s) => s.playerId === viewer.id,
       ) ?? -1) + 1;
     return { ...standing, rank };
-  }, [statistics?.standings, session?.user?.id]);
+  }, [statistics?.standings, viewer.id]);
   const myMatchId = useMemo(
     () =>
       myStanding?.currentMatchId ? String(myStanding.currentMatchId) : null,
@@ -284,7 +293,7 @@ export default function TournamentDetailsPage() {
   const myAssignedMatchId = useMemo(() => {
     const direct = myMatchId ? String(myMatchId) : null;
     if (direct) return direct;
-    const uid = session?.user?.id || null;
+    const uid = viewer.id || null;
     if (!uid) return null;
     // Prefer embedded matches on the active round
     const matchesInRound =
@@ -311,7 +320,7 @@ export default function TournamentDetailsPage() {
     return null;
   }, [
     myMatchId,
-    session?.user?.id,
+    viewer.id,
     activeRound,
     statistics?.matches,
     activeRoundNumber,
@@ -332,7 +341,7 @@ export default function TournamentDetailsPage() {
       ? (((match as { players?: Array<{ id: string; name?: string }> } | null)
           ?.players as Array<{ id: string; name?: string }>) ?? [])
       : [];
-    const me = session?.user?.id || null;
+    const me = viewer.id || null;
     const opp = players.find((p) => p.id !== me)?.name || null;
     setAssigned({ matchId: String(mid), opponentName: opp });
   }, [
@@ -340,7 +349,7 @@ export default function TournamentDetailsPage() {
     rtAssignedMatchId,
     myAssignedMatchId,
     statistics?.matches,
-    session?.user?.id,
+    viewer.id,
   ]);
 
   // Also re-sync when the page becomes visible or gains focus (covers missed socket events)
@@ -363,7 +372,7 @@ export default function TournamentDetailsPage() {
         ? (((match as { players?: Array<{ id: string; name?: string }> } | null)
             ?.players as Array<{ id: string; name?: string }>) ?? [])
         : [];
-      const me = session?.user?.id || null;
+      const me = viewer.id || null;
       const opp = players.find((p) => p.id !== me)?.name || null;
       setAssigned({ matchId: String(mid), opponentName: opp });
     };
@@ -382,7 +391,7 @@ export default function TournamentDetailsPage() {
     rtAssignedMatchId,
     myAssignedMatchId,
     statistics?.matches,
-    session?.user?.id,
+    viewer.id,
   ]);
 
   const [viewerDeckCards, setViewerDeckCards] = useState<
@@ -464,7 +473,7 @@ export default function TournamentDetailsPage() {
 
   // Check if current user is registered (prefer explicit registrations over standings)
   const isRegistered = useMemo(() => {
-    const userId = session?.user?.id;
+    const userId = viewer.id;
     if (!tournament || !userId) return false;
     if (Array.isArray(registeredPlayers)) {
       const seat = registeredPlayers.find((p) => p.id === userId);
@@ -478,14 +487,14 @@ export default function TournamentDetailsPage() {
         (s) => s.playerId === userId && !s.isEliminated,
       ),
     );
-  }, [tournament, statistics?.standings, session?.user?.id, registeredPlayers]);
+  }, [tournament, statistics?.standings, viewer.id, registeredPlayers]);
 
   const isSeatVacant = useMemo(() => {
-    const userId = session?.user?.id;
+    const userId = viewer.id;
     if (!userId) return false;
     const seat = registeredPlayers.find((p) => p.id === userId);
     return seat?.seatStatus === "vacant";
-  }, [registeredPlayers, session?.user?.id]);
+  }, [registeredPlayers, viewer.id]);
 
   const vacantCount = useMemo(() => {
     return registeredPlayers.filter((p) => p.seatStatus === "vacant").length;
@@ -494,7 +503,7 @@ export default function TournamentDetailsPage() {
   const activeCount = tournament ? getCurrentPlayersCount(tournament) : 0;
 
   // Check if current user is the creator
-  const isCreator = tournament && session?.user?.id === tournament.creatorId;
+  const isCreator = tournament && viewer.id === tournament.creatorId;
 
   // Set rounds tab as default for host when tournament is active
   const hasSetDefaultTabRef = useRef(false);
@@ -1094,13 +1103,13 @@ export default function TournamentDetailsPage() {
   };
 
   const handleJoinTournament = async () => {
-    if (!session || !tournament) return;
+    if (!viewer.id || !tournament) return;
 
     setJoining(true);
     setError(null);
 
     try {
-      await rtJoinTournament(tournamentId);
+      await rtJoinTournament(tournamentId, { inviteToken });
     } catch (err) {
       console.error("Failed to join tournament:", err);
       setError(
@@ -1112,7 +1121,7 @@ export default function TournamentDetailsPage() {
   };
 
   const handleStartTournament = async () => {
-    if (!session || !tournament || !isCreator) return;
+    if (!viewer.id || !tournament || !isCreator) return;
 
     // For draft tournaments, show roster confirmation modal first
     if (tournament.format === "draft") {
@@ -1124,7 +1133,7 @@ export default function TournamentDetailsPage() {
   };
 
   const executeStartTournament = async () => {
-    if (!session || !tournament || !isCreator) return;
+    if (!viewer.id || !tournament || !isCreator) return;
 
     setStarting(true);
     setError(null);
@@ -1150,7 +1159,7 @@ export default function TournamentDetailsPage() {
   };
 
   const handleEndTournament = async () => {
-    if (!session || !tournament || !isCreator) return;
+    if (!viewer.id || !tournament || !isCreator) return;
 
     const ok = window.confirm(
       "End this tournament now? This cannot be undone.",
@@ -1208,7 +1217,7 @@ export default function TournamentDetailsPage() {
     }
   };
 
-  if (status === "loading" || (rtLoading && !initialLoaded)) {
+  if (viewer.status === "loading" || (rtLoading && !initialLoaded && !viewer.isAnonymous)) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading tournament...</div>
@@ -1216,8 +1225,18 @@ export default function TournamentDetailsPage() {
     );
   }
 
-  if (!session) {
-    return null; // Redirecting to signin
+  if (viewer.isAnonymous) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white">
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <GuestGate
+            title="You\u2019ve been invited to a tournament"
+            description="Sign in to play with your saved decks, or continue as a guest and bring a deck from sorcerytcg.com or a precon."
+            returnTo={currentHref}
+          />
+        </div>
+      </div>
+    );
   }
 
   if (error || rtError) {
@@ -1302,7 +1321,7 @@ export default function TournamentDetailsPage() {
                     omw?: number;
                   }>;
                   const top = standings.slice(0, 3);
-                  const meId = session?.user?.id || "";
+                  const meId = viewer.id || "";
                   const myIdx = meId
                     ? standings.findIndex((s) => s.playerId === meId)
                     : -1;
@@ -1546,6 +1565,18 @@ export default function TournamentDetailsPage() {
 
           <div className="flex flex-col gap-2">
             <div className="flex space-x-3">
+              {isCreator &&
+                tournament.status !== "completed" &&
+                tournament.status !== "cancelled" && (
+                  <TournamentInviteLinkButton
+                    tournamentId={tournament.id}
+                    kind="tournament"
+                    inviteToken={
+                      (tournament as { inviteToken?: string | null })
+                        .inviteToken ?? null
+                    }
+                  />
+                )}
               {/* Invite Players button (creator only, during registration while capacity remains) */}
               {canInvitePlayers && (
                 <button
@@ -1580,7 +1611,7 @@ export default function TournamentDetailsPage() {
         {isRegistered &&
           (() => {
             // Determine if the player has a submitted deck (server + optimistic flags)
-            const meId = session?.user?.id;
+            const meId = viewer.id;
             const rp =
               (
                 tournament as unknown as {
@@ -1786,7 +1817,7 @@ export default function TournamentDetailsPage() {
               <div className="flex items-center gap-2">
                 {tournament.format === "draft" &&
                   (() => {
-                    const meId = session?.user?.id;
+                    const meId = viewer.id;
                     const rp =
                       (
                         tournament as unknown as {
@@ -1854,7 +1885,7 @@ export default function TournamentDetailsPage() {
                   })()}
                 {tournament.format === "sealed" &&
                   (() => {
-                    const meId = session?.user?.id;
+                    const meId = viewer.id;
                     const rp =
                       (
                         tournament as unknown as {
@@ -2076,19 +2107,19 @@ export default function TournamentDetailsPage() {
                     onClick={() => setShowCuriosaImport((prev) => !prev)}
                     className="text-xs text-emerald-300 hover:text-emerald-200 underline"
                   >
-                    {showCuriosaImport ? "Hide" : "Import from Curiosa link"}
+                    {showCuriosaImport ? "Hide" : "Import from Sorcerytcg link"}
                   </button>
                   {showCuriosaImport && (
                     <div className="mt-2 p-3 bg-slate-800/60 rounded-lg ring-1 ring-slate-700">
                       <div className="text-xs text-slate-300 mb-2">
-                        Paste a public Curiosa deck URL to import it directly.
+                        Paste a public Sorcerytcg deck URL to import it directly.
                       </div>
                       <div className="flex gap-2">
                         <input
                           type="text"
                           value={curiosaUrl}
                           onChange={(e) => setCuriosaUrl(e.target.value)}
-                          placeholder="https://curiosa.io/decks/..."
+                          placeholder="https://sorcerytcg.com/decks/..."
                           className="flex-1 bg-slate-900/80 ring-1 ring-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder:text-slate-500"
                           disabled={curiosaImporting}
                         />
@@ -2419,7 +2450,7 @@ export default function TournamentDetailsPage() {
                           (myAssignedMatchId
                             ? String(m.id) === String(myAssignedMatchId)
                             : false) ||
-                          players.some((p) => p.id === session?.user?.id);
+                          players.some((p) => p.id === viewer.id);
                         const isCompleted =
                           m.status === "completed" || m.completedAt;
                         return (
@@ -2836,7 +2867,7 @@ export default function TournamentDetailsPage() {
                           .slice(0, 5)
                           .map((standing, index) => {
                             const isMe =
-                              standing.playerId === session?.user?.id;
+                              standing.playerId === viewer.id;
                             return (
                               <tr
                                 key={standing.playerId}
@@ -2943,7 +2974,7 @@ export default function TournamentDetailsPage() {
                         <td className="py-2">
                           <span
                             className={
-                              standing.playerId === session?.user?.id
+                              standing.playerId === viewer.id
                                 ? "text-blue-400 font-semibold"
                                 : "text-white"
                             }
@@ -3061,12 +3092,12 @@ export default function TournamentDetailsPage() {
                     {roundsView === "flowchart" ? (
                       <TournamentFlowchart
                         rounds={bracketRounds}
-                        currentUserId={session?.user?.id}
+                        currentUserId={viewer.id}
                       />
                     ) : (
                       <TournamentBracket
                         rounds={bracketRounds}
-                        currentUserId={session?.user?.id}
+                        currentUserId={viewer.id}
                         isCreator={isCreator ?? false}
                         onInvalidateMatch={handleInvalidateMatch}
                       />
@@ -3488,7 +3519,7 @@ export default function TournamentDetailsPage() {
                     </h3>
                     <div className="space-y-2">
                       {statistics.standings.slice(0, 3).map((standing, idx) => {
-                        const isMe = standing.playerId === session?.user?.id;
+                        const isMe = standing.playerId === viewer.id;
                         return (
                           <div
                             key={standing.playerId}

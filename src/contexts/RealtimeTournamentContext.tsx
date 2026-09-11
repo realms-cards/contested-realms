@@ -1,7 +1,6 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
 import {
   createContext,
   useContext,
@@ -11,12 +10,14 @@ import {
   useMemo,
   ReactNode,
   useRef,
+  type MutableRefObject,
 } from "react";
 import type { Socket } from "socket.io-client";
 import { useTournamentPhases } from "@/hooks/useTournamentPhases";
 import { useTournamentPreparation } from "@/hooks/useTournamentPreparation";
 import { useTournamentSocket } from "@/hooks/useTournamentSocket";
 import { useTournamentStatistics } from "@/hooks/useTournamentStatistics";
+import { useViewer } from "@/lib/guest/useViewer";
 
 interface RegisteredTournamentPlayer {
   id: string;
@@ -118,7 +119,12 @@ interface RealtimeTournamentContextValue {
     registrationMode?: "fixed" | "open";
     registrationLocked?: boolean;
   }) => Promise<TournamentInfo>;
-  joinTournament: (tournamentId: string) => Promise<void>;
+  joinTournament: (
+    tournamentId: string,
+    options?: { inviteToken?: string | null },
+  ) => Promise<void>;
+  /** Invite token from the page URL, sent with detail fetches and joins */
+  setInviteToken: (token: string | null) => void;
   leaveTournament: (tournamentId: string) => Promise<void>;
   startTournament: (tournamentId: string) => Promise<void>;
   endTournament: (tournamentId: string) => Promise<void>;
@@ -182,6 +188,21 @@ interface RealtimeTournamentContextValue {
 const RealtimeTournamentContext =
   createContext<RealtimeTournamentContextValue | null>(null);
 
+/**
+ * Detail endpoint for a tournament, carrying the invite token from the page
+ * URL when there is one: private tournaments are only readable with it.
+ * Takes the ref itself so callers need no extra hook dependencies.
+ */
+function tournamentDetailUrl(
+  tokenRef: MutableRefObject<string | null>,
+  id: string,
+): string {
+  const token = tokenRef.current;
+  return token
+    ? `/api/tournaments/${id}?invite=${encodeURIComponent(token)}`
+    : `/api/tournaments/${id}`;
+}
+
 export function RealtimeTournamentProvider({
   children,
 }: {
@@ -189,7 +210,7 @@ export function RealtimeTournamentProvider({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { data: sessionData } = useSession();
+  const viewer = useViewer();
 
   // Only actively fetch tournaments when on actual tournament pages
   // Exclude /online/lobby and /online/play to reduce unnecessary polling
@@ -197,7 +218,14 @@ export function RealtimeTournamentProvider({
     pathname === "/tournaments" ||
     pathname?.startsWith("/tournaments/") ||
     false;
-  const currentUserId = sessionData?.user?.id ?? null;
+  // Account id, or the guest id for invite-link players
+  const currentUserId = viewer.id;
+  // Invite token from the page URL: private tournaments are only readable
+  // (and joinable) with it, so every detail fetch carries it along
+  const inviteTokenRef = useRef<string | null>(null);
+  const setInviteToken = useCallback((token: string | null) => {
+    inviteTokenRef.current = token;
+  }, []);
   const [tournaments, setTournaments] = useState<TournamentInfo[]>([]);
   const [currentTournament, setCurrentTournamentState] =
     useState<TournamentInfo | null>(null);
@@ -344,7 +372,7 @@ export function RealtimeTournamentProvider({
     ) => {
       if (!id) return;
       if (typeof window === "undefined") {
-        void fetch(`/api/tournaments/${id}`)
+        void fetch(tournamentDetailUrl(inviteTokenRef, id))
           .then((res) => (res.ok ? res.json() : null))
           .then((detail) => {
             if (!detail) return;
@@ -395,7 +423,7 @@ export function RealtimeTournamentProvider({
       const handle = window.setTimeout(async () => {
         delete timers[id];
         try {
-          const res = await fetch(`/api/tournaments/${id}`);
+          const res = await fetch(tournamentDetailUrl(inviteTokenRef, id));
           if (!res.ok) return;
           const detail = (await res.json()) as TournamentInfo;
           setTournaments((prev) => {
@@ -1227,7 +1255,7 @@ export function RealtimeTournamentProvider({
         // Fetch full details and set as current tournament for downstream hooks
         let fullDetail = tournament;
         try {
-          const detailRes = await fetch(`/api/tournaments/${tournament.id}`);
+          const detailRes = await fetch(tournamentDetailUrl(inviteTokenRef, tournament.id));
           if (detailRes.ok) {
             const detail = await detailRes.json();
             fullDetail = detail;
@@ -1253,16 +1281,18 @@ export function RealtimeTournamentProvider({
   );
 
   const joinTournament = useCallback(
-    async (tournamentId: string) => {
+    async (tournamentId: string, options?: { inviteToken?: string | null }) => {
       setLoading(true);
       setError(null);
 
       try {
         logTournamentDebug("Joining tournament:", tournamentId);
 
+        const inviteToken = options?.inviteToken ?? inviteTokenRef.current;
         const response = await fetch(`/api/tournaments/${tournamentId}/join`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(inviteToken ? { inviteToken } : {}),
         });
 
         if (!response.ok) {
@@ -1281,7 +1311,7 @@ export function RealtimeTournamentProvider({
         }
         // Fetch full details and set as current tournament for downstream hooks
         try {
-          const detailRes = await fetch(`/api/tournaments/${tournamentId}`);
+          const detailRes = await fetch(tournamentDetailUrl(inviteTokenRef, tournamentId));
           if (detailRes.ok) {
             const detail = await detailRes.json();
             setCurrentTournament(detail as unknown as TournamentInfo);
@@ -1375,7 +1405,7 @@ export function RealtimeTournamentProvider({
         } catch {}
         // Real-time events will propagate updates; fetch details only
         try {
-          const detailRes = await fetch(`/api/tournaments/${tournamentId}`);
+          const detailRes = await fetch(tournamentDetailUrl(inviteTokenRef, tournamentId));
           if (detailRes.ok) {
             const detail = await detailRes.json();
             setCurrentTournament(detail as unknown as TournamentInfo);
@@ -1575,6 +1605,7 @@ export function RealtimeTournamentProvider({
       socket,
       createTournament,
       joinTournament,
+      setInviteToken,
       leaveTournament,
       startTournament,
       endTournament,
@@ -1607,6 +1638,7 @@ export function RealtimeTournamentProvider({
       socket,
       createTournament,
       joinTournament,
+      setInviteToken,
       leaveTournament,
       startTournament,
       endTournament,

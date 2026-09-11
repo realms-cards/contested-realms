@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
+import GuestGate from "@/components/auth/GuestGate";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
+import { useViewer } from "@/lib/guest/useViewer";
 import {
   useAvailableSets,
   DEFAULT_SET,
@@ -47,7 +48,12 @@ interface CreateTournamentForm {
 }
 
 export default function TournamentsPage() {
-  const { data: session, status } = useSession();
+  const viewer = useViewer();
+  const searchParams = useSearchParams();
+  const pathnameForReturn = usePathname();
+  const currentHref = `${pathnameForReturn ?? "/"}${
+    searchParams?.toString() ? `?${searchParams.toString()}` : ""
+  }`;
   const router = useRouter();
   const {
     tournaments,
@@ -164,18 +170,12 @@ export default function TournamentsPage() {
     return 0;
   }
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/signin?callbackUrl=/tournaments");
-    }
-  }, [status, router]);
-
   // Mark initial load complete once auth resolved and realtime layer finished its first hydration
   useEffect(() => {
-    if (!initialLoaded && status !== "loading" && !rtLoading) {
+    if (!initialLoaded && viewer.status !== "loading" && !rtLoading) {
       setInitialLoaded(true);
     }
-  }, [initialLoaded, status, rtLoading]);
+  }, [initialLoaded, viewer.status, rtLoading]);
 
   // Fetch available cubes for cube draft option
   useEffect(() => {
@@ -258,7 +258,7 @@ export default function TournamentsPage() {
 
   const handleCreateTournament = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!session) return;
+    if (!viewer.id) return;
 
     setCreating(true);
     setError(null);
@@ -391,7 +391,7 @@ export default function TournamentsPage() {
   };
 
   const handleJoinTournament = async (tournamentId: string) => {
-    if (!session) return;
+    if (!viewer.id) return;
 
     try {
       await rtJoinTournament(tournamentId);
@@ -436,7 +436,7 @@ export default function TournamentsPage() {
     }
   };
 
-  if (status === "loading" || (rtLoading && !initialLoaded)) {
+  if (viewer.status === "loading" || (rtLoading && !initialLoaded && !viewer.isAnonymous)) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-white text-xl">Loading tournaments...</div>
@@ -444,8 +444,18 @@ export default function TournamentsPage() {
     );
   }
 
-  if (!session) {
-    return null; // Redirecting to signin
+  if (viewer.isAnonymous) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white">
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <GuestGate
+            title="Tournaments"
+            description="Sign in to create and play tournaments, or continue as a guest to browse them and join through an invite link."
+            returnTo={currentHref}
+          />
+        </div>
+      </div>
+    );
   }
 
   return (
