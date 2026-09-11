@@ -52,6 +52,9 @@ import type {
 import type { MatchTimerConfig } from "@/lib/net/transport";
 
 // Map context TournamentInfo to protocol TournamentInfo
+// Seconds the pulsing "Joining" button counts down before entering the match.
+const AUTO_JOIN_SECONDS = 3;
+
 function mapToProtocolTournament(tournament: {
   id: string;
   name: string;
@@ -839,6 +842,10 @@ function LobbyPageContent({
   // Overlay for configuring and confirming match start (host)
   const [configOpen, setConfigOpen] = useState(false);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  // Auto-join countdown: players who are already in a match are taken into it
+  // automatically; the pulsing button is the interrupt (it leaves the match).
+  const [autoJoinIn, setAutoJoinIn] = useState<number | null>(null);
+  const [autoJoinCancelled, setAutoJoinCancelled] = useState(false);
   // Create match overlay state (shared between MatchmakingPanel and LobbiesCentral)
   const [createMatchOverlayOpen, setCreateMatchOverlayOpen] = useState(false);
 
@@ -1226,21 +1233,30 @@ function LobbyPageContent({
     return false;
   }, [match, me?.id]);
 
+  // Match CTA. Once you are a player in the match you are already *in* it, so
+  // the button reads as an active state ("Joining") rather than an action you
+  // still have to perform - pulsing to draw the eye. Opting out is the
+  // separate Leave Match button next to it.
   const matchCta = useMemo(() => {
     if (!match || !isPlayerInMatch)
-      return { label: "", disabled: true } as const;
+      return { label: "", disabled: true, pulse: false } as const;
     if (match.status === "ended")
-      return { label: "Match Ended", disabled: true } as const;
+      return { label: "Match Ended", disabled: true, pulse: false } as const;
 
     // Draft-specific phases
     if (match.matchType === "draft") {
       if (match.status === "waiting") {
-        return { label: "Join Draft Session", disabled: false } as const;
+        return {
+          label: "Joining Draft Session",
+          disabled: false,
+          pulse: true,
+        } as const;
       }
       if (match.status === "deck_construction" && !hasSubmittedForMatch.draft) {
         return {
           label: "Join Deck Construction for Draft",
           disabled: false,
+          pulse: true,
         } as const;
       }
     }
@@ -1254,20 +1270,73 @@ function LobbyPageContent({
       return {
         label: "Join Deck Construction for Sealed",
         disabled: false,
+        pulse: true,
       } as const;
     }
 
-    // Waiting/default should always say Join (avoid confusing "Rejoin" wording before first entry)
+    // Waiting: you are already in - host is still configuring the match
     if (match.status === "waiting")
-      return { label: "Join Match", disabled: false } as const;
+      return { label: "Joining", disabled: false, pulse: true } as const;
 
     // In-progress
     if (match.status === "in_progress")
-      return { label: "Rejoin Game", disabled: false } as const;
+      return { label: "Rejoin Game", disabled: false, pulse: true } as const;
 
     // Fallback
-    return { label: "Join Match", disabled: false } as const;
+    return { label: "Joining", disabled: false, pulse: true } as const;
   }, [match, hasSubmittedForMatch, isPlayerInMatch]);
+
+  // Reset the interrupt flag whenever we are looking at a different match.
+  useEffect(() => {
+    setAutoJoinCancelled(false);
+  }, [match?.id]);
+
+  // Count down, then navigate into the match. Only for playable statuses -
+  // sealed/draft deck construction keeps its explicit CTA.
+  useEffect(() => {
+    const id = match?.id;
+    const status = match?.status;
+    if (
+      !id ||
+      !isPlayerInMatch ||
+      autoJoinCancelled ||
+      leaveConfirmOpen ||
+      (status !== "waiting" && status !== "in_progress")
+    ) {
+      setAutoJoinIn(null);
+      return;
+    }
+    // Only ever auto-join a given match once per browser session, so coming
+    // back to the lobby from a match does not bounce the player straight back.
+    const seenKey = `auto_joined_${id}`;
+    try {
+      if (sessionStorage.getItem(seenKey) === "true") {
+        setAutoJoinIn(null);
+        return;
+      }
+    } catch {}
+    setAutoJoinIn(AUTO_JOIN_SECONDS);
+    const tick = setInterval(() => {
+      setAutoJoinIn((n) => (n === null ? null : Math.max(0, n - 1)));
+    }, 1000);
+    const go = setTimeout(() => {
+      try {
+        sessionStorage.setItem(seenKey, "true");
+      } catch {}
+      router.push(`/online/play/${encodeURIComponent(id)}`);
+    }, AUTO_JOIN_SECONDS * 1000);
+    return () => {
+      clearInterval(tick);
+      clearTimeout(go);
+    };
+  }, [
+    match?.id,
+    match?.status,
+    isPlayerInMatch,
+    autoJoinCancelled,
+    leaveConfirmOpen,
+    router,
+  ]);
 
   // Auto-start logic: once the host has confirmed setup at least once for
   // this lobby, automatically start the match as soon as there are at least
@@ -1508,14 +1577,30 @@ function LobbyPageContent({
                 {match.status.replaceAll("_", " ")}
                 {match.lobbyName ? ` • ${match.lobbyName}` : ""}
               </div>
+              {/* Single toggle: it is ON ("Joining") by default and auto-enters
+                  the match; clicking it interrupts and leaves the match. */}
               <button
-                className={`rounded-lg px-4 py-2 text-sm font-semibold shadow ${
+                className={`rounded-lg px-4 py-2 text-sm font-semibold shadow transition-colors ${
                   matchCta.disabled
                     ? "bg-slate-700/80 text-slate-300 cursor-not-allowed"
+                    : autoJoinIn !== null
+                    ? "bg-emerald-600 hover:bg-red-600 text-white ring-2 ring-emerald-400/70 shadow-lg shadow-emerald-500/30 animate-pulse"
+                    : autoJoinCancelled
+                    ? "bg-blue-600/90 hover:bg-blue-600"
+                    : matchCta.pulse
+                    ? "bg-emerald-600 hover:bg-emerald-500 text-white ring-2 ring-emerald-400/70 shadow-lg shadow-emerald-500/30 animate-pulse"
                     : "bg-blue-600/90 hover:bg-blue-600"
                 }`}
                 onClick={() => {
-                  if (!matchCta.disabled && match?.id) {
+                  if (matchCta.disabled) return;
+                  if (autoJoinIn !== null) {
+                    // Interrupt the auto-join and offer to leave the match.
+                    setAutoJoinCancelled(true);
+                    setAutoJoinIn(null);
+                    setLeaveConfirmOpen(true);
+                    return;
+                  }
+                  if (match?.id) {
                     router.push(`/online/play/${encodeURIComponent(match.id)}`);
                   }
                 }}
@@ -1523,18 +1608,28 @@ function LobbyPageContent({
                 title={
                   matchCta.disabled
                     ? "Match has ended"
+                    : autoJoinIn !== null
+                    ? "You are joining automatically - click to interrupt and leave the match"
                     : `Go to match ${match.id}`
                 }
               >
-                {matchCta.label}
+                {autoJoinIn !== null
+                  ? `Joining in ${autoJoinIn}… — click to leave`
+                  : autoJoinCancelled
+                  ? "Enter Match"
+                  : matchCta.label}
               </button>
-              <button
-                className="rounded bg-red-600/80 hover:bg-red-600 px-4 py-2 text-sm font-medium transition-colors"
-                onClick={() => setLeaveConfirmOpen(true)}
-                title="Leave current match"
-              >
-                Leave Match
-              </button>
+              {/* Once the auto-join has been interrupted the toggle turns into
+                  an enter action, so keep a compact way back out. */}
+              {autoJoinIn === null && !matchCta.disabled && (
+                <button
+                  className="rounded px-2 py-2 text-xs text-red-300/80 hover:text-red-200 underline underline-offset-2"
+                  onClick={() => setLeaveConfirmOpen(true)}
+                  title="Leave current match"
+                >
+                  Leave
+                </button>
+              )}
             </div>
           </div>
         )}

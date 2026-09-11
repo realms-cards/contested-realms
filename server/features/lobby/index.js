@@ -2154,69 +2154,9 @@ function createLobbyFeature(deps) {
             } catch {}
           }
 
-          // Pick a random precon deck for the bot
-          let constructedDeck = null;
-          try {
-            if (prisma) {
-              const decks = await prisma.deck.findMany({
-                where: {
-                  isPublic: true,
-                  format: "Constructed",
-                  name: { startsWith: "Beta Precon" },
-                },
-                include: { cards: { include: { card: true } } },
-              });
-              const configs = decks
-                .map((deck) => {
-                  try {
-                    const spellAgg = new Map();
-                    const atlasAgg = new Map();
-                    for (const dc of deck.cards || []) {
-                      const name = dc.card?.name || "";
-                      const count = Number(dc.count || 1);
-                      if (!name || count <= 0) continue;
-                      const map =
-                        dc.zone === "Atlas"
-                          ? atlasAgg
-                          : dc.zone === "Sideboard"
-                            ? null
-                            : spellAgg;
-                      if (!map) continue;
-                      map.set(name, (map.get(name) || 0) + count);
-                    }
-                    const toArr = (m) =>
-                      Array.from(m.entries()).map(([name, count]) => ({
-                        name,
-                        count,
-                      }));
-                    const cfg = {
-                      spellbook: toArr(spellAgg),
-                      atlas: toArr(atlasAgg),
-                    };
-                    return cfg.spellbook.length && cfg.atlas.length
-                      ? cfg
-                      : null;
-                  } catch {
-                    return null;
-                  }
-                })
-                .filter(Boolean);
-              if (configs.length > 0) {
-                constructedDeck =
-                  configs[Math.floor(Math.random() * configs.length)];
-                console.log(
-                  `[Bot] Assigned precon deck to ${displayName}: ${constructedDeck.spellbook.length} spells, ${constructedDeck.atlas.length} sites`,
-                );
-              }
-            }
-          } catch (e) {
-            try {
-              console.warn(
-                "[Bot] Failed to load precon for bot:",
-                e?.message || e,
-              );
-            } catch {}
-          }
+          // Versioned precons include their avatar and work without public deck rows.
+          const precons = require(require("path").resolve(process.cwd(), "data/precons/beta.json"));
+          const constructedDeck = precons[Math.floor(Math.random() * precons.length)];
 
           const bot = new BotClient({
             serverUrl,
@@ -2242,7 +2182,7 @@ function createLobbyFeature(deps) {
     });
 
     // ---------- Solo vs CPU: atomic lobby + bot + match creation ----------
-    socket.on("startCpuMatch", async () => {
+    socket.on("startCpuMatch", async (payload = {}) => {
       console.log("[CpuMatch] startCpuMatch received", {
         authed: isAuthed(),
         cpuEnabled: CPU_BOTS_ENABLED,
@@ -2290,7 +2230,8 @@ function createLobbyFeature(deps) {
           visibility: "private",
           maxPlayers: 2,
         });
-        lobby.plannedMatchType = "constructed";
+        const cpuMatchType = payload.mode === "goldfish" ? "constructed" : "precon";
+        lobby.plannedMatchType = cpuMatchType;
         host.lobbyId = lobby.id;
         lobby.playerIds.add(host.id);
         lobby.ready.add(host.id);
@@ -2328,64 +2269,10 @@ function createLobbyFeature(deps) {
           } catch {}
         }
 
-        // 4. Pick a random precon deck for the bot
-        let constructedDeck = null;
-        try {
-          if (prisma) {
-            const decks = await prisma.deck.findMany({
-              where: {
-                isPublic: true,
-                format: "Constructed",
-                name: { startsWith: "Beta Precon" },
-              },
-              include: { cards: { include: { card: true } } },
-            });
-            const configs = decks
-              .map((deck) => {
-                try {
-                  const spellAgg = new Map();
-                  const atlasAgg = new Map();
-                  for (const dc of deck.cards || []) {
-                    const name = dc.card?.name || "";
-                    const count = Number(dc.count || 1);
-                    if (!name || count <= 0) continue;
-                    const map =
-                      dc.zone === "Atlas"
-                        ? atlasAgg
-                        : dc.zone === "Sideboard"
-                          ? null
-                          : spellAgg;
-                    if (!map) continue;
-                    map.set(name, (map.get(name) || 0) + count);
-                  }
-                  const toArr = (m) =>
-                    Array.from(m.entries()).map(([name, count]) => ({
-                      name,
-                      count,
-                    }));
-                  const cfg = {
-                    spellbook: toArr(spellAgg),
-                    atlas: toArr(atlasAgg),
-                  };
-                  return cfg.spellbook.length && cfg.atlas.length ? cfg : null;
-                } catch {
-                  return null;
-                }
-              })
-              .filter(Boolean);
-            if (configs.length > 0) {
-              constructedDeck =
-                configs[Math.floor(Math.random() * configs.length)];
-            }
-          }
-        } catch (e) {
-          try {
-            console.warn(
-              "[CpuMatch] Failed to load precon for bot:",
-              e?.message || e,
-            );
-          } catch {}
-        }
+        // 4. Select a fixed Beta precon, preserving its avatar identity.
+        const precons = require(require("path").resolve(process.cwd(), "data/precons/beta.json"));
+        const constructedDeck = precons.find(deck => deck.id === payload.preconId)
+          || precons[Math.floor(Math.random() * precons.length)];
 
         // 5. Spawn the bot
         const bot = new BotClient({
@@ -2427,7 +2314,7 @@ function createLobbyFeature(deps) {
 
         // 7. Mark bot as ready and start the match
         lobby.ready.add(botId);
-        const res = await startMatchFromLobby(host, "constructed");
+        const res = await startMatchFromLobby(host, cpuMatchType);
         if (!res || !res.ok) {
           socket.emit("cpuMatchError", {
             message: res?.error || "Failed to start match",

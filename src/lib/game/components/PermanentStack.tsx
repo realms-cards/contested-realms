@@ -11,10 +11,9 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { Group, MathUtils } from "three";
-import { pendingOrigins } from "@/lib/game/cardAnimOrigins";
 import { getGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { BodyApi, getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
-import { detectSpellcasterSync } from "@/lib/game/cardAbilities";
+import { pendingOrigins } from "@/lib/game/cardAnimOrigins";
 import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
 import ResolverOutline from "@/lib/game/components/ResolverOutline";
@@ -40,7 +39,12 @@ import type {
   PlayerKey,
 } from "@/lib/game/store/types";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
-import { buildProjectileTarget } from "@/lib/game/store/utils/magicTargeting";
+import {
+  buildProjectileTarget,
+  isMagicCasterCandidate,
+  isMagicTargetCandidate,
+  MAGIC_CANDIDATE_COLOR,
+} from "@/lib/game/store/utils/magicTargeting";
 import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
 // Silenced token uses the Silence spell's card art
@@ -119,6 +123,7 @@ type CombatContext = {
 type MagicContext = {
   pendingMagic: GameState["pendingMagic"];
   avatars: GameState["avatars"];
+  sites: GameState["board"]["sites"];
   setMagicTargetChoice: GameState["setMagicTargetChoice"];
   setMagicCasterChoice: GameState["setMagicCasterChoice"];
   computeProjectileFirstHits: ComputeProjectileHits;
@@ -449,6 +454,7 @@ export function PermanentStack({
   const {
     pendingMagic,
     avatars: magicAvatars,
+    sites: magicSites,
     setMagicTargetChoice,
     setMagicCasterChoice,
     computeProjectileFirstHits,
@@ -671,9 +677,25 @@ export function PermanentStack({
           ) {
             roleGlow = HIGHLIGHT_TARGET;
           }
-          // NOTE: "Potential target" highlighting is disabled until we can provide
-          // accurate hints for every spell type. Only selected caster/target are highlighted.
-          // The magic interaction flow (caster/target selection) still works.
+          // What the caster may click next: eligible spellcasters first, then
+          // eligible targets for the spell's mode and range.
+          if (
+            !roleGlow &&
+            (isMagicCasterCandidate(
+              pendingMagic,
+              { kind: "permanent", at: key as CellKey, index: idx },
+              { permanents, sites: magicSites },
+            ) ||
+              (!p.attachedTo &&
+                isMagicTargetCandidate(
+                  pendingMagic,
+                  magicAvatars,
+                  { x: tileX, y: tileY },
+                  "permanent",
+                )))
+          ) {
+            roleGlow = MAGIC_CANDIDATE_COLOR;
+          }
         }
 
         const showPermanentGlow =
@@ -830,16 +852,21 @@ export function PermanentStack({
                   if (amActor && actorIsActive) {
                     e.stopPropagation();
                     if (pendingMagic.status === "choosingCaster") {
-                      if (p.owner === pendingMagic.spell.owner) {
-                        const nm = p.card?.name || "";
-                        if (nm && detectSpellcasterSync(nm)) {
-                          setMagicCasterChoice({
-                            kind: "permanent",
-                            at: key as CellKey,
-                            index: idx,
-                            owner: p.owner as 1 | 2,
-                          });
-                        }
+                      // Spellcaster minions, Omphalos-style artifacts, and
+                      // anything a borne artifact or its site turns into one.
+                      if (
+                        isMagicCasterCandidate(
+                          pendingMagic,
+                          { kind: "permanent", at: key as CellKey, index: idx },
+                          { permanents, sites: magicSites },
+                        )
+                      ) {
+                        setMagicCasterChoice({
+                          kind: "permanent",
+                          at: key as CellKey,
+                          index: idx,
+                          owner: p.owner as 1 | 2,
+                        });
                       }
                       return;
                     }

@@ -1,10 +1,16 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { extractMagicTargetingHintsSync } from "@/lib/game/cardAbilities";
+import {
+  extractMagicTargetingHintsSync,
+  isSpellcasterCard,
+  isSpellcasterGrantingArtifact,
+  isSpellcasterGrantingSite,
+} from "@/lib/game/cardAbilities";
 import { createGameStore } from "@/lib/game/store";
 import type { CardRef, CellKey, GameState } from "@/lib/game/store";
 import {
   buildProjectileTarget,
   getMagicOrigin,
+  isMagicCasterCandidate,
   isTileInMagicRange,
   projectileDirection,
 } from "@/lib/game/store/utils/magicTargeting";
@@ -184,6 +190,10 @@ describe("guide flow echo suppression", () => {
       tile: { x: 2, y: 3 },
       spell: { at, index: 0, instanceId: "inst_spell", owner: 1, card: spellCard },
     });
+    // The player chooses who casts; nothing is preselected.
+    expect(store.getState().pendingMagic?.status).toBe("choosingCaster");
+    expect(store.getState().pendingMagic?.caster).toBeNull();
+    store.getState().setMagicCasterChoice({ kind: "avatar", seat: "p1" });
     const pending = store.getState().pendingMagic;
     expect(pending?.status).toBe("choosingTarget");
     expect(pending?.caster).toEqual({ kind: "avatar", seat: "p1" });
@@ -337,5 +347,120 @@ describe("magic targeting intention", () => {
     expect(
       buildProjectileTarget(pending, avatars, { x: 3, y: 1 }, null, hits),
     ).toBeNull();
+  });
+});
+
+describe("spellcaster identification", () => {
+  it("recognises casters that are not minions", () => {
+    // Artifacts that cast on their own
+    for (const n of [
+      "Algor Omphalos",
+      "Char Omphalos",
+      "Dank Omphalos",
+      "Torrid Omphalos",
+      "Wicker Manikin",
+    ])
+      expect({ n, is: isSpellcasterCard(n) }).toEqual({ n, is: true });
+    // Sites that cast on their own
+    for (const n of ["River of Flame", "Merlin's Tower"])
+      expect({ n, is: isSpellcasterCard(n) }).toEqual({ n, is: true });
+    // Minions, including the two whose keyword line carries an element
+    for (const n of [
+      "Apprentice Wizard",
+      "Merlin",
+      "Skeleton Mage",
+      "Lava Salamander",
+      "Earl of the Ivory Towers",
+    ])
+      expect({ n, is: isSpellcasterCard(n) }).toEqual({ n, is: true });
+  });
+
+  it("does not treat cards that merely mention Spellcasters as casters", () => {
+    for (const n of [
+      "Maddening Bells",
+      "Peacemaker Arbalest",
+      "Book of the Dead",
+      "De Vermis Mysteriis",
+      "The Malleus Maleficarum",
+      "Standing Stones",
+      "Merlin's Staff",
+      "Hand of Glory",
+    ])
+      expect({ n, is: isSpellcasterCard(n) }).toEqual({ n, is: false });
+    // A reference in rules text must not promote an unknown card either
+    expect(
+      isSpellcasterCard("Some New Card", "Gain 2 for each allied Spellcaster."),
+    ).toBe(false);
+    // ...but a real keyword line on an unknown card should count
+    expect(isSpellcasterCard("Some New Card", "Water Spellcaster")).toBe(true);
+  });
+
+  it("knows which artifacts and sites grant Spellcaster to others", () => {
+    for (const n of [
+      "Merlin's Staff",
+      "Hand of Glory",
+      "Eerie Coral",
+      "Mandrake Jars",
+      "Sensu of the Fang",
+      "Wiccan Tools",
+    ])
+      expect({ n, g: isSpellcasterGrantingArtifact(n) }).toEqual({ n, g: true });
+    expect(isSpellcasterGrantingArtifact("Book of the Dead")).toBe(false);
+    expect(isSpellcasterGrantingSite("Standing Stones")).toBe(true);
+    expect(isSpellcasterGrantingSite("River of Flame")).toBe(false);
+  });
+
+  it("offers sites, artifacts and granted minions as casters", () => {
+    const at = "1,1" as CellKey;
+    const pending = {
+      id: "mag",
+      tile: { x: 1, y: 1 },
+      spell: { at, index: 0, owner: 1 as const, card: spellCard },
+      caster: null,
+      target: null,
+      status: "choosingCaster" as const,
+      createdAt: 0,
+    };
+    const unit = (name: string, extra: Record<string, unknown> = {}) => ({
+      owner: 1 as const,
+      card: { cardId: 1, name, type: "Minion" } as CardRef,
+      instanceId: `i_${name}`,
+      ...extra,
+    });
+    const ctx = {
+      permanents: {
+        [at]: [
+          unit("Apprentice Wizard"), // 0: caster by keyword
+          unit("Char Omphalos"), // 1: artifact that casts itself
+          unit("Sir Lancelot"), // 2: plain minion
+          unit("Merlin's Staff", {
+            attachedTo: { at, index: 2 },
+          }), // 3: grants to index 2
+        ],
+        "2,2": [unit("Sir Lancelot")], // plain minion on Standing Stones
+        "3,3": [{ ...unit("Sir Lancelot"), owner: 2 as const }],
+      },
+      sites: {
+        [at]: { owner: 1 as const, card: { cardId: 2, name: "Plains" } },
+        "2,2": { owner: 1 as const, card: { cardId: 3, name: "Standing Stones" } },
+        "4,4": { owner: 1 as const, card: { cardId: 4, name: "River of Flame" } },
+        "5,5": { owner: 2 as const, card: { cardId: 4, name: "River of Flame" } },
+      },
+    } as unknown as Parameters<typeof isMagicCasterCandidate>[2];
+
+    const can = (c: Parameters<typeof isMagicCasterCandidate>[1]) =>
+      isMagicCasterCandidate(pending, c, ctx);
+
+    expect(can({ kind: "avatar", seat: "p1" })).toBe(true);
+    expect(can({ kind: "avatar", seat: "p2" })).toBe(false);
+    expect(can({ kind: "permanent", at, index: 0 })).toBe(true); // wizard
+    expect(can({ kind: "permanent", at, index: 1 })).toBe(true); // Omphalos
+    expect(can({ kind: "permanent", at, index: 2 })).toBe(true); // bears the staff
+    expect(can({ kind: "permanent", at, index: 3 })).toBe(false); // the staff itself
+    expect(can({ kind: "permanent", at: "2,2" as CellKey, index: 0 })).toBe(true); // Standing Stones
+    expect(can({ kind: "permanent", at: "3,3" as CellKey, index: 0 })).toBe(false); // opponent's
+    expect(can({ kind: "site", at: "4,4" as CellKey })).toBe(true); // River of Flame
+    expect(can({ kind: "site", at: "5,5" as CellKey })).toBe(false); // opponent's site
+    expect(can({ kind: "site", at })).toBe(false); // ordinary site
   });
 });

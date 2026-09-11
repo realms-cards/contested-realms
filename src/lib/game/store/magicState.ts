@@ -1,8 +1,12 @@
 import type { StateCreator } from "zustand";
 import { extractMagicTargetingHintsSync } from "@/lib/game/cardAbilities";
+import { abilityChoices } from "@/lib/game/cpu/abilities";
+import { applySpellChoice } from "@/lib/game/cpu/applySpellChoice";
+import { luckyCharmCount } from "@/lib/game/cpu/luckyCharm";
+import { getSpellChoice, getSpellChoices, supportsSpell } from "@/lib/game/cpu/spells";
 import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import type { CustomMessage } from "@/lib/net/transport";
-import type { CellKey, GameState } from "./types";
+import type { CellKey, GameState, PlayerKey } from "./types";
 import { getCellNumber, seatFromOwner } from "./utils/boardHelpers";
 
 function newMagicId() {
@@ -14,6 +18,11 @@ function newMagicId() {
 export type MagicSlice = Pick<
   GameState,
   | "pendingMagic"
+  | "setCpuMagicChoice"
+  | "activateCpuAbility"
+  | "chooseCpuTrigger"
+  | "finishCpuEffect"
+  | "completeCpuMagicManual"
   | "beginMagicCast"
   | "setMagicCasterChoice"
   | "setMagicTargetChoice"
@@ -27,16 +36,89 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
   get,
 ) => ({
   pendingMagic: null,
+  finishCpuEffect: ({pending,label,ability}) => {
+    const instanceId = pending.spell.instanceId || pending.spell.card.instanceId;
+    if (instanceId && !pending.cpuEvent && !ability) {
+      for (const [cell,units] of Object.entries(get().permanents)) {
+        const index = units.findIndex(unit => (unit.instanceId || unit.card.instanceId) === instanceId);
+        if (index>=0) { get().movePermanentToZone(cell,index,"graveyard"); break; }
+      }
+    }
+    const privateCpuChoice = pending.cpuEvent?.kind === "genesis" && seatFromOwner(pending.spell.owner) !== get().actorKey &&
+      ["Observatory","Autumn River","Spring River","Summer River"].includes(pending.spell.card.name);
+    get().log(`${pending.spell.card.name}: ${privateCpuChoice ? "resolved its private deck choice" : label}`);
+    get().flushPendingPatches();
+    get().transport?.sendMessage?.({type:"magicResolve",id:pending.id,spell:pending.spell,tile:pending.tile} as unknown as CustomMessage);
+  },
+  chooseCpuTrigger: (id) => {
+    if (get().cpuTriggerOptions?.some(option => option.id === id)) set({cpuChosenTrigger:id});
+  },
+  activateCpuAbility: (key, requestedSeat, requestId) => {
+    const state = get(), seat = requestedSeat || state.actorKey;
+    if (!state.opponentPlayerId?.startsWith("cpu_") || !seat) return;
+    if (requestId && state.cpuAbilityReceipts?.includes(requestId)) {
+      if (state.pendingMagic?.id === requestId || state.cpuEffectContinuations?.some(frame => frame.completion?.pending.id === requestId)) return;
+      state.transport?.sendMessage?.({type:"magicResolve",id:requestId} as unknown as CustomMessage);
+      return;
+    }
+    if (requestId) set({cpuAbilityReceipts:[...(state.cpuAbilityReceipts || []).slice(-99),requestId]});
+    const choice = state.matchEnded ? undefined : abilityChoices(state,seat).find(choice => choice.key === key);
+    const id = requestId || newMagicId();
+    if (choice) {
+      const source = choice.source, [x,y] = source.at.split(",").map(Number);
+      // Hold the normal resolution lock while paying costs and applying effects.
+      const spell = {at:source.at,index:-1,owner:seat === "p1" ? 1 as const : 2 as const,instanceId:id,card:source.card};
+      set({pendingMagic:{id,tile:{x,y},spell,status:"confirm",createdAt:Date.now()}});
+      state.transport?.sendMessage?.({type:"magicBegin",id,tile:{x,y},spell} as unknown as CustomMessage);
+      const pending = get().pendingMagic;
+      if (!pending) return;
+      const complete = applySpellChoice(set,get,choice,Math.random,{pending,label:choice.label,ability:true});
+      set({pendingMagic:null});
+      if (complete) get().finishCpuEffect({pending,label:choice.label,ability:true});
+      return;
+    }
+    // Also release the bot's request lock when a stale choice is rejected.
+    state.transport?.sendMessage?.({type:"magicResolve",id} as unknown as CustomMessage);
+  },
+
+  completeCpuMagicManual: () => {
+    const state = get(), pending = state.pendingMagic;
+    if (!state.opponentPlayerId?.startsWith("cpu_") || !pending ||
+        state.actorKey !== seatFromOwner(pending.spell.owner) || supportsSpell(pending.spell.card.name || "")) return;
+    set({ pendingMagic: null });
+    const instanceId = pending.spell.instanceId || pending.spell.card.instanceId;
+    if (instanceId && pending.spell.card.type === "Magic") {
+      for (const [at,units] of Object.entries(get().permanents)) {
+        const index = units.findIndex(unit => (unit.instanceId || unit.card.instanceId) === instanceId);
+        if (index >= 0) { get().movePermanentToZone(at,index,"graveyard"); break; }
+      }
+    }
+    get().log(`${pending.spell.card.name}: effect resolved manually.`);
+    get().transport?.sendMessage?.({ type: "magicResolve", id: pending.id, spell: pending.spell, tile: pending.tile } as unknown as CustomMessage);
+    get().checkMatchEnd();
+  },
+
+  setCpuMagicChoice: (key) => {
+    const state = get();
+    const pending = state.pendingMagic;
+    if (!pending || !state.opponentPlayerId?.startsWith("cpu_") ||
+        state.actorKey !== seatFromOwner(pending.spell.owner)) return;
+    const choice = getSpellChoice(state, seatFromOwner(pending.spell.owner), pending.spell.card.name || "", key);
+    if (!choice) return;
+    set({ pendingMagic: { ...pending, cpuChoice: key, caster: choice.caster, target: choice.target, status: "choosingTarget" } });
+    state.transport?.sendMessage?.({ type: "cpuMagicChoice", id: pending.id, key } as unknown as CustomMessage);
+  },
 
   beginMagicCast: (input) => {
     const id = newMagicId();
     const spell = input.spell;
     const tile = input.tile;
     const createdAt = Date.now();
-    const magicGuidesActive = get().magicGuidesActive;
+    const magicGuidesActive = get().magicGuidesActive || get().opponentPlayerId?.startsWith("cpu_");
     const ownerSeat = seatFromOwner(spell.owner);
-    const autoCaster =
-      input.presetCaster ?? ({ kind: "avatar", seat: ownerSeat } as const);
+    // The player picks who casts (avatar or a Spellcaster minion) unless the
+    // caller already knows (e.g. an ability cast from a specific minion).
+    const presetCaster = input.presetCaster ?? null;
 
     // When magic guides are disabled, skip the targeting flow entirely
     // to prevent pendingMagic from blocking board interactions
@@ -75,9 +157,9 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
         id,
         tile,
         spell,
-        caster: autoCaster,
+        caster: presetCaster,
         target: null,
-        status: "choosingTarget",
+        status: presetCaster ? "choosingTarget" : "choosingCaster",
         hints,
         createdAt,
         guidesSuppressed: cardHasResolver,
@@ -133,13 +215,14 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
           type: "toast",
           text: `Casting '${cardName}' at #${cellNo}`,
         } as unknown as CustomMessage);
-        // Immediately broadcast chosen caster (avatar by default)
-        transport.sendMessage({
-          type: "magicSetCaster",
-          id,
-          caster: autoCaster,
-          ts: Date.now(),
-        } as unknown as CustomMessage);
+        if (presetCaster) {
+          transport.sendMessage({
+            type: "magicSetCaster",
+            id,
+            caster: presetCaster,
+            ts: Date.now(),
+          } as unknown as CustomMessage);
+        }
       } catch {}
     }
   },
@@ -275,6 +358,42 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
   resolveMagic: () => {
     const pending = get().pendingMagic;
     if (!pending) return;
+    if (get().opponentPlayerId?.startsWith("cpu_") && !pending.cpuEvent && !supportsSpell(pending.spell.card.name || "")) {
+      get().log("This effect requires manual resolution. Confirm completion in the CPU guide when finished.");
+      return;
+    }
+    if (get().opponentPlayerId?.startsWith("cpu_") && (pending.cpuEvent || supportsSpell(pending.spell.card.name || ""))) {
+      const choice = getSpellChoice(get(), seatFromOwner(pending.spell.owner), pending.spell.card.name || "", pending.cpuChoice);
+      if (!choice) {
+        set({ pendingMagic: { ...pending, status: "choosingTarget" } });
+        get().log("Choose a legal spell effect before resolving.");
+        return;
+      }
+      if (choice.operations.some(op => op.kind === "raise" && !op.to)) {
+        const eligible = (["p1","p2"] as PlayerKey[]).flatMap(fromSeat => get().zones[fromSeat].graveyard
+          .map((card,graveyardIndex) => ({card,fromSeat,graveyardIndex})).filter(item => item.card.type === "Minion"));
+        if (eligible.length) {
+          const seat = seatFromOwner(pending.spell.owner);
+          const options = Array.from({length:1+luckyCharmCount(get(),seat)},() => eligible[Math.floor(Math.random()*eligible.length)]);
+          const cpuRandomMinion = options[0];
+          set({pendingMagic:{...pending,cpuRandomMinion,cpuRandomMinionOptions:options.length>1 ? options : undefined,cpuChoice:undefined,status:"choosingTarget"}});
+          get().log(options.length>1 ? `Lucky Charm revealed ${options.map(option => option.card.name).join(" or ")}. Choose a result and where to summon it.` : `Raise Dead selected ${cpuRandomMinion.card.name}. Choose where to summon it.`);
+          if (get().actorKey !== seat) {
+            const summon = getSpellChoices(get(),seat,"Raise Dead").sort((a,b) => b.score-a.score)[0];
+            const current = get().pendingMagic;
+            if (summon && current) {
+              set({pendingMagic:{...current,cpuChoice:summon.key,status:"confirm"}});
+              get().resolveMagic();
+            }
+          }
+          return;
+        }
+      }
+      // Claim resolution before applying effects; incoming echoes cannot replay it.
+      set({ pendingMagic: null });
+      if (applySpellChoice(set,get,choice,Math.random,{pending,label:choice.label})) get().finishCpuEffect({pending,label:choice.label});
+      return;
+    }
     const at = pending.spell.at as CellKey;
     const index = Number(pending.spell.index);
 
@@ -555,6 +674,10 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
   },
 
   cancelMagic: () => {
+    if (get().pendingMagic?.cpuRandomMinion || get().pendingMagic?.cpuEvent) {
+      get().log("This effect has already begun resolving. Finish its remaining choices.");
+      return;
+    }
     const pending = get().pendingMagic;
     if (!pending) return;
     try {

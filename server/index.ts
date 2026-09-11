@@ -762,6 +762,7 @@ const {
 const matchLeaderService: MatchLeaderService = createMatchLeaderService({
   io,
   storeRedis,
+  matchControlChannel: MATCH_CONTROL_CHANNEL,
   prisma,
   players,
   getOrLoadMatch,
@@ -809,6 +810,7 @@ const {
   applyAction: leaderApplyAction,
   joinMatch: leaderJoinMatch,
   handleMulliganDone: leaderHandleMulliganDone,
+  handleClientReady: leaderHandleClientReady,
   handleInteractionRequest: leaderHandleInteractionRequest,
   handleInteractionResponse: leaderHandleInteractionResponse,
 } = matchLeaderService;
@@ -935,6 +937,7 @@ registerPubSubListeners({
   safeErrorMessage,
   getOrClaimMatchLeader,
   ensurePlayerCached,
+  applyPlayerMatchAssociation,
   leaderJoinMatch,
   leaderApplyAction,
   leaderHandleInteractionRequest,
@@ -945,6 +948,7 @@ registerPubSubListeners({
   leaderMakeDraftPick,
   leaderChooseDraftPack,
   leaderHandleMulliganDone,
+  leaderHandleClientReady,
   cleanupMatchNow,
   getOrClaimLobbyLeader,
   handleLobbyControlAsLeader,
@@ -1263,6 +1267,9 @@ async function finalizeMatch(
       // Keep sockets connected so players can review the final board,
       // but ensure server-side state no longer treats them as in-match.
     }
+    // Other instances hold their own copy of the player record, so clear the
+    // association there too instead of leaving it pointing at an ended match.
+    publishPlayerMatchDetach(pid, match.id);
   }
   broadcastPlayers();
 
@@ -1651,6 +1658,40 @@ function getPlayerBySocket(
   const pid = playerIdBySocket.get(socket.id);
   if (!pid) return null;
   return players.get(pid) || null;
+}
+
+/**
+ * Mirror the match leader's roster decision onto this instance.
+ *
+ * Actions are handled by the instance the player's socket is connected to, but
+ * joinMatch only runs on the match leader. Without this, a player connected to
+ * a non-leader instance keeps `matchId: null` locally and every action they
+ * send is silently dropped, even though broadcasts still reach them.
+ */
+function publishPlayerMatchDetach(playerId: string, matchId: string): void {
+  if (!storeRedis) return;
+  try {
+    void storeRedis.publish(
+      MATCH_CONTROL_CHANNEL,
+      JSON.stringify({ type: "player:match", matchId, playerId, attached: false }),
+    );
+  } catch {
+    // best effort
+  }
+}
+
+function applyPlayerMatchAssociation(
+  playerId: string,
+  matchId: string,
+  attached: boolean,
+): void {
+  const player = players.get(playerId);
+  if (!player) return;
+  if (attached) {
+    player.matchId = matchId;
+  } else if (player.matchId === matchId) {
+    player.matchId = null;
+  }
 }
 
 // Ensure basic player profile is cached locally; fetch displayName from Redis if needed
@@ -3003,6 +3044,30 @@ io.on("connection", async (socket: SocketClient) => {
     } catch {}
   });
 
+  socket.on("clientReady", async () => {
+    if (!authed) return;
+    const player = getPlayerBySocket(socket);
+    if (!player || !player.matchId) return;
+    const matchId = player.matchId;
+    try {
+      const leader = await getOrClaimMatchLeader(matchId);
+      if (leader && leader !== INSTANCE_ID) {
+        if (storeRedis)
+          await storeRedis.publish(
+            MATCH_CONTROL_CHANNEL,
+            JSON.stringify({
+              type: "client:ready",
+              matchId,
+              playerId: player.id,
+              socketId: socket.id,
+            }),
+          );
+        return;
+      }
+      await leaderHandleClientReady(matchId, player.id, socket.id);
+    } catch {}
+  });
+
   socket.on("joinMatch", async (payload) => {
     if (!authed) return;
     const matchId = payload && payload.matchId;
@@ -4075,9 +4140,9 @@ io.on("connection", async (socket: SocketClient) => {
                 : null;
             const amount = Number(d.amount);
             if (!seat || !Number.isFinite(amount)) return null;
-            return { seat, amount: Math.max(0, Math.floor(amount)) };
+            return { seat, amount: Math.max(0, Math.floor(amount)), isAvatarDamage: d.isAvatarDamage === true };
           })
-          .filter((entry): entry is { seat: "p1" | "p2"; amount: number } =>
+          .filter((entry): entry is { seat: "p1" | "p2"; amount: number; isAvatarDamage: boolean } =>
             Boolean(entry),
           );
         const out = {
@@ -4234,7 +4299,7 @@ io.on("connection", async (socket: SocketClient) => {
         const msg = payload as { id?: unknown; caster?: unknown };
         const id = typeof msg.id === "string" ? msg.id : rid("mag");
         let caster: {
-          kind: "avatar" | "permanent";
+          kind: "avatar" | "permanent" | "site";
           seat?: "p1" | "p2";
           at?: string;
           index?: number;
@@ -4244,10 +4309,14 @@ io.on("connection", async (socket: SocketClient) => {
           if (msg.caster && typeof msg.caster === "object") {
             const c = msg.caster as Record<string, unknown>;
             const kind =
-              c.kind === "avatar" || c.kind === "permanent"
-                ? (c.kind as "avatar" | "permanent")
+              c.kind === "avatar" || c.kind === "permanent" || c.kind === "site"
+                ? (c.kind as "avatar" | "permanent" | "site")
                 : null;
-            if (kind === "avatar") {
+            // Sites cast too (River of Flame, Merlin's Tower).
+            if (kind === "site") {
+              const at = typeof c.at === "string" ? (c.at as string) : null;
+              if (at) caster = { kind: "site", at };
+            } else if (kind === "avatar") {
               const seat =
                 c.seat === "p1" || c.seat === "p2"
                   ? (c.seat as "p1" | "p2")
@@ -4617,6 +4686,20 @@ io.on("connection", async (socket: SocketClient) => {
           io.to(`spectate:${matchId}`).emit("message", out);
         } catch {}
       } catch {}
+    } else if (type === "cpuHumanReady") {
+      const match = await getOrLoadMatch(matchId);
+      if (!match?.playerIds.some(isCpuPlayerId) || isCpuPlayerId(player.id)) return;
+      const playerKey = getSeatForPlayer(match,player.id);
+      if (!playerKey) return;
+      io.to(`match:${matchId}`).emit("message",{type,matchId,playerKey,visible:(payload as {visible?: unknown}).visible !== false,ts:Date.now()});
+    } else if (type === "cpuMagicChoice" || type === "cpuActivateAbility") {
+      const match = await getOrLoadMatch(matchId);
+      if (!match?.playerIds.some(isCpuPlayerId)) return;
+      if (type === "cpuActivateAbility" && !isCpuPlayerId(player.id)) return;
+      const playerKey = getSeatForPlayer(match, player.id);
+      const choice = payload as { id?: unknown; key?: unknown };
+      if (!playerKey || typeof choice.id !== "string" || choice.id.length > 256 || typeof choice.key !== "string" || choice.key.length > 4096) return;
+      io.to(`match:${matchId}`).emit("message", { type, id: choice.id, key: choice.key, playerKey, ts: Date.now() });
     } else if (isResolverRelayMessage(type)) {
       // Resolver messages - broadcast to match room
       try {

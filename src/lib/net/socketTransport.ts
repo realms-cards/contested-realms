@@ -754,6 +754,13 @@ export class SocketTransport implements GameTransport {
       socket.on("statePatch", (payload) =>
         this.dispatch("statePatch", Protocol.StatePatchPayload.parse(payload)),
       );
+      socket.on("matchReady", (payload) => {
+        try {
+          this.dispatch("matchReady", Protocol.MatchReadyPayload.parse(payload));
+        } catch (err) {
+          console.error("[Transport] matchReady payload failed to parse", err);
+        }
+      });
       // D20 acknowledgment - server confirms receipt of D20 roll
       socket.on("d20Ack", (payload) => {
         const p = payload as {
@@ -1193,6 +1200,14 @@ export class SocketTransport implements GameTransport {
     );
   }
 
+  // Board readiness signal (per-player): art + scene finished loading
+  clientReady(): void {
+    this.requireSocket().emit(
+      "clientReady",
+      Protocol.ClientReadyPayload.parse({}),
+    );
+  }
+
   sendChat(content: string, scope?: ChatScope): void {
     this.requireSocket().emit(
       "chat",
@@ -1285,9 +1300,9 @@ export class SocketTransport implements GameTransport {
     this.requireSocket().emit("addCpuBot", displayName ? { displayName } : {});
   }
 
-  startCpuMatch(): void {
+  startCpuMatch(preconId?: string, mode: "precon" | "goldfish" = "precon"): void {
     // Atomically create lobby + bot + start match for solo vs CPU.
-    this.requireSocket().emit("startCpuMatch", {});
+    this.requireSocket().emit("startCpuMatch", { preconId, mode });
   }
 
   removeCpuBot(playerId?: string): void {

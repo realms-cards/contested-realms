@@ -1,5 +1,6 @@
 import type { StateCreator } from "zustand";
 import { soundManager } from "@/lib/audio/soundManager";
+import { changeLife, lifeTurnKey } from "@/lib/game/cpu/life";
 import type {
   CellKey,
   GameState,
@@ -362,7 +363,17 @@ export const createCoreSlice: StateCreator<
 
       // Imposter mask breaking is manual only - no automatic triggers
 
-      if (newLife > 20) {
+      const cpuMatch = state.opponentPlayerId?.startsWith("cpu_") === true;
+      const cpuLife = cpuMatch
+        ? changeLife(
+            state.players[who], delta, _isAvatarDamage === true,
+            lifeTurnKey(state.turn, state.currentPlayer),
+          )
+        : null;
+      if (cpuLife) {
+        newLife = cpuLife.life;
+        newLifeState = cpuLife.lifeState;
+      } else if (newLife > 20) {
         newLife = 20;
       } else if (newLife <= 0) {
         if (currentLifeState === "alive") {
@@ -383,6 +394,7 @@ export const createCoreSlice: StateCreator<
             ...state.players[who],
             life: newLife,
             lifeState: newLifeState,
+            ...(cpuLife ? { deathsDoorTurn: cpuLife.deathsDoorTurn } : {}),
           },
         },
       };
@@ -460,6 +472,11 @@ export const createCoreSlice: StateCreator<
 
   nextPhase: () => {
     const state = get();
+    if (state.opponentPlayerId?.startsWith("cpu_") && state.transport && state.phase === "End") return;
+    if (state.opponentPlayerId?.startsWith("cpu_") && (state.pendingMagic || state.pendingCombat || state.cpuPendingTriggerCount || state.cpuEffectContinuations?.length)) {
+      state.log("Finish the current interaction before advancing the phase.");
+      return;
+    }
     // In online play, only the current player can advance the phase
     if (state.transport && state.actorKey) {
       const currentSeat = state.currentPlayer === 1 ? "p1" : "p2";
@@ -585,6 +602,17 @@ export const createCoreSlice: StateCreator<
 
   endTurn: () => {
     const state = get();
+    if (state.opponentPlayerId?.startsWith("cpu_") && state.transport && state.phase === "End") return;
+    if (state.opponentPlayerId?.startsWith("cpu_") && state.transport && state.phase !== "End" &&
+        Object.values(state.permanents).some(items => items.some(item => ["Wildfire","Thunderstorm","Entangle Terrain"].includes(item.card.name)))) {
+      if (state.pendingMagic || state.pendingCombat || state.cpuPendingTriggerCount || state.cpuEffectContinuations?.length || state.actorKey !== (state.currentPlayer === 1 ? "p1" : "p2")) return;
+      state.transport.sendAction({currentPlayer:state.currentPlayer === 1 ? 2 : 1,phase:"Start"});
+      return;
+    }
+    if (state.opponentPlayerId?.startsWith("cpu_") && (state.pendingMagic || state.pendingCombat || state.cpuPendingTriggerCount || state.cpuEffectContinuations?.length)) {
+      state.log("Finish the current interaction before ending your turn.");
+      return;
+    }
     if (state.matchEnded) {
       console.debug("[game] endTurn ignored after match ended");
       return;

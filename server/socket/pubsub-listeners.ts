@@ -19,6 +19,12 @@ export interface PubSubListenerDeps {
   safeErrorMessage: (err: unknown) => unknown;
   getOrClaimMatchLeader: (matchId: string) => Promise<string | null>;
   ensurePlayerCached: (playerId: string) => Promise<unknown>;
+  /** Applied on every instance so a player's own instance can route their actions */
+  applyPlayerMatchAssociation?: (
+    playerId: string,
+    matchId: string,
+    attached: boolean
+  ) => void;
   leaderJoinMatch: (
     matchId: string,
     playerId: string,
@@ -68,6 +74,11 @@ export interface PubSubListenerDeps {
     matchId: string,
     playerId: string
   ) => Promise<void>;
+  leaderHandleClientReady: (
+    matchId: string,
+    playerId: string,
+    socketId?: string | null
+  ) => Promise<void>;
   cleanupMatchNow: (
     matchId: string,
     reason: string,
@@ -89,6 +100,7 @@ export function registerPubSubListeners({
   safeErrorMessage,
   getOrClaimMatchLeader,
   ensurePlayerCached,
+  applyPlayerMatchAssociation,
   leaderJoinMatch,
   leaderApplyAction,
   leaderHandleInteractionRequest,
@@ -99,6 +111,7 @@ export function registerPubSubListeners({
   leaderMakeDraftPick,
   leaderChooseDraftPack,
   leaderHandleMulliganDone,
+  leaderHandleClientReady,
   cleanupMatchNow,
   getOrClaimLobbyLeader,
   handleLobbyControlAsLeader,
@@ -162,6 +175,19 @@ export function registerPubSubListeners({
       if (!msgType) return;
       const { matchId } = msg as { matchId?: string };
       if (!matchId) return;
+
+      // Applied on EVERY instance, not just the leader: this is how a player's
+      // own instance learns which match to route their actions to.
+      if (msgType === "player:match") {
+        if (msg.playerId && applyPlayerMatchAssociation) {
+          applyPlayerMatchAssociation(
+            String(msg.playerId),
+            matchId,
+            msg.attached !== false
+          );
+        }
+        return;
+      }
 
       try {
         const leader = await getOrClaimMatchLeader(matchId);
@@ -243,6 +269,12 @@ export function registerPubSubListeners({
           });
         } else if (msgType === "mulligan:done" && msg.playerId) {
           await leaderHandleMulliganDone(matchId, String(msg.playerId));
+        } else if (msgType === "client:ready" && msg.playerId) {
+          await leaderHandleClientReady(
+            matchId,
+            String(msg.playerId),
+            (msg.socketId as string | null) ?? null
+          );
         } else if (msgType === "match:cleanup" && msg.reason) {
           await cleanupMatchNow(
             matchId,

@@ -1,4 +1,5 @@
 import { create, type StateCreator } from "zustand";
+import { installCpuController } from "@/lib/game/cpu/controller";
 import { createAccusationSlice } from "./store/accusationState";
 import { createAnimistSlice } from "./store/animistState";
 import { createAnnualFairSlice } from "./store/annualFairState";
@@ -467,7 +468,11 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
     }),
 });
 
-export const createGameStore = () => create<GameState>(createGameStoreState);
+export const createGameStore = () => {
+  const store = create<GameState>(createGameStoreState);
+  installCpuController(store);
+  return store;
+};
 
 export const useGameStore = createGameStore();
 setTransportStateAccessor(useGameStore.getState);

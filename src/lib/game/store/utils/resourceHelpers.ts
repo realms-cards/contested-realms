@@ -3,6 +3,7 @@ import {
   isHarbinger,
   isTemplar,
 } from "@/lib/game/avatarAbilities";
+import { affectedByAura } from "@/lib/game/cpu/auras";
 import {
   ADJACENT_SILENCER_NO_THRESHOLD,
   AURA_SITE_MODIFIERS,
@@ -387,6 +388,7 @@ export const siteHasFloodedAbility = (
   if (siteHasDisabledToken(cellKey, permanents)) return false;
   if (siteHasSilencedToken(cellKey, permanents)) return false;
   if (siteHasFloodedToken(cellKey, permanents)) return true;
+  if (affectedByAura(permanents,cellKey,"Flood")) return true;
   return !!specialSiteState?.realmFlooded;
 };
 
@@ -636,6 +638,7 @@ export const computeThresholdTotals = (ctx: ResourceContext): Thresholds => {
     // sites. A site that already provides water is unchanged.
     if (
       !floodedByAtlanteanFate &&
+      siteName !== "bedrock" &&
       siteHasFloodedAbility(cellKey, permanents, specialSiteState) &&
       siteThresholds.water <= 0
     ) {
@@ -761,7 +764,7 @@ export const computeAvailableMana = (ctx: ResourceContext): number => {
   };
 
   for (const [cellKey, tile] of Object.entries(board?.sites ?? {})) {
-    if (!tile) continue;
+    if (!tile || tile.cpuNeutral) continue;
     const rawName = String(tile.card?.name || "").toLowerCase();
 
     // Opponent's City of Plenty: when its owner has the water threshold it

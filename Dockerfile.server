@@ -11,8 +11,12 @@ COPY tsconfig.json ./tsconfig.json
 COPY prisma ./prisma
 COPY server ./server
 COPY bots ./bots
+# Bots require these CommonJS modules at their original relative paths.
+COPY src/lib/game/cpu/*.js src/lib/game/cpu/cards.json ./src/lib/game/cpu/
 # Only copy data files needed by the server (not card art/textures)
 COPY data/cards_raw.json ./data/cards_raw.json
+COPY data/mana-providers.json ./data/mana-providers.json
+COPY data/precons ./data/precons
 COPY data/bots ./data/bots
 COPY data/cards ./data/cards
 COPY scripts ./scripts
@@ -38,11 +42,13 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/data ./data
 COPY --from=builder /app/bots ./bots
+COPY --from=builder /app/src/lib/game/cpu ./src/lib/game/cpu
 COPY --from=builder /app/reference ./reference
 
 # Generate Prisma client with production deps
 RUN npm run prisma:generate
 RUN test -f dist/server/index.js
+RUN node scripts/check-cpu-runtime.js
 
 EXPOSE 3010
 

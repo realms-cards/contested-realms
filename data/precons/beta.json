@@ -1,0 +1,550 @@
+[
+  {
+    "id": "fire",
+    "name": "Beta Precon – Fire",
+    "avatar": "Flamecaller",
+    "spellbook": [
+      {
+        "name": "Wildfire",
+        "count": 1
+      },
+      {
+        "name": "Askelon Phoenix",
+        "count": 1
+      },
+      {
+        "name": "Blaze",
+        "count": 1
+      },
+      {
+        "name": "Clamor of Harpies",
+        "count": 1
+      },
+      {
+        "name": "Colicky Dragonettes",
+        "count": 1
+      },
+      {
+        "name": "Cone of Flame",
+        "count": 1
+      },
+      {
+        "name": "Escyllion Cyclops",
+        "count": 1
+      },
+      {
+        "name": "Fireball",
+        "count": 1
+      },
+      {
+        "name": "Firebolts",
+        "count": 2
+      },
+      {
+        "name": "Heat Ray",
+        "count": 1
+      },
+      {
+        "name": "Hillock Basilisk",
+        "count": 1
+      },
+      {
+        "name": "Incinerate",
+        "count": 1
+      },
+      {
+        "name": "Infernal Legion",
+        "count": 1
+      },
+      {
+        "name": "Lava Salamander",
+        "count": 1
+      },
+      {
+        "name": "Mad Dash",
+        "count": 1
+      },
+      {
+        "name": "Major Explosion",
+        "count": 1
+      },
+      {
+        "name": "Minor Explosion",
+        "count": 2
+      },
+      {
+        "name": "Ogre Goons",
+        "count": 3
+      },
+      {
+        "name": "Petrosian Cavalry",
+        "count": 1
+      },
+      {
+        "name": "Pit Vipers",
+        "count": 2
+      },
+      {
+        "name": "Quarrelsome Kobolds",
+        "count": 1
+      },
+      {
+        "name": "Raal Dromedary",
+        "count": 2
+      },
+      {
+        "name": "Rimland Nomads",
+        "count": 2
+      },
+      {
+        "name": "Sacred Scarabs",
+        "count": 2
+      },
+      {
+        "name": "Sand Worm",
+        "count": 2
+      },
+      {
+        "name": "Wayfaring Pilgrim",
+        "count": 2
+      }
+    ],
+    "atlas": [
+      {
+        "name": "Arid Desert",
+        "count": 4
+      },
+      {
+        "name": "Cornerstone",
+        "count": 1
+      },
+      {
+        "name": "Red Desert",
+        "count": 4
+      },
+      {
+        "name": "Remote Desert",
+        "count": 4
+      },
+      {
+        "name": "Shifting Sands",
+        "count": 2
+      },
+      {
+        "name": "Vesuvius",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "earth",
+    "name": "Beta Precon – Earth",
+    "avatar": "Geomancer",
+    "spellbook": [
+      {
+        "name": "Entangle Terrain",
+        "count": 1
+      },
+      {
+        "name": "Amazon Warriors",
+        "count": 2
+      },
+      {
+        "name": "Autumn Unicorn",
+        "count": 2
+      },
+      {
+        "name": "Belmotte Longbowmen",
+        "count": 3
+      },
+      {
+        "name": "Border Militia",
+        "count": 1
+      },
+      {
+        "name": "Bury",
+        "count": 2
+      },
+      {
+        "name": "Cave Trolls",
+        "count": 3
+      },
+      {
+        "name": "Cave-In",
+        "count": 1
+      },
+      {
+        "name": "Craterize",
+        "count": 1
+      },
+      {
+        "name": "Dalcean Phalanx",
+        "count": 1
+      },
+      {
+        "name": "Divine Healing",
+        "count": 1
+      },
+      {
+        "name": "House Arn Bannerman",
+        "count": 2
+      },
+      {
+        "name": "King of the Realm",
+        "count": 1
+      },
+      {
+        "name": "Land Surveyor",
+        "count": 2
+      },
+      {
+        "name": "Mountain Giant",
+        "count": 1
+      },
+      {
+        "name": "Overpower",
+        "count": 2
+      },
+      {
+        "name": "Payload Trebuchet",
+        "count": 1
+      },
+      {
+        "name": "Pudge Butcher",
+        "count": 1
+      },
+      {
+        "name": "Rolling Boulder",
+        "count": 1
+      },
+      {
+        "name": "Scent Hounds",
+        "count": 2
+      },
+      {
+        "name": "Siege Ballista",
+        "count": 1
+      },
+      {
+        "name": "Slumbering Giantess",
+        "count": 1
+      },
+      {
+        "name": "Wild Boars",
+        "count": 2
+      },
+      {
+        "name": "Wraetannis Titan",
+        "count": 1
+      }
+    ],
+    "atlas": [
+      {
+        "name": "Bedrock",
+        "count": 1
+      },
+      {
+        "name": "Holy Ground",
+        "count": 1
+      },
+      {
+        "name": "Humble Village",
+        "count": 3
+      },
+      {
+        "name": "Quagmire",
+        "count": 2
+      },
+      {
+        "name": "Rustic Village",
+        "count": 3
+      },
+      {
+        "name": "Simple Village",
+        "count": 3
+      },
+      {
+        "name": "Sinkhole",
+        "count": 1
+      },
+      {
+        "name": "Vantage Hills",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "id": "air",
+    "name": "Beta Precon – Air",
+    "avatar": "Sparkmage",
+    "spellbook": [
+      {
+        "name": "Thunderstorm",
+        "count": 1
+      },
+      {
+        "name": "Apprentice Wizard",
+        "count": 2
+      },
+      {
+        "name": "Blink",
+        "count": 2
+      },
+      {
+        "name": "Chain Lightning",
+        "count": 2
+      },
+      {
+        "name": "Cloud Spirit",
+        "count": 2
+      },
+      {
+        "name": "Dead of Night Demon",
+        "count": 2
+      },
+      {
+        "name": "Grandmaster Wizard",
+        "count": 1
+      },
+      {
+        "name": "Gyre Hippogriffs",
+        "count": 1
+      },
+      {
+        "name": "Headless Haunt",
+        "count": 2
+      },
+      {
+        "name": "Highland Clansmen",
+        "count": 1
+      },
+      {
+        "name": "Kite Archer",
+        "count": 1
+      },
+      {
+        "name": "Lightning Bolt",
+        "count": 3
+      },
+      {
+        "name": "Lucky Charm",
+        "count": 1
+      },
+      {
+        "name": "Midnight Rogue",
+        "count": 2
+      },
+      {
+        "name": "Nimbus Jinn",
+        "count": 1
+      },
+      {
+        "name": "Plumed Pegasus",
+        "count": 2
+      },
+      {
+        "name": "Raise Dead",
+        "count": 1
+      },
+      {
+        "name": "Roaming Monster",
+        "count": 1
+      },
+      {
+        "name": "Skirmishers of Mu",
+        "count": 1
+      },
+      {
+        "name": "Sling Pixies",
+        "count": 1
+      },
+      {
+        "name": "Snow Leopard",
+        "count": 2
+      },
+      {
+        "name": "Spectral Stalker",
+        "count": 2
+      },
+      {
+        "name": "Spire Lich",
+        "count": 1
+      },
+      {
+        "name": "Teleport",
+        "count": 1
+      }
+    ],
+    "atlas": [
+      {
+        "name": "Cloud City",
+        "count": 1
+      },
+      {
+        "name": "Dark Tower",
+        "count": 3
+      },
+      {
+        "name": "Gothic Tower",
+        "count": 3
+      },
+      {
+        "name": "Lone Tower",
+        "count": 3
+      },
+      {
+        "name": "Mountain Pass",
+        "count": 2
+      },
+      {
+        "name": "Observatory",
+        "count": 1
+      },
+      {
+        "name": "Planar Gate",
+        "count": 1
+      },
+      {
+        "name": "Updraft Ridge",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "id": "water",
+    "name": "Beta Precon – Water",
+    "avatar": "Waveshaper",
+    "spellbook": [
+      {
+        "name": "Flood",
+        "count": 1
+      },
+      {
+        "name": "Mariner's Curse",
+        "count": 1
+      },
+      {
+        "name": "Anui Undine",
+        "count": 2
+      },
+      {
+        "name": "Brobdingnag Bullfrog",
+        "count": 1
+      },
+      {
+        "name": "Coral-Reef Kelpie",
+        "count": 2
+      },
+      {
+        "name": "Deep-Sea Mermaids",
+        "count": 2
+      },
+      {
+        "name": "Diluvian Kraken",
+        "count": 1
+      },
+      {
+        "name": "Drown",
+        "count": 2
+      },
+      {
+        "name": "Font of Life",
+        "count": 1
+      },
+      {
+        "name": "Guile Sirens",
+        "count": 1
+      },
+      {
+        "name": "Ice Lance",
+        "count": 2
+      },
+      {
+        "name": "Pirate Ship",
+        "count": 2
+      },
+      {
+        "name": "Polar Bears",
+        "count": 2
+      },
+      {
+        "name": "Porcupine Pufferfish",
+        "count": 1
+      },
+      {
+        "name": "Riptide",
+        "count": 2
+      },
+      {
+        "name": "Sea Serpent",
+        "count": 2
+      },
+      {
+        "name": "Sedge Crabs",
+        "count": 1
+      },
+      {
+        "name": "Seirawan Hydra",
+        "count": 1
+      },
+      {
+        "name": "Stormy Seas",
+        "count": 1
+      },
+      {
+        "name": "Sunken Treasure",
+        "count": 1
+      },
+      {
+        "name": "Swamp Buffalo",
+        "count": 2
+      },
+      {
+        "name": "Swan Maidens",
+        "count": 1
+      },
+      {
+        "name": "Tide Naiads",
+        "count": 2
+      },
+      {
+        "name": "Tufted Turtles",
+        "count": 1
+      },
+      {
+        "name": "Wrath of the Sea",
+        "count": 1
+      }
+    ],
+    "atlas": [
+      {
+        "name": "Autumn River",
+        "count": 3
+      },
+      {
+        "name": "Floodplain",
+        "count": 2
+      },
+      {
+        "name": "Island Leviathan",
+        "count": 1
+      },
+      {
+        "name": "Maelström",
+        "count": 1
+      },
+      {
+        "name": "Spring River",
+        "count": 3
+      },
+      {
+        "name": "Summer River",
+        "count": 3
+      },
+      {
+        "name": "Undertow",
+        "count": 3
+      }
+    ]
+  }
+]

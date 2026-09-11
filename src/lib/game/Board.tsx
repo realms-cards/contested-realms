@@ -429,8 +429,13 @@ export default function Board({
   }, [setPlaymatUrl, localPlayerId]);
 
   // Fetch cardback selection for solo/hotseat mode (apply only to local player p2)
+  // In online mode, the play page fetches per-seat sleeves for both players;
+  // applying "my" sleeves here would stamp them onto whoever holds p2.
   const setCardbackUrls = useGameStore((s) => s.setCardbackUrls);
   useEffect(() => {
+    // Skip in online mode - play page handles this
+    if (localPlayerId || transport) return;
+
     const controller = new AbortController();
 
     const applyCardbacks = async () => {
@@ -483,7 +488,7 @@ export default function Board({
 
     void applyCardbacks();
     return () => controller.abort();
-  }, [setCardbackUrls]);
+  }, [setCardbackUrls, localPlayerId, transport]);
 
   // Calculate playmat bounds for drag clamping (same logic as matW/matH below)
   const matBounds = useMemo(() => {
@@ -1194,6 +1199,7 @@ export default function Board({
     () => ({
       pendingMagic,
       avatars,
+      sites: board.sites,
       setMagicTargetChoice,
       setMagicCasterChoice,
       computeProjectileFirstHits,
@@ -1202,6 +1208,7 @@ export default function Board({
     [
       pendingMagic,
       avatars,
+      board.sites,
       setMagicTargetChoice,
       setMagicCasterChoice,
       computeProjectileFirstHits,
@@ -1717,6 +1724,7 @@ export default function Board({
             magicContext={{
               pendingMagic,
               avatars,
+              sites: board.sites,
               setMagicCasterChoice,
               setMagicTargetChoice,
               computeProjectileFirstHits,

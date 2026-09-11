@@ -33,6 +33,7 @@ import CombatHudOverlay from "@/components/game/CombatHudOverlay";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
 import CorpseExplosionOverlay from "@/components/game/CorpseExplosionOverlay";
+import CpuBoardReady from "@/components/game/CpuBoardReady";
 import CrossroadsOverlay from "@/components/game/CrossroadsOverlay";
 import DemonicContractOverlay from "@/components/game/DemonicContractOverlay";
 import DholChantsOverlay from "@/components/game/DholChantsOverlay";
@@ -348,21 +349,23 @@ export default function OnlineMatchPage() {
             cache: "no-store",
             signal: controller.signal,
           });
-          if (res.ok) {
-            const data = (await res.json()) as {
-              selectedSpellbookRef?: string;
-              selectedAtlasRef?: string;
-            };
-            const { spellbookUrl, atlasUrl, spellbookPreset, atlasPreset } =
-              parseSleeveRefs(data, "/api/users/me/cardbacks");
-            setCardbackUrls(
-              resolvedSeat,
-              spellbookUrl,
-              atlasUrl,
-              spellbookPreset,
-              atlasPreset,
-            );
-          }
+          const data = res.ok
+            ? ((await res.json()) as {
+                selectedSpellbookRef?: string;
+                selectedAtlasRef?: string;
+              })
+            : {};
+          const { spellbookUrl, atlasUrl, spellbookPreset, atlasPreset } =
+            parseSleeveRefs(data, "/api/users/me/cardbacks");
+          // Always write, even when empty: this seat owns its sleeves, so a
+          // stale value from a previous match must be cleared, not inherited.
+          setCardbackUrls(
+            resolvedSeat,
+            spellbookUrl,
+            atlasUrl,
+            spellbookPreset,
+            atlasPreset,
+          );
         } catch {
           // Ignore fetch errors
         }
@@ -375,21 +378,23 @@ export default function OnlineMatchPage() {
             cache: "no-store",
             signal: controller.signal,
           });
-          if (res.ok) {
-            const data = (await res.json()) as {
-              selectedSpellbookRef?: string;
-              selectedAtlasRef?: string;
-            };
-            const { spellbookUrl, atlasUrl, spellbookPreset, atlasPreset } =
-              parseSleeveRefs(data, `/api/users/${opponentPlayerId}/cardbacks`);
-            setCardbackUrls(
-              opponentSeat,
-              spellbookUrl,
-              atlasUrl,
-              spellbookPreset,
-              atlasPreset,
-            );
-          }
+          const data = res.ok
+            ? ((await res.json()) as {
+                selectedSpellbookRef?: string;
+                selectedAtlasRef?: string;
+              })
+            : {};
+          const { spellbookUrl, atlasUrl, spellbookPreset, atlasPreset } =
+            parseSleeveRefs(data, `/api/users/${opponentPlayerId}/cardbacks`);
+          // Always write: an opponent without custom sleeves must fall back to
+          // the default backs, never keep whatever sat on this seat before.
+          setCardbackUrls(
+            opponentSeat,
+            spellbookUrl,
+            atlasUrl,
+            spellbookPreset,
+            atlasPreset,
+          );
         } catch {
           // Ignore fetch errors
         }
@@ -2302,6 +2307,42 @@ export default function OnlineMatchPage() {
     return () => window.clearTimeout(t);
   }, [setupOpen, assetsReady, matchId]);
 
+  // --- Board unlock handshake: the match only starts once BOTH clients have
+  // finished loading. The server stamps the match clock and broadcasts
+  // "matchReady"; until then we hold a curtain over the board so the turn
+  // announcement and the timer line up with the moment play is actually
+  // possible.
+  const [matchReady, setMatchReady] = useState(false);
+  const clientReadySentForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!transport || !matchId) return undefined;
+    return transport.on("matchReady", (p) => {
+      if (p.matchId !== matchId) return;
+      setMatchReady(true);
+    });
+  }, [transport, matchId]);
+  useEffect(() => {
+    if (!transport || !matchId || isSpectatorView) return;
+    if (!assetsReady || !bothPlayersReady || !portalSetupComplete) return;
+    if (clientReadySentForRef.current === matchId) return;
+    clientReadySentForRef.current = matchId;
+    try {
+      transport.clientReady?.();
+    } catch {
+      // A transport without the signal (older build) leaves the server's
+      // grace timer to unlock the board.
+    }
+  }, [
+    transport,
+    matchId,
+    isSpectatorView,
+    assetsReady,
+    bothPlayersReady,
+    portalSetupComplete,
+  ]);
+  // Spectators never gate the match; they watch as soon as their own art is in.
+  const boardReady = isSpectatorView ? assetsReady : matchReady;
+
   // Debug: page mount/unmount
   useEffect(() => {
     try {
@@ -2717,6 +2758,8 @@ export default function OnlineMatchPage() {
     setSoatcLeagueResult(null);
     setRematchInfo(null);
     setAssetsReady(false);
+    setMatchReady(false);
+    clientReadySentForRef.current = null;
     setAssetProgress(null);
     assetPrefetchForRef.current = null;
   }, [matchId]);
@@ -3226,7 +3269,7 @@ export default function OnlineMatchPage() {
                 {opponentPlayerId?.startsWith("cpu_") && (
                   <div className="bg-amber-950/60 border border-amber-700/40 rounded-xl px-5 py-4 space-y-2">
                     <h3 className="text-sm font-semibold uppercase tracking-wide text-amber-300">
-                      Experimental Mode
+                      {match?.matchType === "precon" ? "VS CPU Precons — Experimental" : "Goldfish — Experimental"}
                     </h3>
                     <ul className="text-xs text-amber-200/80 space-y-1 list-disc list-inside">
                       <li>
@@ -3234,13 +3277,13 @@ export default function OnlineMatchPage() {
                         rules errors, especially regarding card-specific rules
                       </li>
                       <li>
-                        Best used for goldfishing &mdash; getting a feel for how
-                        your deck shapes the board without strong opposition
+                        {match?.matchType === "precon" ? "Choose a Beta precon for guided tactical practice. Full rules automation is still in development." : "Test any deck against a CPU sparring partner. Unsupported interactions can be resolved manually."}
                       </li>
                     </ul>
                   </div>
                 )}
                 <OnlineDeckSelector
+                  cpuPreconsOnly={opponentPlayerId?.startsWith("cpu_") === true && match?.matchType === "precon"}
                   myPlayerKey={myPlayerKey}
                   playerNames={playerNames}
                   onPrepareComplete={() => setPrepared(true)}
@@ -3356,7 +3399,7 @@ export default function OnlineMatchPage() {
           <EndTurnConfirmDialog />
           {/* Turn Start Overlay - announces turn number and draw reminder */}
           <TurnStartOverlay
-            gameStarted={bothPlayersReady && portalSetupComplete}
+            gameStarted={bothPlayersReady && portalSetupComplete && boardReady}
           />
           {/* Audio Controls - hidden visually when uiHidden but stays mounted to keep music playing */}
           {uiHidden && !shouldShowDraft && (
@@ -3612,6 +3655,7 @@ export default function OnlineMatchPage() {
               <CombatHudOverlay />
               {/* Magic HUD Overlay (layout-level, not inside Canvas) */}
               <MagicHudOverlay />
+              <CpuBoardReady />
               {/* Chaos Twister Overlay (dexterity minigame) */}
               <ChaosTwisterOverlay transport={transport} />
               {/* Corpse Explosion Overlay (corpse assignment to 2x2 area) */}
@@ -3727,14 +3771,24 @@ export default function OnlineMatchPage() {
           {/* 3D Board Canvas - fills entire viewport */}
           {!setupOpen && (
             <div className="absolute inset-0 w-full h-full">
-              {!assetsReady && (
-                <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-sm pointer-events-none">
+              {!boardReady && (
+                <div
+                  className="fixed inset-0 z-[120] flex flex-col items-center justify-center bg-slate-950/95 backdrop-blur-sm"
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
                   <div className="text-white text-lg font-medium">
-                    Loading card art…
+                    {assetsReady
+                      ? "Waiting for opponent…"
+                      : "Loading card art…"}
                   </div>
-                  {assetProgress && (
+                  {!assetsReady && assetProgress && (
                     <div className="mt-2 text-sm text-slate-300">
                       {assetProgress.loaded} / {assetProgress.total}
+                    </div>
+                  )}
+                  {assetsReady && (
+                    <div className="mt-2 text-sm text-slate-300">
+                      The match starts once both players have loaded.
                     </div>
                   )}
                 </div>

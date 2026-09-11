@@ -1961,9 +1961,9 @@ export default function OnlineProvider({
         if (transport.addCpuBot) transport.addCpuBot(displayName);
       } catch {}
     },
-    startCpuMatch: () => {
+    startCpuMatch: (preconId?: string, mode?: "precon" | "goldfish") => {
       try {
-        if (transport.startCpuMatch) transport.startCpuMatch();
+        if (transport.startCpuMatch) transport.startCpuMatch(preconId, mode);
       } catch {}
     },
     removeCpuBot: (playerId?: string) => {

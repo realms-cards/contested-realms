@@ -1,5 +1,7 @@
 import type { StateCreator } from "zustand";
 import { isInterrogator } from "@/lib/game/avatarAbilities";
+import { resolveCpuCombat } from "@/lib/game/cpu/combat";
+import { unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
 import type { CustomMessage } from "@/lib/net/transport";
 import {
   getBoudiccaBonus,
@@ -21,6 +23,20 @@ import {
   seatFromOwner,
   toCellKey,
 } from "./utils/boardHelpers";
+
+function cpuCombatStats(state: GameState, at: string, index: number) {
+  if (!state.opponentPlayerId?.startsWith("cpu_")) return null;
+  const unit = unitsInRealm(state).find(unit => unit.target.kind === "permanent" && unit.target.at === at && unit.target.index === index);
+  if (!unit) return null;
+  const stats = unitStats(state, unit);
+  return { atk: stats.atk, def: Math.max(0, stats.def-unit.damage) };
+}
+
+function cpuAvatarPower(state: GameState, seat: PlayerKey | undefined) {
+  if (!state.opponentPlayerId?.startsWith("cpu_") || !seat) return null;
+  const unit = unitsInRealm(state).find(unit => unit.target.kind === "avatar" && unit.target.seat === seat);
+  return unit ? unitStats(state, unit).atk : null;
+}
 
 type CombatSlice = Pick<
   GameState,
@@ -92,6 +108,12 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
         console.error("[commitDefenders] Error sending combatCommit:", error);
       }
     }
+    // CPU attacks use the same resolver as human attacks. The human chooses
+    // defenders, then this store applies both sides' results exactly once.
+    if (get().opponentPlayerId?.startsWith("cpu_") &&
+        get().actorKey !== seatFromOwner(updated.attacker.owner)) {
+      get().autoResolveCombat();
+    }
   },
 
   setDamageAssignment: (assignment) => {
@@ -103,6 +125,8 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       at: string,
       index: number,
     ): { atk: number; def: number } {
+      const cpuStats = cpuCombatStats(get(), at, index);
+      if (cpuStats) return cpuStats;
       try {
         const card = (permanents as Permanents)[at]?.[index]?.card;
         if (!card) return { atk: 0, def: 0 };
@@ -185,7 +209,8 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
     }
 
     // setDamageAssignment is only used with multiple defenders, always fighting units
-    const eff = computeEffectiveAttack({
+    const cpuPower = pending.attacker.isAvatar ? cpuAvatarPower(get(), pending.attacker.avatarSeat) : null;
+    const eff = cpuPower !== null ? { atk: cpuPower, firstStrike: false } : computeEffectiveAttack({
       at: pending.attacker.at,
       index: pending.attacker.index,
       fightingUnit: true,
@@ -243,6 +268,10 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
 
   declareAttack: (tile, attacker, target) =>
     set((state) => {
+      if (state.opponentPlayerId?.startsWith("cpu_") && state.pendingMagic) {
+        state.log("Finish the current effect before declaring an attack.");
+        return state;
+      }
       const id = `cmb_${Date.now().toString(36)}_${Math.random()
         .toString(36)
         .slice(2, 6)}`;
@@ -426,6 +455,9 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
 
   offerIntercept: (tile, attacker) => {
     try {
+      const state = get();
+      const entity = attacker.isAvatar ? state.avatars[attacker.avatarSeat || seatFromOwner(attacker.owner)] : state.permanents[attacker.at]?.[attacker.index];
+      if (state.opponentPlayerId?.startsWith("cpu_") && entity?.cpuTurnEffect?.blaze && entity.cpuTurnEffect.turn === `${state.turn}:${state.currentPlayer}`) return;
       const defenderSeat = opponentSeat(seatFromOwner(attacker.owner));
       const key = toCellKey(tile.x, tile.y);
       const allPermanents = get().permanents as Permanents;
@@ -518,6 +550,10 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
   },
 
   resolveCombat: () => {
+    if (get().opponentPlayerId?.startsWith("cpu_")) {
+      resolveCpuCombat(set, get);
+      return;
+    }
     const pending = get().pendingCombat;
     if (!pending) return;
     const transport = get().transport;
@@ -535,6 +571,8 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       at: string,
       index: number,
     ): { atk: number; def: number } {
+      const cpuStats = cpuCombatStats(get(), at, index);
+      if (cpuStats) return cpuStats;
       try {
         const card = permanents[at]?.[index]?.card;
         if (!card) return { atk: 0, def: 0 };
@@ -647,7 +685,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       if (pending.attacker.isAvatar && pending.attacker.avatarSeat) {
         // Avatar attack power comes directly from the enriched avatar card
         const avatarCard = get().avatars?.[pending.attacker.avatarSeat]?.card;
-        const atk = Number(avatarCard?.attack ?? 1) || 1;
+        const atk = cpuAvatarPower(get(), pending.attacker.avatarSeat) ?? (Number(avatarCard?.attack ?? 1) || 1);
         return { atk, firstStrike: false };
       }
       return computeEffectiveAttack({
@@ -916,6 +954,10 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
   },
 
   autoResolveCombat: () => {
+    if (get().opponentPlayerId?.startsWith("cpu_")) {
+      resolveCpuCombat(set, get);
+      return;
+    }
     console.log("[autoResolveCombat] Called");
     const pending = get().pendingCombat;
     if (!pending) {
@@ -950,7 +992,8 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
     );
     if (actor) {
       const defenderMayResolve = Boolean(
-        isIntercept && defenderSeat && actor === defenderSeat,
+        (isIntercept && defenderSeat && actor === defenderSeat) ||
+        get().opponentPlayerId?.startsWith("cpu_"),
       );
       if (!defenderMayResolve && actor !== attackerSeat) {
         console.log(
@@ -992,6 +1035,8 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       at: string,
       index: number,
     ): { atk: number; def: number } {
+      const cpuStats = cpuCombatStats(get(), at, index);
+      if (cpuStats) return cpuStats;
       try {
         const card = (permanents as Permanents)[at]?.[index]?.card;
         if (!card) return { atk: 0, def: 0 };
@@ -1091,7 +1136,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
             get().avatars?.[pending.attacker.avatarSeat as PlayerKey]?.card;
           // Avatar attack is already on the CardRef from enrichCardRefs()
           // Default to 1 if not set (most avatars have 1 attack)
-          const atk = Number(avatarCard?.attack ?? 1) || 1;
+          const atk = cpuAvatarPower(get(), pending.attacker.avatarSeat) ?? (Number(avatarCard?.attack ?? 1) || 1);
           console.log(
             "[autoResolveCombat] Avatar attacker:",
             avatarCard?.name,

@@ -10,7 +10,7 @@ import AsciiMarquee from "@/components/ui/AsciiMarquee";
 import AsciiPanel from "@/components/ui/AsciiPanel";
 import LobbyFooter from "@/components/ui/LobbyFooter";
 import OtherRealms from "@/components/ui/OtherRealms";
-import { FEATURE_CPU_BOTS } from "@/lib/config/features";
+import { FEATURE_CPU_BOTS, FEATURE_VS_CPU_PRECONS } from "@/lib/config/features";
 import { fetchPatrons, isPatron } from "@/lib/patrons";
 
 export default function Home() {
@@ -173,6 +173,17 @@ export default function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 max-w-4xl mx-auto">
             {FEATURE_CPU_BOTS && (
               <AsciiPanel className="w-full p-5 md:p-6">
+                <Link href={userIsPatron ? "/play/goldfish" : "https://www.patreon.com/realmscards"} className="group block hover:scale-[1.02] transition-transform duration-200">
+                  <div className="flex flex-col items-center justify-center py-3 md:py-4">
+                    <span className="text-xs uppercase tracking-widest text-amber-400/80">Experimental</span>
+                    <h4 className="text-lg font-semibold tracking-wide">Goldfish — Any Deck</h4>
+                    <span className="text-xs text-slate-400 mt-1">{userIsPatron ? "Test your builds against CPU" : "Patrons only"}</span>
+                  </div>
+                </Link>
+              </AsciiPanel>
+            )}
+            {FEATURE_VS_CPU_PRECONS && (
+              <AsciiPanel className="w-full p-5 md:p-6">
                 {userIsPatron ? (
                   <Link
                     href="/play/vs-cpu"
@@ -183,7 +194,7 @@ export default function Home() {
                         Experimental
                       </span>
                       <h4 className="text-lg font-semibold tracking-wide">
-                        Goldfish with CPU
+                        VS CPU Precons
                       </h4>
                     </div>
                   </Link>
@@ -199,7 +210,7 @@ export default function Home() {
                         Experimental
                       </span>
                       <h4 className="text-lg font-semibold tracking-wide">
-                        Goldfish with CPU
+                        VS CPU Precons
                       </h4>
                       <span className="text-xs text-amber-400/70 mt-1">
                         Patrons only

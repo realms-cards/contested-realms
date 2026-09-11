@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createGameStore,
   type CellKey,
@@ -34,10 +34,12 @@ describe("combat state", () => {
   let store: ReturnType<typeof createGameStore>;
 
   beforeEach(() => {
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
     store = createGameStore();
     // Avoid accidental network traffic from tests
     store.setState({ transport: null } as Partial<GameState>);
   });
+  afterEach(() => { vi.restoreAllMocks(); });
 
   describe("setDamageAssignment", () => {
     const attackerKey = "1,1";

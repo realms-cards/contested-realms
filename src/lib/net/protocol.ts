@@ -380,6 +380,8 @@ export const ResyncRequestPayload = z.object({});
 export const PingPayload = z.object({ t: z.number() });
 // Mulligan sync: explicit per-player completion signal
 export const MulliganDonePayload = z.object({});
+// Board readiness: the client has finished loading art/scene and can play
+export const ClientReadyPayload = z.object({});
 
 // New Client -> Server payloads
 export const SetLobbyVisibilityPayload = z.object({
@@ -425,6 +427,7 @@ export type ChatPayloadT = z.infer<typeof ChatPayload>;
 export type ResyncRequestPayloadT = z.infer<typeof ResyncRequestPayload>;
 export type PingPayloadT = z.infer<typeof PingPayload>;
 export type MulliganDonePayloadT = z.infer<typeof MulliganDonePayload>;
+export type ClientReadyPayloadT = z.infer<typeof ClientReadyPayload>;
 export type SetLobbyVisibilityPayloadT = z.infer<
   typeof SetLobbyVisibilityPayload
 >;
@@ -510,6 +513,7 @@ export type ClientEventMap = {
   requestLobbies: RequestLobbiesPayloadT;
   requestPlayers: RequestPlayersPayloadT;
   mulliganDone: MulliganDonePayloadT;
+  clientReady: ClientReadyPayloadT;
   setLobbyPlan: SetLobbyPlanPayloadT;
   // Matchmaking
   joinMatchmaking: JoinMatchmakingPayloadT;
@@ -546,6 +550,12 @@ export const ResyncResponsePayload = z.object({
   snapshot: ResyncSnapshotSchema,
 });
 export const PongPayload = z.object({ t: z.number() });
+// Every seated player finished loading: unlock the board, start the clock
+export const MatchReadyPayload = z.object({
+  matchId: z.string(),
+  startedAt: z.number().optional(),
+  t: z.number().optional(),
+});
 export const LobbiesUpdatedPayload = z.object({
   lobbies: z.array(LobbyInfoSchema),
 });
@@ -578,6 +588,7 @@ export type StatePatchPayloadT = z.infer<typeof StatePatchPayload>;
 export type ServerChatPayloadT = z.infer<typeof ServerChatPayload>;
 export type ResyncResponsePayloadT = z.infer<typeof ResyncResponsePayload>;
 export type PongPayloadT = z.infer<typeof PongPayload>;
+export type MatchReadyPayloadT = z.infer<typeof MatchReadyPayload>;
 export type LobbiesUpdatedPayloadT = z.infer<typeof LobbiesUpdatedPayload>;
 export type PlayerListPayloadT = z.infer<typeof PlayerListPayload>;
 export type LobbyInvitePayloadT = z.infer<typeof LobbyInvitePayload>;
@@ -592,6 +603,7 @@ export type ServerEventMap = {
   matchStarted: MatchStartedPayloadT;
   matchEnded: { matchId: string; tournamentId?: string; reason?: string };
   statePatch: StatePatchPayloadT;
+  matchReady: MatchReadyPayloadT;
   chat: ServerChatPayloadT;
   resyncResponse: ResyncResponsePayloadT;
   pong: PongPayloadT;
@@ -628,6 +640,7 @@ export const Protocol = {
   RequestPlayersPayload,
   SetLobbyPlanPayload,
   MulliganDonePayload,
+  ClientReadyPayload,
   JoinMatchmakingPayload,
   LeaveMatchmakingPayload,
   RespondMatchmakingPayload,
@@ -638,6 +651,7 @@ export const Protocol = {
   LeftLobbyPayload,
   MatchStartedPayload,
   StatePatchPayload,
+  MatchReadyPayload,
   ServerChatPayload,
   ResyncResponsePayload,
   PongPayload,

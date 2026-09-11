@@ -1,0 +1,2246 @@
+{
+  "Flamecaller": {
+    "name": "Flamecaller",
+    "rarity": null,
+    "type": "Avatar",
+    "rulesText": "Tap → Play or draw a site.\r\n\r\nTap, Banish all your dead fire minions → Shoot a projectile. It deals damage equal to to the sum of their (F).",
+    "cost": null,
+    "attack": 1,
+    "defence": 1,
+    "life": 20,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Wildfire": {
+    "name": "Wildfire",
+    "rarity": "Exceptional",
+    "type": "Aura",
+    "rulesText": "Conjure Wildfire atop a single site nearby.\r\n\r\nAt the end of each turn, each unit here takes 3 damage, then move Wildfire to an adjacent location it hasn't visited before. If none remain, dispel Wildfire.",
+    "cost": 4,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Askelon Phoenix": {
+    "name": "Askelon Phoenix",
+    "rarity": "Elite",
+    "type": "Minion",
+    "rulesText": "UPDATED: Airborne\r\n\r\nIf Askelon Phoenix would take fire damage, it gains +1 power this turn instead.",
+    "cost": 5,
+    "attack": 4,
+    "defence": 4,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 2,
+      "water": 0
+    },
+    "subTypes": "Beast"
+  },
+  "Blaze": {
+    "name": "Blaze",
+    "rarity": "Exceptional",
+    "type": "Magic",
+    "rulesText": "This turn, give an ally Movement +2, it can't be intercepted, and it leaves a trail of fire at departed locations. When it stops, each unit along the trail takes 2 damage.",
+    "cost": 3,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Clamor of Harpies": {
+    "name": "Clamor of Harpies",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Airborne\r\n\r\nGenesis → Teleport target weaker minion to this location. Clamor of Harpies may strike it.",
+    "cost": 4,
+    "attack": 3,
+    "defence": 3,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": "Monster"
+  },
+  "Colicky Dragonettes": {
+    "name": "Colicky Dragonettes",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "At the end of your turn, Colicky Dragonettes shoot a projectile. It deals 1 damage.",
+    "cost": 3,
+    "attack": 3,
+    "defence": 3,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 2,
+      "water": 0
+    },
+    "subTypes": "Dragon"
+  },
+  "Cone of Flame": {
+    "name": "Cone of Flame",
+    "rarity": "Exceptional",
+    "type": "Magic",
+    "rulesText": "Choose a direction from the caster. Deal damage to each unit at a location in the area of effect:",
+    "cost": 6,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 2,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Escyllion Cyclops": {
+    "name": "Escyllion Cyclops",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Doesn’t strike back while defending.",
+    "cost": 6,
+    "attack": 6,
+    "defence": 6,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 2,
+      "water": 0
+    },
+    "subTypes": "Monster"
+  },
+  "Fireball": {
+    "name": "Fireball",
+    "rarity": "Exceptional",
+    "type": "Magic",
+    "rulesText": "Shoot a projectile. It deals 4 damage on impact, and 2 damage to each other unit at that location.",
+    "cost": 4,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 2,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Firebolts": {
+    "name": "Firebolts",
+    "rarity": "Ordinary",
+    "type": "Magic",
+    "rulesText": "Shoot three projectiles in the same direction, one at a time. Each deals 1 damage.",
+    "cost": 2,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Heat Ray": {
+    "name": "Heat Ray",
+    "rarity": "Ordinary",
+    "type": "Magic",
+    "rulesText": "UPDATED: Shoot a piercing projectile. Deal 2 damage to each hit unit.",
+    "cost": 3,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Hillock Basilisk": {
+    "name": "Hillock Basilisk",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Other minions at rest here or one step in front of Hillock Basilisk are disabled.",
+    "cost": 4,
+    "attack": 3,
+    "defence": 3,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": "Beast"
+  },
+  "Incinerate": {
+    "name": "Incinerate",
+    "rarity": "Ordinary",
+    "type": "Magic",
+    "rulesText": "Deal 4 damage to each other unit at target location near the caster or an allied Dragon.",
+    "cost": 5,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Infernal Legion": {
+    "name": "Infernal Legion",
+    "rarity": "Elite",
+    "type": "Minion",
+    "rulesText": "At the end of your turn, deal 3 damage to each other adjacent unit.",
+    "cost": 6,
+    "attack": 6,
+    "defence": 6,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 3,
+      "water": 0
+    },
+    "subTypes": "Undead"
+  },
+  "Lava Salamander": {
+    "name": "Lava Salamander",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Fire Spellcaster\r\n\r\nTakes no damage from fire spells.",
+    "cost": 2,
+    "attack": 1,
+    "defence": 1,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 2,
+      "water": 0
+    },
+    "subTypes": "Beast"
+  },
+  "Mad Dash": {
+    "name": "Mad Dash",
+    "rarity": "Ordinary",
+    "type": "Magic",
+    "rulesText": "Draw a card, then give an ally Movement +1 this turn.",
+    "cost": 2,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Major Explosion": {
+    "name": "Major Explosion",
+    "rarity": "Elite",
+    "type": "Magic",
+    "rulesText": "Target a location up to two steps away.\r\n\r\nDeal damage to each unit at locations in the area of effect:",
+    "cost": 7,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 2,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Minor Explosion": {
+    "name": "Minor Explosion",
+    "rarity": "Ordinary",
+    "type": "Magic",
+    "rulesText": "Deal 3 damage to each unit at target location up to two steps away.",
+    "cost": 3,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 2,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Ogre Goons": {
+    "name": "Ogre Goons",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "",
+    "cost": 3,
+    "attack": 3,
+    "defence": 3,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": "Ogre"
+  },
+  "Petrosian Cavalry": {
+    "name": "Petrosian Cavalry",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Charge",
+    "cost": 4,
+    "attack": 3,
+    "defence": 3,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": "Mortal"
+  },
+  "Pit Vipers": {
+    "name": "Pit Vipers",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Burrowing, Lethal",
+    "cost": 1,
+    "attack": 1,
+    "defence": 1,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": "Beast"
+  },
+  "Quarrelsome Kobolds": {
+    "name": "Quarrelsome Kobolds",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "At the end of your turn, Quarrelsome Kobolds strike themselves or another target adjacent unit.",
+    "cost": 3,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": "Goblin"
+  },
+  "Raal Dromedary": {
+    "name": "Raal Dromedary",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "",
+    "cost": 1,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": "Beast"
+  },
+  "Rimland Nomads": {
+    "name": "Rimland Nomads",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Movement +1\r\n\r\nTakes no damage from Deserts.",
+    "cost": 2,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": "Mortal"
+  },
+  "Sacred Scarabs": {
+    "name": "Sacred Scarabs",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Airborne\r\n\r\nDeathrite → Deal 3 damage to each unit here.",
+    "cost": 2,
+    "attack": 1,
+    "defence": 1,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": "Beast"
+  },
+  "Sand Worm": {
+    "name": "Sand Worm",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Burrowing, Landbound",
+    "cost": 4,
+    "attack": 4,
+    "defence": 4,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": "Beast"
+  },
+  "Wayfaring Pilgrim": {
+    "name": "Wayfaring Pilgrim",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Whenever Wayfaring Pilgrim enters each corner of the realm for the first time, you may draw a card.",
+    "cost": 2,
+    "attack": 1,
+    "defence": 1,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": "Mortal"
+  },
+  "Arid Desert": {
+    "name": "Arid Desert",
+    "rarity": "Ordinary",
+    "type": "Site",
+    "rulesText": "Genesis → Deal 1 damage to each minion atop target nearby site.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": "Desert"
+  },
+  "Cornerstone": {
+    "name": "Cornerstone",
+    "rarity": "Exceptional",
+    "type": "Site",
+    "rulesText": "You may play this site to any corner.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Red Desert": {
+    "name": "Red Desert",
+    "rarity": "Ordinary",
+    "type": "Site",
+    "rulesText": "Genesis → Deal 1 damage to each minion atop target nearby site.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": "Desert"
+  },
+  "Remote Desert": {
+    "name": "Remote Desert",
+    "rarity": "Ordinary",
+    "type": "Site",
+    "rulesText": "Genesis → Deal 1 damage to each minion atop target nearby site.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": "Desert"
+  },
+  "Shifting Sands": {
+    "name": "Shifting Sands",
+    "rarity": "Exceptional",
+    "type": "Site",
+    "rulesText": "Genesis → Reactivate the Genesis abilities of your nearby Deserts.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Vesuvius": {
+    "name": "Vesuvius",
+    "rarity": "Unique",
+    "type": "Site",
+    "rulesText": "(F)(F)(F) — Sacrifice Vesuvius → Each unit occupying nearby sites takes 3 damage.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Geomancer": {
+    "name": "Geomancer",
+    "rarity": null,
+    "type": "Avatar",
+    "rulesText": "Tap → Play or draw a site. If you played an earth site, fill a void adjacent to you with Rubble.\r\n\r\nTap → Replace an adjacent Rubble with the topmost site of your atlas.",
+    "cost": null,
+    "attack": 1,
+    "defence": 1,
+    "life": 20,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Entangle Terrain": {
+    "name": "Entangle Terrain",
+    "rarity": "Ordinary",
+    "type": "Aura",
+    "rulesText": "Minions occupying affected sites lose Airborne and are Immobile. Lasts 3 of your turns.",
+    "cost": 4,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 2,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Amazon Warriors": {
+    "name": "Amazon Warriors",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "",
+    "cost": 5,
+    "attack": 5,
+    "defence": 5,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Mortal"
+  },
+  "Autumn Unicorn": {
+    "name": "Autumn Unicorn",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "",
+    "cost": 3,
+    "attack": 4,
+    "defence": 4,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 2,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Beast"
+  },
+  "Belmotte Longbowmen": {
+    "name": "Belmotte Longbowmen",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Ranged",
+    "cost": 3,
+    "attack": 3,
+    "defence": 3,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Mortal"
+  },
+  "Border Militia": {
+    "name": "Border Militia",
+    "rarity": "Ordinary",
+    "type": "Magic",
+    "rulesText": "Summon a Foot Soldier token to each site you control that borders an enemy site.",
+    "cost": 3,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Bury": {
+    "name": "Bury",
+    "rarity": "Ordinary",
+    "type": "Magic",
+    "rulesText": "Burrow target minion or artifact, if able.",
+    "cost": 3,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Cave Trolls": {
+    "name": "Cave Trolls",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Burrowing",
+    "cost": 3,
+    "attack": 3,
+    "defence": 3,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Troll"
+  },
+  "Cave-In": {
+    "name": "Cave-In",
+    "rarity": "Exceptional",
+    "type": "Magic",
+    "rulesText": "Burrow all minions and artifacts occupying target land site.",
+    "cost": 4,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Craterize": {
+    "name": "Craterize",
+    "rarity": "Elite",
+    "type": "Magic",
+    "rulesText": "As an additional cost to cast Craterize, discard a site. Destroy target site and deal damage to each unit above or below a site in the area of effect:",
+    "cost": 8,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 2,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Dalcean Phalanx": {
+    "name": "Dalcean Phalanx",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Can only move themselves forward.",
+    "cost": 4,
+    "attack": 5,
+    "defence": 5,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 2,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Mortal"
+  },
+  "Divine Healing": {
+    "name": "Divine Healing",
+    "rarity": "Exceptional",
+    "type": "Magic",
+    "rulesText": "You gain 7 life.",
+    "cost": 1,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 3,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "House Arn Bannerman": {
+    "name": "House Arn Bannerman",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Other nearby allies have +1 power.",
+    "cost": 4,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 2,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Mortal"
+  },
+  "King of the Realm": {
+    "name": "King of the Realm",
+    "rarity": "Unique",
+    "type": "Minion",
+    "rulesText": "Other Mortals have +1 power.\r\n\r\nYou control all Mortals.",
+    "cost": 7,
+    "attack": 3,
+    "defence": 3,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 3,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Mortal"
+  },
+  "Land Surveyor": {
+    "name": "Land Surveyor",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Genesis → Draw a site.",
+    "cost": 2,
+    "attack": 1,
+    "defence": 1,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Mortal"
+  },
+  "Mountain Giant": {
+    "name": "Mountain Giant",
+    "rarity": "Elite",
+    "type": "Minion",
+    "rulesText": "Occupies four locations.",
+    "cost": 8,
+    "attack": 8,
+    "defence": 8,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 4,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Giant"
+  },
+  "Overpower": {
+    "name": "Overpower",
+    "rarity": "Ordinary",
+    "type": "Magic",
+    "rulesText": "Give an ally +2 power this turn.",
+    "cost": 1,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Payload Trebuchet": {
+    "name": "Payload Trebuchet",
+    "rarity": "Elite",
+    "type": "Artifact",
+    "rulesText": "Tap bearer and another ally here, Discard a card → Deal damage equal to the discarded card's mana cost to each unit at target location up to three steps away.",
+    "cost": 5,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Weapon"
+  },
+  "Pudge Butcher": {
+    "name": "Pudge Butcher",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "UPDATED: Immobile\r\n\r\nTap → Shoot a projectile. If it hits a unit, drag it to this location. Pudge may fight it when it arrives.",
+    "cost": 4,
+    "attack": 5,
+    "defence": 5,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 2,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Demon"
+  },
+  "Rolling Boulder": {
+    "name": "Rolling Boulder",
+    "rarity": "Exceptional",
+    "type": "Artifact",
+    "rulesText": "Units here have “Tap → Give Rolling Boulder a push. It rolls as far as possible and deals 4 damage to each other unit along its path.”",
+    "cost": 4,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Relic"
+  },
+  "Scent Hounds": {
+    "name": "Scent Hounds",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Nearby enemies permanently lose Stealth.",
+    "cost": 2,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Beast"
+  },
+  "Siege Ballista": {
+    "name": "Siege Ballista",
+    "rarity": "Exceptional",
+    "type": "Artifact",
+    "rulesText": "Tap bearer and another ally here → Deal 3 damage to target unit up to two steps away.",
+    "cost": 3,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Weapon"
+  },
+  "Slumbering Giantess": {
+    "name": "Slumbering Giantess",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Genesis → Fall asleep. Slumbering Giantess is disabled until hurt.",
+    "cost": 3,
+    "attack": 5,
+    "defence": 5,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Giant"
+  },
+  "Wild Boars": {
+    "name": "Wild Boars",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "",
+    "cost": 1,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Beast"
+  },
+  "Wraetannis Titan": {
+    "name": "Wraetannis Titan",
+    "rarity": "Elite",
+    "type": "Minion",
+    "rulesText": "Genesis → Strike each enemy here.",
+    "cost": 7,
+    "attack": 6,
+    "defence": 6,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 2,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Giant"
+  },
+  "Bedrock": {
+    "name": "Bedrock",
+    "rarity": "Exceptional",
+    "type": "Site",
+    "rulesText": "Can't be moved, destroyed, or modified.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Holy Ground": {
+    "name": "Holy Ground",
+    "rarity": "Exceptional",
+    "type": "Site",
+    "rulesText": "Genesis → Each nearby Avatar heals 3 life.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Humble Village": {
+    "name": "Humble Village",
+    "rarity": "Ordinary",
+    "type": "Site",
+    "rulesText": "Genesis → You may pay ① to summon a Foot Soldier token here.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Village"
+  },
+  "Quagmire": {
+    "name": "Quagmire",
+    "rarity": "Exceptional",
+    "type": "Site",
+    "rulesText": "Genesis → Until your next turn, units are Immobile while they occupy nearby sites.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Rustic Village": {
+    "name": "Rustic Village",
+    "rarity": "Ordinary",
+    "type": "Site",
+    "rulesText": "Genesis → You may pay ① to summon a Foot Soldier token here.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Village"
+  },
+  "Simple Village": {
+    "name": "Simple Village",
+    "rarity": "Ordinary",
+    "type": "Site",
+    "rulesText": "Genesis → You may pay ① to summon a Foot Soldier token here.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Village"
+  },
+  "Sinkhole": {
+    "name": "Sinkhole",
+    "rarity": "Elite",
+    "type": "Site",
+    "rulesText": "Sacrifice Sinkhole → Destroy a nearby site.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Vantage Hills": {
+    "name": "Vantage Hills",
+    "rarity": "Exceptional",
+    "type": "Site",
+    "rulesText": "Ranged units atop this site have +1 range.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 1,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Sparkmage": {
+    "name": "Sparkmage",
+    "rarity": null,
+    "type": "Avatar",
+    "rulesText": "Tap → Play or draw a site.\r\n\r\nTap → Target nearby location. Deal damage to another random unit there equal to the sum of (A) on spells you've cast this turn.",
+    "cost": null,
+    "attack": 1,
+    "defence": 1,
+    "life": 20,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Thunderstorm": {
+    "name": "Thunderstorm",
+    "rarity": "Exceptional",
+    "type": "Aura",
+    "rulesText": "At the end of your turn, deal 3 damage to a random unit atop affected sites, then you may move Thunderstorm one step.\r\n\r\nLasts 3 of your turns.",
+    "cost": 4,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 2,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Apprentice Wizard": {
+    "name": "Apprentice Wizard",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Spellcaster\r\nGenesis → Draw a spell.",
+    "cost": 3,
+    "attack": 1,
+    "defence": 1,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Mortal"
+  },
+  "Blink": {
+    "name": "Blink",
+    "rarity": "Ordinary",
+    "type": "Magic",
+    "rulesText": "An ally teleports to a location it’s nearby. Draw a card.",
+    "cost": 2,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Chain Lightning": {
+    "name": "Chain Lightning",
+    "rarity": "Exceptional",
+    "type": "Magic",
+    "rulesText": "Deal 2 damage to target unit nearby. Any number of times, you may spend ② to additionally target a new unit nearby the previous one.",
+    "cost": 2,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 2,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Cloud Spirit": {
+    "name": "Cloud Spirit",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Airborne, Movement +2",
+    "cost": 2,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 2,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Spirit"
+  },
+  "Dead of Night Demon": {
+    "name": "Dead of Night Demon",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Stealth",
+    "cost": 2,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Demon"
+  },
+  "Grandmaster Wizard": {
+    "name": "Grandmaster Wizard",
+    "rarity": "Elite",
+    "type": "Minion",
+    "rulesText": "Spellcaster\r\nGenesis → Draw three spells.",
+    "cost": 6,
+    "attack": 0,
+    "defence": 0,
+    "life": null,
+    "thresholds": {
+      "air": 2,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Mortal"
+  },
+  "Gyre Hippogriffs": {
+    "name": "Gyre Hippogriffs",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Airborne, Charge",
+    "cost": 4,
+    "attack": 3,
+    "defence": 3,
+    "life": null,
+    "thresholds": {
+      "air": 2,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Beast"
+  },
+  "Headless Haunt": {
+    "name": "Headless Haunt",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Voidwalk\r\n\r\nAt the start of your turn, Headless Haunt teleports to the top of a random site or void.",
+    "cost": 3,
+    "attack": 4,
+    "defence": 4,
+    "life": null,
+    "thresholds": {
+      "air": 2,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Spirit"
+  },
+  "Highland Clansmen": {
+    "name": "Highland Clansmen",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Charge",
+    "cost": 7,
+    "attack": 5,
+    "defence": 5,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Mortal"
+  },
+  "Kite Archer": {
+    "name": "Kite Archer",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Ranged\r\n\r\nImmediately after performing a ranged strike, Kite Archer may take a step.",
+    "cost": 3,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Mortal"
+  },
+  "Lightning Bolt": {
+    "name": "Lightning Bolt",
+    "rarity": "Ordinary",
+    "type": "Magic",
+    "rulesText": "Deal 3 damage to a random unit at target location.",
+    "cost": 2,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Lucky Charm": {
+    "name": "Lucky Charm",
+    "rarity": "Exceptional",
+    "type": "Artifact",
+    "rulesText": "Bearer's controller has “Whenever you would determine an outcome at random, determine it an extra time and choose one.”",
+    "cost": 1,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Relic"
+  },
+  "Midnight Rogue": {
+    "name": "Midnight Rogue",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Ranged, Stealth",
+    "cost": 3,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Mortal"
+  },
+  "Nimbus Jinn": {
+    "name": "Nimbus Jinn",
+    "rarity": "Elite",
+    "type": "Minion",
+    "rulesText": "Airborne\r\n\r\nDiscard a spell → Deal 3 damage to another random unit here.",
+    "cost": 6,
+    "attack": 4,
+    "defence": 4,
+    "life": null,
+    "thresholds": {
+      "air": 2,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Spirit"
+  },
+  "Plumed Pegasus": {
+    "name": "Plumed Pegasus",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Airborne",
+    "cost": 3,
+    "attack": 3,
+    "defence": 3,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Beast"
+  },
+  "Raise Dead": {
+    "name": "Raise Dead",
+    "rarity": "Exceptional",
+    "type": "Magic",
+    "rulesText": "Summon a random dead minion.",
+    "cost": 4,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 2,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Roaming Monster": {
+    "name": "Roaming Monster",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "May be summoned to any site.",
+    "cost": 5,
+    "attack": 4,
+    "defence": 4,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Monster"
+  },
+  "Skirmishers of Mu": {
+    "name": "Skirmishers of Mu",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Ranged\r\n\r\nDuring basic movement, Skirmishers of Mu may perform a ranged strike from any location along their path.",
+    "cost": 4,
+    "attack": 3,
+    "defence": 3,
+    "life": null,
+    "thresholds": {
+      "air": 2,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Mortal"
+  },
+  "Sling Pixies": {
+    "name": "Sling Pixies",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Airborne, Ranged\r\n\r\nTakes no damage from units with 4 or more power.",
+    "cost": 1,
+    "attack": 1,
+    "defence": 1,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Faerie"
+  },
+  "Snow Leopard": {
+    "name": "Snow Leopard",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "",
+    "cost": 1,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Beast"
+  },
+  "Spectral Stalker": {
+    "name": "Spectral Stalker",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Voidwalk",
+    "cost": 2,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Undead"
+  },
+  "Spire Lich": {
+    "name": "Spire Lich",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "If Spire Lich is atop a Tower, it has +2 power, Ranged, and Spellcaster.",
+    "cost": 3,
+    "attack": 1,
+    "defence": 1,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Undead"
+  },
+  "Teleport": {
+    "name": "Teleport",
+    "rarity": "Ordinary",
+    "type": "Magic",
+    "rulesText": "Teleport an ally to the surface of target site.",
+    "cost": 2,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 2,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Cloud City": {
+    "name": "Cloud City",
+    "rarity": "Unique",
+    "type": "Site",
+    "rulesText": "(A)(A)(A) — Once on your turn, this site may fly to a nearby void.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Dark Tower": {
+    "name": "Dark Tower",
+    "rarity": "Ordinary",
+    "type": "Site",
+    "rulesText": "Genesis → If this is the only Dark Tower you control, gain ① this turn.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Gothic Tower": {
+    "name": "Gothic Tower",
+    "rarity": "Ordinary",
+    "type": "Site",
+    "rulesText": "Genesis → If this is the only Gothic Tower you control, gain ① this turn.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Lone Tower": {
+    "name": "Lone Tower",
+    "rarity": "Ordinary",
+    "type": "Site",
+    "rulesText": "Genesis → If this is the only Lone Tower you control, gain ① this turn.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Mountain Pass": {
+    "name": "Mountain Pass",
+    "rarity": "Exceptional",
+    "type": "Site",
+    "rulesText": "Minions can't enter this site on the ground if there's already a minion atop.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Observatory": {
+    "name": "Observatory",
+    "rarity": "Elite",
+    "type": "Site",
+    "rulesText": "Genesis → Look at your next three spells. Put them back in any order.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Planar Gate": {
+    "name": "Planar Gate",
+    "rarity": "Elite",
+    "type": "Site",
+    "rulesText": "Minions here can traverse the void, gaining Voidwalk until leaving it.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Updraft Ridge": {
+    "name": "Updraft Ridge",
+    "rarity": "Exceptional",
+    "type": "Site",
+    "rulesText": "UPDATED: Airborne minions atop Updraft Ridge move freely away.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 1,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Waveshaper": {
+    "name": "Waveshaper",
+    "rarity": null,
+    "type": "Avatar",
+    "rulesText": "Tap → Play or draw a site.\r\n\r\nTap → Flood a site near your body of water until you do so again. Tap minions without submerge there. They don't untap the next time they would.",
+    "cost": null,
+    "attack": 1,
+    "defence": 1,
+    "life": 20,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": ""
+  },
+  "Flood": {
+    "name": "Flood",
+    "rarity": "Exceptional",
+    "type": "Aura",
+    "rulesText": "Affected sites are flooded. They're water sites.",
+    "cost": 4,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 2
+    },
+    "subTypes": ""
+  },
+  "Mariner's Curse": {
+    "name": "Mariner's Curse",
+    "rarity": "Exceptional",
+    "type": "Aura",
+    "rulesText": "Whenever a minion enters an affected water site, submerge it and return Mariner's Curse to its owner's hand.",
+    "cost": 3,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 2
+    },
+    "subTypes": ""
+  },
+  "Anui Undine": {
+    "name": "Anui Undine",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Submerge\r\n\r\nAnui Undine has +1 power for each site in her body of water.",
+    "cost": 5,
+    "attack": 0,
+    "defence": 0,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 2
+    },
+    "subTypes": "Spirit"
+  },
+  "Brobdingnag Bullfrog": {
+    "name": "Brobdingnag Bullfrog",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Genesis → Brobdingnag Bullfrog swallows another target minion here. He carries it disabled in his belly until he leaves the realm.",
+    "cost": 3,
+    "attack": 3,
+    "defence": 3,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 2
+    },
+    "subTypes": "Beast"
+  },
+  "Coral-Reef Kelpie": {
+    "name": "Coral-Reef Kelpie",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Submerge",
+    "cost": 3,
+    "attack": 3,
+    "defence": 3,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": "Beast"
+  },
+  "Deep-Sea Mermaids": {
+    "name": "Deep-Sea Mermaids",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Submerge\r\n\r\nGenesis → Draw your bottommost spell.",
+    "cost": 3,
+    "attack": 1,
+    "defence": 1,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 2
+    },
+    "subTypes": "Merfolk"
+  },
+  "Diluvian Kraken": {
+    "name": "Diluvian Kraken",
+    "rarity": "Elite",
+    "type": "Minion",
+    "rulesText": "Submerge\r\n\r\nTap → Surface to strike each other unit nearby.",
+    "cost": 8,
+    "attack": 8,
+    "defence": 8,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 3
+    },
+    "subTypes": "Monster"
+  },
+  "Drown": {
+    "name": "Drown",
+    "rarity": "Ordinary",
+    "type": "Magic",
+    "rulesText": "Submerge target minion or artifact, if able.",
+    "cost": 3,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": ""
+  },
+  "Font of Life": {
+    "name": "Font of Life",
+    "rarity": "Exceptional",
+    "type": "Magic",
+    "rulesText": "Each ally heals an amount equal to the number of sites in its body of water.",
+    "cost": 3,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 2
+    },
+    "subTypes": ""
+  },
+  "Guile Sirens": {
+    "name": "Guile Sirens",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Submerge\r\n\r\nAt the start of your turn, force target nearby enemy minion to take a step toward Guile Sirens.",
+    "cost": 3,
+    "attack": 3,
+    "defence": 3,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 2
+    },
+    "subTypes": "Merfolk"
+  },
+  "Ice Lance": {
+    "name": "Ice Lance",
+    "rarity": "Ordinary",
+    "type": "Magic",
+    "rulesText": "UPDATED: Shoot a piercing projectile. Deal 3, then 2, then 1 damage to up to one hit unit at each of the first three locations along its path.",
+    "cost": 3,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": ""
+  },
+  "Pirate Ship": {
+    "name": "Pirate Ship",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Waterbound",
+    "cost": 4,
+    "attack": 5,
+    "defence": 5,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": "Mortal"
+  },
+  "Polar Bears": {
+    "name": "Polar Bears",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Can move as if the top and bottom edges of the realm were connected.",
+    "cost": 2,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": "Beast"
+  },
+  "Porcupine Pufferfish": {
+    "name": "Porcupine Pufferfish",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Lethal, Submerge",
+    "cost": 1,
+    "attack": 1,
+    "defence": 1,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": "Beast"
+  },
+  "Riptide": {
+    "name": "Riptide",
+    "rarity": "Ordinary",
+    "type": "Magic",
+    "rulesText": "Target water site pulls in an aboveground unit it's adjacent to. Draw a card.",
+    "cost": 2,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": ""
+  },
+  "Sea Serpent": {
+    "name": "Sea Serpent",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Submerge, Waterbound",
+    "cost": 4,
+    "attack": 4,
+    "defence": 4,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": "Beast"
+  },
+  "Sedge Crabs": {
+    "name": "Sedge Crabs",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Can only move themselves sideways.",
+    "cost": 1,
+    "attack": 3,
+    "defence": 3,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": "Beast"
+  },
+  "Seirawan Hydra": {
+    "name": "Seirawan Hydra",
+    "rarity": "Elite",
+    "type": "Minion",
+    "rulesText": "UPDATED: Immediately heals from damage that doesn't kill it.",
+    "cost": 6,
+    "attack": 6,
+    "defence": 6,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": "Monster"
+  },
+  "Stormy Seas": {
+    "name": "Stormy Seas",
+    "rarity": "Exceptional",
+    "type": "Magic",
+    "rulesText": "Submerge all minions and artifacts occupying target water site.\r\n",
+    "cost": 4,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": ""
+  },
+  "Sunken Treasure": {
+    "name": "Sunken Treasure",
+    "rarity": "Exceptional",
+    "type": "Artifact",
+    "rulesText": "If cast, conjure this under an allied water site of an opponent's choice.\r\n\r\nWhen Sunken Treasure is carried to the surface, its controller sacrifices it and draws two cards.",
+    "cost": 3,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
+    "subTypes": "Relic"
+  },
+  "Swamp Buffalo": {
+    "name": "Swamp Buffalo",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "",
+    "cost": 1,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": "Beast"
+  },
+  "Swan Maidens": {
+    "name": "Swan Maidens",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "Airborne, Submerge",
+    "cost": 2,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": "Mortal"
+  },
+  "Tide Naiads": {
+    "name": "Tide Naiads",
+    "rarity": "Exceptional",
+    "type": "Minion",
+    "rulesText": "Submerge\r\n\r\nThis site is flooded. It is a water site.",
+    "cost": 2,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 2
+    },
+    "subTypes": "Spirit"
+  },
+  "Tufted Turtles": {
+    "name": "Tufted Turtles",
+    "rarity": "Ordinary",
+    "type": "Minion",
+    "rulesText": "The first time Tuft Turtles would take damage each turn, prevent that damage.",
+    "cost": 3,
+    "attack": 2,
+    "defence": 2,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": "Beast"
+  },
+  "Wrath of the Sea": {
+    "name": "Wrath of the Sea",
+    "rarity": "Elite",
+    "type": "Magic",
+    "rulesText": "Flood all sites adjacent to a body of water this turn. Then submerge all minions and artifacts on water.",
+    "cost": 7,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 2
+    },
+    "subTypes": ""
+  },
+  "Autumn River": {
+    "name": "Autumn River",
+    "rarity": "Ordinary",
+    "type": "Site",
+    "rulesText": "Genesis → Look at your next spell. You may put it on the bottom of your spellbook.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": "River"
+  },
+  "Floodplain": {
+    "name": "Floodplain",
+    "rarity": "Exceptional",
+    "type": "Site",
+    "rulesText": "Once on your turn, you may flood an adjacent site this turn.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": ""
+  },
+  "Island Leviathan": {
+    "name": "Island Leviathan",
+    "rarity": "Elite",
+    "type": "Site",
+    "rulesText": "(W)(W)(W)(W)(W)(W)(W)(W) — May transform into a Monster. Place flooded Rubble underneath.",
+    "cost": null,
+    "attack": 8,
+    "defence": 8,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": ""
+  },
+  "Maelström": {
+    "name": "Maelström",
+    "rarity": "Unique",
+    "type": "Site",
+    "rulesText": "At the start of your turn, you may pull in each minion in this body of water one step.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": ""
+  },
+  "Spring River": {
+    "name": "Spring River",
+    "rarity": "Ordinary",
+    "type": "Site",
+    "rulesText": "Genesis → Look at your next spell. You may put it on the bottom of your spellbook.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": "River"
+  },
+  "Summer River": {
+    "name": "Summer River",
+    "rarity": "Ordinary",
+    "type": "Site",
+    "rulesText": "Genesis → Look at your next spell. You may put it on the bottom of your spellbook.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": "River"
+  },
+  "Undertow": {
+    "name": "Undertow",
+    "rarity": "Exceptional",
+    "type": "Site",
+    "rulesText": "Genesis → Staying within this body of water, move target unit one step.",
+    "cost": null,
+    "attack": null,
+    "defence": null,
+    "life": null,
+    "thresholds": {
+      "air": 0,
+      "earth": 0,
+      "fire": 0,
+      "water": 1
+    },
+    "subTypes": ""
+  }
+}

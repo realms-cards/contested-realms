@@ -476,6 +476,10 @@ export function buildMoveDeltaPatch(
         instanceId: id,
         owner: entry.owner,
         card: cloneCardForPatch(entry.card),
+        cpuAuraTicks: entry.cpuAuraTicks,
+        skipNextUntap: entry.skipNextUntap,
+        cpuAuraVisited: entry.cpuAuraVisited,
+        cpuAuraLastEnd: entry.cpuAuraLastEnd,
       };
       if (entry.offset !== undefined) patchEntry.offset = entry.offset;
       if (entry.tilt !== undefined) patchEntry.tilt = entry.tilt;

@@ -8,6 +8,7 @@ import type {
 import type {
   LobbyUpdatedPayloadT,
   MatchStartedPayloadT,
+  MatchReadyPayloadT,
   ResyncResponsePayloadT,
   ServerChatPayloadT,
   StatePatchPayloadT,
@@ -60,6 +61,8 @@ export type TransportEventMap = {
     oldestIndex: number;
   };
   matchStarted: MatchStartedPayloadT;
+  /** Every seated player finished loading — board unlocks and the clock starts */
+  matchReady: MatchReadyPayloadT;
   matchEnded: { matchId: string; tournamentId?: string; reason?: string };
   // Post-match rematch handshake (matchId is the match that just ended)
   rematchState: {
@@ -175,6 +178,11 @@ export interface GameTransport {
   sendAction(action: unknown): void;
   // Explicit mulligan completion signal (per-player)
   mulliganDone(): void;
+  /**
+   * Board readiness signal (per-player): this client finished loading card art
+   * and the scene. The server unlocks the match once every seat reports in.
+   */
+  clientReady?(): void;
   sendChat(content: string, scope?: ChatScope): void;
 
   resync(): void;

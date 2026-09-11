@@ -7,6 +7,12 @@ const path = require("path");
 const fs = require("fs");
 const { io } = require("socket.io-client");
 const botEngine = require("./engine");
+const { ActionPacing } = require("./action-pacing");
+const { changeLife, lifeTurnKey } = require("../src/lib/game/cpu/life");
+const cpuSpells = require("../src/lib/game/cpu/spells");
+const { abilityChoices } = require("../src/lib/game/cpu/abilities");
+const { reachableCells } = require("../src/lib/game/cpu/movement");
+const { moveUnit, mergePermanents } = require("../src/lib/game/cpu/move");
 
 // Lazy-loaded card database from data/cards_raw.json
 let _CARDS_DB = null;
@@ -71,6 +77,7 @@ class BotClient {
     this.lobbyId = opts.lobbyId || null;
     this._botSecret = opts.botSecret || null;
 
+    /** @type {{ emit(event: string, ...args: unknown[]): unknown; disconnect(): unknown } | null} */
     this.socket = null;
     this.you = null; // { id, displayName }
     this.currentMatch = null; // { id, matchType, players, sealedPacks?, draftState? }
@@ -143,7 +150,9 @@ class BotClient {
     this._actedTurn = new Set(); // `${matchId}:${turnIndex}` — only set when we PASS (end turn)
     this._turnActionCount = new Map(); // turnKey → number of actions sent this turn
     this._pendingAction = false; // true while waiting for server response after sending an action
-    this._summonedCells = new Map(); // cellKey → turnIndex — tracks cells where units were placed this turn
+    this._actionPacing = new ActionPacing();
+    this._pacingTimer = null;
+    this._summonedCells = new Map(); // instanceId → turnIndex — tracks newly summoned units
     this._startPhaseHandled = new Set(); // turnKey — tracks which turns already had Start phase processed
     this._startedAsFirst = false; // true if we were the first player when Start applied
     this._constructedInitDone = new Set(); // matchId
@@ -153,6 +162,9 @@ class BotClient {
     this._botRules = null;
     // Combat protocol state
     this._pendingCombats = new Map(); // combatId -> { meta, status, myRole }
+    this._pendingResolutions = new Set();
+    this._resolutionTimers = new Set();
+    this._stopped = false;
     // Combat life tracking (separate from game state, which gets overwritten by server patches)
     this._combatLife = { p1: 20, p2: 20 };
   }
@@ -376,8 +388,8 @@ class BotClient {
         this._mergeGamePatch(patch);
         // Re-apply constructed deck zones after merge (server patches may overwrite them)
         this._ensureLocalZonesApplied();
-        // Clear pending flag so _maybeAct can run the next action in multi-action turns
-        this._pendingAction = false;
+        // Patches can arrive while a guide is awaiting the human's decision.
+        // Only the scheduled action completion releases pacing.
         this._maybeAct();
       } catch (err) {
         console.warn("[Bot] statePatch handler error:", err);
@@ -398,21 +410,8 @@ class BotClient {
       try {
         const snap = payload && payload.snapshot ? payload.snapshot : null;
         if (snap && snap.game) {
-          // Preserve local life tracking (combat is client-side, server doesn't track it)
-          const prevPlayers = this._game && this._game.players ? JSON.parse(JSON.stringify(this._game.players)) : null;
           this._game = JSON.parse(JSON.stringify(snap.game));
-          // Restore life values if we had local tracking (lower life = more accurate)
-          if (prevPlayers && this._game.players) {
-            for (const key of ["p1", "p2"]) {
-              const prev = prevPlayers[key];
-              const curr = this._game.players[key];
-              if (prev && curr && typeof prev.life === "number" && typeof curr.life === "number") {
-                if (prev.life < curr.life) {
-                  curr.life = prev.life; // Keep the lower (combat-damaged) life
-                }
-              }
-            }
-          }
+          this._syncLifeFromGame();
           // Initialize turn tracking from snapshot
           if (this._game && typeof this._game.currentPlayer === "number") {
             this._lastCurrentPlayer = this._game.currentPlayer;
@@ -421,6 +420,9 @@ class BotClient {
           this._ensureLocalZonesApplied();
           // Re-enforce summoning sickness after full snapshot replacement
           this._reenforceSummoningSickness();
+          this._resyncing = false;
+          this._acknowledgeCpuAction(this._game.cpuActionReceipts?.[this._getMeKey()]);
+          if (this._inflightAction) this._inflightAction = null; // Snapshot did not contain that action.
           this._maybeAct();
         }
       } catch (e) {
@@ -435,6 +437,8 @@ class BotClient {
       // Request a full state resync from the server
       try {
         this._pendingAction = false;
+        this._inflightAction = null;
+        this._resyncing = true;
         socket.emit("resyncRequest", {});
       } catch {}
     });
@@ -445,6 +449,17 @@ class BotClient {
         if (!payload || typeof payload !== "object") return;
         const type = payload.type;
         if (!type) return;
+        if (type === "cpuHumanReady" && payload.matchId === this.currentMatch?.id) {
+          if (payload.visible === false) { this._actionPacing.pause(); return; }
+          this._actionPacing.ready(payload.matchId,Date.now());
+          this._maybeAct();
+          return;
+        }
+        if (type === "cpuActionApplied") {
+          this._acknowledgeCpuAction(payload.id);
+          return;
+        }
+        this._trackResolutionMessage(type, payload);
         if (type === "guidePref") {
           // The human (re)announced its guide prefs, e.g. after a reload. Our
           // one-shot opt-in at match start may have been missed, so answer
@@ -515,6 +530,7 @@ class BotClient {
     this._nudgeTimer = setInterval(() => {
       try {
         if (!this._game || !this.currentMatch) return;
+        if (this._stopped || this._gameEnded || this._pendingResolutions.size) return;
         const myNum = this.playerIndex === 1 ? 2 : 1;
 
         // NOTE: Periodic resync disabled — it resets local combat life tracking.
@@ -542,6 +558,11 @@ class BotClient {
   }
 
   stop() {
+    this._stopped = true;
+    this._inflightAction = null;
+    for (const timer of this._resolutionTimers) clearTimeout(timer);
+    this._resolutionTimers.clear();
+    this._pendingResolutions.clear();
     try {
       if (this._nudgeTimer) clearInterval(this._nudgeTimer);
       if (this.socket) this.socket.disconnect();
@@ -840,10 +861,10 @@ class BotClient {
       const patch = { zones: { [meKey]: myZones } };
 
       // Place avatar on the board with canonical position
-      const avatarCardRef = this._chooseAvatarCardRef();
+      const avatarCardRef = deck.avatar || this._chooseAvatarCardRef();
       if (avatarCardRef) {
         const w = (this._game && this._game.board && this._game.board.size && this._game.board.size.w) || 5;
-        const h = (this._game && this._game.board && this._game.board.size && this._game.board.size.h) || 5;
+        const h = (this._game && this._game.board && this._game.board.size && this._game.board.size.h) || 4;
         const cx = Math.floor(Math.max(1, Number(w) || 5) / 2);
         // p1 is at bottom (h-1), p2 is at top (0)
         const yy = meKey === "p1" ? (Number(h) || 5) - 1 : 0;
@@ -1250,85 +1271,93 @@ class BotClient {
   }
 
   _chooseOpeningHand(spells, sites) {
-    try {
-      const rng =
-        this._rng ||
-        ((seed) => {
-          let x = 1234567;
-          return () =>
-            (((x ^= x << 13), (x ^= x >>> 17), (x ^= x << 5)) >>> 0) /
-            4294967296;
-        })(`${this._trainSeed || "seed"}/opening`);
-      const shuffle = (arr) => {
-        const a = [...arr];
-        for (let i = a.length - 1; i > 0; i--) {
-          const j = Math.floor(rng() * (i + 1));
-          [a[i], a[j]] = [a[j], a[i]];
-        }
-        return a;
-      };
-      const isPerm = (c) => {
-        const t = String(c?.type || "").toLowerCase();
-        return (
-          !!t &&
-          !t.includes("site") &&
-          !t.includes("avatar") &&
-          !t.includes("spell")
-        );
-      };
-      const perms = spells.filter(isPerm);
-      const nonPerms = spells.filter((c) => !isPerm(c));
-      const score = (c) => this._getCostForCardRef(c) + (isPerm(c) ? -2 : 0);
-      const permSorted = perms
-        .map((c) => ({ c, s: score(c) }))
-        .sort((a, b) => a.s - b.s)
-        .map((x) => x.c);
-      const otherSorted = nonPerms
-        .map((c) => ({ c, s: score(c) }))
-        .sort((a, b) => a.s - b.s)
-        .map((x) => x.c);
-      const handSpells = [];
-      for (const c of permSorted) {
-        if (handSpells.length >= 3) break;
-        handSpells.push(c);
+    // Shuffle the complete piles before drawing. The CPU must not tutor its
+    // opening hand, reorder its future draws, or lose duplicate copies.
+    const rng = this._rng || botEngine.createRng(`${this.currentMatch?.id || "opening"}:${this.playerId}`);
+    const shuffle = (cards) => {
+      const result = [...cards];
+      for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
       }
-      for (const c of otherSorted) {
-        if (handSpells.length >= 3) break;
-        handSpells.push(c);
+      return result;
+    };
+    const book = shuffle(spells);
+    const atlas = shuffle(sites);
+    return {
+      handSpells: book.slice(0, 3), restSpells: book.slice(3),
+      handSites: atlas.slice(0, 3), restSites: atlas.slice(3),
+    };
+  }
+
+  _syncLifeFromGame() {
+    for (const seat of ["p1", "p2"]) {
+      const player = this._game?.players?.[seat];
+      if (!player) continue;
+      this._combatLife[seat] = player.life ?? 20;
+      if (player.lifeState === "dead") {
+        this._gameEnded = true;
+        this._gameWinner = seat === "p1" ? "p2" : "p1";
       }
-      const pickedIdx = new Set(handSpells.map((c) => spells.indexOf(c)));
-      const restSpells = spells.filter((_, i) => !pickedIdx.has(i));
-
-      // Sites: favor early color fixing by taking first 3 (atlas already balanced by _standardSites)
-      const sitesShuffled = shuffle(sites);
-      // Light bias toward 'Valley' and 'Stream' if present
-      sitesShuffled.sort((a, b) => {
-        const bias = (n) => {
-          const nm = String(n?.name || "").toLowerCase();
-          if (nm.includes("valley")) return -2;
-          if (nm.includes("stream")) return -1;
-          return 0;
-        };
-        return bias(a) - bias(b) || rng() - 0.5;
-      });
-      const handSites = sitesShuffled.slice(
-        0,
-        Math.min(3, sitesShuffled.length)
-      );
-      const restSites = sites.filter((c, i) => !handSites.includes(c));
-
-      return { handSpells, handSites, restSpells, restSites };
-    } catch {
-      // Fallback: first 3 + first 3
-      const hs = spells.slice(0, 3);
-      const hsi = sites.slice(0, 3);
-      return {
-        handSpells: hs,
-        handSites: hsi,
-        restSpells: spells.slice(hs.length),
-        restSites: sites.slice(hsi.length),
-      };
     }
+  }
+
+  _hasHumanOpponent() {
+    return (this.currentMatch?.players || []).some(p =>
+      p.id !== this.playerId && typeof p.id === "string" && !p.id.startsWith("cpu_"));
+  }
+
+  _scheduleResolution(fn, delay) {
+    const timer = setTimeout(() => {
+      this._resolutionTimers.delete(timer);
+      if (!this._stopped) fn();
+    }, delay);
+    this._resolutionTimers.add(timer);
+    return timer;
+  }
+
+  _sendCpuAction(action, onApplied) {
+    if (this._stopped || !this.socket) return;
+    if (!this._hasHumanOpponent()) {
+      this.socket.emit("action", { action });
+      onApplied();
+      return;
+    }
+    if (this._inflightAction) return;
+    const id = `cpu_action_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+    this._inflightAction = { id, onApplied };
+    this.socket.emit("action", { action: { ...action, __cpuActionId: id } });
+  }
+
+  _acknowledgeCpuAction(id) {
+    const pending = this._inflightAction;
+    if (!pending || typeof id !== "string" || pending.id !== id || this._stopped) return;
+    this._inflightAction = null;
+    pending.onApplied();
+  }
+
+  _trackResolutionMessage(type, payload) {
+    const id = payload.id;
+    if (typeof id !== "string") return;
+    if (type === "attackDeclare" || type === "interceptOffer" ||
+        type === "magicBegin") this._pendingResolutions.add(id);
+    if (type === "combatResolve" || type === "combatCancel" ||
+        type === "combatSummary" || type === "magicResolve" ||
+        type === "magicCancel") {
+      // The CPU's own spell animation is followed by effect application.
+      if (type === "magicResolve" && this._castingMagicId === id && payload.playerKey === this._getMeKey()) return;
+      this._pendingResolutions.delete(id);
+      if (type.startsWith("combat")) this._pendingCombats.delete(id);
+      this._scheduleResolution(() => this._maybeAct(), 200);
+    }
+  }
+
+  _applyLifeDamage(seat, amount, directDamage) {
+    if (!this._game.players) this._game.players = {};
+    const previous = this._game.players[seat] || { life: 20, lifeState: "alive", mana: 0 };
+    const next = changeLife(previous, -amount, directDamage,
+      lifeTurnKey(this._game.turn || 1, this._game.currentPlayer || 1));
+    this._mergeGamePatch({ players: { [seat]: next } });
   }
 
   _mergeGamePatch(patch) {
@@ -1350,7 +1379,11 @@ class BotClient {
         }
         return dst;
       };
+      const permanents = patch.permanents && !patch.__replaceKeys?.includes("permanents")
+        ? mergePermanents(this._game.permanents || {}, patch.permanents) : null;
       this._game = merge({ ...this._game }, patch);
+      if (permanents) this._game.permanents = permanents;
+      this._syncLifeFromGame();
       // Track turn changes
       if (typeof this._game.currentPlayer === "number") {
         if (this._lastCurrentPlayer === null)
@@ -1362,6 +1395,7 @@ class BotClient {
       }
       // Re-enforce summoning sickness on units placed this turn
       this._reenforceSummoningSickness();
+      this._acknowledgeCpuAction(this._game.cpuActionReceipts?.[this._getMeKey()]);
     } catch {}
   }
 
@@ -1380,10 +1414,26 @@ class BotClient {
    * This communicates intent to the human player's client so it can display
    * the spell casting overlay (magicBegin → magicSetCaster → magicConfirm → magicResolve).
    */
-  _emitMagicFlow(spellCard, meKey) {
+  _emitMagicFlow(spellCard, meKey, choiceKey) {
     try {
       const magicId = `mag_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      if (choiceKey && this._hasHumanOpponent()) {
+        const choice = cpuSpells.getSpellChoices(this._game, meKey, spellCard.name).find(c => c.key === choiceKey);
+        if (!choice) throw new Error(`Spell choice is no longer legal: ${spellCard.name}`);
+        this._pendingResolutions.add(magicId);
+        const pos = choice.caster.kind === "avatar" ? this._game.avatars[meKey].pos : choice.caster.at.split(",").map(Number);
+        const at = pos.join(",");
+        this.socket.emit("message", { type: "magicBegin", id: magicId,
+          tile: { x: pos[0], y: pos[1] }, spell: { at, index: -1, instanceId: spellCard.instanceId, card: spellCard, owner: meKey === "p1" ? 1 : 2 } });
+        this._scheduleResolution(() => {
+          this.socket.emit("message", { type: "cpuMagicChoice", id: magicId, key: choiceKey });
+          this.socket.emit("message", { type: "magicConfirm", id: magicId });
+        }, 400);
+        return;
+      }
       const cardName = spellCard.name || "Spell";
+      this._pendingResolutions.add(magicId);
+      this._castingMagicId = magicId;
       // Find a cell to place the spell at (any owned site)
       const board = (this._game && this._game.board) || {};
       const sites = board.sites || {};
@@ -1462,6 +1512,10 @@ class BotClient {
           this._applySpellEffect(spellCard, meKey);
         } catch (e) {
           try { console.warn("[Bot Magic] Error applying spell effect:", e?.message || e); } catch {}
+        } finally {
+          this._pendingResolutions.delete(magicId);
+          this._castingMagicId = null;
+          this._maybeAct();
         }
       }, 1600);
     } catch {}
@@ -1916,7 +1970,10 @@ class BotClient {
    */
   _trackSummonedUnit(cellKey) {
     try {
-      this._summonedCells.set(cellKey, this._turnIndex);
+      const items = this._game?.permanents?.[cellKey] || [];
+      const unit = items[items.length-1];
+      const id = unit?.instanceId || unit?.card?.instanceId;
+      if (id) this._summonedCells.set(id, this._turnIndex);
     } catch {}
   }
 
@@ -1937,14 +1994,14 @@ class BotClient {
     try {
       if (!this._game || !this._game.permanents) return;
       const currentTurn = this._turnIndex;
-      for (const [cellKey, placedTurn] of this._summonedCells) {
+      for (const [instanceId, placedTurn] of this._summonedCells) {
         if (placedTurn !== currentTurn) continue; // Stale entry
-        const arr = this._game.permanents[cellKey];
+        const arr = Object.values(this._game.permanents).flat();
         if (!Array.isArray(arr)) continue;
         const meKey = this.playerIndex === 1 ? "p2" : "p1";
         const myNum = meKey === "p1" ? 1 : 2;
         for (const p of arr) {
-          if (p && Number(p.owner) === myNum && !p.summonedThisTurn) {
+          if (p && (p.instanceId || p.card?.instanceId) === instanceId && Number(p.owner) === myNum && !p.summonedThisTurn) {
             p.summonedThisTurn = true;
           }
         }
@@ -1959,45 +2016,35 @@ class BotClient {
    */
   _triggerCombat(meta, meKey) {
     try {
+      if (this._stopped || !this.socket) return;
+      if (this._pendingResolutions.size) {
+        this._scheduleResolution(() => this._triggerCombat(meta,meKey),200);
+        return;
+      }
       const myNum = meKey === "p1" ? 1 : 2;
       const combatId = `cmb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-      // Determine target type
-      const oppSeat = meKey === "p1" ? "p2" : "p1";
-      const oppNum = myNum === 1 ? 2 : 1;
       const toKey = meta.toKey;
-      const perms = (this._game && this._game.permanents && this._game.permanents[toKey]) || [];
-      const sites = (this._game && this._game.board && this._game.board.sites) || {};
-      const avatars = (this._game && this._game.avatars) || {};
-      const oppAvatar = avatars[oppSeat] || {};
-      const oppAvatarPos = oppAvatar.pos || (oppSeat === "p1" ? [2, 4] : [2, 0]);
-      const oppAvatarKey = `${oppAvatarPos[0]},${oppAvatarPos[1]}`;
+      const units = cpuSpells.unitsInRealm(this._game);
+      const attacker = units.find(unit => meta.isAvatarAttack
+        ? unit.target.kind === "avatar" && unit.owner === meKey
+        : unit.target.kind === "permanent" && unit.at === toKey && unit.target.index === meta.attackerIndex);
+      if (!attacker) return;
+      const target = cpuSpells.getAttackTargets(this._game, attacker)[0]?.target;
+      const attackingEntity = attacker.target.kind === "avatar" ? this._game.avatars[attacker.target.seat] : this._game.permanents[attacker.at][attacker.target.index];
+      if (!target && attackingEntity?.cpuTurnEffect?.blaze && attackingEntity.cpuTurnEffect.turn === `${this._game.turn}:${this._game.currentPlayer}`) return;
+      if (!target && !this._hasHumanOpponent()) return;
+      // Moving without a legal attack still gives the opponent an interception
+      // opportunity. Stealth cannot be intercepted.
+      if (!target && cpuSpells.hasStealth(this._game, attacker)) return;
 
-      let target = null;
-      // Check for enemy units at destination
-      const enemyUnits = Array.isArray(perms)
-        ? perms.map((p, i) => ({ p, i })).filter(({ p }) => p && Number(p.owner) === oppNum)
-        : [];
-
-      if (enemyUnits.length > 0) {
-        // Target the first enemy unit
-        target = { kind: "permanent", at: toKey, index: enemyUnits[0].i };
-      } else if (toKey === oppAvatarKey) {
-        // Attacking the avatar
-        target = { kind: "avatar", at: toKey, index: null };
-      } else if (sites[toKey] && Number(sites[toKey].owner) === oppNum) {
-        // Attacking a site
-        target = { kind: "site", at: toKey, index: null };
-      }
-
-      if (!target) return; // Nothing to attack
-
-      console.log(`[Bot Combat] Declaring attack: ${combatId} at ${toKey}, target=${target.kind}`);
+      console.log(`[Bot Combat] ${target ? "Declaring attack" : "Offering intercept"}: ${combatId} at ${toKey}`);
 
       const attackerPayload = {
         at: toKey,
         index: meta.attackerIndex,
         owner: myNum,
+        instanceId: attacker.target.kind === "permanent" ? attacker.target.instanceId : undefined,
       };
       // Mark avatar attacks with isAvatar flag (matches client behavior)
       if (meta.isAvatarAttack) {
@@ -2006,7 +2053,7 @@ class BotClient {
       }
 
       this.socket.emit("message", {
-        type: "attackDeclare",
+        type: target ? "attackDeclare" : "interceptOffer",
         id: combatId,
         tile: meta.tile,
         attacker: attackerPayload,
@@ -2016,6 +2063,7 @@ class BotClient {
       });
 
       // Track this combat — we're the attacker
+      this._pendingResolutions.add(combatId);
       this._pendingCombats.set(combatId, {
         ...meta,
         combatId,
@@ -2621,115 +2669,66 @@ class BotClient {
    * Evaluate potential defenders and pick the best one (or none).
    * Returns { cellKey, index, instanceId } or null if we shouldn't block.
    */
-  _findBestDefender(payload) {
-    try {
-      const meKey = this._getMeKey();
-      const myNum = meKey === "p1" ? 1 : 2;
-
-      // Get attacker info
-      const attackerCard = payload.attacker && payload.attacker.card;
-      if (!attackerCard) return null;
-      const atkKw = this._getCardKeywords(attackerCard);
-      const atkAtk = Number(attackerCard.attack || 0);
-      const atkDef = Number(attackerCard.defence || attackerCard.defense || 0);
-
-      // Find the target cell (where the attack lands)
-      const targetCell = payload.target;
-      if (!targetCell) return null;
-
-      // Find our untapped units at the target cell
-      const perms = this._game && this._game.permanents;
-      if (!perms || !perms[targetCell]) return null;
-      const cellPerms = perms[targetCell];
-      if (!Array.isArray(cellPerms)) return null;
-
-      // Get our life to check for lethal prevention
-      const avatars = this._game && this._game.avatars;
-      const myAvatar = avatars && avatars[meKey];
-      const myLife = Number(myAvatar && myAvatar.life) || 20;
-
-      // Check if target is our avatar (blocking is more valuable)
-      const isAvatarTarget = payload.targetType === "avatar" ||
-        (myAvatar && myAvatar.pos === targetCell);
-
-      let bestDefender = null;
-      let bestScore = 0;
-
-      for (let i = 0; i < cellPerms.length; i++) {
-        const perm = cellPerms[i];
-        if (!perm || Number(perm.owner) !== myNum) continue;
-        if (perm.tapped) continue; // Can't block if tapped
-        const card = perm.card;
-        if (!card) continue;
-        const cardType = String(card.type || "").toLowerCase();
-        if (cardType.includes("site")) continue; // Sites can't block
-
-        const defKw = this._getCardKeywords(card);
-        const defAtk = Number(card.attack || 0);
-        const defDef = Number(card.defence || card.defense || 0);
-        const defCost = Number(card.cost || card.manaCost || 0);
-        const atkCost = Number(attackerCard.cost || attackerCard.manaCost || 0);
-
-        const weKillAttacker = defAtk >= atkDef || defKw.has("lethal");
-        const theyKillUs = atkAtk >= defDef || atkKw.has("lethal");
-        const theyHitFirst = atkKw.has("initiative") && !defKw.has("initiative");
-
-        let score = 0;
-
-        // Score based on trade outcome
-        if (weKillAttacker && !theyKillUs) {
-          // Great trade — we kill them, survive
-          score += 20;
-        } else if (weKillAttacker && theyKillUs) {
-          // Even trade — both die
-          score += (atkCost >= defCost) ? 5 : -3;
-        } else if (!weKillAttacker && theyKillUs) {
-          // Bad trade — we die, they survive
-          score -= 10;
-        } else {
-          // Bounce — neither dies, but we prevent damage
-          score += 2;
-        }
-
-        // Initiative disadvantage — they kill us before we strike
-        if (theyHitFirst && theyKillUs) {
-          score -= 8;
-        }
-
-        // Blocking avatar attacks is more valuable
-        if (isAvatarTarget) {
-          score += 5;
-          // Preventing lethal to avatar is critical
-          if (myLife <= atkAtk && myLife <= 5) {
-            score += 30;
-          }
-        }
-
-        // Don't block with high-value units into lethal attackers
-        if (atkKw.has("lethal") && !weKillAttacker) {
-          score -= 15;
-        }
-
-        if (score > bestScore) {
-          bestScore = score;
-          bestDefender = {
-            cellKey: targetCell,
-            index: i,
-            instanceId: perm.instanceId || null,
-          };
-        }
-      }
-
-      if (bestDefender) {
-        console.log(`[Bot Combat] Best defender found with score ${bestScore}`);
-      }
-      return bestDefender;
-    } catch (e) {
-      console.error("[Bot Combat] Error finding defender:", e);
-      return null;
+  _findBestDefender(payload, intercept = false) {
+    const state = this._game;
+    const meKey = this._getMeKey();
+    const myNum = meKey === "p1" ? 1 : 2;
+    const attack = payload.attacker;
+    if (!state || !attack) return null;
+    const attackingEntity = attack.isAvatar ? state.avatars[attack.avatarSeat || (myNum === 1 ? "p2" : "p1")] : state.permanents?.[attack.at]?.[attack.index];
+    if (intercept && attackingEntity?.cpuTurnEffect?.blaze && attackingEntity.cpuTurnEffect.turn === `${state.turn}:${state.currentPlayer}`) return null;
+    const attacker = attack.isAvatar
+      ? state.avatars[attack.avatarSeat || (myNum === 1 ? "p2" : "p1")]?.card
+      : state.permanents?.[attack.at]?.[attack.index]?.card;
+    const realmUnits = cpuSpells.unitsInRealm(state);
+    const locatedAttacker = realmUnits.find(unit => attack.isAvatar
+      ? unit.target.kind === "avatar" && unit.target.seat === (attack.avatarSeat || (myNum === 1 ? "p2" : "p1"))
+      : unit.target.kind === "permanent" && unit.at === attack.at && unit.target.index === attack.index);
+    if (!attacker || (locatedAttacker && cpuSpells.hasStealth(state, locatedAttacker))) return null;
+    const to = payload.tile ? `${payload.tile.x},${payload.tile.y}` : attack.at;
+    const stats = this._getCardCombatStats(attacker);
+    const threatenedAvatar = payload.target?.kind === "avatar";
+    const life = state.players?.[meKey];
+    const choices = [];
+    for (const [at, items] of Object.entries(state.permanents || {})) {
+      items.forEach((unit, index) => {
+        const located = realmUnits.find(candidate => candidate.target.kind === "permanent" && candidate.at === at && candidate.target.index === index);
+        if (unit.owner !== myNum || unit.tapped || !located || cpuSpells.isDisabled(state, located)) return;
+        if (payload.target?.kind === "permanent" && payload.target.at === at && payload.target.index === index) return;
+        // Intercept never grants movement; Airborne also restricts who can intercept.
+        if (intercept ? at !== to : !reachableCells(state, at, unit).includes(to)) return;
+        if (intercept && locatedAttacker && cpuSpells.hasAirborne(state,locatedAttacker) &&
+            !cpuSpells.hasAirborne(state,located) && !/\bRanged\b/i.test(cpuSpells.cardText(unit.card))) return;
+        const attackerPosition = state.permanentPositions?.[attack.instanceId]?.state || "surface";
+        const defenderPosition = state.permanentPositions?.[unit.instanceId]?.state || "surface";
+        if (attackerPosition !== defenderPosition) return;
+        const defence = this._getCardCombatStats(unit.card);
+        const text = cpuSpells.cardText(unit.card);
+        const wins = defence.atk >= stats.def || /\bLethal\b/i.test(text);
+        const dies = stats.atk + (unit.damage || 0) >= Math.max(1, defence.def) || /\bLethal\b/i.test(cpuSpells.cardText(attacker));
+        let score = (wins ? 8 : 0) + (dies ? -(this._getCostForCardRef(unit.card) + 3) : 3);
+        if (threatenedAvatar) score += life?.lifeState === "dd" ? 1000 : stats.atk * 2;
+        else if (payload.target?.kind === "site" && life?.lifeState !== "dd") score += stats.atk;
+        if (/strikes first|strike first/i.test(cpuSpells.cardText(attacker)) && dies) score -= 8;
+        choices.push({ at, index, instanceId: unit.instanceId, owner: myNum, to, score });
+      });
     }
+    choices.sort((a,b) => b.score-a.score);
+    return choices[0]?.score > 0 ? choices[0] : null;
   }
 
+  _commitDefender(choice, onApplied) {
+    const unit = this._game.permanents[choice.at]?.[choice.index];
+    if (!unit || unit.instanceId !== choice.instanceId) return null;
+    const moved = moveUnit(this._game, choice.at, choice.index, choice.to);
+    if (!moved) return null;
+    const defender = { at: choice.to, index: moved.index, instanceId: unit.instanceId, owner: unit.owner };
+    this._sendCpuAction(moved.patch, () => {
+      if (!this._hasHumanOpponent()) this._mergeGamePatch(moved.patch);
+      onApplied?.(defender);
+    });
+    return defender;
+  }
   /**
    * Handle incoming combat messages from the server.
    */
@@ -2738,6 +2737,7 @@ class BotClient {
     const myNum = meKey === "p1" ? 1 : 2;
 
     switch (type) {
+      case "interceptOffer":
       case "attackDeclare": {
         // If we're the defender, auto-commit defenders (empty = unblocked)
         const attackerOwner = Number(payload.attacker && payload.attacker.owner);
@@ -2756,22 +2756,22 @@ class BotClient {
           status: "declared",
           attackerData: payload,
         });
-        setTimeout(() => {
+        this._scheduleResolution(() => {
           try {
             const p = this._pendingCombats.get(payload.id);
             if (!p || p.status === "committed") return;
             p.status = "committed";
-            const bestDefender = this._findBestDefender(payload);
-            const defenders = bestDefender ? [bestDefender] : [];
-            console.log(`[Bot Combat] Defending: ${defenders.length ? "blocking" : "not blocking"} for ${payload.id}`);
-            this.socket.emit("message", {
+            const bestDefender = this._findBestDefender(payload, type === "interceptOffer");
+            const commit = (defenders) => this.socket.emit("message", {
               type: "combatCommit",
               id: payload.id,
               defenders,
               target: payload.target,
+              tile: payload.tile,
               playerKey: meKey,
               ts: Date.now(),
             });
+            if (!bestDefender || !this._commitDefender(bestDefender, defender => commit([defender]))) commit([]);
           } catch {}
         }, 800);
         break;
@@ -2781,6 +2781,7 @@ class BotClient {
         // If we're the attacker, resolve combat after a short delay
         const pending = this._pendingCombats.get(payload.id);
         if (!pending || pending.role !== "attacker") return;
+        if (this._hasHumanOpponent()) return; // Human store owns shared combat resolution.
         pending.status = "committed";
         console.log(`[Bot Combat] Resolving combat ${payload.id} (after delay)`);
         setTimeout(() => {
@@ -2792,6 +2793,7 @@ class BotClient {
       }
 
       case "combatAutoApply": {
+        if (this._hasHumanOpponent()) break; // Human store already patched both sides.
         // Apply kills to our own permanents
         const kills = payload.kills;
         if (!Array.isArray(kills) || !this._game) return;
@@ -2826,6 +2828,7 @@ class BotClient {
       }
 
       case "combatLifeDamage": {
+        if (this._hasHumanOpponent()) break; // Results arrive as authoritative player patches.
         // Apply life damage using combat-specific tracking
         const damages = payload.damage;
         if (!Array.isArray(damages)) return;
@@ -2835,16 +2838,8 @@ class BotClient {
             if (!seat) continue;
             const amount = Number(dmg.amount) || 0;
             if (amount <= 0) continue;
-            const prevLife = this._combatLife[seat] || 20;
-            this._combatLife[seat] = prevLife - amount;
-            console.log(`[Bot Combat] ${seat} took ${amount} life damage: ${prevLife} -> ${this._combatLife[seat]}`);
-            // Check for game over
-            if (this._combatLife[seat] <= 0) {
-              const winner = seat === "p1" ? "p2" : "p1";
-              console.log(`[Bot Combat] GAME OVER! ${seat} life reached ${this._combatLife[seat]}. Winner: ${winner}`);
-              this._gameEnded = true;
-              this._gameWinner = winner;
-            }
+            if (payload.playerKey === meKey) continue;
+            this._applyLifeDamage(seat, amount, dmg.isAvatarDamage === true);
           } catch {}
         }
         break;
@@ -2935,9 +2930,7 @@ class BotClient {
                 damage: [{ seat: meKey, amount: counterDmg, isAvatarDamage: true }],
                 ts: Date.now(),
               });
-              const prevLife = this._combatLife[meKey] || 20;
-              this._combatLife[meKey] = prevLife - counterDmg;
-              console.log(`[Bot Combat] ${meKey} took ${counterDmg} counter-damage: ${prevLife} -> ${this._combatLife[meKey]}`);
+              this._applyLifeDamage(meKey, counterDmg, true);
             }
           } else if (targetAtk >= attackerDef && attackerDef > 0) {
             attackerAlive = false;
@@ -2961,13 +2954,7 @@ class BotClient {
             damage: [{ seat: oppSeat, amount: dmgAmount, isAvatarDamage: isAvatar }],
             ts: Date.now(),
           });
-          // Apply to combat life tracking (not game state, which gets overwritten)
-          const prevLife = this._combatLife[oppSeat] || 20;
-          this._combatLife[oppSeat] = prevLife - dmgAmount;
-          console.log(`[Bot Combat] Dealt ${dmgAmount} to ${oppSeat}: ${prevLife} -> ${this._combatLife[oppSeat]}`);
-          if (this._combatLife[oppSeat] <= 0) {
-            console.log(`[Bot Combat] GAME OVER! ${oppSeat} life reached ${this._combatLife[oppSeat]}. Winner: ${meKey}`);
-          }
+          this._applyLifeDamage(oppSeat, dmgAmount, isAvatar);
         }
       }
 
@@ -3056,57 +3043,69 @@ class BotClient {
     try {
       const match = this.currentMatch;
       if (!match || !this._game) return;
+      if (this._stopped || this._gameEnded || this._inflightAction || this._resyncing || this._pendingResolutions.size > 0) return;
       // Do not act during setup. Wait until server has transitioned to in_progress
       if (match.status !== "in_progress") return;
-      // Check if game is over (combat life reached 0)
-      if (this._combatLife.p1 <= 0 || this._combatLife.p2 <= 0) return;
+      if (Object.values(this._game.players || {}).some(p => p.lifeState === "dead")) return;
       const myNum = this.playerIndex === 1 ? 2 : 1;
       const meKey = this.playerIndex === 1 ? "p2" : "p1";
 
       const turnKey = `${match.id}:${this._turnIndex}`;
 
-      // Handle Start phase locally: untap avatar, draw from spellbook, transition to Main
-      // Done entirely locally — the server doesn't enforce phase transitions
-      // Only process once per turn (server may re-send phase: "Start" in later patches)
+      if (this._hasHumanOpponent() && this._game.currentPlayer === myNum &&
+          ["Start","Main"].includes(this._game.phase) && !this._pendingAction && !this._actedTurn.has(turnKey)) {
+        const delay = this._actionPacing.delay(match.id,turnKey,Date.now());
+        if (delay > 0) {
+          if (Number.isFinite(delay) && !this._pacingTimer) this._pacingTimer = this._scheduleResolution(() => {
+            this._pacingTimer = null;
+            this._maybeAct();
+          },delay);
+          return;
+        }
+        this._actionPacing.acted(Date.now());
+      }
+
       if (this._game.phase === "Start" && this._game.currentPlayer === myNum) {
-        if (!this._startPhaseHandled.has(turnKey)) {
-          this._startPhaseHandled.add(turnKey);
-          console.log(`[Bot] Start phase: untapping avatar, resetting resources, drawing, transitioning to Main`);
-          // Untap our avatar locally
-          if (!this._game.avatars) this._game.avatars = {};
-          const avPrev = this._game.avatars[meKey] || {};
-          this._game.avatars[meKey] = { ...avPrev, tapped: false };
-          // Reset the mana spend ledger for the new turn (players[seat].mana)
-          if (!this._game.players) this._game.players = {};
-          this._game.players[meKey] = { ...(this._game.players[meKey] || {}), mana: 0 };
-          // Clear summoning sickness on all our units
-          const perms = this._game.permanents || {};
-          for (const cellKey of Object.keys(perms)) {
-            const arr = perms[cellKey];
-            if (!Array.isArray(arr)) continue;
-            for (const p of arr) {
-              if (p && Number(p.owner) === myNum && p.summonedThisTurn) {
-                p.summonedThisTurn = false;
-              }
-            }
+        if (this._startPhaseHandled.has(turnKey)) return;
+        this._startPhaseHandled.add(turnKey);
+        const state = this._game;
+        const zones = state.zones?.[meKey];
+        if (!zones) return;
+        const hand = [...(zones.hand || [])];
+        const hasSite = hand.some(card => card.type === "Site");
+        const siteCount = Object.values(state.board?.sites || {}).filter(site => site.owner === myNum && site.card).length;
+        const source = zones.atlas?.length && (!zones.spellbook?.length || (!hasSite && siteCount < 6)) ? "atlas" : "spellbook";
+        const pile = [...(zones[source] || [])];
+        const firstTurn = Number(state.turn || 1) === 1;
+        const players = { [meKey]: { ...(state.players?.[meKey] || { life: 20, lifeState: "alive" }), mana: 0 } };
+        if (!firstTurn) {
+          if (!pile.length) {
+            players[meKey].lifeState = "dead";
+            this.socket.emit("action", { action: { players } });
+            this._mergeGamePatch({ players });
+            return;
           }
-          // Clear summoning sickness tracking for the new turn
-          this._clearSummoningSickness();
-          // Draw one card from spellbook (unless first turn for first player)
-          const isVeryFirstTurn = this._turnIndex <= 1 && this._startedAsFirst;
-          if (!isVeryFirstTurn) {
-            const zones = (this._game.zones && this._game.zones[meKey]) || {};
-            const spellbook = Array.isArray(zones.spellbook) ? [...zones.spellbook] : [];
-            if (spellbook.length > 0) {
-              const drawn = spellbook.shift();
-              const hand = Array.isArray(zones.hand) ? [...zones.hand, drawn] : [drawn];
-              if (!this._game.zones) this._game.zones = {};
-              this._game.zones[meKey] = { ...zones, spellbook, hand };
-            }
+          hand.push(pile.shift());
+        }
+        const patch = { phase: "Main", players, zones: { [meKey]: { ...zones, hand, [source]: pile } } };
+        // The server's turn-start helper owns untapping when it is enabled.
+        if (state.turnTracking?.[meKey] !== state.turn) {
+          patch.avatars = { [meKey]: { ...state.avatars[meKey], tapped: false } };
+          patch.permanents = {};
+          for (const [at, units] of Object.entries(state.permanents || {})) {
+            patch.permanents[at] = units.map(unit => unit.owner !== myNum ? unit : {
+              ...unit, tapped: unit.skipNextUntap ? unit.tapped : false,
+              skipNextUntap: false, summonedThisTurn: false,
+              tapVersion: (unit.tapVersion || 0)+1, version: (unit.version || 0)+1,
+            });
           }
         }
-        // Always force Main phase when it's our turn
-        this._game.phase = "Main";
+        this._clearSummoningSickness();
+        this.socket.emit("action", { action: patch });
+        this._mergeGamePatch(patch);
+        this._pendingAction = true;
+        this._scheduleResolution(() => { this._pendingAction = false; this._maybeAct(); }, 500);
+        return;
       }
 
       if (this._game.phase !== "Main") return;
@@ -3127,6 +3126,16 @@ class BotClient {
       }
 
       // DEBUG: Log game state before acting
+      if (this._hasHumanOpponent()) {
+        const ability = abilityChoices(this._game,meKey).sort((a,b) => b.score-a.score)[0];
+        if (ability && ability.score > 0) {
+          const id = `cpu_ability_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+          this._pendingResolutions.add(id);
+          this._turnActionCount.set(turnKey,actionCount+1);
+          this.socket.emit("message",{type:"cpuActivateAbility",id,key:ability.key});
+          return;
+        }
+      }
       try {
         const zones = (this._game.zones && this._game.zones[meKey]) || null;
         const handSize = zones && zones.hand ? zones.hand.length : 0;
@@ -3213,6 +3222,7 @@ class BotClient {
         // The engine reads state.turnIndex for deterministic actions (turns 1-3: play site)
         // and strategic modifiers (Phase 1: prioritize sites over movement)
         this._game.turnIndex = this._turnIndex;
+        this._game.cpuPreconRules = this._hasHumanOpponent();
         try {
           const baseTheta =
             this.theta && this.theta.weights
@@ -3244,7 +3254,7 @@ class BotClient {
                   )
                 : null),
             {
-              skipDrawThisTurn: isFirstTurnForMe,
+              skipDrawThisTurn: true, // The start phase already supplied the mandatory draw.
               mode: this.engineMode === "train" ? "train" : "evaluate",
               exploration: (mergedTheta && mergedTheta.exploration) || {
                 epsilon_root: 0,
@@ -3319,93 +3329,103 @@ class BotClient {
               }, 1500);
             } else {
               // Engine chose a game action — send it to server
-              const toSend = this._hydratePatchCardRefs(patch);
+              const toSend = this._hydratePatchCardRefs(Object.fromEntries(Object.entries(patch).filter(([key]) => !key.startsWith("_"))));
               try {
                 console.log(
                   `[Bot] Sending action #${actionCount + 1} (turn ${this._turnIndex}):`,
                   JSON.stringify(toSend, null, 2).substring(0, 500)
                 );
               } catch {}
-              this.socket.emit("action", { action: toSend });
-              this._turnActionCount.set(turnKey, actionCount + 1);
-              // Emit toast so the human player can see what the bot did
-              const toastMsg = this._describePatch(patch);
-              if (toastMsg) this._emitBotToast(toastMsg);
-              // Optimistically apply our own action to local state
-              // (server broadcasts to other players but NOT back to sender)
-              try { this._mergeGamePatch(patch); } catch {}
-              // Track summoned units for summoning sickness enforcement
-              if (patch.permanents && patch.zones) {
-                // Unit placement: has both permanents (unit on board) and zones (removed from hand)
-                for (const cellKey of Object.keys(patch.permanents)) {
-                  this._trackSummonedUnit(cellKey);
-                }
-              }
-              // Emit magic flow messages when casting a spell (so human client shows the spell UI)
-              if (patch._spellCast && patch._spellCard) {
-                try {
-                  this._emitMagicFlow(patch._spellCard, meKey);
-                } catch {}
-              }
-              // Emit toast message for site placement (matches human client behavior)
-              if (patch.board && patch.board.sites) {
-                try {
-                  for (const cellKey of Object.keys(patch.board.sites)) {
-                    const site = patch.board.sites[cellKey];
-                    if (site && site.card) {
-                      this.socket.emit("message", {
-                        type: "toast",
-                        text: `Played '${site.card.name || "Site"}'`,
-                        cellKey,
-                        seat: meKey,
-                        ts: Date.now(),
-                      });
-                    }
-                  }
-                } catch {}
-              }
-              // Emit toast message for unit placement
-              if (patch.permanents && patch.zones && !patch._attackMeta) {
-                try {
+              this._sendCpuAction(toSend, () => {
+                this._turnActionCount.set(turnKey, actionCount + 1);
+                // Emit toast so the human player can see what the bot did
+                const toastMsg = this._describePatch(patch);
+                if (toastMsg) this._emitBotToast(toastMsg);
+                // Human matches use the authoritative echo; legacy bot matches
+                // still apply their own patch locally.
+                if (!this._hasHumanOpponent()) this._mergeGamePatch(patch);
+                // Track summoned units for summoning sickness enforcement
+                if (patch.permanents && patch.zones) {
+                  // Unit placement: has both permanents (unit on board) and zones (removed from hand)
                   for (const cellKey of Object.keys(patch.permanents)) {
-                    const arr = patch.permanents[cellKey];
-                    if (Array.isArray(arr) && arr.length > 0) {
-                      const newest = arr[arr.length - 1];
-                      if (newest && newest.card) {
+                    this._trackSummonedUnit(cellKey);
+                  }
+                }
+                // Emit magic flow messages when casting a spell (so human client shows the spell UI)
+                if (patch._spellCast && patch._spellCard) {
+                  try {
+                    this._emitMagicFlow(patch._spellCard, meKey, patch._spellChoice);
+                  } catch {}
+                }
+                // Emit toast message for site placement (matches human client behavior)
+                if (patch.board && patch.board.sites) {
+                  try {
+                    for (const cellKey of Object.keys(patch.board.sites)) {
+                      const site = patch.board.sites[cellKey];
+                      if (site && site.card) {
                         this.socket.emit("message", {
                           type: "toast",
-                          text: `Played '${newest.card.name || "Card"}'`,
+                          text: `Played '${site.card.name || "Site"}'`,
                           cellKey,
                           seat: meKey,
                           ts: Date.now(),
                         });
                       }
                     }
-                  }
-                } catch {}
-              }
-              // If this was an attack move, trigger combat protocol
-              if (patch._attackMeta) {
-                try {
-                  // Delay to let server process the move and client animate
-                  const attackMeta = patch._attackMeta;
-                  setTimeout(() => {
-                    this._triggerCombat(attackMeta, meKey);
-                  }, 600);
-                } catch {}
-              }
-              // Schedule next action attempt after a delay (slow enough for human to follow)
-              this._pendingAction = true;
-              setTimeout(() => {
-                this._pendingAction = false;
-                this._maybeAct();
-              }, 1000);
+                  } catch {}
+                }
+                // Emit toast message for unit placement
+                if (patch.permanents && patch.zones && !patch._attackMeta) {
+                  try {
+                    for (const cellKey of Object.keys(patch.permanents)) {
+                      const arr = patch.permanents[cellKey];
+                      if (Array.isArray(arr) && arr.length > 0) {
+                        const newest = arr[arr.length - 1];
+                        if (newest && newest.card) {
+                          this.socket.emit("message", {
+                            type: "toast",
+                            text: `Played '${newest.card.name || "Card"}'`,
+                            cellKey,
+                            seat: meKey,
+                            ts: Date.now(),
+                          });
+                        }
+                      }
+                    }
+                  } catch {}
+                }
+                // If this was an attack move, trigger combat protocol
+                if (patch._attackMeta) {
+                  try {
+                    // Delay to let server process the move and client animate
+                    const attackMeta = patch._attackMeta;
+                    this._scheduleResolution(() => {
+                      this._triggerCombat(attackMeta, meKey);
+                    }, 600);
+                  } catch {}
+                }
+                // Schedule next action attempt after a delay (slow enough for human to follow)
+                this._pendingAction = true;
+                this._scheduleResolution(() => {
+                  this._pendingAction = false;
+                  this._maybeAct();
+                }, 1000);
+              });
             }
             return; // avoid running the legacy heuristic path
           }
         } catch (e) {
           console.log("[Bot] AI engine failed:", e.message || e);
         }
+      }
+      if (this._hasHumanOpponent()) {
+        // The legacy fallback draws and resolves effects outside the guided
+        // rules path. End safely if search cannot produce a valid action.
+        const action = { currentPlayer: myNum === 1 ? 2 : 1, phase: "Start" };
+        this.socket.emit("action", { action });
+        this._mergeGamePatch(action);
+        this._actedTurn.add(turnKey);
+        return;
       }
       if (!isFirstTurnForMe) {
         const spellbook = Array.isArray(myZones.spellbook)
@@ -4014,126 +4034,42 @@ class BotClient {
 
   _loadConstructedDeckFromFile(filePath) {
     try {
-      const abs = path.isAbsolute(filePath)
-        ? filePath
-        : path.join(process.cwd(), filePath);
-      if (!fs.existsSync(abs)) return null;
-      const raw = JSON.parse(fs.readFileSync(abs, "utf8"));
-      const sb = Array.isArray(raw && raw.spellbook) ? raw.spellbook : [];
-      const at = Array.isArray(raw && raw.atlas) ? raw.atlas : [];
-      const book = [];
-      const atlas = [];
-      const pushMany = (arr, ref, n) => {
-        for (let i = 0; i < n; i++) arr.push(ref);
-      };
-      for (const e of sb) {
-        try {
-          const name = String((e && e.name) || "");
-          const count = Math.max(1, Number((e && e.count) || 1));
-          if (!name) continue;
-          const slug = this._getSlugForName(name);
-          const ref = {
-            id: `${name.replace(/\s+/g, "_").toLowerCase()}_${Math.random()
-              .toString(36)
-              .slice(2, 6)}`,
-            name,
-            type: null,
-            set: "Beta",
-            slug: slug || undefined,
-          };
-          // Enrich with cost, thresholds, and type from cards_raw.json
-          const enriched = this._hydrateCardRef(ref);
-          if (!enriched.cost) enriched.cost = this._getCostForCardRef(enriched);
-          pushMany(book, enriched, count);
-        } catch {}
-      }
-      for (const e of at) {
-        try {
-          const name = String((e && e.name) || "");
-          const count = Math.max(1, Number((e && e.count) || 1));
-          if (!name) continue;
-          const slug = this._getSlugForName(name);
-          const ref = {
-            id: `${name.replace(/\s+/g, "_").toLowerCase()}_${Math.random()
-              .toString(36)
-              .slice(2, 6)}`,
-            name,
-            type: "Site",
-            set: "Beta",
-            slug: slug || undefined,
-          };
-          // Enrich with thresholds from cards_raw.json
-          const enriched = this._hydrateCardRef(ref);
-          enriched.cost = 0;
-          pushMany(atlas, enriched, count);
-        } catch {}
-      }
-      if (book.length === 0 || atlas.length === 0) return null;
-      return { book, atlas };
+      const abs = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
+      return this._buildDeckFromConfig(JSON.parse(fs.readFileSync(abs, "utf8")));
     } catch {
       return null;
     }
   }
 
   _buildDeckFromConfig(config) {
-    try {
-      const sb = Array.isArray(config && config.spellbook)
-        ? config.spellbook
-        : [];
-      const at = Array.isArray(config && config.atlas) ? config.atlas : [];
-      const book = [];
-      const atlas = [];
-      const pushMany = (arr, ref, n) => {
-        for (let i = 0; i < n; i++) arr.push(ref);
-      };
-      for (const e of sb) {
-        try {
-          const name = String((e && e.name) || "");
-          const count = Math.max(1, Number((e && e.count) || 1));
-          if (!name) continue;
-          const slug = this._getSlugForName(name);
-          const ref = {
-            id: `${name.replace(/\s+/g, "_").toLowerCase()}_${Math.random()
-              .toString(36)
-              .slice(2, 6)}`,
-            name,
-            type: null,
-            set: "Beta",
-            slug: slug || undefined,
-          };
-          // CRITICAL: Enrich with cost, thresholds, and type for bot engine validation
-          const enriched = this._hydrateCardRef(ref);
-          if (!enriched.cost) enriched.cost = this._getCostForCardRef(enriched);
-          pushMany(book, enriched, count);
-        } catch {}
+    const db = _loadCardsDb();
+    const book = [];
+    const atlas = [];
+    let avatar = null;
+    const entries = [...(config.spellbook || []), ...(config.atlas || [])];
+    if (config.avatar) entries.push({ name: typeof config.avatar === "string" ? config.avatar : config.avatar.name, count: 1 });
+    for (const entry of entries) {
+      const card = db.find(c => c.name.toLowerCase() === String(entry.name).toLowerCase());
+      if (!card) throw new Error(`Unknown precon card: ${entry.name}`);
+      const type = card.guardian?.type || card.sets?.[0]?.metadata?.type;
+      const count = Number(entry.count ?? 1);
+      if (!Number.isInteger(count) || count < 1 || count > 100) throw new Error("Invalid card count");
+      for (let i = 0; i < count; i++) {
+        // Distinct identities are essential for drawing, moving and removing
+        // one of several copies of a card.
+        const ref = this._hydrateCardRef(this._toRefFromDb(card, i));
+        ref.cost = this._getCostForCardRef(ref);
+        ref.instanceId = ref.id;
+        if (type === "Avatar") {
+          if (avatar && avatar.name !== ref.name) throw new Error("Precon has multiple avatars");
+          avatar = ref;
+        } else if (type === "Site") atlas.push(ref);
+        else book.push(ref);
       }
-      for (const e of at) {
-        try {
-          const name = String((e && e.name) || "");
-          const count = Math.max(1, Number((e && e.count) || 1));
-          if (!name) continue;
-          const slug = this._getSlugForName(name);
-          const ref = {
-            id: `${name.replace(/\s+/g, "_").toLowerCase()}_${Math.random()
-              .toString(36)
-              .slice(2, 6)}`,
-            name,
-            type: "Site",
-            set: "Beta",
-            slug: slug || undefined,
-          };
-          // CRITICAL: Enrich with thresholds for threshold validation
-          const enriched = this._hydrateCardRef(ref);
-          // CRITICAL: Sites are free to play (played via Avatar ability), so explicitly set cost to 0
-          enriched.cost = 0;
-          pushMany(atlas, enriched, count);
-        } catch {}
-      }
-      if (book.length === 0 || atlas.length === 0) return null;
-      return { book, atlas };
-    } catch {
-      return null;
     }
+    if (!avatar || !book.length || !atlas.length) throw new Error("Precon requires an avatar, spellbook and atlas");
+    this._deckAvatar = avatar;
+    return { book, atlas, avatar };
   }
 
   _toRefFromDb(card, serial = 0) {
@@ -4247,6 +4183,7 @@ class BotClient {
   }
 
   _chooseAvatarCardRef() {
+    if (this._deckAvatar) return this._deckAvatar;
     const db = _loadCardsDb();
     // Prefer Spellslinger first; then other known avatars
     const preferred = [

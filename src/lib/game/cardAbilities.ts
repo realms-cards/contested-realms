@@ -312,19 +312,111 @@ export type MagicTargetHints = {
   fromText: boolean;
 };
 
+/**
+ * Cards that carry the Spellcaster keyword themselves, and so can cast a
+ * magic on their own. Not only minions: four Omphalos artifacts and the
+ * Wicker Manikin cast, and two sites do (Merlin's Tower only after its
+ * Genesis ability, which the guide cannot see, so it is listed as eligible).
+ *
+ * Derived from `data/cards_raw.json` (rules text carrying "Spellcaster" as its
+ * own keyword line, e.g. "Spellcaster", "Fire Spellcaster", "Non-fire
+ * Spellcaster"). Cards that merely mention Spellcasters are excluded.
+ */
+const SPELLCASTER_CARDS = new Set([
+  // Minions
+  "Adept Illusionist",
+  "Apprentice Wizard",
+  "Arjaro Exorcist",
+  "Cauldron Crones",
+  "Earl of the Ivory Towers",
+  "Fenvale Muse",
+  "Grandmaster Wizard",
+  "Grigori Rasputin",
+  "Lava Salamander",
+  "Master Necromancer",
+  "Merlin",
+  "Mordric Druids",
+  "Mover of Mountains",
+  "Novice Necromancer",
+  "Sisters of Avalon",
+  "Skeleton Mage",
+  "Wicked Witch",
+  // Artifacts that cast by themselves
+  "Algor Omphalos",
+  "Char Omphalos",
+  "Dank Omphalos",
+  "Torrid Omphalos",
+  "Wicker Manikin",
+  // Sites that cast by themselves
+  "River of Flame",
+  "Merlin's Tower",
+]);
+
+/**
+ * Artifacts whose *bearer* gains Spellcaster while carrying them, so an
+ * ordinary minion holding one may cast. Cards that only act on an
+ * already-Spellcaster bearer (Book of the Dead, De Vermis Mysteriis,
+ * The Malleus Maleficarum) are deliberately absent.
+ */
+const SPELLCASTER_GRANTING_ARTIFACTS = new Set([
+  "Eerie Coral",
+  "Hand of Glory",
+  "Mandrake Jars",
+  "Merlin's Staff",
+  "Sensu of the Fang",
+  "Wiccan Tools",
+]);
+
+/** Sites that make the minions standing on them Spellcasters. */
+const SPELLCASTER_GRANTING_SITES = new Set(["Standing Stones"]);
+
+/** Card names vary in apostrophe style between sources; compare on one form. */
+function normalizeCardName(cardName: string | null | undefined): string {
+  return (cardName || "").replace(/[‘’]/g, "'").trim();
+}
+
+/** True when the card itself carries the Spellcaster keyword. */
+export function isSpellcasterCard(
+  cardName: string | null | undefined,
+  rulesText?: string | null
+): boolean {
+  const name = normalizeCardName(cardName);
+  if (!name) return false;
+  if (SPELLCASTER_CARDS.has(name)) return true;
+  // Fall back to the rules text for cards outside the known sets (new sets,
+  // tokens). Only a standalone keyword line counts: "an allied Spellcaster"
+  // and similar references must not make the card itself a caster.
+  const txt = rulesText ?? abilityCache.get(name.toLowerCase())?.rulesText;
+  if (!txt) return false;
+  return txt
+    .split(/[\r\n]+/)
+    .some((line) =>
+      /^(?:non-)?(?:[a-z]+(?:\s+and\s+[a-z]+)?\s+)?spellcasters?$/i.test(
+        line.trim()
+      )
+    );
+}
+
+/** True when carrying this artifact makes its bearer a Spellcaster. */
+export function isSpellcasterGrantingArtifact(
+  cardName: string | null | undefined
+): boolean {
+  return SPELLCASTER_GRANTING_ARTIFACTS.has(normalizeCardName(cardName));
+}
+
+/** True when minions standing on this site count as Spellcasters. */
+export function isSpellcasterGrantingSite(
+  cardName: string | null | undefined
+): boolean {
+  return SPELLCASTER_GRANTING_SITES.has(normalizeCardName(cardName));
+}
+
 export async function detectSpellcaster(cardName: string): Promise<boolean> {
   try {
     const abilities = await fetchCardAbilities(cardName);
-    const txt = (abilities.rulesText || "").toLowerCase();
-    const name = cardName.toLowerCase();
-    const nameCaster =
-      /mage|wizard|sorcer|warlock|witch|shaman|conjur|enchant/.test(name);
-    if (nameCaster) return true;
-    if (!txt) return false;
-    if (txt.includes("cast") || txt.includes("spellcaster")) return true;
-    return false;
+    return isSpellcasterCard(cardName, abilities.rulesText);
   } catch {
-    return false;
+    return isSpellcasterCard(cardName);
   }
 }
 
@@ -332,17 +424,7 @@ export function detectSpellcasterSync(
   cardName: string,
   rulesText?: string | null
 ): boolean {
-  const name = (cardName || "").toLowerCase();
-  if (/mage|wizard|sorcer|warlock|witch|shaman|conjur|enchant/.test(name))
-    return true;
-  const t = (
-    rulesText ||
-    abilityCache.get(name)?.rulesText ||
-    ""
-  ).toLowerCase();
-  if (!t) return false;
-  if (t.includes("cast") || t.includes("spellcaster")) return true;
-  return false;
+  return isSpellcasterCard(cardName, rulesText);
 }
 
 export async function extractMagicTargetingHints(

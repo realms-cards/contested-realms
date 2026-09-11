@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useOnline } from "@/app/online/online-context";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { betaPrecons } from "@/lib/game/cpu/precons";
 import type { PlayerKey } from "@/lib/game/store";
 
 type MyDeckInfo = {
@@ -26,6 +27,7 @@ interface OnlineDeckSelectorProps {
   playerNames: { p1: string; p2: string };
   onPrepareComplete: () => void;
   matchType?: "constructed" | "sealed" | "draft" | "precon";
+  cpuPreconsOnly?: boolean;
 }
 
 export default function OnlineDeckSelector({
@@ -33,6 +35,7 @@ export default function OnlineDeckSelector({
   playerNames,
   onPrepareComplete,
   matchType,
+  cpuPreconsOnly = false,
 }: OnlineDeckSelectorProps) {
   const { transport, isGuest } = useOnline();
   const curiosaEnabled =
@@ -58,14 +61,16 @@ export default function OnlineDeckSelector({
   const [guestUrl, setGuestUrl] = useState("");
 
   const isConstructed = (matchType ?? "constructed") === "constructed";
-  const isPrecon = matchType === "precon";
+  const isPrecon = cpuPreconsOnly || matchType === "precon";
 
   // Filter decks for precon mode - only show public decks with "precon" in name
   const preconDecks = useMemo(() => {
+    if (cpuPreconsOnly) return betaPrecons;
     return publicDecks.filter((d) => d.name.toLowerCase().includes("precon"));
-  }, [publicDecks]);
+  }, [publicDecks, cpuPreconsOnly]);
 
   useEffect(() => {
+    if (cpuPreconsOnly) { setDecksLoaded(true); return; }
     (async () => {
       try {
         const res = await fetch("/api/decks", { cache: "no-store" });
@@ -86,7 +91,7 @@ export default function OnlineDeckSelector({
         setDecksLoaded(true);
       }
     })();
-  }, []);
+  }, [cpuPreconsOnly]);
 
   // Once a deck sits in the store: report it for meta stats and move to Setup
   const finishPrepare = async () => {
@@ -128,6 +133,14 @@ export default function OnlineDeckSelector({
     setDeckError(null);
 
     try {
+      if (cpuPreconsOnly) {
+        const response = await fetch(`/api/precons/${encodeURIComponent(selectedDeck)}`);
+        const data = await response.json();
+        if (!response.ok) { setDeckError(data.error || "Failed to load precon"); return; }
+        const { loadDeckFromData } = await import("@/lib/game/deckLoader");
+        if (await loadDeckFromData(myPlayerKey, data, setDeckError)) await finishPrepare();
+        return;
+      }
       const { loadDeckFor } = await import("@/lib/game/deckLoader");
       const success = await loadDeckFor(
         myPlayerKey,

@@ -1,4 +1,8 @@
 // Pure engine module (no Node I/O). Consumers provide θ and optional telemetry logger.
+const cpuSpells = require("../../src/lib/game/cpu/spells");
+const { recordAirCast } = require("../../src/lib/game/cpu/castHistory");
+const { reachableCells } = require("../../src/lib/game/cpu/movement");
+const { moveUnit } = require("../../src/lib/game/cpu/move");
 
 // T036: Import card evaluation system for card-specific understanding
 let cardEvalLoader = null;
@@ -229,7 +233,7 @@ function ownedSiteKeys(state, seat) {
   const keys = [];
   for (const k of Object.keys(sites)) {
     const t = sites[k];
-    if (t && t.card && Number(t.owner) === myNum) keys.push(k);
+    if (t && t.card && !t.cpuNeutral && Number(t.owner) === myNum) keys.push(k);
   }
   return keys;
 }
@@ -241,7 +245,7 @@ function getOpponentSiteKeys(state, seat) {
   const keys = [];
   for (const k of Object.keys(sites)) {
     const t = sites[k];
-    if (t && t.card && Number(t.owner) === oppNum) keys.push(k);
+    if (t && t.card && !t.cpuNeutral && Number(t.owner) === oppNum) keys.push(k);
   }
   return keys;
 }
@@ -374,7 +378,7 @@ function findAnyOwnedSiteCell(state, seat) {
     const sites = (state && state.board && state.board.sites) || {};
     for (const key of Object.keys(sites)) {
       const t = sites[key];
-      if (t && t.card && Number(t.owner) === myNum) return key;
+      if (t && t.card && !t.cpuNeutral && Number(t.owner) === myNum) return key;
     }
   } catch {}
   return null;
@@ -826,11 +830,11 @@ function playUnitPatch(state, seat, placedCell, specificCard = null) {
   patch.zones[seat] = { ...z, hand };
   patch.permanents[cell] = [
     ...existing,
-    { owner: myNum, card: pick.card, tapped: false, summonedThisTurn: true },
+    { owner: myNum, card: pick.card, instanceId: pick.card.instanceId, tapped: false, summonedThisTurn: true },
   ];
   // Track mana spent on the shared ledger so engine knows remaining mana for
   // multi-action turns (and the server / opponent HUD see the spend).
-  return withLedgerSpend(state, seat, patch, getCardManaCost(pick.card));
+  return withLedgerSpend(state, seat, patch, getCardManaCost(pick.card), pick.card);
 }
 
 // Site Type Detection - identify Site cards
@@ -904,6 +908,16 @@ function playSpellPatch(state, seat, specificCard = null) {
     return null;
   }
 
+  // Never run the legacy text-guessing spell resolver in a guided precon match.
+  // Unsupported cards remain in hand until their explicit semantics are added.
+  if (state.cpuPreconRules && String(pick.card.type).toLowerCase() === "magic" && !cpuSpells.supportsSpell(pick.card.name)) return null;
+
+  const spellPreview = { ...state, players: { ...state.players, [seat]: { ...state.players[seat], mana: getManaLedger(state,seat)-getCardManaCost(pick.card) } } };
+  const spellChoice = cpuSpells.supportsSpell(pick.card.name)
+    ? cpuSpells.getSpellChoices(spellPreview, seat, pick.card.name).sort((a, b) => b.score - a.score)[0]
+    : null;
+  if (cpuSpells.supportsSpell(pick.card.name) && (!spellChoice || spellChoice.score <= 0)) return null;
+
   hand.splice(pick.idx, 1);
 
   // Auras and enchantments go to battlefield (attached to permanents)
@@ -913,7 +927,7 @@ function playSpellPatch(state, seat, specificCard = null) {
   // Track mana spent for spells
   const spellCost = getCardManaCost(pick.card);
   const addResourceTracking = (patch) =>
-    withLedgerSpend(state, seat, patch, spellCost);
+    withLedgerSpend(state, seat, patch, spellCost, pick.card);
 
   if (cardType.includes("aura") || cardType.includes("enchantment")) {
     // Place aura on battlefield at owned site
@@ -935,6 +949,10 @@ function playSpellPatch(state, seat, specificCard = null) {
     const graveyard = Array.isArray(z.graveyard) ? [...z.graveyard] : [];
     graveyard.push(pick.card);
     const patch = { zones: {}, _spellCast: true, _spellCard: pick.card };
+    if (spellChoice) {
+      patch._spellChoice = spellChoice.key;
+      patch._spellScore = spellChoice.score;
+    }
     patch.zones[seat] = { ...z, hand, graveyard };
     return addResourceTracking(patch);
   }
@@ -1066,15 +1084,10 @@ function buildMovePatch(state, seat, fromKey, index, toKey) {
       return patch;
     }
 
-    const perPrev = (state && state.permanents) || {};
-    const fromArrPrev = Array.isArray(perPrev[fromKey]) ? perPrev[fromKey] : [];
-    const fromArr = [...fromArrPrev];
-    const spliced = fromArr.splice(index, 1);
-    const item = spliced[0];
-    if (!item) return null;
-    const toArrPrev = Array.isArray(perPrev[toKey]) ? perPrev[toKey] : [];
-    const toArr = [...toArrPrev, { ...item, tapped: true }];
-    const patch = { permanents: { [fromKey]: fromArr, [toKey]: toArr } };
+    const item = state.permanents?.[fromKey]?.[index];
+    const moved = moveUnit(state, fromKey, index, toKey);
+    if (!item || !moved) return null;
+    const patch = moved.patch;
     // Annotate attack moves with metadata for combat protocol
     if (hasEnemyAt(state, seat, toKey) || isOpponentAvatarCell(state, seat, toKey) || isOpponentSiteCell(state, seat, toKey)) {
       const myNum = seatNum(seat);
@@ -1082,7 +1095,7 @@ function buildMovePatch(state, seat, fromKey, index, toKey) {
       patch._attackMeta = {
         fromKey,
         toKey,
-        attackerIndex: toArr.length - 1,
+        attackerIndex: moved.index,
         attackerOwner: myNum,
         attackerCard: item.card || null,
         tile: toPos ? { x: toPos.x, y: toPos.y } : { x: 0, y: 0 },
@@ -1121,7 +1134,7 @@ function generateMoveCandidates(state, seat) {
   const allMyUnits = myUnits(state, seat);
   const units = allMyUnits.filter((u) => {
     if (u.item?.tapped) return false; // Must be untapped
-    if (u.item?.summonedThisTurn) return false; // T057: Cannot attack with summoning sickness
+    if (u.item?.summonedThisTurn && !/\bCharge\b/.test(cpuSpells.cardText(u.item.card))) return false;
     // Exclude non-combat permanents (Auras, 0-attack units) from attack candidates
     const cardType = String(u.item?.card?.type || "").toLowerCase();
     if (cardType.includes("aura") || cardType.includes("enchantment") || cardType.includes("artifact")) return false;
@@ -1167,7 +1180,7 @@ function generateMoveCandidates(state, seat) {
   // Check if opponent is at death's door (life = 0)
   const players = (state && state.players) || {};
   const oppPlayer = players[otherSeat(seat)] || {};
-  const oppLife = Number(oppPlayer.life) || 20;
+  const oppLife = Number(oppPlayer.life ?? 20);
   const oppAtDeathsDoor = oppLife <= 0;
 
   // CRITICAL RULE: Final blow must be to avatar when opponent is at 0 life
@@ -1217,17 +1230,17 @@ function generateMoveCandidates(state, seat) {
   const oppSiteNum = seatNum(otherSeat(seat));
 
   // Generate movement candidates for up to 5 closest units (not just one)
-  const maxUnitsToConsider = Math.min(units.length, 5);
+  const maxUnitsToConsider = units.length;
   for (let ui = 0; ui < maxUnitsToConsider; ui++) {
     const chosen = units[ui];
     const chosenPos = parseCellKey(chosen.at);
     const chosenDist = chosenPos ? Math.min(...targetPositions.map(t => manhattan([chosenPos.x, chosenPos.y], t))) : 999;
     // T050: Filter neighbors to exclude void unless unit has voidwalk
     // Allow movement to friendly-occupied cells if it advances toward enemy
-    const allNeigh = neighborsInBounds(state, chosen.at);
+    const allNeigh = reachableCells(state, chosen.at, chosen.item);
     const neigh = allNeigh
       .filter((k) => {
-        if (!isValidMovement(state, chosen.at, k, chosen)) return false;
+        if (k === chosen.at && !hasEnemyAt(state, seat, k) && !isOpponentSiteCell(state, seat, k)) return false;
         // Always allow movement to enemy cells or empty cells
         if (hasEnemyAt(state, seat, k)) return true;
         if (!hasFriendlyAt(state, seat, k)) return true;
@@ -1336,7 +1349,11 @@ function getManaLedger(state, seat) {
 function getManaSpentThisTurn(state, seat) {
   return Math.max(0, -getManaLedger(state, seat));
 }
-function withLedgerSpend(state, seat, patch, cost) {
+function withLedgerSpend(state, seat, patch, cost, card) {
+  if (state.cpuPreconRules && card) {
+    const cpuAirCast = recordAirCast(state,seat,card);
+    if (cpuAirCast) patch.avatars = {...patch.avatars,[seat]:{...state.avatars[seat],...patch.avatars?.[seat],cpuAirCast}};
+  }
   if (!(cost > 0)) return patch;
   const players = (state && state.players) || {};
   const prev = players[seat] || {};
@@ -1368,7 +1385,7 @@ function countThresholdsForSeat(state, seat) {
   const sites = (state && state.board && state.board.sites) || {};
   for (const key of Object.keys(sites)) {
     const tile = sites[key];
-    if (!tile || Number(tile.owner) !== myNum) continue;
+    if (!tile || tile.cpuNeutral || Number(tile.owner) !== myNum) continue;
     let th =
       tile && tile.card && tile.card.thresholds ? tile.card.thresholds : null;
     if (!th) {
@@ -1379,6 +1396,7 @@ function countThresholdsForSeat(state, seat) {
         if (nm && SITE_THRESHOLD_BY_NAME[nm]) th = SITE_THRESHOLD_BY_NAME[nm];
       } catch {}
     }
+    if (cpuSpells.isWater(state,key) && Number(th?.water || 0)<1) th = {...th,water:1};
     accumulateThresholds(out, th);
   }
   const per = (state && state.permanents) || {};
@@ -1405,7 +1423,7 @@ function countOwnedManaSites(state, seat) {
   const sites = (state && state.board && state.board.sites) || {};
   for (const key of Object.keys(sites)) {
     const tile = sites[key];
-    if (!tile || Number(tile.owner) !== myNum) continue;
+    if (!tile || tile.cpuNeutral || Number(tile.owner) !== myNum) continue;
     // Assume most sites provide 1 (Rubble / Wedding Hall provide none)
     if (!tile.card) continue;
     if (NON_MANA_SITE_NAMES.has(String(tile.card.name || "").toLowerCase()))
@@ -3017,7 +3035,7 @@ function generateCandidates(state, seat, options = {}) {
   const avatarState = getAvatar(base, seat);
   const avatarTapped = !!(avatarState && avatarState.tapped);
   // T013/T076: Allow site playing up to 8 sites, BUT only if avatar is untapped
-  const allowSitePlaying = ownedSitesNow < 8 && !avatarTapped;
+  const allowSitePlaying = !avatarTapped;
   stats.sitesGated = !allowSitePlaying;
 
   if (allowSitePlaying) {
@@ -3042,7 +3060,7 @@ function generateCandidates(state, seat, options = {}) {
   // Only generate standalone spellbook draw as fallback when nothing else to do and hand is small
   const sitesInHand = hand.filter((c) => isSiteCard(c)).length;
   const hasSiteToPlay =
-    allowSitePlaying && ownedSitesNow < 8 && sitesInHand > 0;
+    allowSitePlaying && sitesInHand > 0;
   const handSize = getZones(base, seat).hand?.length || 0;
   const hasPlayableActions =
     playableUnits.length > 0 || playableSpells.length > 0 || hasSiteToPlay;
@@ -3121,6 +3139,7 @@ function search(state, seat, theta, rng, options) {
     const next = applyPatch(state, p);
     const f = extractFeatures(state, next, seat);
     let s = evalFeatures(f, w);
+    if (Number.isFinite(p._spellScore)) s += p._spellScore * 3;
 
     // T011: Apply strategic modifier based on action type
     const actionType = getActionType(p);

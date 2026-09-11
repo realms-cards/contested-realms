@@ -1,6 +1,7 @@
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
 import { TargetBullseye } from "@/lib/game/components/TargetBullseye";
 import { TILE_SIZE, PLAYER_COLORS } from "@/lib/game/constants";
 import { requestCosmeticFrame } from "@/lib/game/render/cosmeticFrame";
@@ -14,13 +15,39 @@ type MagicConnectionLinesProps = {
   boardOffset: { x: number; y: number };
 };
 
-// Card offset from tile center based on owner (cards pushed toward their owner's side)
-// Matches the zBase calculation in PermanentStack.tsx
-const CARD_MARGIN_Z = TILE_SIZE * 0.1;
-const getCardZOffset = (owner: 1 | 2): number => {
-  return owner === 1
-    ? -TILE_SIZE * 0.5 + CARD_MARGIN_Z // Cards pushed toward p1 (negative Z)
-    : TILE_SIZE * 0.5 - CARD_MARGIN_Z;  // Cards pushed toward p2 (positive Z)
+// Card offset from tile center: the same owner-based resting Z that
+// PermanentStack renders with, so strips and the bullseye land on the card
+// rather than on the far side of the tile.
+const getCardZOffset = (owner: 1 | 2): number => getPermanentOwnerBaseZ(owner);
+
+/** Per-card drag offset ([x, z]) of a permanent, if it has one. */
+const permanentOffset = (
+  permanents: GameState["permanents"],
+  at: string,
+  index: number | undefined,
+): [number, number] => {
+  const off = permanents[at]?.[index ?? -1]?.offset;
+  return Array.isArray(off) ? [off[0] || 0, off[1] || 0] : [0, 0];
+};
+
+/** World position of an avatar's card centre (tile + its own offset). */
+const avatarWorld = (
+  avatars: GameState["avatars"],
+  seat: "p1" | "p2",
+  boardOffset: { x: number; y: number },
+  elevation: number,
+): [number, number, number] | null => {
+  const av = avatars?.[seat];
+  const pos = av?.pos as [number, number] | null | undefined;
+  if (!Array.isArray(pos)) return null;
+  const off = av?.offset;
+  const ox = Array.isArray(off) ? off[0] || 0 : 0;
+  const oz = Array.isArray(off) ? off[1] || 0 : 0;
+  return [
+    boardOffset.x + pos[0] * TILE_SIZE + ox,
+    elevation,
+    boardOffset.y + pos[1] * TILE_SIZE + oz,
+  ];
 };
 
 /**
@@ -204,44 +231,45 @@ export function MagicConnectionLines({
     const elevation = 0.25; // At card level (cards are raised above the board)
 
     // Spell card position (at tile center + owner offset)
-    const spellX = boardOffset.x + tile.x * TILE_SIZE;
-    const spellZOffset = getCardZOffset(spell.owner);
-    const spellZ = boardOffset.y + tile.y * TILE_SIZE + spellZOffset;
+    const [spellOffX, spellOffZ] = permanentOffset(
+      permanents,
+      spell.at,
+      spell.index,
+    );
+    const spellX = boardOffset.x + tile.x * TILE_SIZE + spellOffX;
+    const spellZ =
+      boardOffset.y + tile.y * TILE_SIZE + getCardZOffset(spell.owner) + spellOffZ;
     const spellPos: [number, number, number] = [spellX, elevation, spellZ];
 
     // Caster position (if selected)
     let casterPos: [number, number, number] | null = null;
     if (caster) {
       if (caster.kind === "avatar") {
-        const avatarPos = avatars?.[caster.seat]?.pos as
-          | [number, number]
-          | null;
-        if (Array.isArray(avatarPos)) {
-          const cx = boardOffset.x + avatarPos[0] * TILE_SIZE;
-          const cz = boardOffset.y + avatarPos[1] * TILE_SIZE;
-          casterPos = [cx, elevation, cz];
-        }
+        casterPos = avatarWorld(avatars, caster.seat, boardOffset, elevation);
       } else if (caster.kind === "permanent") {
         const [px, py] = String(caster.at).split(",").map(Number);
         if (Number.isFinite(px) && Number.isFinite(py)) {
-          const cx = boardOffset.x + px * TILE_SIZE;
-          const czOffset = getCardZOffset(caster.owner);
-          const cz = boardOffset.y + py * TILE_SIZE + czOffset;
+          const [ox, oz] = permanentOffset(permanents, caster.at, caster.index);
+          const cx = boardOffset.x + px * TILE_SIZE + ox;
+          const cz =
+            boardOffset.y + py * TILE_SIZE + getCardZOffset(caster.owner) + oz;
           casterPos = [cx, elevation, cz];
+        }
+      } else if (caster.kind === "site") {
+        // A site card is the tile itself, so it sits at the tile centre.
+        const [px, py] = String(caster.at).split(",").map(Number);
+        if (Number.isFinite(px) && Number.isFinite(py)) {
+          casterPos = [
+            boardOffset.x + px * TILE_SIZE,
+            elevation,
+            boardOffset.y + py * TILE_SIZE,
+          ];
         }
       }
     }
 
-    // If no explicit caster, use spell owner's avatar as default
-    if (!casterPos) {
-      const ownerSeat = seatFromOwner(spell.owner);
-      const avatarPos = avatars?.[ownerSeat]?.pos as [number, number] | null;
-      if (Array.isArray(avatarPos)) {
-        const cx = boardOffset.x + avatarPos[0] * TILE_SIZE;
-        const cz = boardOffset.y + avatarPos[1] * TILE_SIZE;
-        casterPos = [cx, elevation, cz];
-      }
-    }
+    // No default caster: while the player is still choosing who casts, a
+    // spell -> avatar strip would wrongly suggest the avatar is already it.
 
     // Target position (if selected)
     let targetPos: [number, number, number] | null = null;
@@ -260,20 +288,14 @@ export function MagicConnectionLines({
           const cellItems = permanents[target.at];
           const targetPerm = cellItems?.[target.index];
           const targetOwner = targetPerm?.owner ?? spell.owner; // Fallback to spell owner
-          const worldX = boardOffset.x + tx * TILE_SIZE;
-          const zOffset = getCardZOffset(targetOwner);
-          const worldZ = boardOffset.y + ty * TILE_SIZE + zOffset;
+          const [ox, oz] = permanentOffset(permanents, target.at, target.index);
+          const worldX = boardOffset.x + tx * TILE_SIZE + ox;
+          const worldZ =
+            boardOffset.y + ty * TILE_SIZE + getCardZOffset(targetOwner) + oz;
           targetPos = [worldX, elevation, worldZ];
         }
       } else if (target.kind === "avatar") {
-        const avatarPos = avatars?.[target.seat]?.pos as
-          | [number, number]
-          | null;
-        if (Array.isArray(avatarPos)) {
-          const worldX = boardOffset.x + avatarPos[0] * TILE_SIZE;
-          const worldZ = boardOffset.y + avatarPos[1] * TILE_SIZE;
-          targetPos = [worldX, elevation, worldZ];
-        }
+        targetPos = avatarWorld(avatars, target.seat, boardOffset, elevation);
       } else if (target.kind === "projectile") {
         // For projectiles, use firstHit if available, otherwise use intended target
         const hitTarget = target.firstHit || target.intended;
@@ -287,21 +309,27 @@ export function MagicConnectionLines({
               const hitIndex = hitTarget.index ?? 0;
               const hitPerm = cellItems?.[hitIndex];
               const hitOwner = hitPerm?.owner ?? spell.owner; // Fallback to spell owner
-              const worldX = boardOffset.x + tx * TILE_SIZE;
-              const zOffset = hitTarget.kind === "permanent" ? getCardZOffset(hitOwner) : 0;
-              const worldZ = boardOffset.y + ty * TILE_SIZE + zOffset;
-              targetPos = [worldX, elevation, worldZ];
+              if (hitTarget.kind === "permanent") {
+                const [ox, oz] = permanentOffset(permanents, hitTarget.at, hitIndex);
+                targetPos = [
+                  boardOffset.x + tx * TILE_SIZE + ox,
+                  elevation,
+                  boardOffset.y + ty * TILE_SIZE + getCardZOffset(hitOwner) + oz,
+                ];
+              } else {
+                // Avatar hit: find which avatar stands on that cell
+                const seatHere = (["p1", "p2"] as const).find((s) => {
+                  const p = avatars?.[s]?.pos as [number, number] | null | undefined;
+                  return Array.isArray(p) && p[0] === tx && p[1] === ty;
+                });
+                targetPos = seatHere
+                  ? avatarWorld(avatars, seatHere, boardOffset, elevation)
+                  : [boardOffset.x + tx * TILE_SIZE, elevation, boardOffset.y + ty * TILE_SIZE];
+              }
             }
           } else if ("seat" in hitTarget) {
             // intended target with seat (fallback for when firstHit not available)
-            const avatarPos = avatars?.[hitTarget.seat]?.pos as
-              | [number, number]
-              | null;
-            if (Array.isArray(avatarPos)) {
-              const worldX = boardOffset.x + avatarPos[0] * TILE_SIZE;
-              const worldZ = boardOffset.y + avatarPos[1] * TILE_SIZE;
-              targetPos = [worldX, elevation, worldZ];
-            }
+            targetPos = avatarWorld(avatars, hitTarget.seat, boardOffset, elevation);
           }
         }
       }

@@ -17,10 +17,14 @@ import type {
   SiteTile,
 } from "@/lib/game/store/types";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
-import { buildProjectileTarget } from "@/lib/game/store/utils/magicTargeting";
+import {
+  buildProjectileTarget,
+  isMagicSiteCasterCandidate,
+} from "@/lib/game/store/utils/magicTargeting";
 
 const HIGHLIGHT_TARGET = "#ef4444";
 const HIGHLIGHT_SWITCH_SOURCE = "#f59e0b"; // amber for switch site selection
+const HIGHLIGHT_CASTER = "#22c55e"; // green: chosen spellcaster
 
 type ProjectileHit = {
   kind: "permanent" | "avatar";
@@ -69,6 +73,7 @@ export type SiteCardProps = {
   actorKey: PlayerKey | null;
   currentPlayer: 1 | 2;
   setMagicTargetChoice: GameState["setMagicTargetChoice"];
+  setMagicCasterChoice: GameState["setMagicCasterChoice"];
   touchPreviewTimerRef: MutableRefObject<number | null>;
   touchContextTimerRef: MutableRefObject<number | null>;
   lastTapTimeRef: MutableRefObject<number>;
@@ -118,6 +123,7 @@ export function SiteCard({
   actorKey,
   currentPlayer,
   setMagicTargetChoice,
+  setMagicCasterChoice,
   touchPreviewTimerRef: _touchPreviewTimerRef,
   touchContextTimerRef: _touchContextTimerRef,
   lastTapTimeRef,
@@ -130,7 +136,6 @@ export function SiteCard({
   babelTowers,
   pendingEarthquake,
 }: SiteCardProps) {
-  void magicGuidesActive;
   void _touchPreviewTimerRef;
   void _touchContextTimerRef;
   if (!maybeSite) return null;
@@ -237,9 +242,18 @@ export function SiteCard({
     ) {
       hl = HIGHLIGHT_TARGET;
     }
-    // NOTE: Magic target site highlighting is disabled until we can provide
-    // accurate hints for every spell type. See reference/SorceryRulebook.pdf.
-    // The magic interaction flow (caster/target selection) still works.
+    if (magicGuidesActive && pendingMagic && !pendingMagic.guidesSuppressed) {
+      // This site was chosen to cast the spell.
+      if (
+        pendingMagic.caster?.kind === "site" &&
+        pendingMagic.caster.at === tileKey
+      ) {
+        hl = HIGHLIGHT_CASTER;
+      } else if (isMagicSiteCasterCandidate(pendingMagic, site)) {
+        // Sites that cast on their own (River of Flame, Merlin's Tower).
+        hl = HIGHLIGHT_SWITCH_SOURCE;
+      }
+    }
     return hl;
   }
 
@@ -305,6 +319,14 @@ export function SiteCard({
       (actorKey === "p1" && currentPlayer === 1) ||
       (actorKey === "p2" && currentPlayer === 2);
     if (!amActor || !actorIsActive) return;
+    if (pendingMagic.status === "choosingCaster") {
+      // Sites can be Spellcasters themselves.
+      if (isMagicSiteCasterCandidate(pendingMagic, site)) {
+        e.stopPropagation();
+        setMagicCasterChoice({ kind: "site", at: tileKey });
+      }
+      return;
+    }
     e.stopPropagation();
     if (pendingMagic.status === "choosingTarget") {
       if (pendingMagic.hints?.mode === "projectile") {

@@ -38,6 +38,7 @@ export type LifeState = "alive" | "dd" | "dead";
 export type PlayerState = {
   life: number;
   lifeState: LifeState; // 'alive', 'dd' (Death's Door), 'dead'
+  deathsDoorTurn?: string; // CPU matches: turn in which damage immunity began
   // Spend ledger: offset applied to computed available mana. Negative when
   // mana has been spent this turn, positive for manual or temporary gains.
   // Reset to 0 for a player at the start of their turn. This is the ONLY
@@ -49,6 +50,10 @@ export type BoardSize = { w: number; h: number };
 export type CellKey = string; // `${x},${y}`
 export type SiteTile = {
   owner: 1 | 2;
+  cpuNeutral?: boolean;
+  cpuFloodedUntil?: string | null;
+  cpuFloodOriginalThresholds?: CardRef["thresholds"];
+  cpuImmobileUntil?: number;
   tapped?: boolean;
   card?: CardRef | null;
 };
@@ -139,6 +144,18 @@ export type EntityBase<TCard> = {
   card: TCard;
   offset?: [number, number] | null;
   tapped?: boolean;
+  cpuTurnEffect?: { turn: string; power: number; movement: number; blaze?: boolean } | null;
+  cpuAirCast?: { turn: string; air: number };
+  cpuPlanarVoidwalk?: boolean;
+  cpuAsleep?: boolean;
+  cpuSwallowedBy?: string;
+  cpuStealthLost?: boolean;
+  cpuDamagePreventedTurn?: string | null;
+  summonedThisTurn?: boolean;
+  cpuExpiresTurn?: string | null;
+  cpuAuraTicks?: number;
+  cpuAuraVisited?: string[];
+  cpuAuraLastEnd?: {effect?: string; counter?: string};
 };
 
 // Champion reference for Dragonlord avatar
@@ -491,6 +508,16 @@ export type Permanents = Record<CellKey, PermanentItem[]>;
 
 // --- Magic Interaction (casting) -------------------------------------------------
 
+/**
+ * Who casts a pending Magic spell. Not only avatars and minions: four
+ * Omphalos artifacts and the Wicker Manikin cast on their own, and two sites
+ * do too (River of Flame, Merlin's Tower).
+ */
+export type MagicCaster =
+  | { kind: "avatar"; seat: PlayerKey }
+  | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 }
+  | { kind: "site"; at: CellKey };
+
 export type MagicTarget =
   | { kind: "location"; at: CellKey }
   | { kind: "permanent"; at: CellKey; index: number }
@@ -506,6 +533,19 @@ export type MagicTarget =
 
 export type PendingMagic = {
   id: string;
+  cpuChoice?: string;
+  cpuRandomMinion?: { card: CardRef; fromSeat: PlayerKey; graveyardIndex: number };
+  cpuRandomMinionOptions?: { card: CardRef; fromSeat: PlayerKey; graveyardIndex: number }[];
+  cpuEvent?:
+    | { kind: "geomancerFill"; seat: PlayerKey }
+    | { kind: "treasurePlace"; source: import("@/lib/game/cpu/spellTypes").UnitTarget; castOwner: 1 | 2 }
+    | { kind: "treasureRecover"; source: import("@/lib/game/cpu/spellTypes").UnitTarget }
+    | { kind: "drawChoice" }
+    | { kind: "randomChoice"; outcomes: import("@/lib/game/cpu/spellTypes").SpellOperation[] }
+    | { kind: "fightChoice"; source: import("@/lib/game/cpu/spellTypes").UnitTarget; target: import("@/lib/game/cpu/spellTypes").UnitTarget; strikeOnly?: boolean }
+    | { kind: "auraEnd"; source: import("@/lib/game/cpu/spellTypes").UnitTarget; counter?: boolean }
+    | { kind: "blazeTrail"; from: string; to: string; region: string; source: import("@/lib/game/cpu/spellTypes").UnitTarget; forced?: boolean }
+    | { kind: "genesis"; region: string; source?: import("@/lib/game/cpu/spellTypes").UnitTarget };
   tile: { x: number; y: number };
   // The spell card placed on board for UX; resolved to cemetery on completion
   spell: {
@@ -515,10 +555,7 @@ export type PendingMagic = {
     owner: 1 | 2;
     card: CardRef;
   };
-  caster?:
-    | { kind: "avatar"; seat: PlayerKey }
-    | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 }
-    | null;
+  caster?: MagicCaster | null;
   target?: MagicTarget | null;
   status:
     | "choosingCaster"
@@ -1724,6 +1761,9 @@ export type SerializedGame = {
 };
 
 export type GameState = {
+  cpuForcedMovement?: boolean;
+  cpuGenesisRequests?: { id: string; at: string }[];
+  cpuEffectRequests?: PendingMagic[];
   players: Record<PlayerKey, PlayerState>;
   currentPlayer: 1 | 2;
   turn: number;
@@ -2015,6 +2055,17 @@ export type GameState = {
   setTapPermanent: (at: CellKey, index: number, tapped: boolean) => void;
   // Magic casting flow (MVP)
   pendingMagic: PendingMagic | null;
+  setCpuMagicChoice: (key: string) => void;
+  activateCpuAbility: (key: string, seat?: PlayerKey, requestId?: string) => void;
+  cpuAbilityReceipts?: string[];
+  cpuPendingTriggerCount?: number;
+  cpuResolvingEffect?: boolean;
+  cpuEffectContinuations?: import("@/lib/game/cpu/spellTypes").CpuEffectContinuation[];
+  finishCpuEffect: (completion: import("@/lib/game/cpu/spellTypes").CpuEffectCompletion) => void;
+  cpuTriggerOptions?: {id: string; label: string}[];
+  cpuChosenTrigger?: string | null;
+  chooseCpuTrigger: (id: string) => void;
+  completeCpuMagicManual: () => void;
   // Animist cast choice (choose magic or spirit mode)
   pendingAnimistCast: PendingAnimistCast | null;
   beginAnimistCast: (input: {
@@ -2799,17 +2850,9 @@ export type GameState = {
       owner: 1 | 2;
       card: CardRef;
     };
-    presetCaster?:
-      | { kind: "avatar"; seat: PlayerKey }
-      | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 }
-      | null;
+    presetCaster?: MagicCaster | null;
   }) => void;
-  setMagicCasterChoice: (
-    caster:
-      | { kind: "avatar"; seat: PlayerKey }
-      | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 }
-      | null,
-  ) => void;
+  setMagicCasterChoice: (caster: MagicCaster | null) => void;
   setMagicTargetChoice: (target: MagicTarget | null) => void;
   confirmMagic: () => void;
   resolveMagic: () => void;

@@ -29,8 +29,13 @@ data-ktx2-bak
 data-webp
 public
 
-# Frontend source (not needed for server build)
-src
+# Frontend source is excluded except the CommonJS rules shared with CPU bots.
+src/**
+!src/lib/
+!src/lib/game/
+!src/lib/game/cpu/
+!src/lib/game/cpu/*.js
+!src/lib/game/cpu/cards.json
 
 # Misc
 logs

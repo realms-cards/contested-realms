@@ -11,7 +11,7 @@ process.env.TS_NODE_PROJECT = path.resolve(__dirname, 'tsconfig.vitest.json');
 export default defineConfig({
   test: {
     environment: 'jsdom',
-    include: ['tests/**/*.test.{ts,tsx}'],
+    include: ['tests/**/*.test.{ts,tsx}', 'src/**/*.test.{ts,tsx}', 'bots/**/*.test.{ts,tsx}'],
     globals: true,
     setupFiles: ['./tests/setup.ts'],
     reporters: ['default'],

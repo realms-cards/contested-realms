@@ -1,5 +1,6 @@
 import type { StateCreator } from "zustand";
 import { extractMagicTargetingHintsSync } from "@/lib/game/cardAbilities";
+import { getSpellChoice } from "@/lib/game/cpu/spells";
 import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import type { CustomMessage } from "@/lib/net/transport";
 import { findInquisitionInCards } from "./inquisitionSummonState";
@@ -11,6 +12,7 @@ import type {
   Permanents,
   SiteTile,
   CardRef,
+  MagicCaster,
   MagicTarget,
   ServerPatchT,
   Zones,
@@ -92,6 +94,25 @@ export function handleCustomMessage(
   const t = (msg as { type?: unknown }).type;
   if (typeof t !== "string" || !t) return;
   if (ECHO_SUPPRESSED_TYPES.has(t) && isOwnEcho(msg, get)) return;
+  if (t === "cpuActivateAbility") {
+    const message = msg as {id?: unknown; key?: unknown; playerKey?: unknown};
+    const seat = message.playerKey;
+    if (typeof message.id !== "string" || typeof message.key !== "string" ||
+        (seat !== "p1" && seat !== "p2") || seat === get().actorKey || !get().actorKey) return;
+    get().activateCpuAbility(message.key,seat,message.id);
+    return;
+  }
+  if (t === "cpuMagicChoice") {
+    const state = get();
+    const pending = state.pendingMagic;
+    const message = msg as { id?: unknown; key?: unknown; playerKey?: unknown };
+    if (!state.opponentPlayerId?.startsWith("cpu_") || !pending ||
+        pending.id !== message.id || typeof message.key !== "string" ||
+        message.playerKey !== seatFromOwner(pending.spell.owner)) return;
+    const choice = getSpellChoice(state, seatFromOwner(pending.spell.owner), pending.spell.card.name || "", message.key);
+    if (choice) set({ pendingMagic: { ...pending, cpuChoice: choice.key, caster: choice.caster, target: choice.target } });
+    return;
+  }
   if (t === "boardPing") {
     const payload = msg as {
       id?: string;
@@ -326,26 +347,21 @@ export function handleCustomMessage(
     set((s) => {
       if (!id || !s.pendingMagic || s.pendingMagic.id !== id)
         return s as GameState;
-      let caster:
-        | { kind: "avatar"; seat: PlayerKey }
-        | { kind: "permanent"; at: CellKey; index: number; owner: 1 | 2 }
-        | null = null;
+      let caster: MagicCaster | null = null;
       try {
         if (casterAny && typeof casterAny === "object") {
           const c = casterAny as Record<string, unknown>;
-          const kind =
-            c.kind === "avatar" || c.kind === "permanent"
-              ? (c.kind as "avatar" | "permanent")
-              : null;
-          if (kind === "avatar")
+          if (c.kind === "avatar")
             caster = { kind: "avatar", seat: c.seat as PlayerKey };
-          if (kind === "permanent")
+          if (c.kind === "permanent")
             caster = {
               kind: "permanent",
               at: c.at as CellKey,
               index: Number(c.index),
               owner: Number(c.owner) as 1 | 2,
             };
+          if (c.kind === "site" && typeof c.at === "string")
+            caster = { kind: "site", at: c.at as CellKey };
         }
       } catch {}
       return {
@@ -583,8 +599,10 @@ export function handleCustomMessage(
         ? opponentSeat(seatFromOwner(ownerVal as 1 | 2))
         : "p1";
     const mySeat = get().actorKey as PlayerKey | null;
-    // Show intercept chooser only to defender seat, or in hotseat (no actorKey)
-    if (mySeat && mySeat !== defenderSeat) return;
+    // In CPU games the human store also adjudicates a CPU interception (or
+    // decline), so retain the offer when the human is the moving player.
+    // Human-vs-human keeps its defender-only chooser.
+    if (mySeat && mySeat !== defenderSeat && !get().opponentPlayerId?.startsWith("cpu_")) return;
     set({
       pendingCombat: {
         id: String(id),
@@ -709,6 +727,11 @@ export function handleCustomMessage(
         },
       } as Partial<GameState> as GameState;
     });
+    const pending = get().pendingCombat;
+    if (get().opponentPlayerId?.startsWith("cpu_") && pending?.id === id &&
+        !pending.target && pending.defenders.length === 0) {
+      get().autoResolveCombat();
+    }
     return;
   }
   if (t === "combatAssign") {
@@ -777,7 +800,7 @@ export function handleCustomMessage(
       const amt = Number(rec.amount);
       const isAvatarDamage = rec.isAvatarDamage === true;
       if (!seat || !Number.isFinite(amt)) continue;
-      if (!mySeat || seat !== mySeat) continue;
+      if (!mySeat || (seat !== mySeat && !get().opponentPlayerId?.startsWith("cpu_"))) continue;
       try {
         get().addLife(seat, -Math.max(0, Math.floor(amt)), isAvatarDamage);
       } catch {}

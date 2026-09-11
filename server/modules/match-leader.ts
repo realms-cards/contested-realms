@@ -4,6 +4,8 @@ import type { PrismaClient } from "@prisma/client";
 import type Redis from "ioredis";
 import type { Server as SocketIOServer } from "socket.io";
 import { debugLog } from "../metrics";
+import { cpuEndPhasePatch } from "./cpu-end-phase";
+import { cpuTurnCleanup } from "./cpu-turn-cleanup";
 import type {
   MatchConsoleEvent,
   MatchPermanents,
@@ -71,6 +73,7 @@ interface AvatarState {
   pos: [number, number] | null;
   tapped: boolean;
   offset?: unknown;
+  cpuTurnEffect?: { turn: string; power: number; movement: number; blaze?: boolean } | null;
 }
 
 interface AvatarsState {
@@ -101,6 +104,7 @@ interface MatchGameState extends Record<string, unknown> {
   board?: { sites?: Record<string, unknown> };
   phase?: string;
   currentPlayer?: number;
+  turn?: number;
 }
 
 interface InteractionRequestMessage extends Record<string, unknown> {
@@ -167,6 +171,11 @@ interface MatchState {
   interactionGrants: Map<string, GrantRecord[]>;
   interactionRequests: Map<string, InteractionRequestEntry>;
   mulliganDone?: Set<string>;
+  /** Players whose client reported the board finished loading */
+  clientReady?: Set<string>;
+  /** Set once every seat reported ready; also the moment the clock starts */
+  readyAt?: number;
+  _clientReadyTimer?: NodeJS.Timeout | null;
   _autoSeatTimer?: NodeJS.Timeout | null;
   _autoSeatApplied?: boolean;
   _cleanupTimer?: NodeJS.Timeout | null;
@@ -200,6 +209,8 @@ interface LeaderResult {
 interface MatchLeaderDeps {
   io: SocketIOServer;
   storeRedis: Redis | null;
+  /** Pub/sub channel used to tell every instance who is in which match */
+  matchControlChannel: string;
   prisma: PrismaClient;
   players: Map<string, PlayerState>;
   getOrLoadMatch: (matchId: string) => Promise<MatchState | null>;
@@ -327,6 +338,12 @@ interface MatchLeaderDeps {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
+
+/**
+ * How long the leader waits for the remaining seat to report board readiness
+ * before unlocking anyway (stale client, crashed tab).
+ */
+const CLIENT_READY_GRACE_MS = 20000;
 
 const newZoneCardInstanceId = () =>
   `card_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
@@ -588,6 +605,14 @@ function ensureAvatar(value: unknown, fallback: AvatarState): AvatarState {
   } else if (Object.prototype.hasOwnProperty.call(fallback, "offset")) {
     avatar.offset = fallback.offset ?? null;
   }
+  const effect = Object.prototype.hasOwnProperty.call(value, "cpuTurnEffect")
+    ? value.cpuTurnEffect : fallback.cpuTurnEffect;
+  if (effect === null) avatar.cpuTurnEffect = null;
+  else if (isRecord(effect) && typeof effect.turn === "string" &&
+      typeof effect.power === "number" && Number.isFinite(effect.power) &&
+      typeof effect.movement === "number" && Number.isFinite(effect.movement)) {
+    avatar.cpuTurnEffect = { turn: effect.turn, power: effect.power, movement: effect.movement,...(effect.blaze === true ? {blaze:true} : {}) };
+  }
   return avatar;
 }
 
@@ -626,6 +651,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
   const {
     io,
     storeRedis,
+    matchControlChannel,
     prisma,
     players,
     getOrLoadMatch,
@@ -938,6 +964,16 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       if (match && patch) {
         const prevMatchEnded = Boolean(match.game && match.game.matchEnded);
         let patchToApply: MatchPatch = { ...patch };
+        const cpuActionId = isCpuPlayerId(playerId) && typeof patchToApply.__cpuActionId === "string"
+          ? patchToApply.__cpuActionId : null;
+        delete patchToApply.__cpuActionId;
+        delete patchToApply.cpuActionReceipts;
+        if (cpuActionId) {
+          patchToApply.cpuActionReceipts = {
+            ...(isRecord(match.game?.cpuActionReceipts) ? match.game.cpuActionReceipts : {}),
+            [actorSeat]: cpuActionId,
+          };
+        }
 
         const enforce =
           rulesEnforceMode === "all" ||
@@ -1414,6 +1450,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             normalizedAvatars.p1
           ) {
             normalizedAvatars.p1 = {
+              ...normalizedAvatars.p1,
               card: prevAvatars.p1.card,
               pos: normalizedAvatars.p1.pos,
               tapped: normalizedAvatars.p1.tapped,
@@ -1427,6 +1464,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             normalizedAvatars.p2
           ) {
             normalizedAvatars.p2 = {
+              ...normalizedAvatars.p2,
               card: prevAvatars.p2.card,
               pos: normalizedAvatars.p2.pos,
               tapped: normalizedAvatars.p2.tapped,
@@ -1599,6 +1637,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           });
         }
 
+        if (match.playerIds.some(id => isCpuPlayerId(id))) {
+          patchToApply = cpuEndPhasePatch(baseForMerge,patchToApply,!isCpuPlayerId(playerId)) as MatchPatch;
+        }
         const mergedGame = deepMergeReplaceArrays(
           baseForMerge as Record<string, unknown>,
           patchToApply as Record<string, unknown>,
@@ -1643,6 +1684,11 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             prevCurrentPlayer !== nextCurrentPlayer,
         );
         if (turnJustChanged) {
+          if (match.playerIds.some(id => isCpuPlayerId(id))) {
+            const cleanup = cpuTurnCleanup(match.game);
+            match.game = { ...match.game, ...cleanup } as MatchGameState;
+            patchToApply = { ...patchToApply, ...cleanup };
+          }
           const currentTurn = Number(match.game?.turn || 1);
           match.game = {
             ...match.game,
@@ -1934,7 +1980,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
         }
 
         if (senderSocketId) {
-          if (d20OnlyPatch) {
+          if (d20OnlyPatch || match.playerIds.some(id => isCpuPlayerId(id))) {
             io.to(matchRoom).emit("statePatch", {
               patch: enrichedPatchToApply,
               t: now,
@@ -1957,6 +2003,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
             patch: enrichedPatchToApply,
             t: now,
           });
+        }
+        if (cpuActionId && senderSocketId) {
+          io.to(senderSocketId).emit("message", { type: "cpuActionApplied", id: cpuActionId });
         }
         // Also broadcast to spectators (sanitized unless commentator)
         try {
@@ -2104,6 +2153,32 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     }
   }
 
+  /**
+   * Tell every instance which match a player belongs to.
+   *
+   * A player's actions are handled by the instance their socket is connected
+   * to, but only the match leader runs joinMatch - so without this the other
+   * instance never learns `player.matchId` and silently drops every action that
+   * player sends (rolls, avatars, deck submissions) while still delivering
+   * broadcasts to them. Published only after the leader accepts the join, so a
+   * rejected joiner never gains an association.
+   */
+  function publishPlayerMatchAssociation(
+    playerId: string,
+    matchId: string,
+    attached: boolean,
+  ): void {
+    if (!storeRedis) return;
+    try {
+      void storeRedis.publish(
+        matchControlChannel,
+        JSON.stringify({ type: "player:match", matchId, playerId, attached }),
+      );
+    } catch {
+      // best effort - the leader stays authoritative either way
+    }
+  }
+
   async function detachPlayerFromMatch(
     match: MatchState,
     playerId: string,
@@ -2113,6 +2188,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     if (!match.playerIds.includes(playerId)) return;
 
     match.playerIds = match.playerIds.filter((id) => id !== playerId);
+    publishPlayerMatchAssociation(playerId, match.id, false);
     const room = `match:${match.id}`;
 
     if (socketId) {
@@ -2210,6 +2286,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     }
     playerState.matchId = matchId;
     playerState.socketId = socketId;
+    // Before any matchStarted emit, so the player's own instance can route the
+    // actions they send as soon as they react to it.
+    publishPlayerMatchAssociation(playerId, matchId, true);
 
     const room = `match:${matchId}`;
 
@@ -2268,6 +2347,130 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
       await persistMatchUpdate(match, null, playerId, Date.now());
     } catch {
       // ignore
+    }
+  }
+
+  /**
+   * Per-player board readiness. Both clients load card art and build the scene
+   * after the mulligan handshake, so `startedAt` stamped at mulligan time would
+   * bill loading against the round clock and the turn-1 announcement would fire
+   * behind a loading curtain. The match only truly begins once every seat is
+   * loaded: that is when we (re)stamp the clock and tell both clients to
+   * unlock.
+   */
+  async function handleClientReady(
+    matchId: string,
+    playerId: string,
+    socketId?: string | null,
+  ): Promise<void> {
+    const match = await getOrLoadMatch(matchId);
+    if (!match) return;
+    const matchRoom = `match:${matchId}`;
+
+    // Already unlocked (reload / late rejoin): answer the asking client only.
+    // `readyAt` lives in memory, so a match rehydrated from the DB mid-game has
+    // none — a match past turn 1 is unambiguously underway, so treat it as
+    // unlocked rather than making the rejoining player wait out the grace timer.
+    const turn = typeof match.game?.turn === "number" ? match.game.turn : 1;
+    if (typeof match.readyAt !== "number" && turn > 1) {
+      match.readyAt = typeof match.startedAt === "number" ? match.startedAt : Date.now();
+    }
+    if (typeof match.readyAt === "number") {
+      const payload = {
+        matchId,
+        startedAt: match.startedAt,
+        t: Date.now(),
+      };
+      try {
+        if (socketId) io.to(socketId).emit("matchReady", payload);
+        else io.to(matchRoom).emit("matchReady", payload);
+      } catch {
+        // ignore broadcast error
+      }
+      return;
+    }
+
+    if (!(match.clientReady instanceof Set)) {
+      match.clientReady = new Set<string>();
+    }
+    match.clientReady.add(playerId);
+
+    const seats = Array.isArray(match.playerIds) ? match.playerIds : [];
+    // Bots have no client to load anything — they are ready by definition.
+    const waitingFor = seats.filter(
+      (pid) => !match.clientReady?.has(pid) && !isCpuPlayerId(pid),
+    );
+    try {
+      console.log(
+        `[Ready] clientReady <= ${playerId}. Waiting for: ${
+          waitingFor.length > 0
+            ? waitingFor
+                .map((pid) => players.get(pid)?.displayName ?? pid)
+                .join(", ")
+            : "none"
+        }`,
+      );
+    } catch {
+      // ignore logging errors
+    }
+
+    if (seats.length > 0 && waitingFor.length > 0) {
+      // Never deadlock behind a seat that will not report (older client, a tab
+      // that crashed mid-load): release shortly after the first player is in.
+      if (!match._clientReadyTimer) {
+        match._clientReadyTimer = setTimeout(() => {
+          match._clientReadyTimer = null;
+          void unlockMatch(matchId).catch(() => {});
+        }, CLIENT_READY_GRACE_MS);
+      }
+      return;
+    }
+
+    await unlockMatch(matchId);
+  }
+
+  /** Stamp the match clock and unlock both boards. Idempotent. */
+  async function unlockMatch(matchId: string): Promise<void> {
+    const match = await getOrLoadMatch(matchId);
+    if (!match) return;
+    if (typeof match.readyAt === "number") return;
+    if (match._clientReadyTimer) {
+      clearTimeout(match._clientReadyTimer);
+      match._clientReadyTimer = null;
+    }
+
+    const now = Date.now();
+    match.readyAt = now;
+    // Re-stamp: the clock measures playable time, not loading time.
+    match.startedAt = now;
+    if (match.tournamentId) {
+      try {
+        await prisma.match.updateMany({
+          where: { id: match.id, status: { in: ["pending", "active"] } },
+          data: { status: "active", startedAt: new Date(now) },
+        });
+      } catch {
+        // ignore
+      }
+    }
+
+    try {
+      console.log(`[Ready] match ${matchId} unlocked; clock starts now`);
+    } catch {
+      // ignore logging errors
+    }
+
+    const matchRoom = `match:${matchId}`;
+    try {
+      io.to(matchRoom).emit("matchReady", {
+        matchId,
+        startedAt: now,
+        t: now,
+      });
+      // Refresh match info so clients pick up the new startedAt for the timer.
+      io.to(matchRoom).emit("matchStarted", { match: getMatchInfo(match) });
+    } catch {
+      // ignore broadcast error
     }
   }
 
@@ -2756,12 +2959,14 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
     applyAction,
     joinMatch,
     handleMulliganDone,
+    handleClientReady,
     handleInteractionRequest,
     handleInteractionResponse,
   };
 }
 
 export const __testZoneHelpers = {
+  normalizeAvatar: ensureAvatar,
   normalizeZoneCardForSeat: normalizeZoneCard,
   ensurePlayerZonesForSeat: ensurePlayerZones,
   buildBattlefieldFromPermanentsForTest: buildBattlefieldFromPermanents,

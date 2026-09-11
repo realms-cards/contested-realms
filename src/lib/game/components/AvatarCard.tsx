@@ -32,7 +32,12 @@ import type {
   PlayerKey,
 } from "@/lib/game/store/types";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
-import { buildProjectileTarget } from "@/lib/game/store/utils/magicTargeting";
+import {
+  buildProjectileTarget,
+  isMagicCasterCandidate,
+  isMagicTargetCandidate,
+  MAGIC_CANDIDATE_COLOR,
+} from "@/lib/game/store/utils/magicTargeting";
 import { TOKEN_BY_NAME, tokenTextureUrl } from "@/lib/game/tokens";
 
 type HoverContext = {
@@ -67,6 +72,7 @@ type CombatContext = {
 type MagicContext = {
   pendingMagic: GameState["pendingMagic"];
   avatars: GameState["avatars"];
+  sites: GameState["board"]["sites"];
   setMagicCasterChoice: GameState["setMagicCasterChoice"];
   setMagicTargetChoice: GameState["setMagicTargetChoice"];
   computeProjectileFirstHits: () => Record<
@@ -277,12 +283,12 @@ export function AvatarCard({
   const {
     pendingMagic,
     avatars: allAvatars,
+    sites: magicSites,
     setMagicCasterChoice,
     setMagicTargetChoice,
     computeProjectileFirstHits,
     magicGuidesActive,
   } = magicContext;
-  void magicGuidesActive;
   const { moveAvatarToWithOffset, incrementCounter, decrementCounter } =
     avatarActions;
 
@@ -373,6 +379,26 @@ export function AvatarCard({
       pendingMagic.caster.seat === seat
     ) {
       hl = HIGHLIGHT_ATTACKER;
+    }
+    if (
+      !hl &&
+      magicGuidesActive &&
+      pendingMagic &&
+      !pendingMagic.guidesSuppressed &&
+      pos &&
+      (isMagicCasterCandidate(
+        pendingMagic,
+        { kind: "avatar", seat },
+        { permanents, sites: magicSites },
+      ) ||
+        isMagicTargetCandidate(
+          pendingMagic,
+          allAvatars,
+          { x: Number(pos[0]), y: Number(pos[1]) },
+          "avatar",
+        ))
+    ) {
+      hl = MAGIC_CANDIDATE_COLOR;
     }
     return hl;
   }

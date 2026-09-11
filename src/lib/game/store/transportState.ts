@@ -761,7 +761,8 @@ export const createTransportSlice: StateCreator<
           console.warn(`[net] Batch send failed: ${String(err)}`);
         }
       };
-      queueMicrotask(batchFlushCallback);
+      const scheduledFlush = batchFlushCallback;
+      queueMicrotask(() => { if (batchFlushCallback === scheduledFlush) scheduledFlush(); });
     }
 
     return true;
@@ -799,6 +800,9 @@ export const createTransportSlice: StateCreator<
   },
 
   flushPendingPatches: () => {
+    // Explicit flushes (e.g. end-phase completion) must include this frame's
+    // buffered effects, not only patches queued while disconnected.
+    batchFlushCallback?.();
     const queue = get().pendingPatches;
     if (!Array.isArray(queue) || queue.length === 0) return;
     const tr = get().transport;

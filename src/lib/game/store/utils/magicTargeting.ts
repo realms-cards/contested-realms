@@ -1,9 +1,17 @@
-import type { MagicTargetRange } from "@/lib/game/cardAbilities";
+import {
+  isSpellcasterCard,
+  isSpellcasterGrantingArtifact,
+  isSpellcasterGrantingSite,
+  type MagicTargetRange,
+} from "@/lib/game/cardAbilities";
 import type {
+  BoardState,
   CellKey,
   GameState,
   MagicTarget,
   PendingMagic,
+  PlayerKey,
+  SiteTile,
 } from "@/lib/game/store/types";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
 
@@ -140,6 +148,108 @@ export function buildProjectileTarget(
     firstHit,
     intended: intended ?? undefined,
   };
+}
+
+/** Glow colour for things the caster may click next (casters, then targets). */
+export const MAGIC_CANDIDATE_COLOR = "#f59e0b";
+
+/** Board context needed to decide who may cast. */
+export type MagicCasterContext = {
+  permanents: GameState["permanents"];
+  sites: BoardState["sites"];
+};
+
+/** A thing the player might click while choosing who casts. */
+export type MagicCasterCandidate =
+  | { kind: "avatar"; seat: PlayerKey }
+  | { kind: "permanent"; at: CellKey; index: number }
+  | { kind: "site"; at: CellKey };
+
+/**
+ * True when a permanent counts as a Spellcaster: it carries the keyword
+ * itself (a wizard, an Omphalos, the Wicker Manikin), it bears an artifact
+ * that grants Spellcaster (Merlin's Staff, Hand of Glory, ...), or it stands
+ * on a site that grants it (Standing Stones).
+ */
+export function isSpellcasterPermanent(
+  ctx: MagicCasterContext,
+  at: CellKey,
+  index: number,
+): boolean {
+  const list = ctx.permanents[at] || [];
+  const item = list[index];
+  if (!item || item.attachedTo) return false;
+  if (isSpellcasterCard(item.card?.name, item.card?.text ?? null)) return true;
+  // An artifact carried by this permanent may grant the keyword.
+  const bearsGrantingArtifact = list.some(
+    (p) =>
+      p?.attachedTo &&
+      p.attachedTo.at === at &&
+      p.attachedTo.index === index &&
+      isSpellcasterGrantingArtifact(p.card?.name),
+  );
+  if (bearsGrantingArtifact) return true;
+  // Standing Stones and friends turn the minions standing on them into
+  // Spellcasters.
+  return isSpellcasterGrantingSite(ctx.sites[at]?.card?.name);
+}
+
+/**
+ * True when a site the player controls casts on its own and so may be picked
+ * as the spellcaster (River of Flame, Merlin's Tower).
+ */
+export function isMagicSiteCasterCandidate(
+  pendingMagic: PendingMagic,
+  site: SiteTile | undefined | null,
+): boolean {
+  if (pendingMagic.status !== "choosingCaster") return false;
+  if (!site || site.owner !== pendingMagic.spell.owner) return false;
+  return isSpellcasterCard(site.card?.name, site.card?.text ?? null);
+}
+
+/**
+ * True when this card may be picked as the spellcaster for the pending spell:
+ * the spell owner's avatar, one of their Spellcaster permanents, or a site
+ * they control that casts on its own (River of Flame, Merlin's Tower).
+ */
+export function isMagicCasterCandidate(
+  pendingMagic: PendingMagic,
+  candidate: MagicCasterCandidate,
+  ctx: MagicCasterContext,
+): boolean {
+  if (pendingMagic.status !== "choosingCaster") return false;
+  const owner = pendingMagic.spell.owner;
+  const ownerSeat = seatFromOwner(owner);
+  if (candidate.kind === "avatar") return candidate.seat === ownerSeat;
+  if (candidate.kind === "site")
+    return isMagicSiteCasterCandidate(pendingMagic, ctx.sites[candidate.at]);
+  const item = ctx.permanents[candidate.at]?.[candidate.index];
+  if (!item || item.owner !== owner) return false;
+  return isSpellcasterPermanent(ctx, candidate.at, candidate.index);
+}
+
+/**
+ * True when a unit / avatar on `tile` may be clicked as the spell's target
+ * given the spell's mode and range from the chosen caster.
+ */
+export function isMagicTargetCandidate(
+  pendingMagic: PendingMagic,
+  avatars: GameState["avatars"],
+  tile: TilePos,
+  kind: "permanent" | "avatar",
+): boolean {
+  if (pendingMagic.status !== "choosingTarget" || pendingMagic.target)
+    return false;
+  const hints = pendingMagic.hints;
+  const mode = hints?.mode ?? "single";
+  const origin = getMagicOrigin(pendingMagic, avatars);
+  if (mode === "projectile") return projectileDirection(origin, tile) !== null;
+  if (mode !== "single") return false;
+  const allowed =
+    kind === "permanent"
+      ? hints?.allow?.permanent !== false
+      : hints?.allow?.avatar !== false;
+  return allowed && isTileInMagicRange(hints?.range ?? "global", origin, tile);
 }
 
 /** Short label for the HUD describing what kind of target the spell wants. */

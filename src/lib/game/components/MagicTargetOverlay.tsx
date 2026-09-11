@@ -7,11 +7,8 @@ import { TILE_SIZE } from "@/lib/game/constants";
 import { requestCosmeticFrame } from "@/lib/game/render/cosmeticFrame";
 import type { CellKey, GameState, Permanents } from "@/lib/game/store/types";
 import {
-  cellToPos,
   getMagicOrigin,
   isTileInMagicRange,
-  isTileOnProjectilePath,
-  projectileDirection,
   type TilePos,
 } from "@/lib/game/store/utils/magicTargeting";
 
@@ -37,14 +34,15 @@ type TileRole = "target" | "path" | "candidate" | "area";
 
 const CANDIDATE_COLOR = "#f59e0b";
 
+// Outline-led: a faint fill keeps the tile readable, the border does the work.
 const ROLE_STYLE: Record<
   TileRole,
   { opacity: number; pulse: number; useHighlight: boolean }
 > = {
-  target: { opacity: 0.32, pulse: 0.1, useHighlight: true },
-  path: { opacity: 0.16, pulse: 0.04, useHighlight: true },
-  candidate: { opacity: 0.14, pulse: 0.06, useHighlight: false },
-  area: { opacity: 0.22, pulse: 0.08, useHighlight: true },
+  target: { opacity: 0.14, pulse: 0.05, useHighlight: true },
+  path: { opacity: 0.06, pulse: 0.02, useHighlight: true },
+  candidate: { opacity: 0.05, pulse: 0.03, useHighlight: false },
+  area: { opacity: 0.1, pulse: 0.04, useHighlight: true },
 };
 
 function avatarTile(
@@ -63,52 +61,30 @@ function samePos(a: TilePos | null, b: TilePos): boolean {
 function computeRole(
   props: MagicTargetOverlayProps,
 ): TileRole | null {
-  const { pendingMagic, avatars, permanents, hasSite, tileX, tileY } = props;
+  const { pendingMagic, avatars, hasSite, tileX, tileY } = props;
   if (!pendingMagic) return null;
   const tile: TilePos = { x: tileX, y: tileY };
   const tileKey = `${tileX},${tileY}` as CellKey;
   const origin = getMagicOrigin(pendingMagic, avatars);
   const target = pendingMagic.target;
 
+  // Units and avatars carry their own glow (candidate / caster / target) and
+  // the chevron strips connect spell -> caster -> target, so this overlay
+  // only marks *locations*: a chosen site, eligible sites, or an area.
   if (target) {
-    if (target.kind === "location" || target.kind === "permanent") {
+    if (target.kind === "location") {
       return target.at === tileKey ? "target" : null;
     }
-    if (target.kind === "avatar") {
-      return samePos(avatarTile(avatars, target.seat), tile) ? "target" : null;
-    }
-    // Projectile: light the line from the caster up to what it hits.
-    const hitPos = target.firstHit ? cellToPos(target.firstHit.at) : null;
-    const intendedPos = (() => {
-      const it = target.intended;
-      if (!it) return null;
-      if (it.kind === "permanent") return cellToPos(it.at);
-      return avatarTile(avatars, it.seat);
-    })();
-    const until = hitPos ?? intendedPos;
-    if (until && samePos(until, tile)) return "target";
-    return isTileOnProjectilePath(origin, target.direction, tile, until)
-      ? "path"
-      : null;
+    return null;
   }
 
   if (pendingMagic.status !== "choosingTarget") return null;
   const mode = pendingMagic.hints?.mode ?? "single";
   const range = pendingMagic.hints?.range ?? "global";
-
-  if (mode === "none") return null;
-  if (mode === "projectile") {
-    return projectileDirection(origin, tile) ? "candidate" : null;
-  }
+  if (mode !== "site" && mode !== "area") return null;
   if (!isTileInMagicRange(range, origin, tile)) return null;
   if (mode === "area") return "area";
-  if (mode === "site") return hasSite ? "candidate" : null;
-  // single: only tiles with something to hit
-  const occupied =
-    (permanents[tileKey] || []).some((p) => p && !p.attachedTo) ||
-    samePos(avatarTile(avatars, "p1"), tile) ||
-    samePos(avatarTile(avatars, "p2"), tile);
-  return occupied ? "candidate" : null;
+  return hasSite ? "candidate" : null;
 }
 
 function MagicTileHighlight({

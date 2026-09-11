@@ -487,6 +487,7 @@ export function BoardTile({
         actorKey={actorKey}
         currentPlayer={currentPlayer}
         setMagicTargetChoice={magicContext.setMagicTargetChoice}
+        setMagicCasterChoice={magicContext.setMagicCasterChoice}
         touchPreviewTimerRef={touchContext.touchPreviewTimerRef}
         touchContextTimerRef={touchContext.touchContextTimerRef}
         lastTapTimeRef={touchContext.lastTapTimeRef}

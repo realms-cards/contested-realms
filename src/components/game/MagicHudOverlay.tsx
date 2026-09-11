@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import CpuAbilityChoices from "@/components/game/CpuAbilityChoices";
+import CpuMagicChoices from "@/components/game/CpuMagicChoices";
 import { useGameStore } from "@/lib/game/store";
 import {
   getCellNumber,
@@ -13,6 +15,14 @@ import {
 } from "@/lib/game/store/utils/magicTargeting";
 
 export default function MagicHudOverlay() {
+  const cpuMatch = useGameStore(s => s.opponentPlayerId?.startsWith("cpu_") === true);
+  const spellName = useGameStore(s => s.pendingMagic?.spell.card.name);
+  if (cpuMatch && spellName) return <CpuMagicChoices />;
+  if (cpuMatch) return <CpuAbilityChoices />;
+  return <TabletopMagicHudOverlay />;
+}
+
+function TabletopMagicHudOverlay() {
   const pendingMagic = useGameStore((s) => s.pendingMagic);
   const board = useGameStore((s) => s.board);
   const permanents = useGameStore((s) => s.permanents);
@@ -135,24 +145,37 @@ export default function MagicHudOverlay() {
         }
       }
 
-      if (status === "choosingCaster") return `Select a Spellcaster`;
+      // Every step names the next click so the player never has to guess.
+      const range = describeMagicRange(pm.hints);
+      const where = range ? ` ${range}` : "";
+      if (!actorIsActive) {
+        if (status === "choosingCaster")
+          return `Opponent is choosing who casts ${cardName}…`;
+        if (status === "choosingTarget")
+          return `Opponent is choosing a target for ${cardName}…`;
+        if (status === "confirm")
+          return `Apply ${cardName} on the board together, then press Done`;
+        return `Opponent is casting ${cardName}`;
+      }
+      if (status === "choosingCaster")
+        return `Step 1 · Click who casts ${cardName}: your Avatar, or any Spellcaster minion, artifact or site (highlighted)`;
       if (status === "choosingTarget") {
-        const range = describeMagicRange(pm.hints);
-        const where = range ? ` ${range}` : "";
+        if (pm.target) return `Step 2 · Target chosen — press Confirm`;
         switch (pm.hints?.mode) {
           case "projectile":
-            return "Choose a direction: click a tile or unit in line with the caster";
+            return "Step 2 · Click a unit or tile in a straight line from the caster";
           case "site":
-            return `Select a site${where}`;
+            return `Step 2 · Click the site${where} to target`;
           case "area":
-            return `Area effect${where}: confirm to cast`;
+            return `Step 2 · Hits every unit${where} — press Confirm`;
           case "none":
-            return `No target needed: confirm to cast`;
+            return `Step 2 · No target needed — press Confirm`;
           default:
-            return `Select a unit or avatar${where}`;
+            return `Step 2 · Click the unit or avatar${where} to target`;
         }
       }
-      if (status === "confirm") return `Cast ${cardName}`;
+      if (status === "confirm")
+        return `Step 3 · Apply ${cardName} on the board by hand; your opponent presses Done when finished`;
       if (status === "resolving") return `Resolving ${cardName}…`;
       return `Casting ${cardName}`;
     })();
@@ -188,6 +211,14 @@ export default function MagicHudOverlay() {
         return (
           <span className="px-2 py-0.5 rounded bg-white/10">
             Caster: Permanent @{c.at}
+          </span>
+        );
+      }
+      if (c.kind === "site") {
+        const name = board?.sites?.[c.at]?.card?.name || "Site";
+        return (
+          <span className="px-2 py-0.5 rounded bg-white/10">
+            Caster: {name}
           </span>
         );
       }
@@ -280,6 +311,16 @@ export default function MagicHudOverlay() {
             {casterChip}
             {cardChip}
           </span>
+          {actorIsActive && status === "choosingCaster" ? (
+            <button
+              className="mx-1 rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1 select-none"
+              onClick={() =>
+                setMagicCasterChoice({ kind: "avatar", seat: ownerSeat })
+              }
+            >
+              Cast with Avatar
+            </button>
+          ) : null}
           {actorIsActive && status === "choosingTarget" ? (
             <>
               {pm.target || !needsTarget ? (
@@ -314,8 +355,9 @@ export default function MagicHudOverlay() {
             <button
               className="mx-1 rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 select-none"
               onClick={() => resolveMagic()}
+              title="Confirms the effect has been applied; sends the spell to the cemetery"
             >
-              Resolve
+              Done
             </button>
           ) : null}
           {actorIsActive ? (
@@ -474,11 +516,11 @@ export default function MagicHudOverlay() {
                 : "No rules text available."}
           </div>
           {projectileMismatchWarning}
-          {!actorIsActive ? (
-            <div className="mt-3 text-xs opacity-70">
-              Waiting for opponent to resolve…
-            </div>
-          ) : null}
+          <div className="mt-3 text-xs opacity-70">
+            {actorIsActive
+              ? "The app does not apply this effect for you: carry it out on the board (damage, moves, cards). Your opponent presses Done once it is applied."
+              : "The app does not apply this effect automatically: apply it on the board together, then press Done to send the spell to the cemetery."}
+          </div>
         </div>
       </div>
     );

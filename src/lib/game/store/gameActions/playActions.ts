@@ -1,5 +1,7 @@
 import type { StateCreator } from "zustand";
 import { isAnimist, isGeomancer } from "@/lib/game/avatarAbilities";
+import { recordAirCast } from "@/lib/game/cpu/castHistory";
+import { hasCpuGenesis } from "@/lib/game/cpu/genesis";
 import {
   BEACON_GENESIS_SITES,
   BREAK_WARDS_GENESIS_SITES,
@@ -75,6 +77,7 @@ export const triggerSiteGenesis = (
 ): void => {
   const lc = siteName.toLowerCase();
   const state = get();
+  if (state.opponentPlayerId?.startsWith("cpu_") && hasCpuGenesis(siteName)) return;
 
   // Mismanaged Mortuary - register cemetery swap effect
   // "Treat your opponent's cemetery as yours, and vice versa."
@@ -788,7 +791,7 @@ export const createPlayActionsSlice: StateCreator<
         }
 
         // Geomancer ability 1: "If you played an earth site, fill a void adjacent to you with Rubble."
-        if (isGeomancer(get().avatars[who]?.card?.name)) {
+        if (isGeomancer(get().avatars[who]?.card?.name) && !state.opponentPlayerId?.startsWith("cpu_")) {
           const earthThreshold = Number(card.thresholds?.earth ?? 0);
           console.log("[GEOMANCER] Earth site check:", {
             cardName: card.name,
@@ -985,6 +988,8 @@ export const createPlayActionsSlice: StateCreator<
           [permanentInstanceId]: subsurfaceAbility,
         };
       }
+      const cpuAirCast = state.opponentPlayerId?.startsWith("cpu_") ? recordAirCast(state,who,card) : null;
+      if (cpuAirCast) combined.avatars = { [who]: {...get().avatars[who],cpuAirCast} } as GameState["avatars"];
       if (Object.keys(combined).length > 0) get().trySendPatch(combined);
       // Check for special card abilities that need custom flows
       const cardNameLower = (card.name || "").toLowerCase();
@@ -1633,7 +1638,7 @@ export const createPlayActionsSlice: StateCreator<
         }
       }
       // If this is Raise Dead, begin the confirmation flow to summon random dead minion
-      else if (isRaiseDead && newest) {
+      else if (isRaiseDead && newest && !get().opponentPlayerId?.startsWith("cpu_")) {
         try {
           get().beginRaiseDead({
             spell: {
@@ -1754,6 +1759,7 @@ export const createPlayActionsSlice: StateCreator<
       } as GameState["zones"];
       return {
         zones: mergedZones,
+        ...(cpuAirCast ? {avatars:{...get().avatars,[who]:{...get().avatars[who],cpuAirCast}}} : {}),
         permanents: per,
         selectedCard: null,
         selectedPermanent: null,
@@ -2090,7 +2096,7 @@ export const createPlayActionsSlice: StateCreator<
         }
 
         // Geomancer ability 1: "If you played an earth site, fill a void adjacent to you with Rubble."
-        if (isGeomancer(get().avatars[who]?.card?.name)) {
+        if (isGeomancer(get().avatars[who]?.card?.name) && !state.opponentPlayerId?.startsWith("cpu_")) {
           const earthThreshold = Number(card.thresholds?.earth ?? 0);
           if (earthThreshold > 0) {
             setTimeout(() => {
