@@ -154,6 +154,45 @@ describe("shared CPU spell choices", () => {
 });
 
 describe("CPU resolution lifecycle", () => {
+  it("plays its opening site with an omitted empty board instead of crashing in ability selection", () => {
+    vi.useFakeTimers();
+    const state = position().getState();
+    const bot = new BotClient({serverUrl:"http://localhost:3010"});
+    bot.aiEnabled = true;
+    const socket = io("http://localhost:3010",{autoConnect:false});
+    const emit = vi.spyOn(socket,"emit").mockReturnValue(socket);
+    const warn = vi.spyOn(console,"warn").mockImplementation(() => {});
+    bot.socket = socket;
+    bot.currentMatch = {id:"goldfish-first-site",status:"in_progress"};
+    bot.playerIndex = 0;
+    bot._game = {...state,board:undefined,permanents:{},turn:1,
+      zones:{...state.zones,p1:{...state.zones.p1,hand:[card("Lone Tower")]}}};
+    vi.spyOn(bot,"_hasHumanOpponent").mockReturnValue(true);
+    vi.spyOn(bot._actionPacing,"delay").mockReturnValue(0);
+    try {
+      bot._maybeAct();
+      expect(warn).not.toHaveBeenCalled();
+      expect(emit).toHaveBeenCalledWith("action",expect.objectContaining({action:expect.objectContaining({board:expect.objectContaining({sites:expect.objectContaining({"0,3":expect.objectContaining({card:expect.objectContaining({name:"Lone Tower"})})})})})}));
+    } finally { bot.stop(); }
+  });
+  it("continues a human-vs-CPU opening turn when the board has not arrived yet", () => {
+    vi.useFakeTimers();
+    const bot = new BotClient({serverUrl:"http://localhost:3010"});
+    const socket = io("http://localhost:3010",{autoConnect:false});
+    const emit = vi.spyOn(socket,"emit").mockReturnValue(socket);
+    const warn = vi.spyOn(console,"warn").mockImplementation(() => {});
+    bot.socket = socket;
+    bot.currentMatch = {id:"goldfish-opening",status:"in_progress"};
+    bot.playerIndex = 0;
+    bot._game = {phase:"Main",currentPlayer:1,turn:1};
+    vi.spyOn(bot,"_hasHumanOpponent").mockReturnValue(true);
+    vi.spyOn(bot._actionPacing,"delay").mockReturnValue(0);
+    try {
+      bot._maybeAct();
+      expect(warn.mock.calls.some(([message]) => String(message).includes("_maybeAct error"))).toBe(false);
+      expect(emit).toHaveBeenCalledWith("action",expect.objectContaining({action:expect.objectContaining({avatars:expect.any(Object)})}));
+    } finally { bot.stop(); }
+  });
   it("preserves temporary avatar effects through server normalization and clears them explicitly", () => {
     const fallback = { card: card("Sparkmage"),pos: [0,3] as [number,number],tapped: false,
       cpuTurnEffect: { turn: "3:1",power: 2,movement: 1 } };

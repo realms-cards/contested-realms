@@ -1,11 +1,16 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Shared with the Node CPU client. */
 const { unitsInRealm, bodyOfWater, isDisabled, isWater, hasStealth, sameTarget, inRange, unitStats, scoreOperations } = require('./spells');
 
-/** @param {import('./spellTypes').SpellState & {phase?: string, cpuPendingTriggerCount?: number, cpuEffectContinuations?: unknown[]}} state
+/** @param {Partial<import('./spellTypes').SpellState> & {phase?: string, cpuPendingTriggerCount?: number, cpuEffectContinuations?: unknown[]}} state
  * @param {import('../store/types').PlayerKey} seat
  * @returns {(import('./spellTypes').SpellChoice & {source: Pick<import('./spellTypes').LocatedUnit,'card'|'at'|'owner'>})[]} */
 function abilityChoices(state, seat) {
   if (state.phase !== 'Main' || state.currentPlayer !== (seat === 'p1' ? 1 : 2) || state.pendingMagic || state.pendingCombat || state.cpuPendingTriggerCount || state.cpuEffectContinuations?.length) return [];
+  // Socket patches can announce Main before the board/zone snapshot arrives.
+  // No ability can be selected yet; let the bot's normal setup/play path run.
+  if (!state.board?.sites || !state.zones?.[seat] || !state.players) return [];
+  // Empty collections may be omitted from the server's initial snapshot.
+  state = {...state,permanents:state.permanents || {},permanentPositions:state.permanentPositions || {},avatars:state.avatars || {}};
   const units = unitsInRealm(state), choices = [];
   const entity = u => u.target.kind === 'avatar' ? state.avatars[u.owner] : state.permanents[u.at][u.target.index];
   const canTap = u => !entity(u).tapped && !entity(u).summonedThisTurn && !isDisabled(state,u);

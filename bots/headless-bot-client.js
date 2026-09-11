@@ -3125,6 +3125,11 @@ class BotClient {
         return;
       }
 
+      // Initial patches may omit an empty board. Materialize the standard
+      // realm before shared ability rules and search read it, so opening-site
+      // placement also uses the correct home row (5 columns, 4 rows).
+      if (!this._game.board) this._game.board = {size:{w:5,h:4},sites:{}};
+
       // DEBUG: Log game state before acting
       if (this._hasHumanOpponent()) {
         const ability = abilityChoices(this._game,meKey).sort((a,b) => b.score-a.score)[0];

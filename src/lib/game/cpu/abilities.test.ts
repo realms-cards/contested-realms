@@ -22,6 +22,14 @@ beforeEach(() => { vi.spyOn(HTMLMediaElement.prototype,"play").mockResolvedValue
 afterEach(() => vi.restoreAllMocks());
 
 describe("CPU activated abilities", () => {
+  it("ignores abilities on partial opening patches without blocking normal bot play", () => {
+    expect(abilityChoices({phase:"Main",currentPlayer:1},"p1")).toEqual([]);
+    const state = setup().getState();
+    expect(abilityChoices({...state,board:undefined},"p1")).toEqual([]);
+    expect(abilityChoices({...state,zones:undefined},"p1")).toEqual([]);
+    expect(abilityChoices({...state,players:undefined},"p1")).toEqual([]);
+    expect(() => abilityChoices({...state,permanents:undefined,permanentPositions:undefined},"p1")).not.toThrow();
+  });
   it("lets the CPU choose its better Lucky Charm outcome without a human prompt", async () => {
     const store = setup();
     store.setState({permanents:{"2,3":[unit("Mountain Giant"),{...unit("Lucky Charm",2),attachedTo:{at:"2,3",index:2},isCarried:true},unit("Diluvian Kraken",2)]},matchId:"cpu-lucky",transport:new LocalTransport()});
