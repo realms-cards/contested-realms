@@ -455,6 +455,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         pendingKelpCavern: null,
         pendingCrossroads: null,
         pendingPiracy: null,
+        piracyGrants: [],
         pendingShapeshift: null,
         pendingSelfsameSimulacrum: null,
         pendingAssimilatorSnail: null,
