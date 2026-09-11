@@ -2,6 +2,7 @@
 
 import { cardText, getSpellChoices, projectileKey, supportsSpell } from "@/lib/game/cpu/spells";
 import { useGameStore } from "@/lib/game/store";
+import type { PendingMagic } from "@/lib/game/store/types";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
 
 export default function CpuMagicChoices() {
@@ -12,11 +13,13 @@ export default function CpuMagicChoices() {
   const choices = getSpellChoices(state, seat, pending.spell.card.name || "", pending.cpuChoice);
   const selected = choices.find(choice => choice.key === pending.cpuChoice);
   const canChoose = state.actorKey === seat && pending.status !== "confirm";
-  const eventLabel = pending.cpuEvent ? {
+  const eventLabels: Record<NonNullable<PendingMagic["cpuEvent"]>["kind"], string> = {
+    projectileImpact:"Choose the next projectile impact",
     geomancerFill:"Fill adjacent void with Rubble",
     treasurePlace:"Opponent chooses underwater placement",treasureRecover:"Recover treasure",drawChoice:"Choose a deck to draw from",
-    randomChoice:"Choose a random outcome",fightChoice:pending.cpuEvent.kind === "fightChoice" && pending.cpuEvent.strikeOnly ? "Strike after arrival" : "Fight after arrival",genesis:"Genesis",auraEnd:"End-phase effect",blazeTrail:"Blaze trail",
-  }[pending.cpuEvent.kind] : "";
+    randomChoice:"Choose a random outcome",fightChoice:pending.cpuEvent?.kind === "fightChoice" && pending.cpuEvent.strikeOnly ? "Strike after arrival" : "Fight after arrival",genesis:"Genesis",auraEnd:"End-phase effect",blazeTrail:"Blaze trail",
+  };
+  const eventLabel = pending.cpuEvent ? eventLabels[pending.cpuEvent.kind] : "";
   return (
     <div className="absolute bottom-24 left-1/2 z-50 max-h-[65vh] w-[min(92vw,44rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-amber-200/25 bg-slate-950/95 p-4 text-white shadow-xl pointer-events-auto">
       <div className="font-fantaisie text-xl text-amber-100">{pending.spell.card.name}{eventLabel ? ` — ${eventLabel}` : ""}</div>
