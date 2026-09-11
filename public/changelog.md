@@ -1,6 +1,34 @@
 # Changelog
 
-### May 2026
+## September 2026
+
+### Sep 11 - Invite links, guests and tournament invites
+
+- **invite a friend with a link** share the link from the lobby and they land straight in your match
+- **play without an account** pick a name and go: load a deck from sorcerytcg.com on the fly or take a precon. Guest matches are unrated
+- **guests are welcome in the lobby** browse it, join open games, create matches and host invite links - only matchmaking still asks for an account
+- **share tournaments by link instead of inviting people by id** hosts get a "Copy invite link" button, and anyone holding the link can view and join, private tournaments included
+- **guests can play in tournaments too** both the Swiss tournaments and the host-run open events
+- **new tournaments use flexible registration by default** players can still take a seat after the tournament has started
+- **fix Discord /challenge links** they used to land everyone on "That lobby no longer exists"
+- **fix deck import from sorcerytcg.com** Maybeboard cards are no longer pulled into your deck
+- **fix reloading the lobby re-creating an invite match** you left
+
+### Sep 7-9 - Resolver repairs and guides
+
+- **fix a long standing bug that broke around 17 custom resolvers online** the effect resolved on your side but your opponent never saw it happen
+- **add piracy cast grants** for Captain Baldassare and Sea Raider
+- **repair the magic and combat interaction guides** they are online only and both players need them switched on
+- **fix thresholds from sites played by resolvers** and unify how mana and thresholds are tracked
+- **fix cell number inversion** portal and switch-site targeting picked the mirrored tile
+- **show the grid instead of a bare table** by default
+
+### Sep 2 - Rematches
+
+- **rematch straight from the end-of-match screen** both players confirm and a fresh game starts - sealed and draft pools carry over
+- **fix a performance leak** in the board renderer
+
+## May 2026
 
 ### PERFORMANCE and replays rework
 
