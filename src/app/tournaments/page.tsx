@@ -90,7 +90,9 @@ export default function TournamentsPage() {
     format: "constructed",
     maxPlayers: 8,
     isPrivate: false,
-    registrationMode: "fixed",
+    // Flexible (open-seat) registration is the default: players can join
+    // after the tournament starts, which suits invite-link play
+    registrationMode: "open",
     registrationLocked: false,
     settings: {
       totalRounds: 3,
@@ -359,7 +361,7 @@ export default function TournamentsPage() {
         format: "constructed",
         maxPlayers: 8,
         isPrivate: false,
-        registrationMode: "fixed",
+        registrationMode: "open",
         registrationLocked: false,
         settings: {
           totalRounds: 3,
