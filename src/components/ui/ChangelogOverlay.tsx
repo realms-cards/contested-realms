@@ -188,7 +188,7 @@ export default function ChangelogOverlay({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={overlayId}
-        className={`underline hover:text-slate-300 ${triggerClassName}`}
+        className={triggerClassName || "underline hover:text-slate-300"}
       >
         {triggerLabel}
       </button>

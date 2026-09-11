@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { rcButtonVariants } from "@/components/ui/rc-button";
 import { createGuestSession } from "@/lib/guest/guestSession";
 
 interface GuestGateProps {
@@ -9,6 +10,8 @@ interface GuestGateProps {
   description: string;
   /** Where sign-in should return to (the invite link itself, typically) */
   returnTo: string;
+  /** "realms" uses the lobby design-system chrome; "default" the classic slate card */
+  variant?: "default" | "realms";
 }
 
 /**
@@ -20,7 +23,9 @@ export default function GuestGate({
   title,
   description,
   returnTo,
+  variant = "default",
 }: GuestGateProps) {
+  const realms = variant === "realms";
   const [guestName, setGuestName] = useState("");
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,9 +44,25 @@ export default function GuestGate({
   };
 
   return (
-    <div className="rounded-xl bg-slate-900/60 ring-1 ring-sky-500/40 p-5 space-y-3">
-      <div className="text-lg font-semibold">{title}</div>
-      <p className="text-sm opacity-80">{description}</p>
+    <div
+      className={
+        realms
+          ? "rc-panel space-y-3 px-[18px] py-4 font-rc-sans"
+          : "rounded-xl bg-slate-900/60 ring-1 ring-sky-500/40 p-5 space-y-3"
+      }
+    >
+      <div
+        className={
+          realms
+            ? "font-rc-display text-[26px] leading-none text-rc-fg-strong"
+            : "text-lg font-semibold"
+        }
+      >
+        {title}
+      </div>
+      <p className={realms ? "text-sm text-rc-fg-muted" : "text-sm opacity-80"}>
+        {description}
+      </p>
       <form
         className="flex flex-col gap-2 sm:flex-row sm:items-center"
         onSubmit={(e) => {
@@ -50,7 +71,11 @@ export default function GuestGate({
         }}
       >
         <input
-          className="flex-1 rounded-lg bg-slate-800/80 ring-1 ring-slate-700 px-3 py-2 text-sm"
+          className={
+            realms
+              ? "rc-input h-10 min-h-10 w-full sm:flex-1"
+              : "flex-1 rounded-lg bg-slate-800/80 ring-1 ring-slate-700 px-3 py-2 text-sm"
+          }
           placeholder="Your name"
           value={guestName}
           onChange={(e) => setGuestName(e.target.value)}
@@ -60,14 +85,22 @@ export default function GuestGate({
         />
         <button
           type="submit"
-          className="rounded-lg bg-sky-600/90 hover:bg-sky-600 disabled:opacity-50 px-4 py-2 text-sm font-semibold"
+          className={
+            realms
+              ? rcButtonVariants({ className: "h-10" })
+              : "rounded-lg bg-sky-600/90 hover:bg-sky-600 disabled:opacity-50 px-4 py-2 text-sm font-semibold"
+          }
           disabled={joining || guestName.trim().length < 2}
         >
           {joining ? "Joining..." : "Continue as guest"}
         </button>
         <Link
           href={signInHref}
-          className="rounded-lg bg-slate-700/80 hover:bg-slate-700 px-4 py-2 text-sm font-semibold text-center"
+          className={
+            realms
+              ? rcButtonVariants({ variant: "outline", className: "h-10" })
+              : "rounded-lg bg-slate-700/80 hover:bg-slate-700 px-4 py-2 text-sm font-semibold text-center"
+          }
         >
           Sign in
         </Link>

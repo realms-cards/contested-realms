@@ -2,8 +2,9 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { AvailablePlayer } from "@/app/online/online-context";
-import { LeagueBadgeList } from "@/components/online/LeagueBadge";
-import { SoatcLeagueBadge } from "@/components/online/SoatcLeagueBadge";
+import { getLeagueShortName } from "@/components/online/LeagueBadge";
+import { Badge } from "@/components/ui/badge";
+import { RcButton } from "@/components/ui/rc-button";
 import { useLeaguePlayers } from "@/lib/hooks/useLeagueStatus";
 import { useSoatcPlayers } from "@/lib/hooks/useSoatcStatus";
 import type { LobbyInfo, PlayerInfo } from "@/lib/net/protocol";
@@ -26,8 +27,60 @@ export type PlayersInvitePanelProps = {
   me: PlayerInfo | null;
   lobby: LobbyInfo | null;
   onInvite: (playerId: string, lobbyId?: string) => void;
+  /** Pending lobby invites addressed to the viewer (shown as a count) */
+  pendingInvites?: number;
 };
 
+type PlayerView = "recent" | "az" | "friends";
+
+// Patron tiers keep their glow colour on the name (feature, not chrome)
+const PATRON_HEX = {
+  apprentice: "#60a5fa",
+  grandmaster: "#fbbf24",
+  kingofthe: "#34d399",
+} as const;
+
+function presenceState(p: AvailablePlayer): string {
+  if (p.presence.inMatch || p.presence.location === "match") return "in match";
+  switch (p.presence.location) {
+    case "lobby":
+      return "in lobby";
+    case "collection":
+      return "collection";
+    case "decks":
+      return "decks";
+    default:
+      return p.presence.online ? "idle" : "offline";
+  }
+}
+
+function PlayerAvatar({
+  name,
+  avatarUrl,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+}) {
+  return (
+    <div className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-rc-md border border-rc-line/25 bg-gradient-to-br from-[#1a2440] to-[#0b1020] font-rc-display text-[17px] text-rc-fg-muted">
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt=""
+          className="h-full w-full object-cover"
+          draggable={false}
+        />
+      ) : (
+        name.slice(0, 1).toUpperCase()
+      )}
+    </div>
+  );
+}
+
+/**
+ * Players panel: online players with friend management and lobby invites.
+ * Recent / A–Z sort comes from the server; Friends is a client-side filter.
+ */
 export default function PlayersInvitePanel({
   players = [],
   available = [],
@@ -38,11 +91,14 @@ export default function PlayersInvitePanel({
   me,
   lobby,
   onInvite,
+  pendingInvites = 0,
 }: PlayersInvitePanelProps) {
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<"recent" | "alphabetical">("recent");
+  const [view, setView] = useState<PlayerView>("recent");
+  const sort: "recent" | "alphabetical" =
+    view === "az" ? "alphabetical" : "recent";
   const searchingRef = useRef(false);
-  const isHost = lobby && me && lobby.hostId === me.id;
+  const isHost = !!lobby && !!me && lobby.hostId === me.id;
   const [status, setStatus] = useState<{
     kind: "error" | "success";
     text: string;
@@ -50,18 +106,18 @@ export default function PlayersInvitePanel({
   const statusTimer = useRef<number | null>(null);
   // Track pending friend action to disable buttons for the specific userId
   const [pendingFriendUserId, setPendingFriendUserId] = useState<string | null>(
-    null
+    null,
   );
   // Optimistic friend state overlay to immediately reflect UI changes
   const [optimisticFriends, setOptimisticFriends] = useState<Set<string>>(
-    () => new Set()
+    () => new Set(),
   );
   const [patrons, setPatrons] = useState<PatronData | null>(null);
 
   // Get user IDs for SOATC + league status checks
-  const playerUserIds = useMemo(() => {
-    return available.map((p) => p.userId);
-  }, [available]);
+  const playerUserIds = useMemo(() => available.map((p) => p.userId), [
+    available,
+  ]);
   const { players: soatcPlayers } = useSoatcPlayers(playerUserIds);
   const leaguePlayers = useLeaguePlayers(playerUserIds);
 
@@ -78,9 +134,15 @@ export default function PlayersInvitePanel({
     };
   }, []);
 
+  const flash = (next: { kind: "error" | "success"; text: string }, ms = 3000) => {
+    setStatus(next);
+    if (statusTimer.current) window.clearTimeout(statusTimer.current);
+    statusTimer.current = window.setTimeout(() => setStatus(null), ms);
+  };
+
   // Presence visibility toggle state
   const [presenceHiddenUI, setPresenceHiddenUI] = useState<boolean | null>(
-    null
+    null,
   );
   useEffect(() => {
     (async () => {
@@ -107,25 +169,18 @@ export default function PlayersInvitePanel({
           const j = await res.json();
           if (j?.error) msg = j.error;
         } catch {}
-        setStatus({ kind: "error", text: msg });
+        flash({ kind: "error", text: msg });
       } else {
         setPresenceHiddenUI(hidden);
-        setStatus({
+        flash({
           kind: "success",
-          text: hidden ? "Set to Invisible" : "Set to Visible",
+          text: hidden ? "You are now invisible" : "You are now visible",
         });
         if (requestPlayers) requestPlayers({ q: query, sort, reset: true });
       }
-      if (statusTimer.current) window.clearTimeout(statusTimer.current);
-      statusTimer.current = window.setTimeout(() => setStatus(null), 3000);
     } catch (e) {
       console.warn("Update presence error", e);
-      setStatus({
-        kind: "error",
-        text: "Network error while updating visibility",
-      });
-      if (statusTimer.current) window.clearTimeout(statusTimer.current);
-      statusTimer.current = window.setTimeout(() => setStatus(null), 3000);
+      flash({ kind: "error", text: "Network error while updating visibility" });
     }
   }
 
@@ -149,7 +204,7 @@ export default function PlayersInvitePanel({
           const j = await res.json();
           if (j?.error) msg = j.error;
         } catch {}
-        setStatus({ kind: "error", text: msg });
+        flash({ kind: "error", text: msg });
         // Revert optimistic change on failure
         setOptimisticFriends((prev) => {
           const next = new Set(prev);
@@ -157,16 +212,12 @@ export default function PlayersInvitePanel({
           return next;
         });
       } else {
-        setStatus({ kind: "success", text: "Friend removed" });
+        flash({ kind: "success", text: "Friend removed" });
         if (requestPlayers) requestPlayers({ q: query, sort, reset: true });
       }
-      if (statusTimer.current) window.clearTimeout(statusTimer.current);
-      statusTimer.current = window.setTimeout(() => setStatus(null), 3000);
     } catch (e) {
       console.warn("Remove friend error", e);
-      setStatus({ kind: "error", text: "Network error while removing friend" });
-      if (statusTimer.current) window.clearTimeout(statusTimer.current);
-      statusTimer.current = window.setTimeout(() => setStatus(null), 3000);
+      flash({ kind: "error", text: "Network error while removing friend" });
       // Revert optimistic change on error
       setOptimisticFriends((prev) => {
         const next = new Set(prev);
@@ -176,26 +227,6 @@ export default function PlayersInvitePanel({
     }
     setPendingFriendUserId((curr) => (curr === userId ? null : curr));
   }
-
-  const showLegacy = available.length === 0;
-  const filteredLegacy = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!showLegacy) return [];
-    if (!q) return players.filter((p) => !me || p.id !== me.id);
-    return players.filter(
-      (p) => (!me || p.id !== me.id) && p.displayName.toLowerCase().includes(q)
-    );
-  }, [players, me, query, showLegacy]);
-
-  useEffect(() => {
-    // Trigger initial fetch when component mounts if HTTP request function is provided
-    if (requestPlayers && !searchingRef.current) {
-      searchingRef.current = true;
-      requestPlayers({ reset: true, sort });
-      searchingRef.current = false;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   async function addFriend(userId: string) {
     try {
@@ -217,7 +248,7 @@ export default function PlayersInvitePanel({
           const j = await res.json();
           if (j?.error) msg = j.error;
         } catch {}
-        setStatus({ kind: "error", text: msg });
+        flash({ kind: "error", text: msg });
         // Revert optimistic friend mark on failure
         setOptimisticFriends((prev) => {
           const next = new Set(prev);
@@ -230,16 +261,12 @@ export default function PlayersInvitePanel({
           const j = await res.json();
           if (j?.status === "already_friend") msg = "Already a friend";
         } catch {}
-        setStatus({ kind: "success", text: msg });
+        flash({ kind: "success", text: msg });
         if (requestPlayers) requestPlayers({ q: query, sort, reset: true });
       }
-      if (statusTimer.current) window.clearTimeout(statusTimer.current);
-      statusTimer.current = window.setTimeout(() => setStatus(null), 3000);
     } catch (e) {
       console.warn("Add friend error", e);
-      setStatus({ kind: "error", text: "Network error while adding friend" });
-      if (statusTimer.current) window.clearTimeout(statusTimer.current);
-      statusTimer.current = window.setTimeout(() => setStatus(null), 3000);
+      flash({ kind: "error", text: "Network error while adding friend" });
       // Revert optimistic friend mark on error
       setOptimisticFriends((prev) => {
         const next = new Set(prev);
@@ -250,9 +277,116 @@ export default function PlayersInvitePanel({
     setPendingFriendUserId((curr) => (curr === userId ? null : curr));
   }
 
+  const showLegacy = available.length === 0;
+  const filteredLegacy = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!showLegacy) return [];
+    return players.filter(
+      (p) =>
+        (!me || p.id !== me.id) &&
+        (!q || p.displayName.toLowerCase().includes(q)),
+    );
+  }, [players, me, query, showLegacy]);
+
+  const isFriend = (p: AvailablePlayer) =>
+    p.isFriend || optimisticFriends.has(p.userId);
+  const visiblePlayers = useMemo(
+    () => (view === "friends" ? available.filter(isFriend) : available),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isFriend closes over optimisticFriends
+    [available, view, optimisticFriends],
+  );
+
+  useEffect(() => {
+    // Trigger initial fetch when component mounts if HTTP request function is provided
+    if (requestPlayers && !searchingRef.current) {
+      searchingRef.current = true;
+      requestPlayers({ reset: true, sort });
+      searchingRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const selectView = (next: PlayerView) => {
+    setView(next);
+    const nextSort = next === "az" ? "alphabetical" : "recent";
+    if (requestPlayers && nextSort !== sort) {
+      requestPlayers({ q: query, sort: nextSort, reset: true });
+    }
+  };
+
+  const invite = (playerId: string) => {
+    onInvite(playerId, lobby?.id);
+    flash({ kind: "success", text: "Invite sent" }, 2500);
+  };
+  const inviteTitle = !lobby
+    ? "Join or create a lobby first"
+    : isHost
+      ? "Invite to lobby"
+      : "Only the host can invite";
+  const canInvite = !!lobby && isHost;
+
+  const patronTierFor = (id: string) => {
+    if (!patrons) return null;
+    if (patrons.kingofthe?.some((pt) => pt.id === id)) return "kingofthe";
+    if (patrons.grandmaster.some((pt) => pt.id === id)) return "grandmaster";
+    if (patrons.apprentice.some((pt) => pt.id === id)) return "apprentice";
+    return null;
+  };
+
+  const nameStyle = (id: string): React.CSSProperties | undefined => {
+    const tier = patronTierFor(id);
+    return tier
+      ? {
+          color: PATRON_HEX[tier],
+          textShadow: PATRON_COLORS[tier].textShadowMinimal,
+        }
+      : undefined;
+  };
+
+  const rowClass =
+    "flex items-center gap-3.5 border-t border-rc-line/8 px-[18px] py-2.5 transition-colors hover:bg-rc-accent/6";
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <section id="players-invite-panel" className="rc-panel rounded-rc-lg">
+      <div className="rc-panel-head">
+        <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
+          Players
+        </h2>
+        {pendingInvites > 0 && (
+          <Badge tone="gold">
+            {pendingInvites} invite{pendingInvites > 1 ? "s" : ""}
+          </Badge>
+        )}
+        <div className="flex-1" />
+        <div className="rc-segment" role="group" aria-label="Player list view">
+          <button
+            type="button"
+            aria-pressed={view === "recent"}
+            onClick={() => selectView("recent")}
+            title="Recent opponents first"
+          >
+            Recent
+          </button>
+          <button
+            type="button"
+            aria-pressed={view === "az"}
+            onClick={() => selectView("az")}
+            title="Sort alphabetically"
+          >
+            A–Z
+          </button>
+          <button
+            type="button"
+            aria-pressed={view === "friends"}
+            onClick={() => selectView("friends")}
+            title="Only your friends"
+          >
+            Friends
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2.5 px-[18px] py-3.5">
         <input
           type="search"
           name="q"
@@ -266,7 +400,7 @@ export default function PlayersInvitePanel({
           data-dashlane-ignore="true"
           data-np-ignore="true"
           data-keeper-lock="true"
-          className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+          className="rc-input h-[38px] min-w-[180px] flex-1"
           placeholder="Search players"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -276,325 +410,156 @@ export default function PlayersInvitePanel({
             }
           }}
         />
-        <div className="flex items-center gap-1 text-xs">
-          <button
-            className={`px-2 py-1 rounded ${
-              sort === "recent"
-                ? "bg-blue-600/80 text-white"
-                : "bg-slate-700/70 hover:bg-slate-600/70"
-            }`}
-            onClick={() => {
-              setSort("recent");
-              if (requestPlayers)
-                requestPlayers({ q: query, sort: "recent", reset: true });
-            }}
-            title="Sort by recent opponents first"
-          >
-            Recent
-          </button>
-          <button
-            className={`px-2 py-1 rounded ${
-              sort === "alphabetical"
-                ? "bg-blue-600/80 text-white"
-                : "bg-slate-700/70 hover:bg-slate-600/70"
-            }`}
-            onClick={() => {
-              setSort("alphabetical");
-              if (requestPlayers)
-                requestPlayers({ q: query, sort: "alphabetical", reset: true });
-            }}
-            title="Sort alphabetically"
-          >
-            A–Z
-          </button>
-        </div>
-        <button
-          className="rounded bg-slate-700 hover:bg-slate-600 px-2 py-1 text-xs"
-          onClick={() => requestPlayers?.({ q: query, sort, reset: true })}
-          title="Refresh players"
-        >
-          Search
-        </button>
-        {/* Presence toggle (eye open/closed) */}
-        <button
-          className={`ml-auto inline-flex items-center gap-1 px-2 py-1 rounded ring-1 ${
-            presenceHiddenUI === true
-              ? "ring-amber-700 bg-amber-800/30 hover:bg-amber-800/50"
-              : "ring-emerald-700 bg-emerald-800/30 hover:bg-emerald-800/50"
-          } disabled:opacity-50`}
+        <RcButton
+          variant="outline"
+          size="sm"
           onClick={() => {
             if (presenceHiddenUI === null) return;
-            setPresence(!presenceHiddenUI);
+            void setPresence(!presenceHiddenUI);
           }}
           disabled={presenceHiddenUI === null}
           title={
             presenceHiddenUI
-              ? "Currently Invisible – click to become Visible"
-              : "Currently Visible – click to become Invisible"
+              ? "Currently invisible – click to become visible"
+              : "Currently visible – click to become invisible"
           }
         >
-          {/* Simple inline eye icon */}
-          {presenceHiddenUI ? (
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="w-4 h-4 text-amber-300"
-            >
-              <path d="M3.53 2.47a.75.75 0 0 0-1.06 1.06l18 18a.75.75 0 1 0 1.06-1.06l-2.36-2.36A11.7 11.7 0 0 0 21.75 12S18 5.25 12 5.25c-1.63 0-3.1.36-4.41.96L3.53 2.47ZM12 7.5c3.9 0 7.17 3.05 8.59 4.5a20.52 20.52 0 0 1-2.48 2.16l-2.2-2.2A4.5 4.5 0 0 0 10.04 9.1l-1.7-1.7c1.05-.36 2.17-.6 3.66-.6Zm.75 6.75a1.5 1.5 0 0 1-2.03-2.03l2.03 2.03Zm-6.6-6.6 2.67 2.67a4.5 4.5 0 0 0 5.61 5.61l2.01 2.01c-1.12.35-2.37.61-3.44.61-6 0-9.75-6.75-9.75-6.75a20.74 20.74 0 0 1 2.9-3.15Z" />
-            </svg>
-          ) : (
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="w-4 h-4 text-emerald-300"
-            >
-              <path d="M12 5.25c6 0 9.75 6.75 9.75 6.75S18 18.75 12 18.75 2.25 12 2.25 12 6 5.25 12 5.25Zm0 2.25a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Zm0 2.25a2.25 2.25 0 1 1 0 4.5 2.25 2.25 0 0 1 0-4.5Z" />
-            </svg>
-          )}
-          <span className="text-[11px] opacity-80">
-            {presenceHiddenUI ? "Invisible" : "Visible"}
-          </span>
-        </button>
+          {presenceHiddenUI ? "● Go Visible" : "◌ Go Invisible"}
+        </RcButton>
       </div>
 
-      {/* Error banner */}
       {error && (
-        <div className="text-xs px-2 py-1 rounded bg-red-900/40 ring-1 ring-red-800 text-red-200">
+        <div className="mx-[18px] mb-3 rounded-rc-md border border-rc-danger/40 bg-rc-danger/12 px-3 py-2 font-rc-mono text-xs text-[#f0c2b5]">
           {error}
         </div>
       )}
-      {/* Action status banner */}
       {status && (
         <div
-          className={`text-xs px-2 py-1 rounded ${
+          className={`mx-[18px] mb-3 rounded-rc-md border px-3 py-2 font-rc-mono text-xs ${
             status.kind === "error"
-              ? "bg-red-900/40 ring-1 ring-red-800 text-red-200"
-              : "bg-emerald-900/30 ring-1 ring-emerald-800 text-emerald-200"
+              ? "border-rc-danger/40 bg-rc-danger/12 text-[#f0c2b5]"
+              : "border-rc-success/35 bg-rc-success/18 text-[#c5d6a8]"
           }`}
+          role="status"
         >
           {status.text}
         </div>
       )}
 
       {showLegacy ? (
-        !filteredLegacy || filteredLegacy.length === 0 ? (
-          <div className="text-sm opacity-60">No players online</div>
+        filteredLegacy.length === 0 ? (
+          <div className="border-t border-rc-line/8 px-[18px] py-6 text-center font-rc-mono text-xs tracking-[0.1em] text-rc-fg-dim">
+            {loading ? "loading players…" : "no players online"}
+          </div>
         ) : (
-          <div className="max-h-60 overflow-y-auto space-y-1 pr-1">
-            {filteredLegacy.map((p) => {
-              const isSelf = !!me && p.id === me.id;
-              const patronTier = patrons
-                ? patrons.kingofthe?.some((pt) => pt.id === p.id)
-                  ? "kingofthe"
-                  : patrons.grandmaster.some((pt) => pt.id === p.id)
-                  ? "grandmaster"
-                  : patrons.apprentice.some((pt) => pt.id === p.id)
-                  ? "apprentice"
-                  : null
-                : null;
-              const patronStyle = patronTier ? PATRON_COLORS[patronTier] : null;
-              return (
-                <div
-                  key={p.id}
-                  className="flex items-center justify-between text-sm"
-                >
+          <div className="thin-scrollbar max-h-[480px] overflow-y-auto">
+            {filteredLegacy.map((p) => (
+              <div key={p.id} className={rowClass}>
+                <PlayerAvatar name={p.displayName} />
+                <div className="min-w-0 flex-1">
                   <div
-                    className={`truncate ${patronStyle?.text ?? ""}`}
-                    style={
-                      patronStyle
-                        ? { textShadow: patronStyle.textShadowMinimal }
-                        : undefined
-                    }
+                    className="truncate font-rc-mono text-sm font-semibold text-rc-fg-strong"
+                    style={nameStyle(p.id)}
                   >
                     {p.displayName}
                   </div>
-                  {!isSelf && (
-                    <button
-                      className="rounded bg-indigo-600/80 hover:bg-indigo-600 px-2 py-0.5 text-xs disabled:opacity-40"
-                      disabled={!lobby || !isHost}
-                      onClick={() => {
-                        onInvite(p.id, lobby?.id);
-                        setStatus({ kind: "success", text: "Invite sent" });
-                        if (statusTimer.current)
-                          window.clearTimeout(statusTimer.current);
-                        statusTimer.current = window.setTimeout(
-                          () => setStatus(null),
-                          2500
-                        );
-                      }}
-                      title={
-                        !lobby
-                          ? "Join or create a lobby first"
-                          : isHost
-                          ? "Invite to lobby"
-                          : "Only host can invite"
-                      }
-                    >
-                      Invite
-                    </button>
-                  )}
+                  <div className="mt-0.5 truncate font-rc-mono text-[11px] tracking-[0.1em] text-rc-fg-dim">
+                    {p.id.slice(-8)} · online
+                  </div>
                 </div>
-              );
-            })}
+                <RcButton
+                  variant="ghost"
+                  size="sm"
+                  disabled={!canInvite}
+                  onClick={() => invite(p.id)}
+                  title={inviteTitle}
+                >
+                  Invite
+                </RcButton>
+              </div>
+            ))}
           </div>
         )
       ) : (
-        <div className="space-y-2">
-          {available.length === 0 ? (
-            <div className="text-sm opacity-60">No players available</div>
+        <>
+          {visiblePlayers.length === 0 ? (
+            <div className="border-t border-rc-line/8 px-[18px] py-6 text-center font-rc-mono text-xs tracking-[0.1em] text-rc-fg-dim">
+              {view === "friends"
+                ? "none of your friends are around"
+                : "no players available"}
+            </div>
           ) : (
-            <div className="max-h-80 overflow-y-auto space-y-1 pr-1">
-              {available.map((p) => {
+            <div className="thin-scrollbar max-h-[480px] overflow-y-auto">
+              {visiblePlayers.map((p) => {
                 const isSelf = !!me && p.userId === me.id;
-                const isFriend = p.isFriend || optimisticFriends.has(p.userId);
+                const friend = isFriend(p);
                 const isPending = pendingFriendUserId === p.userId;
-                const patronTier = patrons
-                  ? patrons.kingofthe?.some((pt) => pt.id === p.userId)
-                    ? "kingofthe"
-                    : patrons.grandmaster.some((pt) => pt.id === p.userId)
-                    ? "grandmaster"
-                    : patrons.apprentice.some((pt) => pt.id === p.userId)
-                    ? "apprentice"
-                    : null
-                  : null;
-                const patronStyle = patronTier
-                  ? PATRON_COLORS[patronTier]
-                  : null;
+                const soatc = soatcPlayers[p.userId];
+                const leagues = leaguePlayers[p.userId] ?? [];
                 return (
-                  <div
-                    key={p.userId}
-                    className="flex items-center justify-between gap-3 text-sm bg-white/5 rounded px-2 py-1"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      {p.avatarUrl ? (
-                        <img
-                          src={p.avatarUrl}
-                          alt={p.displayName}
-                          className="w-6 h-6 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-6 h-6 rounded-full bg-slate-700/70 flex items-center justify-center text-[11px]">
-                          {p.displayName.slice(0, 1).toUpperCase()}
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={`truncate font-medium ${
-                              patronStyle?.text ?? ""
-                            }`}
-                            style={
-                              patronStyle
-                                ? { textShadow: patronStyle.textShadowMinimal }
-                                : undefined
-                            }
+                  <div key={p.userId} className={rowClass}>
+                    <PlayerAvatar name={p.displayName} avatarUrl={p.avatarUrl} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className="truncate font-rc-mono text-sm font-semibold text-rc-fg-strong"
+                          style={nameStyle(p.userId)}
+                        >
+                          {p.displayName}
+                        </span>
+                        {soatc?.isParticipant && (
+                          <Badge
+                            tone="gold"
+                            title={soatc.tournamentName || "SATC League participant"}
                           >
-                            {p.displayName}
-                          </span>
-                          {/* SOATC participant badge */}
-                          {soatcPlayers[p.userId]?.isParticipant && (
-                            <SoatcLeagueBadge
-                              compact
-                              tournamentName={
-                                soatcPlayers[p.userId]?.tournamentName
-                              }
-                            />
-                          )}
-                          {/* League badges (Sorcerers Summit, etc.) */}
-                          {leaguePlayers[p.userId]?.length > 0 && (
-                            <LeagueBadgeList
-                              leagues={leaguePlayers[p.userId]}
-                              compact
-                            />
-                          )}
-                          {/* Location badge */}
-                          {p.presence.location &&
-                            p.presence.location !== "lobby" && (
-                              <span
-                                className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded-full ${
-                                  p.presence.location === "collection" ||
-                                  p.presence.location === "decks"
-                                    ? "bg-purple-900/50 text-purple-300"
-                                    : p.presence.location === "match"
-                                    ? "bg-amber-900/50 text-amber-300"
-                                    : "bg-slate-700/50 text-slate-400"
-                                }`}
-                              >
-                                {p.presence.location === "collection"
-                                  ? "📦 Collection"
-                                  : p.presence.location === "decks"
-                                  ? "🃏 Decks"
-                                  : p.presence.location === "match"
-                                  ? "⚔️ In Match"
-                                  : p.presence.location === "browsing"
-                                  ? "Browsing"
-                                  : p.presence.location}
-                              </span>
-                            )}
-                        </div>
-                        <div className="text-[11px] opacity-60 font-mono">
-                          {p.shortUserId}
-                        </div>
+                            SATC
+                          </Badge>
+                        )}
+                        {leagues.map((league) => (
+                          <Badge key={league.slug} tone="ok" title={league.name}>
+                            {getLeagueShortName(league.slug, league.name)}
+                          </Badge>
+                        ))}
+                      </div>
+                      <div className="mt-0.5 truncate font-rc-mono text-[11px] tracking-[0.1em] text-rc-fg-dim">
+                        {p.shortUserId} · {presenceState(p)}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {!isSelf && isFriend ? (
-                        <button
-                          className={`relative inline-flex items-center justify-center px-2 py-0.5 text-[11px] rounded ring-1 transition-colors group
-                          ${isPending ? "opacity-60 cursor-not-allowed" : ""}
-                          bg-emerald-800/40 ring-emerald-700 text-emerald-200
-                          hover:bg-red-800/60 hover:ring-red-700 hover:text-white focus:bg-red-800/60 focus:ring-red-700 focus:text-white
-                        `}
-                          onClick={() => removeFriend(p.userId)}
+                    <div className="flex flex-none gap-2">
+                      {!isSelf && friend ? (
+                        <RcButton
+                          variant="outline"
+                          size="sm"
+                          className="group hover:border-rc-danger hover:bg-rc-danger/12 hover:text-rc-fg-strong"
+                          onClick={() => void removeFriend(p.userId)}
                           disabled={isPending}
-                          title={isPending ? "Removing…" : "Remove Friend"}
-                          aria-label="Remove Friend"
+                          title={isPending ? "Removing…" : "Remove friend"}
+                          aria-label="Remove friend"
                         >
-                          {/* Default label */}
-                          <span className="transition-opacity duration-150 group-hover:opacity-0 group-focus:opacity-0">
-                            Friend
-                          </span>
-                          {/* Hover/focus label overlays on top */}
-                          <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus:opacity-100">
-                            Remove
-                          </span>
-                        </button>
+                          <span className="group-hover:hidden">Friend</span>
+                          <span className="hidden group-hover:inline">Remove</span>
+                        </RcButton>
                       ) : !isSelf ? (
-                        <button
-                          className="rounded bg-slate-700/80 hover:bg-slate-700 px-2 py-0.5 text-xs"
-                          onClick={() => addFriend(p.userId)}
+                        <RcButton
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void addFriend(p.userId)}
                           disabled={isPending}
-                          title="Add Friend"
+                          title="Add friend"
                         >
                           Add Friend
-                        </button>
+                        </RcButton>
                       ) : null}
                       {!isSelf && (
-                        <button
-                          className="rounded bg-indigo-600/80 hover:bg-indigo-600 px-2 py-0.5 text-xs disabled:opacity-40"
-                          disabled={!lobby || !isHost}
-                          onClick={() => {
-                            onInvite(p.userId, lobby?.id);
-                            setStatus({ kind: "success", text: "Invite sent" });
-                            if (statusTimer.current)
-                              window.clearTimeout(statusTimer.current);
-                            statusTimer.current = window.setTimeout(
-                              () => setStatus(null),
-                              2500
-                            );
-                          }}
-                          title={
-                            !lobby
-                              ? "Join or create a lobby first"
-                              : isHost
-                              ? "Invite to lobby"
-                              : "Only host can invite"
-                          }
+                        <RcButton
+                          variant="ghost"
+                          size="sm"
+                          disabled={!canInvite}
+                          onClick={() => invite(p.userId)}
+                          title={inviteTitle}
                         >
                           Invite
-                        </button>
+                        </RcButton>
                       )}
                     </div>
                   </div>
@@ -602,28 +567,31 @@ export default function PlayersInvitePanel({
               })}
             </div>
           )}
-          <div className="flex items-center justify-between text-[11px] opacity-70">
-            <div>{loading ? "Loading…" : null}</div>
-            {nextCursor && (
-              <button
-                className="rounded bg-slate-700/70 hover:bg-slate-600/70 px-2 py-1"
-                onClick={() => requestPlayers?.({ cursor: nextCursor })}
-                title="Load more"
-              >
-                Load more
-              </button>
-            )}
-          </div>
-        </div>
+          {(loading || nextCursor) && (
+            <div className="flex items-center justify-between border-t border-rc-line/8 px-[18px] py-2 font-rc-mono text-[11px] tracking-[0.1em] text-rc-fg-dim">
+              <span>{loading ? "loading…" : ""}</span>
+              {nextCursor && view !== "friends" && (
+                <RcButton
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => requestPlayers?.({ cursor: nextCursor })}
+                  title="Load more players"
+                >
+                  Load more
+                </RcButton>
+              )}
+            </div>
+          )}
+        </>
       )}
 
-      <div className="text-[11px] opacity-60">
+      <div className="border-t border-rc-line/12 px-[18px] py-3 font-rc-mono text-[11px] tracking-[0.1em] text-rc-fg-dim">
         {lobby
           ? isHost
-            ? "Invite players to your lobby (private lobbies require invite)."
-            : "Only the host can send invites."
-          : "Join or create a lobby to send invites."}
+            ? "invite players to your lobby (private lobbies require an invite)"
+            : "only the host can send invites"
+          : "join or create a lobby to send invites"}
       </div>
-    </div>
+    </section>
   );
 }

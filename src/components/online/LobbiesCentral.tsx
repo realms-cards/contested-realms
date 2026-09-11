@@ -3,12 +3,13 @@
 */
 "use client";
 
-import { RefreshCw, Eye, EyeOff } from "lucide-react";
-import Link from "next/link";
-import { useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { VoiceOutgoingRequest } from "@/app/online/online-context";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { Badge } from "@/components/ui/badge";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
 import type { SoatcStatus } from "@/lib/hooks/useSoatcStatus";
+import { playerColor, shortId } from "@/lib/lobby/playerColor";
 import { buildLobbyInviteUrl } from "@/lib/lobby-links";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
 import { generateLobbyName } from "@/lib/random-name-generator";
@@ -33,6 +34,28 @@ function formatDuration(startedAt: number | null | undefined): string {
   }
   return "<1m";
 }
+
+type StatusFilter = "any" | "waiting" | "live" | "closed";
+type FormatFilter = "any" | "constructed" | "sealed" | "draft";
+
+/** Human label for a planned/tournament match type in the format column. */
+function formatLabel(type: string | null | undefined): string {
+  switch (type) {
+    case "constructed":
+      return "Constructed";
+    case "sealed":
+      return "Sealed";
+    case "draft":
+      return "Draft";
+    case "precon":
+      return "Precon";
+    default:
+      return "—";
+  }
+}
+
+/** Quiet mono hint text used in the action column when there is no action. */
+const HINT = "font-rc-mono text-[11px] tracking-[0.1em] text-rc-fg-dim";
 
 export type CreateLobbyConfig = {
   name: string;
@@ -90,7 +113,7 @@ function TournamentMatchesModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-slate-900/95 ring-1 ring-slate-800 rounded-xl shadow-xl w-full max-w-3xl p-5">
+      <div className="relative rc-panel w-full max-w-3xl p-5">
         <div className="flex items-center justify-between mb-2">
           <div className="text-base font-semibold">
             {data?.tournament?.name
@@ -447,11 +470,10 @@ export default function LobbiesCentral({
   const [query, setQuery] = useState("");
   const [hideFull, setHideFull] = useState(false);
   const [hideStarted, setHideStarted] = useState(false);
-  const [sortKey, setSortKey] = useState<
-    "invited" | "playersAsc" | "playersDesc" | "status"
-  >("status");
-  const [showTournaments, setShowTournaments] = useState(tournamentsEnabled);
-  const [showLobbies, setShowLobbies] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("any");
+  const [formatFilter, setFormatFilter] = useState<FormatFilter>("any");
+  // Braille skull art shown behind the empty state (public/skull.txt)
+  const [skull, setSkull] = useState("");
   const [internalOverlayOpen, setInternalOverlayOpen] = useState(false);
 
   // Use external overlay state if provided, otherwise use internal state
@@ -631,6 +653,13 @@ export default function LobbiesCentral({
       // Don't hide the joined lobby even if it's full or started; otherwise apply filters
       if (hideFull && l.players.length >= l.maxPlayers && !pinned) return false;
       if (hideStarted && l.status !== "open" && !pinned) return false;
+      if (!pinned) {
+        if (statusFilter === "waiting" && l.status !== "open") return false;
+        if (statusFilter === "live" && l.status !== "started") return false;
+        if (statusFilter === "closed" && l.status !== "closed") return false;
+        if (formatFilter !== "any" && l.plannedMatchType !== formatFilter)
+          return false;
+      }
       if (!q) return true;
       const hostName =
         l.players.find((p) => p.id === l.hostId)?.displayName?.toLowerCase() ||
@@ -650,20 +679,18 @@ export default function LobbiesCentral({
     list.sort((a, b) => {
       if (a.id === joinedLobbyId) return -1;
       if (b.id === joinedLobbyId) return 1;
-      switch (sortKey) {
-        case "playersAsc":
-          return a.players.length - b.players.length;
-        case "playersDesc":
-          return b.players.length - a.players.length;
-        case "status":
-          return statusWeight(a.status) - statusWeight(b.status);
-        case "invited":
-        default:
-          return 0;
-      }
+      return statusWeight(a.status) - statusWeight(b.status);
     });
     return list;
-  }, [lobbies, query, hideFull, hideStarted, sortKey, joinedLobbyId]);
+  }, [
+    lobbies,
+    query,
+    hideFull,
+    hideStarted,
+    statusFilter,
+    formatFilter,
+    joinedLobbyId,
+  ]);
 
   // Filter tournaments
   const filteredTournaments = useMemo(() => {
@@ -698,6 +725,14 @@ export default function LobbiesCentral({
             status === "registering" &&
             activeCount < tournament.maxPlayers;
         if (q && !tournament.name.toLowerCase().includes(q)) return false;
+        if (!isJoined) {
+          if (statusFilter === "waiting" && status !== "registering")
+            return false;
+          if (statusFilter === "live" && status === "registering") return false;
+          if (statusFilter === "closed") return false;
+          if (formatFilter !== "any" && tournament.matchType !== formatFilter)
+            return false;
+        }
         // Don't hide joined tournaments even if they're full or started
         if (hideFull && !canJoin && !isJoined) return false;
         if (
@@ -731,7 +766,25 @@ export default function LobbiesCentral({
         ).length;
         return bActive - aActive;
       });
-  }, [tournaments, query, hideFull, hideStarted, myId]);
+  }, [tournaments, query, hideFull, hideStarted, statusFilter, formatFilter, myId]);
+
+  const gameCount =
+    filtered.length + (tournamentsEnabled ? filteredTournaments.length : 0);
+
+  // Load the skull art lazily, only once the empty state is actually shown
+  useEffect(() => {
+    if (gameCount > 0 || skull) return;
+    let cancelled = false;
+    fetch("/skull.txt")
+      .then((r) => (r.ok ? r.text() : ""))
+      .then((text) => {
+        if (!cancelled && text) setSkull(text);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [gameCount, skull]);
 
   async function openMatchesModal(tournamentId: string) {
     setMatchesModalOpen(true);
@@ -760,56 +813,63 @@ export default function LobbiesCentral({
   }
 
   return (
-    <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="text-sm font-semibold text-white">Active Games</div>
-          <button
-            className="rounded bg-slate-700/80 hover:bg-slate-600 p-1.5 text-[10px]"
-            onClick={() => {
-              if (onResync) onResync();
-              onRefresh();
-            }}
-            title="Sync"
-            aria-label="Sync"
+    <section className="rc-panel">
+      {/* Header */}
+      <div className="rc-panel-head">
+        <h2 className="m-0 font-rc-display text-3xl leading-none text-rc-fg-strong">
+          Active Games
+        </h2>
+        <span className="font-rc-mono text-xs tracking-[0.1em] text-rc-fg-subtle">
+          {filtered.length} {filtered.length === 1 ? "lobby" : "lobbies"}
+          {tournamentsEnabled
+            ? ` · ${filteredTournaments.length} ${
+                filteredTournaments.length === 1 ? "tournament" : "tournaments"
+              }`
+            : ""}
+        </span>
+        <div className="flex-1" />
+        {onLeaveLobby && !!joinedLobbyId && (
+          <RcButton
+            variant="destructive"
+            size="sm"
+            onClick={() => onLeaveLobby()}
+            title={`Leave ${
+              joinedLobby?.name || joinedLobby?.id || "current lobby"
+            }`}
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        <div className="flex items-center gap-2">
-          {onLeaveLobby && !!joinedLobbyId && (
-            <button
-              className="rounded px-3 py-1 text-xs bg-red-600/80 hover:bg-red-600 text-white"
-              onClick={() => onLeaveLobby()}
-              title={`Leave ${
-                joinedLobby?.name || joinedLobby?.id || "current lobby"
-              }`}
-            >
-              Leave Lobby
-            </button>
-          )}
-          {onCreateTournament && (
-            <button
-              className={`rounded px-3 py-1 text-xs font-semibold ${
-                isEngaged
-                  ? "bg-slate-600/50 text-slate-400 cursor-not-allowed"
-                  : "bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-              }`}
-              onClick={isEngaged ? undefined : handleTournamentOverlayOpen}
-              disabled={isEngaged}
-              title={
-                isEngaged
-                  ? `Already in ${isInLobby ? "lobby" : "tournament"}`
-                  : "Create a new tournament"
-              }
-            >
-              Create Tournament
-            </button>
-          )}
-        </div>
+            Leave Lobby
+          </RcButton>
+        )}
+        {onCreateTournament && (
+          <RcButton
+            variant="outline"
+            size="sm"
+            onClick={handleTournamentOverlayOpen}
+            disabled={isEngaged}
+            title={
+              isEngaged
+                ? `Already in ${isInLobby ? "lobby" : "tournament"}`
+                : "Create a new tournament"
+            }
+          >
+            Create Tournament
+          </RcButton>
+        )}
+        <button
+          type="button"
+          className="cursor-pointer rounded-rc-md border border-rc-line/22 bg-transparent px-3 py-[7px] font-rc-mono text-[11px] uppercase tracking-[0.18em] text-rc-fg-muted transition-colors hover:border-rc-accent hover:text-rc-accent-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring"
+          onClick={() => {
+            if (onResync) onResync();
+            onRefresh();
+          }}
+          title="Refresh the games list"
+        >
+          ↻ refresh
+        </button>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-2">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2.5 px-[18px] py-3.5">
         <input
           type="search"
           name="q"
@@ -822,59 +882,34 @@ export default function LobbiesCentral({
           data-dashlane-ignore="true"
           data-np-ignore="true"
           data-keeper-lock="true"
-          className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+          className="rc-input h-10 min-w-[240px] flex-1"
           placeholder="Search by name, lobby ID, host, or player"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <CustomSelect
-          className="min-w-[100px]"
-          value={sortKey}
-          onChange={(v) => setSortKey(v as typeof sortKey)}
-          options={[
-            { value: "status", label: "Status" },
-            { value: "playersAsc", label: "Players ↑" },
-            { value: "playersDesc", label: "Players ↓" },
-          ]}
-        />
-      </div>
-      <div className="flex flex-wrap gap-3 items-center">
-        <div className="flex items-center gap-2">
-          <button
-            className={`text-[11px] px-2 py-0.5 rounded ${
-              showLobbies
-                ? "bg-blue-600/80 text-white"
-                : "bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
-            }`}
-            onClick={() => setShowLobbies(!showLobbies)}
-            title="Toggle lobbies"
-          >
-            Lobbies ({filtered.length})
-          </button>
-          {tournamentsEnabled && (
-            <>
-              <button
-                className={`text-[11px] px-2 py-0.5 rounded ${
-                  showTournaments
-                    ? "bg-purple-600/80 text-white"
-                    : "bg-slate-700/50 text-slate-300 hover:bg-slate-600/50"
-                }`}
-                onClick={() => setShowTournaments(!showTournaments)}
-                title="Toggle tournaments"
-              >
-                Tournaments ({filteredTournaments.length})
-              </button>
-              <Link
-                href="/tournaments"
-                className="text-[11px] px-2 py-0.5 rounded bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 transition-colors"
-                title="View all tournaments"
-              >
-                View All →
-              </Link>
-            </>
-          )}
-        </div>
-        <label className="text-xs flex items-center gap-1 opacity-80">
+        <select
+          className="rc-select h-10"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+          aria-label="Filter by status"
+        >
+          <option value="any">Status: any</option>
+          <option value="waiting">Waiting</option>
+          <option value="live">In progress</option>
+          <option value="closed">Closed</option>
+        </select>
+        <select
+          className="rc-select h-10"
+          value={formatFilter}
+          onChange={(e) => setFormatFilter(e.target.value as FormatFilter)}
+          aria-label="Filter by format"
+        >
+          <option value="any">Format: any</option>
+          <option value="constructed">Constructed</option>
+          <option value="sealed">Sealed</option>
+          <option value="draft">Draft</option>
+        </select>
+        <label className="rc-check">
           <input
             type="checkbox"
             checked={hideFull}
@@ -882,19 +917,29 @@ export default function LobbiesCentral({
           />
           Hide full
         </label>
-        <label className="text-xs flex items-center gap-1 opacity-80">
+        <label className="rc-check">
           <input
             type="checkbox"
             checked={hideStarted}
             onChange={(e) => setHideStarted(e.target.checked)}
           />
-          Hide started/closed
+          Hide started
         </label>
       </div>
 
-      <div className="divide-y divide-white/5 rounded-lg overflow-hidden ring-1 ring-white/10 max-h-[400px] overflow-y-auto">
-        {showLobbies &&
-          filtered.map((l) => {
+      {gameCount > 0 ? (
+        <div className="thin-scrollbar overflow-x-auto">
+          {/* Column header */}
+          <div className="rc-games-grid border-y border-rc-line/12 bg-black/30 px-[18px] py-2 font-rc-mono text-[10px] uppercase tracking-[0.22em] text-rc-fg-dim">
+            <div>lobby</div>
+            <div>host</div>
+            <div>format</div>
+            <div>seats</div>
+            <div>status</div>
+            <div className="text-right">action</div>
+          </div>
+
+          {filtered.map((l) => {
             const isMine = joinedLobbyId === l.id; // Source of truth: joinedLobbyId
             const hostPlayer = l.players.find((p) => p.id === l.hostId);
             const opponentPlayer = l.players.find((p) => p.id !== l.hostId);
@@ -904,144 +949,134 @@ export default function LobbiesCentral({
                 ? `${host} vs ${opponentPlayer.displayName}`
                 : host;
             const open = l.status === "open";
+            const live = l.status === "started";
             const full = l.players.length >= l.maxPlayers;
+            const meta: string[] = [];
+            if (l.plannedTimer) {
+              meta.push(
+                `${l.plannedTimer.matchTimeMinutes}m timer${
+                  l.plannedTimer.tiebreakEnabled ? " · tiebreak" : ""
+                }`
+              );
+            }
+            if (l.plannedEnableSeer) meta.push("seer");
+            if (l.visibility === "private") meta.push("invite only");
+            if (l.visibility === "tournament" && l.soatcLeagueMatch) {
+              meta.push(l.soatcLeagueMatch.tournamentName);
+            }
+            if (live && l.startedAt) meta.push(formatDuration(l.startedAt));
+            const statusLabel = open ? "waiting" : live ? "live" : l.status;
+            const statusClass = open
+              ? "text-rc-success"
+              : live
+              ? "text-rc-danger"
+              : "text-rc-fg-dim";
+            const isRegisteredInTournament =
+              l.visibility === "tournament" && l.soatcLeagueMatch
+                ? soatcStatus?.tournaments?.some(
+                    (t) => t.id === l.soatcLeagueMatch?.tournamentId
+                  ) ||
+                  soatcStatus?.tournament?.id ===
+                    l.soatcLeagueMatch?.tournamentId
+                : false;
+            const joinDisabled =
+              !open || full || (isEngaged && l.id !== joinedLobbyId);
+            const joinTitle = !open
+              ? "Lobby not open"
+              : full
+              ? "Lobby is full"
+              : isEngaged
+              ? `Already in ${isInLobby ? "another lobby" : "tournament"}`
+              : "Join this lobby";
             return (
               <div
                 key={`lobby-${l.id}`}
-                className={`flex flex-col gap-2 px-2 py-1.5 bg-black/20 border-l-2 border-blue-500/50 sm:flex-row sm:items-center ${
-                  isMine ? "ring-1 ring-emerald-500/40 bg-emerald-500/5" : ""
+                className={`rc-games-grid items-center border-b border-rc-line/8 px-[18px] py-3 font-rc-mono text-[13px] text-rc-fg transition-colors hover:bg-rc-accent/6 ${
+                  isMine ? "bg-rc-accent/6 shadow-[inset_2px_0_0_#d4a94a]" : ""
                 }`}
               >
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-white truncate flex items-center gap-2">
-                    <span className="truncate">
-                      {l.name || "Unnamed Lobby"}
-                    </span>
-                    {l.plannedMatchType && (
-                      <span
-                        className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ring-1 ${
-                          l.plannedMatchType === "constructed"
-                            ? "bg-slate-600/30 text-slate-200 ring-slate-500/40"
-                            : l.plannedMatchType === "sealed"
-                            ? "bg-purple-600/15 text-purple-200 ring-purple-500/30"
-                            : "bg-indigo-600/15 text-indigo-200 ring-indigo-500/30"
-                        }`}
-                        title={`Planned: ${l.plannedMatchType}`}
-                      >
-                        {l.plannedMatchType}
-                      </span>
-                    )}
-                    {l.plannedTimer && (
-                      <span
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-sky-600/15 text-sky-200 ring-1 ring-sky-500/30 whitespace-nowrap"
-                        title={`Timed match: ${l.plannedTimer.matchTimeMinutes} minutes${
-                          l.plannedTimer.tiebreakEnabled
-                            ? ` — tiebreak after ${
-                                l.plannedTimer.tiebreakExtraTurns ?? 5
-                              } extra turns`
-                            : " — timer is informational only"
-                        }`}
-                      >
-                        ⏱ {l.plannedTimer.matchTimeMinutes}m
-                        {l.plannedTimer.tiebreakEnabled ? " • TB" : ""}
-                      </span>
-                    )}
-                    {l.plannedEnableSeer && (
-                      <span
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-violet-600/15 text-violet-200 ring-1 ring-violet-500/30 whitespace-nowrap"
-                        title="Second Player Seer: the second player scries 1 before the game starts"
-                      >
-                        👁 Seer
-                      </span>
-                    )}
+                <div className="min-w-0">
+                  <div
+                    className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong"
+                    title={l.name || "Unnamed Lobby"}
+                  >
+                    {l.name || "Unnamed Lobby"}
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5 text-xs opacity-70">
-                    {l.status !== "open" && (
-                      <span
-                        className={`text-[9px] uppercase tracking-wide px-1 py-0.5 rounded ${
-                          l.status === "started"
-                            ? "bg-amber-500/10 text-amber-300"
-                            : "bg-white/10 text-white/70"
-                        }`}
-                      >
-                        {l.status}
-                      </span>
-                    )}
-                    {l.status === "started" && l.startedAt && (
-                      <span
-                        className="text-[10px] text-slate-400"
-                        title={new Date(l.startedAt).toLocaleString()}
-                      >
-                        {formatDuration(l.startedAt)}
-                      </span>
-                    )}
-                    {l.visibility === "private" && (
-                      <span title="Private">
-                        <EyeOff className="w-3 h-3 text-amber-300" />
-                      </span>
-                    )}
-                    {l.visibility === "tournament" && l.soatcLeagueMatch && (
-                      <span
-                        className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30"
-                        title={`Tournament: ${l.soatcLeagueMatch.tournamentName}`}
-                      >
-                        🏆 {l.soatcLeagueMatch.tournamentName}
-                      </span>
-                    )}
-                    <span>{playerDisplay}</span>
-                    <span>•</span>
-                    <span>
-                      {l.players.length}/{l.maxPlayers}
-                    </span>
+                  <div
+                    className="truncate text-[11px] tracking-[0.1em] text-rc-fg-dim"
+                    title={l.id}
+                  >
+                    #{shortId(l.id)}
+                    {meta.map((m) => ` · ${m}`).join("")}
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 shrink-0 sm:justify-end">
+                <div
+                  className="truncate"
+                  style={{ color: playerColor(l.hostId) }}
+                  title={playerDisplay}
+                >
+                  {playerDisplay}
+                </div>
+                <div className="text-rc-fg-muted">
+                  {formatLabel(l.plannedMatchType)}
+                </div>
+                <div className="tabular-nums text-rc-fg-strong">
+                  {l.players.length} / {l.maxPlayers}
+                </div>
+                <div
+                  className={`flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] ${statusClass}`}
+                >
+                  <span
+                    className={`rc-dot ${live ? "animate-rc-blink" : ""}`}
+                    style={live ? { animationDuration: "1.4s" } : undefined}
+                  />
+                  <span>{statusLabel}</span>
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   {isMine ? (
                     <>
-                      <div className="flex items-center gap-2">
-                        {myId &&
-                        l.hostId === myId &&
-                        l.players.length < l.maxPlayers ? (
-                          <button
-                            type="button"
-                            className="rounded px-3 py-1 text-xs bg-amber-600/70 text-amber-100 animate-pulse hover:bg-amber-600"
-                            onClick={() => {
-                              const panel = document.getElementById(
-                                "players-invite-panel"
+                      {myId &&
+                      l.hostId === myId &&
+                      l.players.length < l.maxPlayers ? (
+                        <RcButton
+                          size="sm"
+                          className="animate-pulse"
+                          onClick={() => {
+                            const panel = document.getElementById(
+                              "players-invite-panel"
+                            );
+                            if (panel) {
+                              panel.scrollIntoView({
+                                behavior: "smooth",
+                                block: "center",
+                              });
+                              panel.classList.add(
+                                "ring-1",
+                                "ring-rc-accent-ring"
                               );
-                              if (panel) {
-                                panel.scrollIntoView({
-                                  behavior: "smooth",
-                                  block: "center",
-                                });
-                                panel.classList.add("ring-2", "ring-amber-400");
-                                setTimeout(
-                                  () =>
-                                    panel.classList.remove(
-                                      "ring-2",
-                                      "ring-amber-400"
-                                    ),
-                                  2000
-                                );
-                              }
-                            }}
-                          >
-                            Invite friend!
-                          </button>
-                        ) : (
-                          <span className="rounded px-3 py-1 text-xs bg-green-600/70 text-green-100">
-                            Ready!
-                          </span>
-                        )}
-                        {myId && l.hostId !== myId && l.status === "open" && (
-                          <span className="rounded-full px-3 py-1 text-[10px] bg-slate-700/80 text-slate-100">
-                            Waiting for host to start
-                          </span>
-                        )}
-                      </div>
+                              setTimeout(
+                                () =>
+                                  panel.classList.remove(
+                                    "ring-1",
+                                    "ring-rc-accent-ring"
+                                  ),
+                                2000
+                              );
+                            }
+                          }}
+                        >
+                          Invite friend!
+                        </RcButton>
+                      ) : (
+                        <Badge tone="ok">Ready</Badge>
+                      )}
+                      {myId && l.hostId !== myId && l.status === "open" && (
+                        <span className={HINT}>waiting for host to start</span>
+                      )}
                       {onSetLobbyVisibility && myId && l.hostId === myId && (
-                        <button
-                          className="ml-1 rounded bg-slate-700 hover:bg-slate-600 p-1.5 text-xs"
+                        <RcButton
+                          variant="outline"
+                          size="sm"
                           onClick={() =>
                             onSetLobbyVisibility(
                               l.visibility === "open" ? "private" : "open"
@@ -1052,19 +1087,14 @@ export default function LobbiesCentral({
                               ? "Set lobby to private"
                               : "Set lobby to open"
                           }
-                          aria-label="Toggle lobby visibility"
                         >
-                          {l.visibility === "open" ? (
-                            <Eye className="w-3 h-3" />
-                          ) : (
-                            <EyeOff className="w-3 h-3" />
-                          )}
-                        </button>
+                          {l.visibility === "open" ? "Make private" : "Make open"}
+                        </RcButton>
                       )}
                       {/* CPU bot lobby buttons hidden — use Solo vs CPU route instead */}
-
-                      <button
-                        className="rounded bg-slate-700 hover:bg-slate-600 px-2 py-1 text-xs"
+                      <RcButton
+                        variant="ghost"
+                        size="sm"
                         onClick={() => {
                           try {
                             if (navigator.clipboard)
@@ -1079,604 +1109,540 @@ export default function LobbiesCentral({
                         title="Copy an invite link to this lobby"
                       >
                         Copy invite link
-                      </button>
+                      </RcButton>
                     </>
                   ) : (
-                    <div className="flex items-center gap-2">
+                    <>
                       {/* Only show spectate when match is actually in progress (not during setup/draft/deck building) */}
-                      {l.status === "started" &&
+                      {live &&
                         l.matchId &&
                         l.matchStatus === "in_progress" &&
                         l.visibility === "open" && (
-                          <Link
+                          <RcLinkButton
+                            variant="outline"
+                            size="sm"
                             href={`/online/play/${encodeURIComponent(
                               l.matchId
                             )}?watch=true`}
-                            className="rounded bg-blue-600/80 hover:bg-blue-600 px-3 py-1 text-xs text-blue-100"
                             title="Watch this match as a spectator"
                           >
                             Spectate
-                          </Link>
+                          </RcLinkButton>
                         )}
                       {/* Open lobbies: show Join button only after host has opened the lobby */}
-                      {l.visibility === "open" && l.hostReady && (
-                        <button
-                          className={`rounded px-4 py-1.5 text-sm font-medium disabled:opacity-40 ${
-                            full
-                              ? "bg-slate-700 hover:bg-slate-600"
-                              : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
-                          }`}
+                      {l.visibility === "open" && l.hostReady && open && (
+                        <RcButton
+                          size="sm"
+                          variant={full ? "secondary" : "default"}
                           onClick={() => onJoin(l.id)}
-                          disabled={
-                            !open ||
-                            full ||
-                            (isEngaged && l.id !== joinedLobbyId)
-                          }
-                          title={
-                            !open
-                              ? "Lobby not open"
-                              : full
-                              ? "Lobby is full"
-                              : isEngaged
-                              ? `Already in ${
-                                  isInLobby ? "another lobby" : "tournament"
-                                }`
-                              : "Join this lobby"
-                          }
+                          disabled={joinDisabled}
+                          title={joinTitle}
                         >
-                          {full ? "Full" : "Join Game"}
-                        </button>
+                          {full ? "Full" : "Join"}
+                        </RcButton>
                       )}
-                      {/* Open lobbies: show "Setting up" indicator when host hasn't opened yet */}
+                      {/* Open lobbies: host hasn't opened the lobby yet */}
                       {l.visibility === "open" && !l.hostReady && (
-                        <span className="text-xs text-slate-400 px-2 py-1 italic">
-                          ⏳ Host is configuring...
-                        </span>
+                        <span className={HINT}>host is configuring…</span>
                       )}
-                      {/* Tournament lobbies: show special join button only for registered participants */}
+                      {/* Tournament lobbies: join only for registered participants */}
                       {l.visibility === "tournament" &&
                         l.soatcLeagueMatch &&
-                        (() => {
-                          // Check if user is registered in this tournament
-                          const isRegisteredInTournament =
-                            soatcStatus?.tournaments?.some(
-                              (t) => t.id === l.soatcLeagueMatch?.tournamentId
-                            ) ||
-                            soatcStatus?.tournament?.id ===
-                              l.soatcLeagueMatch?.tournamentId;
-
-                          if (!isRegisteredInTournament) {
-                            // Show indicator that this is a tournament match (no join button)
-                            return (
-                              <span className="text-xs text-amber-400/60 px-2 py-1 italic">
-                                Tournament participants only
-                              </span>
-                            );
-                          }
-
-                          return (
-                            <button
-                              className={`rounded px-4 py-1.5 text-sm font-medium disabled:opacity-40 ${
-                                full
-                                  ? "bg-slate-700 hover:bg-slate-600"
-                                  : "bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-lg shadow-amber-500/30 ring-1 ring-amber-400/50"
-                              }`}
-                              onClick={() => onJoin(l.id)}
-                              disabled={
-                                !open ||
-                                full ||
-                                (isEngaged && l.id !== joinedLobbyId) ||
-                                !l.hostReady
-                              }
-                              title={
-                                !l.hostReady
-                                  ? "Host is still setting up the match"
-                                  : !open
-                                  ? "Lobby not open"
-                                  : full
-                                  ? "Lobby is full"
-                                  : isEngaged
-                                  ? `Already in ${
-                                      isInLobby ? "another lobby" : "tournament"
-                                    }`
-                                  : `Join tournament match: ${l.soatcLeagueMatch.tournamentName}`
-                              }
-                            >
-                              {full
-                                ? "Full"
-                                : !l.hostReady
-                                ? "⏳ Setting up..."
-                                : "🏆 Join Match"}
-                            </button>
-                          );
-                        })()}
-                      {/* Show invite-only indicator for private lobbies */}
+                        (isRegisteredInTournament ? (
+                          <RcButton
+                            size="sm"
+                            variant={full ? "secondary" : "default"}
+                            onClick={() => onJoin(l.id)}
+                            disabled={joinDisabled || !l.hostReady}
+                            title={
+                              !l.hostReady
+                                ? "Host is still setting up the match"
+                                : !open
+                                ? "Lobby not open"
+                                : full
+                                ? "Lobby is full"
+                                : isEngaged
+                                ? `Already in ${
+                                    isInLobby ? "another lobby" : "tournament"
+                                  }`
+                                : `Join tournament match: ${l.soatcLeagueMatch.tournamentName}`
+                            }
+                          >
+                            {full
+                              ? "Full"
+                              : !l.hostReady
+                              ? "Setting up…"
+                              : "Join Match"}
+                          </RcButton>
+                        ) : (
+                          <span className={HINT}>
+                            tournament participants only
+                          </span>
+                        ))}
                       {l.visibility === "private" && (
-                        <span className="text-xs text-amber-400/80 px-2 py-1">
-                          🔒 Invite Only
-                        </span>
+                        <span className={HINT}>invite only</span>
                       )}
-                    </div>
+                    </>
                   )}
                 </div>
               </div>
             );
           })}
 
-        {tournamentsEnabled &&
-          showTournaments &&
-          filteredTournaments.map((tournament) => {
-            const myRegistration = tournament.registeredPlayers.find(
-              (p) => p.id === myId
-            );
-            const isSeatVacant = myRegistration?.seatStatus === "vacant";
-            const isRegistered = Boolean(myRegistration && !isSeatVacant);
-            const isReady = myRegistration?.ready || false;
-            const registrationSettings = (
-              (tournament as unknown as { settings?: Record<string, unknown> })
-                .settings ?? {}
-            ).registration as Record<string, unknown> | undefined;
-            const status = tournament.status as string;
-            const isOpenSeat = registrationSettings?.mode === "open";
-            const isLocked = registrationSettings?.locked === true;
-            const activePlayers = tournament.registeredPlayers.filter(
-              (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
-            );
-            const activeCount = activePlayers.length;
-            const vacantCount = Math.max(
-              0,
-              tournament.registeredPlayers.length - activeCount
-            );
-            // Consider a deck submitted when the API marks deckSubmitted (preferred) or when the player is ready
-            const hasSubmitted = (() => {
-              if (!myRegistration) return false;
-              const maybe = myRegistration as typeof myRegistration & {
-                deckSubmitted?: boolean;
-              };
-              return Boolean(maybe.deckSubmitted || isReady);
-            })();
-            const canRejoin = Boolean(isSeatVacant && !isEngaged);
-            const canJoin = isOpenSeat
-              ? canRejoin ||
-                (!isRegistered &&
-                  !isEngaged &&
-                  (vacantCount > 0 ||
-                    (!isLocked &&
-                      (status === "registering" || status === "preparing"))))
-              : status === "registering" &&
-                !isRegistered &&
-                activeCount < tournament.maxPlayers &&
-                !isEngaged;
-            const allPlayersReady =
-              activeCount >= 2 && activePlayers.every((p) => p.ready);
-            const canStart =
-              tournament.creatorId === myId &&
-              status === "registering" &&
-              allPlayersReady;
-            const statusColors = {
-              registering: "text-green-400",
-              draft_phase: "text-blue-400",
-              sealed_phase: "text-blue-400",
-              playing: "text-yellow-400",
-              completed: "text-slate-400",
-            };
-            const statusColor =
-              statusColors[tournament.status as keyof typeof statusColors] ||
-              "text-slate-400";
+          {tournamentsEnabled &&
+            filteredTournaments.map((tournament) => {
+              const myRegistration = tournament.registeredPlayers.find(
+                (p) => p.id === myId
+              );
+              const isSeatVacant = myRegistration?.seatStatus === "vacant";
+              const isRegistered = Boolean(myRegistration && !isSeatVacant);
+              const isReady = myRegistration?.ready || false;
+              const registrationSettings = (
+                (tournament as unknown as { settings?: Record<string, unknown> })
+                  .settings ?? {}
+              ).registration as Record<string, unknown> | undefined;
+              const status = tournament.status as string;
+              const isOpenSeat = registrationSettings?.mode === "open";
+              const isLocked = registrationSettings?.locked === true;
+              const activePlayers = tournament.registeredPlayers.filter(
+                (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
+              );
+              const activeCount = activePlayers.length;
+              const vacantCount = Math.max(
+                0,
+                tournament.registeredPlayers.length - activeCount
+              );
+              // Consider a deck submitted when the API marks deckSubmitted (preferred) or when the player is ready
+              const hasSubmitted = (() => {
+                if (!myRegistration) return false;
+                const maybe = myRegistration as typeof myRegistration & {
+                  deckSubmitted?: boolean;
+                };
+                return Boolean(maybe.deckSubmitted || isReady);
+              })();
+              const canRejoin = Boolean(isSeatVacant && !isEngaged);
+              const canJoin = isOpenSeat
+                ? canRejoin ||
+                  (!isRegistered &&
+                    !isEngaged &&
+                    (vacantCount > 0 ||
+                      (!isLocked &&
+                        (status === "registering" || status === "preparing"))))
+                : status === "registering" &&
+                  !isRegistered &&
+                  activeCount < tournament.maxPlayers &&
+                  !isEngaged;
+              const allPlayersReady =
+                activeCount >= 2 && activePlayers.every((p) => p.ready);
+              const canStart =
+                tournament.creatorId === myId &&
+                status === "registering" &&
+                allPlayersReady;
+              const live = status === "playing";
+              const statusLabel =
+                status === "registering"
+                  ? "open"
+                  : live
+                  ? "live"
+                  : status === "completed"
+                  ? "done"
+                  : "prep";
+              const statusClass =
+                status === "registering"
+                  ? "text-rc-success"
+                  : live
+                  ? "text-rc-danger"
+                  : status === "completed"
+                  ? "text-rc-fg-dim"
+                  : "text-rc-warning";
+              const meta: string[] = [
+                `round ${tournament.currentRound}/${tournament.totalRounds}`,
+              ];
+              if (isOpenSeat) {
+                meta.push(`open seat${isLocked ? " · locked" : ""}`);
+                if (vacantCount > 0) meta.push(`${vacantCount} vacant`);
+              }
+              if (isRegistered && status === "registering") {
+                meta.push(isReady ? "you: ready" : "you: not ready");
+              }
 
-            return (
-              <div
-                key={`tournament-${tournament.id}`}
-                className={`flex flex-wrap items-center gap-3 px-3 py-2 bg-black/20 border-l-4 border-purple-500/50 ${
-                  isRegistered
-                    ? "ring-1 ring-purple-500/40 bg-purple-500/5"
-                    : ""
-                }`}
-              >
-                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-purple-600/20 text-purple-300">
-                  <span className="text-xs font-bold">T</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-base font-bold text-white mb-1 truncate">
-                    {tournament.name}
+              return (
+                <div
+                  key={`tournament-${tournament.id}`}
+                  className={`rc-games-grid items-center border-b border-rc-line/8 px-[18px] py-3 font-rc-mono text-[13px] text-rc-fg transition-colors hover:bg-rc-accent/6 ${
+                    isRegistered
+                      ? "bg-rc-accent/6 shadow-[inset_2px_0_0_#d4a94a]"
+                      : ""
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div
+                      className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong"
+                      title={tournament.name}
+                    >
+                      {tournament.name}
+                    </div>
+                    <div
+                      className="truncate text-[11px] tracking-[0.1em] text-rc-fg-dim"
+                      title={tournament.id}
+                    >
+                      #{shortId(tournament.id)}
+                      {meta.map((m) => ` · ${m}`).join("")}
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-300 space-y-1">
-                    <div>
-                      Format: {tournament.format} • Type: {tournament.matchType}
-                    </div>
-                    <div>
-                      Players: {activeCount}
-                      {isOpenSeat ? "" : `/${tournament.maxPlayers}`} • Round:{" "}
-                      {tournament.currentRound}/{tournament.totalRounds}
-                    </div>
-                    <div className={statusColor}>
-                      Status: {tournament.status.replace("_", " ")}
-                    </div>
-                    {isOpenSeat && (
-                      <div className="text-slate-400">
-                        Open Seat: {isLocked ? "Locked" : "Open"}
-                        {vacantCount > 0 ? ` • Vacant: ${vacantCount}` : ""}
-                      </div>
-                    )}
-                    {isRegistered && tournament.status === "registering" && (
-                      <div
-                        className={
-                          isReady ? "text-green-400" : "text-yellow-400"
-                        }
-                      >
-                        You: {isReady ? "Ready" : "Not Ready"}
-                      </div>
-                    )}
+                  <div className="truncate text-rc-accent-link">
+                    tournament · {tournament.format.replace("_", " ")}
                   </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 shrink-0 ml-auto">
-                  {canJoin && onJoinTournament && (
-                    <button
-                      className={`rounded px-3 py-1 text-xs ${
-                        pendingJoinT[tournament.id]
-                          ? "bg-slate-600/60 cursor-not-allowed"
-                          : "bg-purple-600/80 hover:bg-purple-600"
-                      } text-white`}
-                      onClick={async () => {
-                        if (pendingJoinT[tournament.id]) return;
-                        setPendingJoinT((m) => ({
-                          ...m,
-                          [tournament.id]: true,
-                        }));
-                        try {
-                          await Promise.resolve(
-                            onJoinTournament(tournament.id)
-                          );
-                          if (onRefresh) onRefresh();
-                        } finally {
+                  <div className="text-rc-fg-muted">
+                    {formatLabel(tournament.matchType)}
+                  </div>
+                  <div className="tabular-nums text-rc-fg-strong">
+                    {activeCount}
+                    {isOpenSeat ? "" : ` / ${tournament.maxPlayers}`}
+                  </div>
+                  <div
+                    className={`flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] ${statusClass}`}
+                  >
+                    <span
+                      className={`rc-dot ${live ? "animate-rc-blink" : ""}`}
+                      style={live ? { animationDuration: "1.4s" } : undefined}
+                    />
+                    <span>{statusLabel}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {canJoin && onJoinTournament && (
+                      <RcButton
+                        size="sm"
+                        onClick={async () => {
+                          if (pendingJoinT[tournament.id]) return;
                           setPendingJoinT((m) => ({
                             ...m,
-                            [tournament.id]: false,
-                          }));
-                        }
-                      }}
-                      disabled={pendingJoinT[tournament.id]}
-                    >
-                      {pendingJoinT[tournament.id]
-                        ? "Joining…"
-                        : canRejoin
-                        ? "Rejoin"
-                        : "Join"}
-                    </button>
-                  )}
-                  {isRegistered &&
-                    (tournament.status === "registering" || isOpenSeat) &&
-                    onLeaveTournament && (
-                      <button
-                        className={`rounded px-3 py-1 text-xs ${
-                          pendingLeaveT[tournament.id]
-                            ? "bg-slate-600/60 cursor-not-allowed"
-                            : "bg-red-600/80 hover:bg-red-600"
-                        } text-white`}
-                        onClick={async () => {
-                          if (pendingLeaveT[tournament.id]) return;
-                          setPendingLeaveT((m) => ({
-                            ...m,
                             [tournament.id]: true,
                           }));
                           try {
                             await Promise.resolve(
-                              onLeaveTournament(tournament.id)
+                              onJoinTournament(tournament.id)
                             );
                             if (onRefresh) onRefresh();
                           } finally {
+                            setPendingJoinT((m) => ({
+                              ...m,
+                              [tournament.id]: false,
+                            }));
+                          }
+                        }}
+                        disabled={pendingJoinT[tournament.id]}
+                      >
+                        {pendingJoinT[tournament.id]
+                          ? "Joining…"
+                          : canRejoin
+                          ? "Rejoin"
+                          : "Join"}
+                      </RcButton>
+                    )}
+                    {isRegistered &&
+                      (tournament.status === "registering" || isOpenSeat) &&
+                      onLeaveTournament && (
+                        <RcButton
+                          variant="destructive"
+                          size="sm"
+                          onClick={async () => {
+                            if (pendingLeaveT[tournament.id]) return;
                             setPendingLeaveT((m) => ({
                               ...m,
-                              [tournament.id]: false,
+                              [tournament.id]: true,
                             }));
-                          }
-                        }}
-                        disabled={pendingLeaveT[tournament.id]}
-                      >
-                        {pendingLeaveT[tournament.id] ? "Leaving…" : "Leave"}
-                      </button>
-                    )}
-                  {tournament.creatorId === myId &&
-                    tournament.status === "registering" &&
-                    onUpdateTournamentSettings && (
-                      <button
-                        className="rounded bg-blue-600/80 hover:bg-blue-600 px-3 py-1 text-xs"
-                        onClick={() => {
-                          setEditingTournament(tournament);
-                          setSettingsModalOpen(true);
-                        }}
-                      >
-                        Settings
-                      </button>
-                    )}
-                  {isOpenSeat &&
-                    tournament.creatorId === myId &&
-                    tournament.status !== "completed" &&
-                    onToggleTournamentRegistrationLock && (
-                      <button
-                        className={`rounded px-3 py-1 text-xs ${
-                          pendingLockT[tournament.id]
-                            ? "bg-slate-600/60 cursor-not-allowed"
+                            try {
+                              await Promise.resolve(
+                                onLeaveTournament(tournament.id)
+                              );
+                              if (onRefresh) onRefresh();
+                            } finally {
+                              setPendingLeaveT((m) => ({
+                                ...m,
+                                [tournament.id]: false,
+                              }));
+                            }
+                          }}
+                          disabled={pendingLeaveT[tournament.id]}
+                        >
+                          {pendingLeaveT[tournament.id] ? "Leaving…" : "Leave"}
+                        </RcButton>
+                      )}
+                    {tournament.creatorId === myId &&
+                      tournament.status === "registering" &&
+                      onUpdateTournamentSettings && (
+                        <RcButton
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEditingTournament(tournament);
+                            setSettingsModalOpen(true);
+                          }}
+                        >
+                          Settings
+                        </RcButton>
+                      )}
+                    {isOpenSeat &&
+                      tournament.creatorId === myId &&
+                      tournament.status !== "completed" &&
+                      onToggleTournamentRegistrationLock && (
+                        <RcButton
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            if (pendingLockT[tournament.id]) return;
+                            setPendingLockT((m) => ({
+                              ...m,
+                              [tournament.id]: true,
+                            }));
+                            try {
+                              await Promise.resolve(
+                                onToggleTournamentRegistrationLock(
+                                  tournament.id,
+                                  !isLocked
+                                )
+                              );
+                              if (onRefresh) onRefresh();
+                            } finally {
+                              setPendingLockT((m) => ({
+                                ...m,
+                                [tournament.id]: false,
+                              }));
+                            }
+                          }}
+                          disabled={pendingLockT[tournament.id]}
+                        >
+                          {pendingLockT[tournament.id]
+                            ? "Updating…"
                             : isLocked
-                            ? "bg-amber-600/80 hover:bg-amber-600"
-                            : "bg-emerald-600/80 hover:bg-emerald-600"
-                        } text-white`}
+                            ? "Unlock Seats"
+                            : "Lock Seats"}
+                        </RcButton>
+                      )}
+                    {isRegistered && tournament.status === "registering" && (
+                      <RcLinkButton
+                        variant="outline"
+                        size="sm"
+                        href={`/tournaments/${tournament.id}`}
+                        title="Go to tournament page to see details and participate in drafts"
+                      >
+                        View Tournament
+                      </RcLinkButton>
+                    )}
+                    {canStart && onStartTournament && (
+                      <RcButton
+                        size="sm"
                         onClick={async () => {
-                          if (pendingLockT[tournament.id]) return;
-                          setPendingLockT((m) => ({
+                          if (pendingStartT[tournament.id]) return;
+                          setPendingStartT((m) => ({
                             ...m,
                             [tournament.id]: true,
                           }));
                           try {
                             await Promise.resolve(
-                              onToggleTournamentRegistrationLock(
-                                tournament.id,
-                                !isLocked
-                              )
+                              onStartTournament(tournament.id)
                             );
                             if (onRefresh) onRefresh();
                           } finally {
-                            setPendingLockT((m) => ({
+                            setPendingStartT((m) => ({
                               ...m,
                               [tournament.id]: false,
                             }));
                           }
                         }}
-                        disabled={pendingLockT[tournament.id]}
+                        disabled={pendingStartT[tournament.id]}
                       >
-                        {pendingLockT[tournament.id]
-                          ? "Updating…"
-                          : isLocked
-                          ? "Unlock Seats"
-                          : "Lock Seats"}
-                      </button>
+                        {pendingStartT[tournament.id]
+                          ? "Starting…"
+                          : "Start Tournament"}
+                      </RcButton>
                     )}
-                  {isRegistered && tournament.status === "registering" && (
-                    <Link
-                      href={`/tournaments/${tournament.id}`}
-                      className="rounded px-3 py-1 text-xs bg-blue-600/80 hover:bg-blue-600 text-white font-medium transition-colors"
-                      title="Go to tournament page to see details and participate in drafts"
-                    >
-                      View Tournament →
-                    </Link>
-                  )}
-                  {canStart && onStartTournament && (
-                    <button
-                      className={`rounded px-3 py-1 text-xs text-white font-medium ${
-                        pendingStartT[tournament.id]
-                          ? "bg-slate-600/60 cursor-not-allowed"
-                          : "bg-blue-600/80 hover:bg-blue-600"
-                      }`}
-                      onClick={async () => {
-                        if (pendingStartT[tournament.id]) return;
-                        setPendingStartT((m) => ({
-                          ...m,
-                          [tournament.id]: true,
-                        }));
-                        try {
-                          await Promise.resolve(
-                            onStartTournament(tournament.id)
-                          );
-                          if (onRefresh) onRefresh();
-                        } finally {
-                          setPendingStartT((m) => ({
-                            ...m,
-                            [tournament.id]: false,
-                          }));
+                    {tournament.creatorId === myId &&
+                      tournament.status !== "completed" &&
+                      onEndTournament && (
+                        <RcButton
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setEndTournamentConfirm(tournament.id)}
+                        >
+                          End Tournament
+                        </RcButton>
+                      )}
+                    {isRegistered && tournament.status === "draft_phase" && (
+                      <RcButton
+                        size="sm"
+                        onClick={() =>
+                          (window.location.href = `/tournaments/${tournament.id}/draft`)
                         }
-                      }}
-                      disabled={pendingStartT[tournament.id]}
-                    >
-                      {pendingStartT[tournament.id]
-                        ? "Starting…"
-                        : "Start Tournament"}
-                    </button>
-                  )}
-                  {tournament.creatorId === myId &&
-                    tournament.status !== "completed" &&
-                    onEndTournament && (
-                      <button
-                        className="rounded bg-red-600/80 hover:bg-red-600 px-3 py-1 text-xs"
-                        onClick={() => setEndTournamentConfirm(tournament.id)}
                       >
-                        End Tournament
-                      </button>
+                        Enter Draft
+                      </RcButton>
                     )}
-                  {isRegistered && tournament.status === "draft_phase" && (
-                    <button
-                      className="rounded bg-blue-600/80 hover:bg-blue-600 px-3 py-1 text-xs text-blue-100"
-                      onClick={() =>
-                        (window.location.href = `/tournaments/${tournament.id}/draft`)
-                      }
-                    >
-                      Enter Draft
-                    </button>
-                  )}
-                  {isRegistered &&
-                    tournament.status === "sealed_phase" &&
-                    (hasSubmitted ? (
-                      <span
-                        className="rounded px-3 py-1 text-xs bg-emerald-600/20 text-emerald-200 ring-1 ring-emerald-500/30 cursor-not-allowed"
-                        title="Deck submitted to tournament"
-                      >
-                        Deck Submitted ✓
-                      </span>
-                    ) : (
-                      <button
-                        className="rounded bg-green-600/80 hover:bg-green-600 px-3 py-1 text-xs text-green-100"
-                        onClick={async () => {
-                          try {
-                            const res = await fetch(
-                              `/api/tournaments/${encodeURIComponent(
-                                tournament.id
-                              )}/preparation/start`,
-                              {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                              }
-                            );
-                            const data = await res.json();
-                            if (!res.ok)
-                              throw new Error(
-                                data?.error || "Failed to start preparation"
+                    {isRegistered &&
+                      tournament.status === "sealed_phase" &&
+                      (hasSubmitted ? (
+                        <Badge tone="ok" title="Deck submitted to tournament">
+                          Deck submitted
+                        </Badge>
+                      ) : (
+                        <RcButton
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(
+                                `/api/tournaments/${encodeURIComponent(
+                                  tournament.id
+                                )}/preparation/start`,
+                                {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                }
                               );
-                            // Persist generated packs for the editor (if provided)
-                            const packs = data?.preparationData?.sealed
-                              ?.generatedPacks as
-                              | Array<{
-                                  packId: string;
-                                  setId: string;
-                                  cards: unknown[];
-                                }>
-                              | undefined;
-                            if (Array.isArray(packs)) {
-                              const storePacks = packs.map((p) => ({
-                                id: p.packId,
-                                set: p.setId,
-                                cards: Array.isArray(p.cards) ? p.cards : [],
-                                opened: false,
-                              }));
-                              try {
-                                localStorage.setItem(
-                                  `sealedPacks_tournament_${tournament.id}`,
-                                  JSON.stringify(storePacks)
+                              const data = await res.json();
+                              if (!res.ok)
+                                throw new Error(
+                                  data?.error || "Failed to start preparation"
                                 );
-                              } catch {}
-                            }
-                          } catch (e) {
-                            console.warn("Failed to start preparation:", e);
-                          }
-                          const cfg =
-                            (
-                              tournament as unknown as {
-                                settings?: {
-                                  sealedConfig?: {
-                                    packCounts?: Record<string, number>;
-                                    timeLimit?: number;
-                                    replaceAvatars?: boolean;
-                                    allowDragonlordChampion?: boolean;
-                                  };
-                                };
+                              // Persist generated packs for the editor (if provided)
+                              const packs = data?.preparationData?.sealed
+                                ?.generatedPacks as
+                                | Array<{
+                                    packId: string;
+                                    setId: string;
+                                    cards: unknown[];
+                                  }>
+                                | undefined;
+                              if (Array.isArray(packs)) {
+                                const storePacks = packs.map((p) => ({
+                                  id: p.packId,
+                                  set: p.setId,
+                                  cards: Array.isArray(p.cards) ? p.cards : [],
+                                  opened: false,
+                                }));
+                                try {
+                                  localStorage.setItem(
+                                    `sealedPacks_tournament_${tournament.id}`,
+                                    JSON.stringify(storePacks)
+                                  );
+                                } catch {}
                               }
-                            ).settings?.sealedConfig || {};
-                          const packCount =
-                            Object.values(cfg.packCounts || { Beta: 6 }).reduce(
-                              (a, b) => a + (b || 0),
-                              0
-                            ) || 6;
-                          const setMix = Object.entries(
-                            cfg.packCounts || { Beta: 6 }
-                          )
-                            .filter(([, c]) => (c || 0) > 0)
-                            .map(([s]) => s);
-                          const timeLimit = cfg.timeLimit ?? 40;
-                          const replaceAvatars = cfg.replaceAvatars ?? false;
-                          const allowDragonlordChampion =
-                            cfg.allowDragonlordChampion ?? true;
-                          const params = new URLSearchParams({
-                            sealed: "true",
-                            tournament: tournament.id,
-                            packCount: String(packCount),
-                            setMix: setMix.join(","),
-                            timeLimit: String(timeLimit),
-                            constructionStartTime: String(Date.now()),
-                            replaceAvatars: String(replaceAvatars),
-                            allowDragonlordChampion: String(
-                              allowDragonlordChampion
-                            ),
-                            matchName: tournament.name,
-                          });
-                          window.location.href = `/decks/editor-3d?${params.toString()}`;
-                        }}
+                            } catch (e) {
+                              console.warn("Failed to start preparation:", e);
+                            }
+                            const cfg =
+                              (
+                                tournament as unknown as {
+                                  settings?: {
+                                    sealedConfig?: {
+                                      packCounts?: Record<string, number>;
+                                      timeLimit?: number;
+                                      replaceAvatars?: boolean;
+                                      allowDragonlordChampion?: boolean;
+                                    };
+                                  };
+                                }
+                              ).settings?.sealedConfig || {};
+                            const packCount =
+                              Object.values(cfg.packCounts || { Beta: 6 }).reduce(
+                                (a, b) => a + (b || 0),
+                                0
+                              ) || 6;
+                            const setMix = Object.entries(
+                              cfg.packCounts || { Beta: 6 }
+                            )
+                              .filter(([, c]) => (c || 0) > 0)
+                              .map(([s]) => s);
+                            const timeLimit = cfg.timeLimit ?? 40;
+                            const replaceAvatars = cfg.replaceAvatars ?? false;
+                            const allowDragonlordChampion =
+                              cfg.allowDragonlordChampion ?? true;
+                            const params = new URLSearchParams({
+                              sealed: "true",
+                              tournament: tournament.id,
+                              packCount: String(packCount),
+                              setMix: setMix.join(","),
+                              timeLimit: String(timeLimit),
+                              constructionStartTime: String(Date.now()),
+                              replaceAvatars: String(replaceAvatars),
+                              allowDragonlordChampion: String(
+                                allowDragonlordChampion
+                              ),
+                              matchName: tournament.name,
+                            });
+                            window.location.href = `/decks/editor-3d?${params.toString()}`;
+                          }}
+                        >
+                          Build Deck
+                        </RcButton>
+                      ))}
+                    {isRegistered && tournament.status === "playing" && (
+                      <RcButton
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openMatchesModal(tournament.id)}
                       >
-                        Build Deck
-                      </button>
-                    ))}
-                  {isRegistered && tournament.status === "playing" && (
-                    <button
-                      className="rounded bg-orange-600/80 hover:bg-orange-600 px-3 py-1 text-xs text-orange-100"
-                      onClick={() => openMatchesModal(tournament.id)}
-                    >
-                      View Matches
-                    </button>
-                  )}
-                  {isRegistered && tournament.status === "completed" && (
-                    <div className="rounded bg-slate-600/20 px-3 py-1 text-xs text-slate-400">
-                      Completed
-                    </div>
-                  )}
-                  {tournament.status === "registering" &&
-                    !isRegistered &&
-                    !isOpenSeat &&
-                    activeCount >= tournament.maxPlayers && (
-                      <div className="rounded bg-slate-600/20 px-3 py-1 text-xs text-slate-400">
-                        Full
-                      </div>
+                        View Matches
+                      </RcButton>
                     )}
-                  {tournament.status === "registering" &&
-                    !isRegistered &&
-                    !isOpenSeat &&
-                    activeCount < tournament.maxPlayers &&
-                    isEngaged && (
-                      <div className="rounded bg-slate-600/20 px-3 py-1 text-xs text-slate-400">
-                        In {isInLobby ? "Lobby" : "Tournament"}
-                      </div>
+                    {isRegistered && tournament.status === "completed" && (
+                      <span className={HINT}>completed</span>
                     )}
-                  {tournament.status === "registering" &&
-                    isOpenSeat &&
-                    !isRegistered &&
-                    isLocked && (
-                      <div className="rounded bg-slate-600/20 px-3 py-1 text-xs text-slate-400">
-                        Locked
-                      </div>
-                    )}
-                  {tournament.status !== "registering" &&
-                    !isRegistered &&
-                    (!isOpenSeat || vacantCount === 0) && (
-                      <div className="rounded bg-slate-600/20 px-3 py-1 text-xs text-slate-400">
-                        Started
-                      </div>
-                    )}
-                  {tournament.status !== "registering" &&
-                    !isRegistered &&
-                    isOpenSeat &&
-                    vacantCount > 0 && (
-                      <div className="rounded bg-emerald-600/20 px-3 py-1 text-xs text-emerald-200">
-                        Vacant Seats
-                      </div>
-                    )}
+                    {tournament.status === "registering" &&
+                      !isRegistered &&
+                      !isOpenSeat &&
+                      activeCount >= tournament.maxPlayers && (
+                        <span className={HINT}>full</span>
+                      )}
+                    {tournament.status === "registering" &&
+                      !isRegistered &&
+                      !isOpenSeat &&
+                      activeCount < tournament.maxPlayers &&
+                      isEngaged && (
+                        <span className={HINT}>
+                          in {isInLobby ? "lobby" : "tournament"}
+                        </span>
+                      )}
+                    {tournament.status === "registering" &&
+                      isOpenSeat &&
+                      !isRegistered &&
+                      isLocked && <span className={HINT}>locked</span>}
+                    {tournament.status !== "registering" &&
+                      !isRegistered &&
+                      (!isOpenSeat || vacantCount === 0) && (
+                        <span className={HINT}>started</span>
+                      )}
+                    {tournament.status !== "registering" &&
+                      !isRegistered &&
+                      isOpenSeat &&
+                      vacantCount > 0 && (
+                        <span className="font-rc-mono text-[11px] uppercase tracking-[0.14em] text-rc-success">
+                          vacant seats
+                        </span>
+                      )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-
-        {showLobbies &&
-          showTournaments &&
-          filtered.length === 0 &&
-          filteredTournaments.length === 0 && (
-            <div className="px-3 py-8 text-center text-sm opacity-60">
-              No games match your filters.
-            </div>
+              );
+            })}
+        </div>
+      ) : (
+        <div className="relative mx-[18px] mb-[18px] overflow-hidden rounded-rc-md border border-dashed border-rc-line/22 bg-black/30 px-6 py-10 text-center">
+          {skull && (
+            <pre
+              aria-hidden="true"
+              className="pointer-events-none absolute -top-2.5 left-1/2 m-0 -translate-x-1/2 select-none text-[5px] leading-[5px] text-rc-fg-dim opacity-45"
+            >
+              {skull}
+            </pre>
           )}
-        {showLobbies && !showTournaments && filtered.length === 0 && (
-          <div className="px-3 py-8 text-center text-sm opacity-60">
-            No lobbies match your filters.
+          <div className="relative font-rc-display text-[26px] text-rc-fg-strong">
+            The realm is quiet.
           </div>
-        )}
-        {tournamentsEnabled &&
-          !showLobbies &&
-          showTournaments &&
-          filteredTournaments.length === 0 && (
-            <div className="px-3 py-8 text-center text-sm opacity-60">
-              No tournaments match your filters.
-            </div>
-          )}
-        {!showLobbies && !(tournamentsEnabled && showTournaments) && (
-          <div className="px-3 py-8 text-center text-sm opacity-60">
-            Select lobby or tournament filters to view games.
+          <div className="relative mt-1.5 font-rc-mono text-xs tracking-[0.1em] text-rc-fg-subtle">
+            No games match your filters — create one and they will come.
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {overlayOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -1684,7 +1650,7 @@ export default function LobbiesCentral({
             className="absolute inset-0 bg-black/60"
             onClick={() => setOverlayOpen(false)}
           />
-          <div className="relative bg-slate-900/95 ring-1 ring-slate-800 rounded-xl shadow-xl w-full max-w-md p-5">
+          <div className="relative rc-panel w-full max-w-md p-5">
             <div className="flex items-center justify-between">
               <div className="text-base font-semibold">Create Match</div>
               <button
@@ -1796,7 +1762,7 @@ export default function LobbiesCentral({
             className="absolute inset-0 bg-black/60"
             onClick={() => setTournamentOverlayOpen(false)}
           />
-          <div className="relative bg-slate-900/95 ring-1 ring-slate-800 rounded-xl shadow-xl w-full max-w-md p-5">
+          <div className="relative rc-panel w-full max-w-md p-5">
             <div className="flex items-center justify-between">
               <div className="text-base font-semibold">Create Tournament</div>
               <button
@@ -2554,7 +2520,7 @@ export default function LobbiesCentral({
         data={matchesData}
         myId={myId}
       />
-    </div>
+    </section>
   );
 }
 

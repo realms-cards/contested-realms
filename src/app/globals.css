@@ -470,3 +470,212 @@ body[data-colorblind="true"] *[class*="ring-rose-"] {
 [data-tooltip]:hover::after {
   opacity: 1;
 }
+
+/* =========================================================================
+   realms.cards design system v2 tokens (lobby refresh)
+   Source: design_handoff/_ds/.../colors_and_type.css
+   Utilities: text-rc-fg, bg-rc-accent, border-rc-line/18, font-rc-mono,
+   rounded-rc-md, shadow-rc-md, animate-rc-blink ...
+   ========================================================================= */
+@theme inline {
+  --color-rc-bg: #0b1020;
+  --color-rc-bg-top: #0c1222;
+  --color-rc-floor: #070a14;
+  --color-rc-panel: rgba(9, 13, 25, 0.82);
+  --color-rc-fg: #ece7d7;
+  --color-rc-fg-strong: #fbf6e8;
+  --color-rc-fg-muted: #b9b4a2;
+  --color-rc-fg-subtle: #8a8675;
+  --color-rc-fg-dim: #5f5c50;
+  /* rule/border base; use opacity modifiers: border-rc-line/18 */
+  --color-rc-line: #ece7d7;
+  --color-rc-accent: #d4a94a;
+  --color-rc-accent-hover: #e8bf5c;
+  --color-rc-accent-press: #b8913b;
+  --color-rc-accent-fg: #1a1407;
+  --color-rc-accent-ring: #f3cf6a;
+  --color-rc-accent-link: #e3ba55;
+  --color-rc-spark: #fde1a0;
+  --color-rc-ember: #c97c3d;
+  --color-rc-moonlight: #c9d6ea;
+  --color-rc-danger: #b9543d;
+  --color-rc-danger-hover: #d06245;
+  --color-rc-warning: #d99b2c;
+  --color-rc-success: #7a9d52;
+  --color-rc-info: #6f8bb3;
+  --color-rc-gold-ink: #3a2c08;
+
+  --font-rc-display:
+    var(--font-fantaisie), "UnifrakturCook", "Luminari", ui-serif, Georgia,
+    serif;
+  --font-rc-sans:
+    "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica,
+    Arial, sans-serif;
+  --font-rc-mono:
+    "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+
+  --radius-rc-sm: 4px;
+  --radius-rc-md: 6px;
+  --radius-rc-lg: 10px;
+
+  --shadow-rc-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-rc-md: 0 6px 14px rgba(0, 0, 0, 0.4);
+  /* --shadow-md + --inset-ink: the panel chrome */
+  --shadow-rc-panel:
+    0 6px 14px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(251, 246, 232, 0.04),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+
+  --animate-rc-blink: rc-blink 2.2s infinite;
+  @keyframes rc-blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.25;
+    }
+  }
+}
+
+/* Lobby page root: slate-navy floor with the warm gold bloom at the top */
+.rc-lobby {
+  color: #ece7d7;
+  font-family: var(--font-rc-sans);
+  background:
+    radial-gradient(
+      ellipse 70% 40% at 50% -5%,
+      rgba(212, 169, 74, 0.14),
+      transparent 60%
+    ),
+    linear-gradient(180deg, #0c1222 0%, #070a14 100%);
+  -webkit-font-smoothing: antialiased;
+}
+.rc-lobby a {
+  color: inherit;
+}
+.rc-lobby ::placeholder {
+  color: #5f5c50;
+}
+
+/* Film grain overlay (inline feTurbulence, 160px tile) */
+.rc-grain {
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* Shared panel chrome (Active Games, Players, Lobby Chat, dialogs) */
+.rc-panel {
+  border: 1px solid rgba(236, 231, 215, 0.18);
+  border-radius: 10px;
+  background: rgba(9, 13, 25, 0.82);
+  box-shadow: var(--shadow-rc-panel);
+}
+.rc-panel-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(236, 231, 215, 0.14);
+}
+
+/* Text controls */
+.rc-input,
+.rc-select {
+  font-family: var(--font-rc-mono);
+  font-size: 13px;
+  color: #ece7d7;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(236, 231, 215, 0.22);
+  border-radius: 6px;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+.rc-input {
+  padding: 0 14px;
+}
+.rc-select {
+  padding: 0 12px;
+}
+.rc-input:focus-visible,
+.rc-select:focus-visible {
+  border-color: #f3cf6a;
+  box-shadow: 0 0 0 1px #f3cf6a;
+}
+.rc-select option {
+  background: #111a2e;
+  color: #ece7d7;
+}
+.rc-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-rc-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: #b9b4a2;
+  cursor: pointer;
+}
+.rc-check input {
+  accent-color: #d4a94a;
+}
+
+/* Segmented control (Players sort, chat scope) */
+.rc-segment {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid rgba(236, 231, 215, 0.22);
+  border-radius: 6px;
+  font-family: var(--font-rc-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.rc-segment > button {
+  padding: 6px 12px;
+  background: transparent;
+  color: #b9b4a2;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease;
+}
+.rc-segment > button + button {
+  border-left: 1px solid rgba(236, 231, 215, 0.22);
+}
+.rc-segment > button:hover {
+  color: #f3cf6a;
+}
+.rc-segment > button[aria-pressed="true"] {
+  background: #d4a94a;
+  color: #1a1407;
+}
+.rc-segment > button:focus-visible {
+  outline: 1px solid #f3cf6a;
+  outline-offset: -1px;
+}
+
+/* Active Games table template (shared by header + body rows) */
+.rc-games-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(200px, 2fr) minmax(120px, 1fr) minmax(110px, 1fr)
+    minmax(90px, 0.7fr) minmax(110px, 0.8fr) minmax(130px, auto);
+  column-gap: 16px;
+}
+
+/* Status square used in the games table */
+.rc-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}

@@ -12,7 +12,9 @@ export default function CpuMagicChoices() {
   const choices = getSpellChoices(state, seat, pending.spell.card.name || "", pending.cpuChoice);
   const selected = choices.find(choice => choice.key === pending.cpuChoice);
   const canChoose = state.actorKey === seat && pending.status !== "confirm";
+  const projectileImpact = pending.cpuEvent?.kind === "projectileImpact";
   const eventLabel = pending.cpuEvent ? {
+    projectileImpact:"Choose the next projectile impact",
     geomancerFill:"Fill adjacent void with Rubble",
     treasurePlace:"Opponent chooses underwater placement",treasureRecover:"Recover treasure",drawChoice:"Choose a deck to draw from",
     randomChoice:"Choose a random outcome",fightChoice:pending.cpuEvent.kind === "fightChoice" && pending.cpuEvent.strikeOnly ? "Strike after arrival" : "Fight after arrival",genesis:"Genesis",auraEnd:"End-phase effect",blazeTrail:"Blaze trail",
@@ -31,13 +33,14 @@ export default function CpuMagicChoices() {
         </div>
       ) : canChoose ? (
         <div className="mt-3 space-y-3">
-          <label className="block text-sm" htmlFor="cpu-spell-choice">Spellcaster and effect</label>
+          <label className="block text-sm" htmlFor="cpu-spell-choice">{projectileImpact ? "Projectile impact" : "Spellcaster and effect"}</label>
           <select id="cpu-spell-choice" className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm"
             value={selected?.key || ""} onChange={event => state.setCpuMagicChoice(event.target.value)}>
-            <option value="">Choose how to cast this spell…</option>
+            <option value="">{projectileImpact ? "Choose the next impact…" : "Choose how to cast this spell…"}</option>
             {choices.map(choice => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
           </select>
-          {selected?.projectile?.decisions.map((decision, index) => (
+          {selected?.resolutionOperations && <p className="text-sm text-amber-200">Choose a direction now. If an impact has multiple eligible units, you will choose when it is reached, after intervening effects resolve.</p>}
+          {!selected?.resolutionOperations && selected?.projectile?.decisions.map((decision, index) => (
             <label key={index} className="block text-sm">
               {decision.label}
               <select className="mt-1 w-full rounded border border-slate-600 bg-slate-900 px-3 py-2"
@@ -59,7 +62,7 @@ export default function CpuMagicChoices() {
           {choices.length === 0 && <p className="text-sm text-amber-200">There are no legal choices in the current position.</p>}
           <div className="flex justify-end gap-2">
             <button className="rounded bg-slate-700 px-3 py-2 text-sm disabled:opacity-40" disabled={!!pending.cpuRandomMinion || !!pending.cpuEvent} onClick={state.cancelMagic}>Cancel</button>
-            <button className="rounded bg-emerald-700 px-3 py-2 text-sm disabled:opacity-40" disabled={!selected} onClick={state.confirmMagic}>Confirm effect</button>
+            <button className="rounded bg-emerald-700 px-3 py-2 text-sm disabled:opacity-40" disabled={!selected} onClick={state.confirmMagic}>{projectileImpact ? "Confirm impact" : "Confirm effect"}</button>
           </div>
         </div>
       ) : <p className="mt-2 text-sm text-slate-200" aria-live="polite">{selected?.label || "Choosing a spellcaster and effect…"}{pending.status === "confirm" ? " — Resolving…" : ""}</p>}

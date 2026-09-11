@@ -8,11 +8,14 @@ export type ManualOverlayProps = {
   triggerClassName?: string;
   /** Optional trigger label text. */
   triggerLabel?: string;
+  /** "chip" (default) renders the glowing amber chip; "plain" renders a bare text button styled only by triggerClassName. */
+  variant?: "chip" | "plain";
 };
 
 export default function ManualOverlay({
   triggerClassName = "",
   triggerLabel = "Manual",
+  variant = "chip",
 }: ManualOverlayProps) {
   const [open, setOpen] = React.useState(false);
   const [content, setContent] = React.useState<string | null>(null);
@@ -208,6 +211,18 @@ export default function ManualOverlay({
 
   return (
     <>
+      {variant === "plain" ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={overlayId}
+          className={triggerClassName}
+        >
+          {triggerLabel}
+        </button>
+      ) : (
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -233,6 +248,7 @@ export default function ManualOverlay({
         </span>
         <span className="relative">{triggerLabel}</span>
       </button>
+      )}
 
       {open &&
         typeof document !== "undefined" &&
