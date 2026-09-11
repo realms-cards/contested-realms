@@ -32,7 +32,7 @@ export function installCpuController(store: StoreApi<GameState>) {
     if (!hasCpuGenesis(card.name)) return;
     const id = `cpu_genesis_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const [x,y] = at.split(",").map(Number);
-    enqueue({id,tile:{x,y},spell:{at,index:-1,owner,instanceId:id,card},cpuEvent:{kind:"genesis",region,source},status:"choosingTarget",createdAt:Date.now()},batch);
+    enqueue({id,tile:{x,y},spell:{at,index:-1,owner,instanceId:id,card},cpuEvent:{kind:"genesis",region,source,...(card.type === "Site" ? {sourceSite:{at,name:card.name,instanceId:card.instanceId}} : {})},status:"choosingTarget",createdAt:Date.now()},batch);
   };
   let scheduled = false;
   const drain = () => {
@@ -143,6 +143,8 @@ export function installCpuController(store: StoreApi<GameState>) {
       for (const [at,tile] of Object.entries(state.board.sites)) {
         const oldCard = previous.board.sites[at]?.card;
         if (!tile.card || (oldCard && oldCard.name === tile.card.name && oldCard.instanceId === tile.card.instanceId)) continue;
+        // Moving or transforming an existing site is not entering the realm.
+        if (tile.card.instanceId && Object.values(previous.board.sites).some(old => old.card?.instanceId === tile.card?.instanceId)) continue;
         enqueueGenesis(tile.card,at,tile.owner,batch);
         const seat = tile.owner === 1 ? "p1" : "p2";
         const avatar = state.avatars[seat];

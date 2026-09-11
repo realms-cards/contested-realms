@@ -29,6 +29,36 @@ beforeEach(() => { vi.spyOn(HTMLMediaElement.prototype,"play").mockResolvedValue
 afterEach(() => vi.restoreAllMocks());
 
 describe("precon Genesis", () => {
+  it("skips a site's queued Genesis after that site is destroyed", async () => {
+    const store = setup();
+    store.setState({matchId:"destroyed-site-genesis",transport:new LocalTransport()});
+    store.setState({board:{...store.getState().board,sites:{...store.getState().board.sites,"2,2":{owner:1,card:card("Red Desert")}}}});
+    await Promise.resolve();
+    expect(store.getState().pendingMagic?.spell.card.name).toBe("Red Desert");
+    applySpellChoice(store.setState,store.getState,{key:"destroy",label:"Destroy site",caster:{kind:"avatar",seat:"p1"},target:null,score:0,operations:[{kind:"destroySite",at:"2,2"}]});
+    expect(getSpellChoices(store.getState(),"p1","Red Desert").map(choice => choice.key)).toEqual(["genesis/gone"]);
+    store.getState().setCpuMagicChoice("genesis/gone");
+    store.getState().resolveMagic();
+    expect(store.getState().pendingMagic).toBeNull();
+  });
+  it("uses a site's current location when its queued Genesis resolves after movement", async () => {
+    const store = setup(), site = card("Holy Ground","moving-ground");
+    store.setState({matchId:"moved-site-genesis",transport:new LocalTransport(),players:{...store.getState().players,p1:{...store.getState().players.p1,life:10}}});
+    store.setState({board:{...store.getState().board,sites:{...store.getState().board.sites,"0,0":{owner:1,card:site}}}});
+    await Promise.resolve();
+    const sites = {...store.getState().board.sites};
+    delete sites["0,0"];
+    sites["3,3"] = {owner:1,card:site};
+    store.setState({board:{...store.getState().board,sites}});
+    const choice = getSpellChoices(store.getState(),"p1","Holy Ground")[0];
+    expect(choice.operations).toContainEqual({kind:"mend",target:{kind:"avatar",seat:"p1"},amount:3});
+    expect(store.getState().cpuPendingTriggerCount).toBe(0);
+    store.getState().setCpuMagicChoice(choice.key);
+    store.getState().resolveMagic();
+    await Promise.resolve();
+    expect(store.getState().players.p1.life).toBe(13);
+    expect(store.getState().pendingMagic).toBeNull();
+  });
   it("offers Harpies' optional strike after teleport, using current power and no retaliation", async () => {
     const store = setup();
     store.setState({board:{...store.getState().board,sites:{...store.getState().board.sites,"2,2":{owner:2,card:card("Red Desert")}}},

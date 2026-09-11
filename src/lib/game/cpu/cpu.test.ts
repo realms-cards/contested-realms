@@ -337,6 +337,116 @@ describe("CPU projectile choices", () => {
   });
 });
 
+describe("live sequential projectile resolution", () => {
+  async function settle() { for (let i=0;i<10;i++) await Promise.resolve(); }
+  function online(store: ReturnType<typeof position>) {
+    const transport = Object.assign(new LocalTransport(),{sendMessage:vi.fn(),sendAction:vi.fn()});
+    store.setState({matchId:"projectile-test",transport});
+    return transport;
+  }
+  function cast(store: ReturnType<typeof position>, name: "Firebolts" | "Fireball" | "Heat Ray" | "Ice Lance") {
+    store.getState().beginMagicCast({tile:{x:0,y:3},spell:{at:"0,3",index:-1,owner:1,card:card(name),instanceId:"original-projectile"}});
+    const id = store.getState().pendingMagic!.id;
+    store.getState().setCpuMagicChoice("p1/E");
+    store.getState().resolveMagic();
+    return id;
+  }
+  function interruptFirstDamage(store: ReturnType<typeof position>) {
+    return store.subscribe((state,previous) => {
+      if (state.permanents["1,3"]?.[0]?.damage && !previous.permanents["1,3"]?.[0]?.damage) {
+        store.setState({cpuEffectRequests:[{id:"intervening-event",tile:{x:0,y:3},spell:{at:"0,3",index:-1,owner:1,card:card("Lucky Charm")},
+          cpuEvent:{kind:"randomChoice",outcomes:[{kind:"gainMana",seat:"p1",amount:0}]},status:"choosingTarget",createdAt:0}]});
+      }
+    });
+  }
+  async function resolve(store: ReturnType<typeof position>, key: string) {
+    store.getState().setCpuMagicChoice(key);
+    store.getState().resolveMagic();
+    await settle();
+  }
+  it("offers fresh choices for each bolt after triggers and completes the original cast once", async () => {
+    const store = position();
+    store.setState({permanents:{"1,3":[unit("Ogre Goons",2,"blocker")],"2,3":[unit("Mountain Giant",2,"rear")]}});
+    const transport = online(store), unsubscribe = interruptFirstDamage(store);
+    const id = cast(store,"Firebolts");
+    unsubscribe();
+    await settle();
+    expect(store.getState().pendingMagic?.id).toBe("intervening-event");
+    expect(store.getState().permanents["1,3"][0].damage).toBe(1);
+    store.setState({permanents:{...store.getState().permanents,"1,3":[unit("Mountain Giant",2,"arrival-a"),unit("Ogre Goons",2,"arrival-b")]}});
+    await resolve(store,"random/0");
+    expect(store.getState().pendingMagic?.cpuEvent?.kind).toBe("projectileImpact");
+    expect(getSpellChoices(store.getState(),"p1","Firebolts").map(c => c.key)).toEqual(["arrival-a","arrival-b"]);
+    const completed = () => transport.sendMessage.mock.calls.filter(([message]) => message.type === "magicResolve" && message.id === id);
+    expect(completed()).toHaveLength(0);
+    await resolve(store,"arrival-a");
+    expect(store.getState().pendingMagic?.cpuEvent).toMatchObject({kind:"projectileImpact",projectile:{shot:2}});
+    expect(completed()).toHaveLength(0);
+    await resolve(store,"arrival-b");
+    expect(store.getState().permanents["1,3"].map(item => item.damage)).toEqual([1,1]);
+    expect(store.getState().permanents["2,3"][0].damage || 0).toBe(0);
+    expect(store.getState().cpuEffectContinuations).toHaveLength(0);
+    expect(completed()).toHaveLength(1);
+    store.getState().resolveMagic();
+    expect(completed()).toHaveLength(1);
+  });
+  it.each(["Heat Ray","Ice Lance"] as const)("%s hits a new occupant, not the unit that left during interruption", async name => {
+    const store = position();
+    store.setState({permanents:{"1,3":[unit("Mountain Giant",2,"first")],"2,3":[unit("Mountain Giant",2,"departed")]}});
+    online(store);
+    const unsubscribe = interruptFirstDamage(store);
+    cast(store,name);
+    unsubscribe();
+    await settle();
+    const departed = store.getState().permanents["2,3"][0];
+    store.setState({permanents:{...store.getState().permanents,"2,3":[unit("Mountain Giant",2,"arrival")],"4,0":[departed]}});
+    await resolve(store,"random/0");
+    expect(store.getState().permanents["1,3"][0].damage).toBe(2);
+    expect(store.getState().permanents["2,3"][0].damage).toBe(name === "Heat Ray" ? 2 : 1);
+    expect(store.getState().permanents["4,0"][0].damage || 0).toBe(0);
+    expect(store.getState().pendingMagic).toBeNull();
+  });
+  it("stops a piercing flight at a newly created region boundary", async () => {
+    const store = position();
+    store.setState({permanents:{"1,3":[unit("Mountain Giant",2,"first")],"2,3":[unit("Mountain Giant",2,"rear")]}});
+    online(store);
+    const unsubscribe = interruptFirstDamage(store);
+    cast(store,"Heat Ray");
+    unsubscribe();
+    await settle();
+    const sites = {...store.getState().board.sites};
+    delete sites["2,3"];
+    store.setState({board:{...store.getState().board,sites}});
+    await resolve(store,"random/0");
+    expect(store.getState().permanents["2,3"][0].damage || 0).toBe(0);
+    expect(store.getState().pendingMagic).toBeNull();
+  });
+  it("revalidates a pending impact and applies Fireball splash simultaneously", async () => {
+    const store = position();
+    store.setState({permanents:{"1,3":[unit("Mountain Giant",2,"a"),unit("Mountain Giant",2,"b")]}});
+    online(store);
+    cast(store,"Fireball");
+    await settle();
+    expect(store.getState().pendingMagic?.cpuEvent?.kind).toBe("projectileImpact");
+    store.setState({permanents:{"1,3":[unit("Mountain Giant",2,"b"),unit("Mountain Giant",2,"c")]}});
+    expect(getSpellChoices(store.getState(),"p1","Fireball").map(c => c.key)).toEqual(["b","c"]);
+    await resolve(store,"c");
+    expect(store.getState().permanents["1,3"].map(item => item.damage)).toEqual([2,4]);
+    expect(store.getState().pendingMagic).toBeNull();
+  });
+  it("lets the CPU choose live impacts without requiring human confirmation", async () => {
+    const store = position();
+    store.setState({actorKey:"p2",permanents:{"1,3":[unit("Mountain Giant",1,"ally"),unit("Mountain Giant",2,"enemy")]}});
+    online(store);
+    applySpellChoice(store.setState,store.getState,getSpellChoice(store.getState(),"p1","Firebolts","p1/E")!);
+    await settle();
+    expect(store.getState().permanents["1,3"][0].damage || 0).toBe(0);
+    expect(store.getState().permanents["1,3"][1].damage).toBe(3);
+    expect(store.getState().pendingMagic).toBeNull();
+    expect(store.getState().cpuEffectContinuations).toHaveLength(0);
+  });
+});
+
 describe("CPU combat and damage", () => {
   function fight() {
     const store = position();
