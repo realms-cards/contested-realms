@@ -46,6 +46,7 @@ import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3D
 import FrontierSettlersOverlay from "@/components/game/FrontierSettlersOverlay";
 import GameToolbox from "@/components/game/GameToolbox";
 import GeomancerOverlay from "@/components/game/GeomancerOverlay";
+import GoldfishTestControls from "@/components/game/GoldfishTestControls";
 import HarbingerPortalScreen from "@/components/game/HarbingerPortalScreen";
 import HeadlessHauntOverlay from "@/components/game/HeadlessHauntOverlay";
 import HighlandPrincessOverlay from "@/components/game/HighlandPrincessOverlay";
@@ -2210,6 +2211,7 @@ export default function OnlineMatchPage() {
   const [matchInfoOpen, setMatchInfoOpen] = useState<boolean>(false);
 
   // Match end overlay
+  const [pausedGoldfishMatchId, setPausedGoldfishMatchId] = useState<string | null>(null);
   const [matchEndOverlayOpen, setMatchEndOverlayOpen] =
     useState<boolean>(false);
   // Store selectors for match end state and winner must be declared before effects that depend on them
@@ -3284,6 +3286,7 @@ export default function OnlineMatchPage() {
                   </div>
                 )}
                 <OnlineDeckSelector
+                  goldfishTesting={opponentPlayerId?.startsWith("cpu_") === true && match?.matchType === "constructed" && !tournamentId}
                   cpuPreconsOnly={opponentPlayerId?.startsWith("cpu_") === true && match?.matchType === "precon"}
                   myPlayerKey={myPlayerKey}
                   playerNames={playerNames}
@@ -3548,6 +3551,11 @@ export default function OnlineMatchPage() {
           {/* Toolbox and Collection buttons (bottom-right) */}
           {showToolbox && (
             <div className="absolute bottom-3 right-3 z-20 flex items-end gap-2">
+              {!isSpectatorView && !matchEnded && !tournamentId && opponentPlayerId?.startsWith("cpu_") && match?.matchType === "constructed" && <GoldfishTestControls
+                paused={pausedGoldfishMatchId === matchId}
+                onPauseChange={paused => setPausedGoldfishMatchId(paused ? matchId : null)}
+                onRestart={() => {leaveMatch();leaveLobby();router.push("/play/goldfish");}}
+              />}
               <BanishedButton mySeat={myPlayerKey} />
               <CollectionButton mySeat={myPlayerKey} />
               <GameToolbox
@@ -3575,6 +3583,7 @@ export default function OnlineMatchPage() {
 
           {/* Match End Overlay */}
           <MatchEndOverlay
+            onTestAgain={!isSpectatorView && !tournamentId && opponentPlayerId?.startsWith("cpu_") && match?.matchType === "constructed" ? () => { leaveMatch(); leaveLobby(); router.push("/play/goldfish"); } : undefined}
             isVisible={matchEndOverlayOpen}
             winner={finalEndContext ? finalEndContext.winner : winner}
             playerNames={
@@ -3656,7 +3665,7 @@ export default function OnlineMatchPage() {
               <CombatHudOverlay />
               {/* Magic HUD Overlay (layout-level, not inside Canvas) */}
               <MagicHudOverlay />
-              <CpuBoardReady />
+              <CpuBoardReady paused={pausedGoldfishMatchId !== null && pausedGoldfishMatchId === matchId} />
               {/* Chaos Twister Overlay (dexterity minigame) */}
               <ChaosTwisterOverlay transport={transport} />
               {/* Corpse Explosion Overlay (corpse assignment to 2x2 area) */}

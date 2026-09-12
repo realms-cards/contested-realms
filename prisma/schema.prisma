@@ -258,6 +258,8 @@ model User {
   discordGuildIds         String?
   /// Shadow row for an account-less invite-link player (id starts with `guest_`)
   isGuest                 Boolean                  @default(false)
+  /// Admin flag: the ladder replay skips every game this user took part in.
+  ladderExcluded          Boolean                  @default(false)
   accounts                Account[]
   cardLists               CardList[]
   collectionCards         CollectionCard[]
@@ -483,25 +485,34 @@ model TournamentStatistics {
 }
 
 model LeaderboardEntry {
-  id             String     @id @default(cuid())
-  playerId       String
-  displayName    String
-  format         GameFormat
-  timeFrame      TimeFrame
-  wins           Int        @default(0)
-  losses         Int        @default(0)
-  draws          Int        @default(0)
-  winRate        Float      @default(0.0)
-  rating         Int        @default(1200)
-  rank           Int        @default(0)
-  tournamentWins Int        @default(0)
-  lastActive     DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-  player         User       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  id              String     @id @default(cuid())
+  playerId        String
+  displayName     String
+  format          GameFormat
+  timeFrame       TimeFrame
+  wins            Int        @default(0)
+  losses          Int        @default(0)
+  draws           Int        @default(0)
+  winRate         Float      @default(0.0)
+  rating          Int        @default(1200)
+  rank            Int        @default(0)
+  tournamentWins  Int        @default(0)
+  /// Distinct rated opponents (all-time for every timeframe row)
+  uniqueOpponents Int        @default(0)
+  /// Rated games that touched this player's rating
+  ratedGames      Int        @default(0)
+  /// Below the opponent/game thresholds: sorted under every ranked player
+  provisional     Boolean    @default(true)
+  /// Last rated game; drives inactivity decay
+  lastRatedAt     DateTime?
+  lastActive      DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  player          User       @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([playerId, format, timeFrame])
   @@index([format, timeFrame, rating])
   @@index([format, timeFrame, winRate])
+  @@index([format, timeFrame, provisional, rating])
   @@index([rank])
 }
 
@@ -589,26 +600,40 @@ model OnlineMatchAction {
 }
 
 model MatchResult {
-  id           String     @id @default(cuid())
-  matchId      String
-  lobbyName    String?
-  winnerId     String?
-  loserId      String?
-  isDraw       Boolean    @default(false)
-  format       GameFormat
-  isPrecon     Boolean    @default(false)
-  tournamentId String?
-  players      Json
-  duration     Int?
-  completedAt  DateTime   @default(now())
-  loser        User?      @relation("MatchLoser", fields: [loserId], references: [id])
-  winner       User?      @relation("MatchWinner", fields: [winnerId], references: [id])
+  id            String     @id @default(cuid())
+  matchId       String     @unique
+  lobbyName     String?
+  winnerId      String?
+  loserId       String?
+  isDraw        Boolean    @default(false)
+  format        GameFormat
+  isPrecon      Boolean    @default(false)
+  tournamentId  String?
+  players       Json
+  duration      Int?
+  /// Whether the ladder replay may use this row at all
+  rated         Boolean    @default(true)
+  /// "full" | "leaver_only" (early leave: only the leaver's rating moves)
+  ratedMode     String     @default("full")
+  /// guest | same_network | unverified_result | early_disconnect | missing_user | precon | admin
+  unratedReason String?
+  /// finalize reason: normal_end, forfeit, concede, disconnect, tiebreaker_*, tie_game
+  endReason     String?
+  /// Game turn at match end; null on legacy rows (treated as a full-length game)
+  turnCount     Int?
+  /// { [playerId]: salted sha256 of the client IP } for the same-network guard
+  ipHashes      Json?
+  sameNetwork   Boolean    @default(false)
+  completedAt   DateTime   @default(now())
+  loser         User?      @relation("MatchLoser", fields: [loserId], references: [id])
+  winner        User?      @relation("MatchWinner", fields: [winnerId], references: [id])
 
   @@index([winnerId])
   @@index([loserId])
   @@index([format])
   @@index([tournamentId])
   @@index([completedAt])
+  @@index([format, rated, completedAt])
 }
 
 model DraftSession {

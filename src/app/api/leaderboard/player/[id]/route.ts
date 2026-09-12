@@ -4,6 +4,22 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+interface ListedPlayer {
+  id: string;
+  name: string | null;
+}
+
+function opponentFromPlayersJson(players: unknown, selfId: string): ListedPlayer | null {
+  if (!Array.isArray(players)) return null;
+  for (const p of players) {
+    if (!p || typeof p !== 'object') continue;
+    const rec = p as { id?: unknown; displayName?: unknown };
+    if (typeof rec.id !== 'string' || rec.id === selfId) continue;
+    return { id: rec.id, name: typeof rec.displayName === 'string' ? rec.displayName : null };
+  }
+  return null;
+}
+
 // GET /api/leaderboard/player/[id]
 // Get detailed player statistics
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -33,12 +49,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       where: { playerId: id }
     });
 
-    // Get recent match results
+    // Recent match results (draws store no winner/loser, so match on the roster too)
     const recentMatches = await prisma.matchResult.findMany({
       where: {
         OR: [
           { winnerId: id },
-          { loserId: id }
+          { loserId: id },
+          { isDraw: true, players: { array_contains: [{ id }] } }
         ]
       },
       orderBy: { completedAt: 'desc' },
@@ -74,10 +91,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       take: 10
     });
 
-    // Calculate overall stats
-    const totalWins = leaderboardEntries.reduce((sum, entry) => sum + entry.wins, 0);
-    const totalLosses = leaderboardEntries.reduce((sum, entry) => sum + entry.losses, 0);
-    const totalDraws = leaderboardEntries.reduce((sum, entry) => sum + entry.draws, 0);
+    // Overall stats come from the all_time rows only: monthly/weekly rows are
+    // windows over the same games and would double count.
+    const allTimeEntries = leaderboardEntries.filter((entry) => entry.timeFrame === 'all_time');
+    const totalWins = allTimeEntries.reduce((sum, entry) => sum + entry.wins, 0);
+    const totalLosses = allTimeEntries.reduce((sum, entry) => sum + entry.losses, 0);
+    const totalDraws = allTimeEntries.reduce((sum, entry) => sum + entry.draws, 0);
     const totalGames = totalWins + totalLosses + totalDraws;
     const overallWinRate = totalGames > 0 ? totalWins / totalGames : 0;
 
@@ -94,7 +113,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         totalDraws,
         totalGames,
         overallWinRate,
-        tournamentWins: leaderboardEntries.reduce((sum, entry) => sum + entry.tournamentWins, 0)
+        tournamentWins: allTimeEntries.reduce((sum, entry) => sum + entry.tournamentWins, 0)
       },
       leaderboardRankings: leaderboardEntries.map(entry => ({
         format: entry.format,
@@ -106,6 +125,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         draws: entry.draws,
         winRate: entry.winRate,
         tournamentWins: entry.tournamentWins,
+        uniqueOpponents: entry.uniqueOpponents,
+        ratedGames: entry.ratedGames,
+        provisional: entry.provisional,
         lastActive: entry.lastActive.toISOString()
       })),
       recentMatches: recentMatches.map(match => ({
@@ -115,8 +137,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         format: match.format,
         isWin: match.winnerId === id,
         isDraw: match.isDraw,
-        opponent: match.winnerId === id ? match.loser : match.winner,
+        opponent:
+          match.winnerId === id
+            ? match.loser
+            : match.loserId === id
+              ? match.winner
+              : opponentFromPlayersJson(match.players, id),
         tournamentId: match.tournamentId,
+        rated: match.rated,
+        ratedMode: match.ratedMode,
+        unratedReason: match.unratedReason,
         completedAt: match.completedAt.toISOString()
       })),
       tournamentHistory: tournamentStandings.map(standing => ({

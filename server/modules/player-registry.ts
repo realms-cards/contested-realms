@@ -20,6 +20,7 @@ export interface PlayerRecord {
   socketId: string | null;
   lobbyId: string | null;
   matchId: string | null;
+  ipHash?: string | null;
 }
 
 export interface PlayerRegistryConfig {
@@ -70,6 +71,7 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
     playerId: string,
     displayName: string,
     socket: Socket,
+    ipHash: string | null = null,
   ): Promise<PlayerRecord> {
     const socketId = socket.id;
     const now = Date.now();
@@ -86,6 +88,7 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
         socketId,
         lobbyId: null,
         matchId: null,
+        ipHash,
       };
       players.set(playerId, player);
     } else {
@@ -95,6 +98,7 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
       }
       player.displayName = displayName;
       player.socketId = socketId;
+      player.ipHash = ipHash;
     }
 
     // Update local cache timestamp
@@ -110,6 +114,7 @@ export function createPlayerRegistry(config: PlayerRegistryConfig) {
       matchId: player.matchId,
       lobbyId: player.lobbyId,
       lastSeen: now,
+      ipHash,
     });
 
     // Store socket reverse lookup

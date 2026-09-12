@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useOnline } from "@/app/online/online-context";
+import { goldfishOpponentKey } from "@/lib/game/cpu/goldfishTesting";
 import { betaPrecons } from "@/lib/game/cpu/precons";
 import { fetchPatrons, isPatron } from "@/lib/patrons";
 
@@ -35,6 +36,13 @@ export default function CpuMatchSetup({ mode }: { mode: "precon" | "goldfish" })
   const { connected, startCpuMatch, match, leaveMatch } = useOnline();
   const [status, setStatus] = useState<Status>("init");
   const [preconId, setPreconId] = useState("");
+  useEffect(() => {
+    if (mode !== "goldfish" || !session?.user?.id) return;
+    try {
+      const previous = sessionStorage.getItem(goldfishOpponentKey(session.user.id));
+      if (betaPrecons.some(deck => deck.id === previous)) setPreconId(previous || "");
+    } catch {}
+  },[mode,session?.user?.id]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const startedRef = useRef(false);
   const creationTimer = useRef<number | null>(null);
@@ -137,10 +145,14 @@ export default function CpuMatchSetup({ mode }: { mode: "precon" | "goldfish" })
     creationTimer.current = window.setTimeout(() => {
       creationTimer.current = null;
       if (startCpuMatch) {
-        startCpuMatch(preconId || undefined, mode);
+        const opponent = preconId || (mode === "goldfish" ? betaPrecons[Math.floor(Math.random()*betaPrecons.length)].id : undefined);
+        if (mode === "goldfish" && session?.user?.id && opponent) {
+          try { sessionStorage.setItem(goldfishOpponentKey(session.user.id),opponent); } catch {}
+        }
+        startCpuMatch(opponent, mode);
       }
     }, matchRef.current?.id ? 300 : 0);
-  }, [leaveMatch, enableGuides, startCpuMatch, preconId, mode]);
+  }, [leaveMatch, enableGuides, startCpuMatch, preconId, mode, session?.user?.id]);
 
   const handleResume = useCallback(() => {
     if (!match?.id) return;

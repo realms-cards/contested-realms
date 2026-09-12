@@ -101,9 +101,70 @@ export async function clearLeaderboard(): Promise<AdminActionResult> {
   return {
     action: "clearLeaderboard",
     status: "ok",
-    message: `Cleared ${result.count} leaderboard entries.`,
+    message: `Cleared ${result.count} leaderboard entries. The next ladder replay repopulates them from match history.`,
     details: { deleted: result.count },
   };
+}
+
+/**
+ * Ask the socket server to replay match history into the ladder now.
+ * The server runs this on its own schedule too; this is for admins who just
+ * unrated a match, excluded a player, or want to verify a deploy.
+ */
+export async function recomputeLadder(): Promise<AdminActionResult> {
+  const secret = process.env.LADDER_ADMIN_SECRET;
+  if (!secret) {
+    return {
+      action: "recomputeLadder",
+      status: "error",
+      message: "LADDER_ADMIN_SECRET is not configured on the web server.",
+    };
+  }
+  const serverUrl = (
+    process.env.SOCKET_SERVER_URL ||
+    process.env.NEXT_PUBLIC_WS_URL ||
+    "http://localhost:3010"
+  ).replace(/\/$/, "");
+  try {
+    const res = await fetch(`${serverUrl}/admin/ladder/recompute`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${secret}` },
+      cache: "no-store",
+    });
+    const body = (await res.json().catch(() => null)) as {
+      ok?: boolean;
+      summary?: unknown;
+      error?: string;
+    } | null;
+    if (!res.ok || !body?.ok) {
+      return {
+        action: "recomputeLadder",
+        status: "error",
+        message: `Socket server refused the recompute (${res.status}): ${body?.error ?? "unknown error"}`,
+        details: body ?? undefined,
+      };
+    }
+    const summary = body.summary as
+      | { players?: number; games?: number; ms?: number }
+      | null
+      | undefined;
+    return {
+      action: "recomputeLadder",
+      status: "ok",
+      message: summary
+        ? `Ladder recomputed: ${summary.players ?? "?"} players over ${summary.games ?? "?"} rated games in ${summary.ms ?? "?"}ms.`
+        : "Ladder recomputed.",
+      details: summary ?? undefined,
+    };
+  } catch (err) {
+    return {
+      action: "recomputeLadder",
+      status: "error",
+      message: `Could not reach the socket server at ${serverUrl}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    };
+  }
 }
 
 export async function clearReplayRecordings(): Promise<AdminActionResult> {
@@ -248,8 +309,16 @@ export const ADMIN_ACTIONS = [
   {
     id: "clearLeaderboard",
     label: "Clear leaderboard",
-    description: "Remove every leaderboard entry across all formats.",
+    description:
+      "Remove every leaderboard entry across all formats (the next ladder replay rebuilds them from match history).",
     dangerous: true,
+  },
+  {
+    id: "recomputeLadder",
+    label: "Recompute ladder",
+    description:
+      "Replay match history into the leaderboard now (decay, per-opponent caps, provisional gating, weekly/monthly windows).",
+    dangerous: false,
   },
   {
     id: "clearReplayRecordings",
@@ -305,6 +374,8 @@ export async function executeAdminAction(
       return clearTournamentData();
     case "clearLeaderboard":
       return clearLeaderboard();
+    case "recomputeLadder":
+      return recomputeLadder();
     case "clearReplayRecordings":
       return clearReplayRecordings();
     case "clearMatches":

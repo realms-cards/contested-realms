@@ -30,6 +30,9 @@ interface PlayerStats {
     draws: number;
     winRate: number;
     tournamentWins: number;
+    uniqueOpponents: number;
+    ratedGames: number;
+    provisional: boolean;
     lastActive: string;
   }>;
   recentMatches: Array<{
@@ -41,9 +44,12 @@ interface PlayerStats {
     isDraw: boolean;
     opponent?: {
       id: string;
-      name: string;
-    };
-    tournamentId?: string;
+      name: string | null;
+    } | null;
+    tournamentId?: string | null;
+    rated: boolean;
+    ratedMode: string;
+    unratedReason?: string | null;
     completedAt: string;
   }>;
   tournamentHistory: Array<{
@@ -149,6 +155,35 @@ export default function PlayerDetailPage({
   const getMatchResultText = (isWin: boolean, isDraw: boolean) => {
     if (isDraw) return "Draw";
     return isWin ? "Win" : "Loss";
+  };
+
+  const UNRATED_LABELS: Record<string, string> = {
+    guest: "Guest opponent",
+    same_network: "Same network",
+    unverified_result: "Unverified result",
+    early_disconnect: "Early disconnect",
+    missing_user: "Deleted account",
+    precon: "Precon match",
+    admin: "Voided by admin",
+    ladder_excluded: "Excluded player",
+  };
+
+  const getLadderNote = (match: {
+    rated: boolean;
+    ratedMode: string;
+    unratedReason?: string | null;
+    isWin: boolean;
+  }) => {
+    if (!match.rated) {
+      const why = match.unratedReason
+        ? UNRATED_LABELS[match.unratedReason] ?? match.unratedReason
+        : "Not counted";
+      return `Unrated · ${why}`;
+    }
+    if (match.ratedMode === "leaver_only") {
+      return match.isWin ? "Opponent left early · no rating gain" : "Left early";
+    }
+    return null;
   };
 
   if (loading) {
@@ -289,8 +324,21 @@ export default function PlayerDetailPage({
                     {getFormatDisplay(ranking.format)} -{" "}
                     {getTimeFrameDisplay(ranking.timeFrame)}
                   </div>
-                  <div className="text-xs text-slate-400">
-                    Rank #{ranking.rank}
+                  <div className="text-xs text-slate-400 flex items-center gap-2">
+                    <span>
+                      {ranking.rank > 0 ? `Rank #${ranking.rank}` : "Unranked"}
+                    </span>
+                    {ranking.provisional && (
+                      <span
+                        className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300"
+                        title="Needs 5 different opponents and 10 rated games to be ranked"
+                      >
+                        Provisional
+                      </span>
+                    )}
+                    <span>
+                      {ranking.uniqueOpponents} opp · {ranking.ratedGames} rated
+                    </span>
                   </div>
                 </div>
               </div>
@@ -330,7 +378,9 @@ export default function PlayerDetailPage({
             data.recentMatches.map((match) => (
               <div
                 key={match.id}
-                className="flex items-center justify-between bg-black/20 rounded-lg p-3"
+                className={`flex items-center justify-between bg-black/20 rounded-lg p-3 ${
+                  match.rated ? "" : "opacity-60"
+                }`}
               >
                 <div className="flex items-center gap-3">
                   <div
@@ -346,7 +396,8 @@ export default function PlayerDetailPage({
                     <div className="text-xs text-slate-400">
                       {getFormatDisplay(match.format)} •{" "}
                       {new Date(match.completedAt).toLocaleDateString()}
-                      {match.opponent && ` • vs ${match.opponent.name}`}
+                      {match.opponent &&
+                        ` • vs ${match.opponent.name ?? "Unknown"}`}
                     </div>
                   </div>
                 </div>
@@ -362,6 +413,12 @@ export default function PlayerDetailPage({
                   {match.tournamentId && (
                     <div className="text-xs text-yellow-400">Tournament</div>
                   )}
+                  {(() => {
+                    const note = getLadderNote(match);
+                    return note ? (
+                      <div className="text-xs text-slate-500">{note}</div>
+                    ) : null;
+                  })()}
                 </div>
               </div>
             ))

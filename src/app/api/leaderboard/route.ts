@@ -5,51 +5,12 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-// Time windows for counting unique opponents
-const TIME_WINDOWS: Record<TimeFrame, number | null> = {
-  all_time: null, // no limit
-  monthly: 30 * 24 * 60 * 60 * 1000,
-  weekly: 7 * 24 * 60 * 60 * 1000,
-};
+// Mirrors LADDER.DECAY_GRACE_DAYS in server/modules/leaderboard/rating-model.ts:
+// past this idle span a rating above 1200 starts decaying.
+const INACTIVE_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
 
-/**
- * Count unique opponents for a player in a given format and time window
- */
-async function countUniqueOpponents(
-  playerId: string,
-  format: GameFormat,
-  timeFrame: TimeFrame
-): Promise<number> {
-  const windowMs = TIME_WINDOWS[timeFrame];
-  const windowStart = windowMs ? new Date(Date.now() - windowMs) : undefined;
-
-  // Get all matches where this player participated
-  const matches = await prisma.matchResult.findMany({
-    where: {
-      format,
-      ...(windowStart ? { completedAt: { gte: windowStart } } : {}),
-      OR: [{ winnerId: playerId }, { loserId: playerId }],
-    },
-    select: {
-      winnerId: true,
-      loserId: true,
-    },
-  });
-
-  // Collect unique opponent IDs
-  const opponents = new Set<string>();
-  for (const match of matches) {
-    if (match.winnerId && match.winnerId !== playerId) {
-      opponents.add(match.winnerId);
-    }
-    if (match.loserId && match.loserId !== playerId) {
-      opponents.add(match.loserId);
-    }
-  }
-
-  return opponents.size;
-}
-
+// Rows are precomputed by the socket server's ladder replay (rating, rank,
+// windowed W-L-D, opponent counts, provisional flag), so this route only reads.
 // GET /api/leaderboard?format=constructed&timeFrame=all_time&limit=100
 export async function GET(req: NextRequest) {
   const session = await getServerAuthSession();
@@ -79,104 +40,70 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const leaderboard = await prisma.leaderboardEntry.findMany({
-      where: {
-        format,
-        timeFrame,
-        // Invite-link guests get a shadow User row but never a ranking
-        player: { isGuest: false },
-      },
-      include: {
-        player: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
+    // Invite-link guests get a shadow User row but never a ranking; excluded
+    // users are dropped by the replay but filtered here too for safety.
+    const where = {
+      format,
+      timeFrame,
+      player: { isGuest: false, ladderExcluded: false },
+    };
+
+    const [leaderboard, totalCount, currentUserEntry] = await Promise.all([
+      prisma.leaderboardEntry.findMany({
+        where,
+        include: {
+          player: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+            },
           },
         },
-      },
-      orderBy: [{ rating: "desc" }, { winRate: "desc" }, { wins: "desc" }],
-      take: limit,
-      skip: offset,
-    });
-
-    // Get total count for pagination
-    const totalCount = await prisma.leaderboardEntry.count({
-      where: {
-        format,
-        timeFrame,
-      },
-    });
-
-    // Get current user's entry and rank
-    const currentUserId = session.user.id;
-    const currentUserEntry = await prisma.leaderboardEntry.findUnique({
-      where: {
-        playerId_format_timeFrame: {
-          playerId: currentUserId,
-          format,
-          timeFrame,
-        },
-      },
-    });
-
-    let currentUserRank: {
-      rank: number;
-      rating: number;
-      wins: number;
-      losses: number;
-      draws: number;
-      winRate: number;
-      uniqueOpponents: number;
-    } | null = null;
-
-    if (currentUserEntry) {
-      // Count how many players are ranked above this user
-      const playersAbove = await prisma.leaderboardEntry.count({
+        orderBy: [
+          { provisional: "asc" },
+          { rating: "desc" },
+          { winRate: "desc" },
+          { wins: "desc" },
+        ],
+        take: limit,
+        skip: offset,
+      }),
+      prisma.leaderboardEntry.count({ where }),
+      prisma.leaderboardEntry.findUnique({
         where: {
-          format,
-          timeFrame,
-          OR: [
-            { rating: { gt: currentUserEntry.rating } },
-            {
-              rating: currentUserEntry.rating,
-              winRate: { gt: currentUserEntry.winRate },
-            },
-            {
-              rating: currentUserEntry.rating,
-              winRate: currentUserEntry.winRate,
-              wins: { gt: currentUserEntry.wins },
-            },
-          ],
+          playerId_format_timeFrame: {
+            playerId: session.user.id,
+            format,
+            timeFrame,
+          },
         },
-      });
+      }),
+    ]);
 
-      const userUniqueOpponents = await countUniqueOpponents(
-        currentUserId,
-        format,
-        timeFrame
-      );
+    const now = Date.now();
+    const isInactive = (lastRatedAt: Date | null): boolean =>
+      lastRatedAt !== null && now - lastRatedAt.getTime() > INACTIVE_AFTER_MS;
 
-      currentUserRank = {
-        rank: playersAbove + 1,
-        rating: currentUserEntry.rating,
-        wins: currentUserEntry.wins,
-        losses: currentUserEntry.losses,
-        draws: currentUserEntry.draws,
-        winRate: currentUserEntry.winRate,
-        uniqueOpponents: userUniqueOpponents,
-      };
-    }
-
-    // Fetch unique opponent counts for all players in parallel
-    const uniqueOpponentCounts = await Promise.all(
-      leaderboard.map((entry) =>
-        countUniqueOpponents(entry.playerId, format, timeFrame)
-      )
-    );
+    const currentUserRank = currentUserEntry
+      ? {
+          // Stored rank is 0 only until the first replay after a deploy.
+          rank: currentUserEntry.rank > 0 ? currentUserEntry.rank : null,
+          rating: currentUserEntry.rating,
+          wins: currentUserEntry.wins,
+          losses: currentUserEntry.losses,
+          draws: currentUserEntry.draws,
+          winRate: currentUserEntry.winRate,
+          uniqueOpponents: currentUserEntry.uniqueOpponents,
+          ratedGames: currentUserEntry.ratedGames,
+          provisional: currentUserEntry.provisional,
+          lastRatedAt: currentUserEntry.lastRatedAt?.toISOString() ?? null,
+          inactive: isInactive(currentUserEntry.lastRatedAt),
+        }
+      : null;
 
     const leaderboardData = leaderboard.map((entry, index) => ({
-      rank: offset + index + 1,
+      rank: entry.rank > 0 ? entry.rank : offset + index + 1,
       playerId: entry.playerId,
       displayName: entry.displayName,
       playerImage: entry.player.image,
@@ -186,7 +113,11 @@ export async function GET(req: NextRequest) {
       winRate: entry.winRate,
       rating: entry.rating,
       tournamentWins: entry.tournamentWins,
-      uniqueOpponents: uniqueOpponentCounts[index],
+      uniqueOpponents: entry.uniqueOpponents,
+      ratedGames: entry.ratedGames,
+      provisional: entry.provisional,
+      lastRatedAt: entry.lastRatedAt?.toISOString() ?? null,
+      inactive: isInactive(entry.lastRatedAt),
       lastActive: entry.lastActive.toISOString(),
     }));
 

@@ -99,6 +99,12 @@ export interface RequestHandlerDeps {
   redisState?: RedisStateManager | null;
   /** Instance ID for this server instance */
   instanceId?: string;
+  /** Ladder replay trigger for the admin recompute endpoint (optional) */
+  ladder?: {
+    runNow: () => Promise<void>;
+    isRunning: () => boolean;
+    lastSummary: () => unknown;
+  } | null;
 }
 
 interface NextAuthJwtPayload {
@@ -126,6 +132,7 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
     matchmaking,
     redisState,
     instanceId,
+    ladder,
   } = deps;
 
   // Track server start time for uptime calculation
@@ -204,6 +211,13 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
     return token === secret;
   }
 
+  function isLadderAdminAuthorized(req: IncomingMessage): boolean {
+    const secret = process.env.LADDER_ADMIN_SECRET;
+    if (!secret) return false;
+    const token = getBearerToken(req);
+    return token === secret;
+  }
+
   async function readJsonBody(req: IncomingMessage): Promise<AnyRecord> {
     const chunks: Buffer[] = [];
     for await (const chunk of req) {
@@ -242,6 +256,31 @@ export function createRequestHandler(deps: RequestHandlerDeps) {
         res.statusCode = 200;
         res.setHeader("Content-Type", "application/json");
         res.end(body);
+        return;
+      }
+
+      // Ladder replay on demand (admin dashboard "Recompute ladder")
+      if (pathname === "/admin/ladder/recompute" && method === "POST") {
+        allowCors(res, reqOrigin);
+        res.setHeader("Content-Type", "application/json");
+        if (!isLadderAdminAuthorized(req)) {
+          res.statusCode = 401;
+          res.end(JSON.stringify({ error: "Unauthorized" }));
+          return;
+        }
+        if (!ladder) {
+          res.statusCode = 503;
+          res.end(JSON.stringify({ error: "Ladder scheduler unavailable" }));
+          return;
+        }
+        try {
+          await ladder.runNow();
+          res.statusCode = 200;
+          res.end(JSON.stringify({ ok: true, summary: ladder.lastSummary() }));
+        } catch (err) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: String(safeErrorMessage(err)) }));
+        }
         return;
       }
 

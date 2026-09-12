@@ -940,6 +940,8 @@ export function createInteractionModule({
         try {
           finalizeMatch(match as MatchState & { status: string; matchType: string }, {
             isDraw: true,
+            reason: "tie_game",
+            source: "server",
           });
         } catch {}
         return {

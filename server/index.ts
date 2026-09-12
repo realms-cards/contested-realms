@@ -18,6 +18,11 @@ import matchInfoModule from "./matchInfo";
 import { incrementMetric, incrementRateLimitHit, debugLog } from "./metrics";
 import modulesIndex from "./modules";
 import { enrichPatchWithCosts } from "./modules/card-costs";
+import {
+  getClientIp,
+  isSameNetworkGuardEnabled,
+  resolveClientIpHash,
+} from "./modules/client-ip";
 import { normalizeDeckPayload, validateDeckCards } from "./modules/deck-utils";
 import {
   createInteractionModule,
@@ -26,6 +31,9 @@ import {
   INTERACTION_DECISIONS,
 } from "./modules/interactions";
 import { createLeaderboardService } from "./modules/leaderboard";
+import { classifyResult } from "./modules/leaderboard/rating-model";
+import { recomputeLadder } from "./modules/leaderboard/replay";
+import { createLadderScheduler } from "./modules/leaderboard/scheduler";
 import { createLeagueReporter } from "./modules/league-reporter";
 import { createMatchLeaderService } from "./modules/match-leader";
 import { createMatchRecordingService } from "./modules/match-recording";
@@ -650,10 +658,31 @@ if (REDIS_STATE_ENABLED) {
   }, LEADER_HEARTBEAT_INTERVAL_MS);
 }
 
+// Ladder ratings are a replay of MatchResult history (see modules/leaderboard).
+// The scheduler runs it after startup, every 10 minutes, and a few seconds
+// after every recorded match; with Redis only the lobby leader runs the
+// interval tick (the post-match run is idempotent, so any instance may do it).
+let lastLadderSummary: unknown = null;
+const ladderScheduler = createLadderScheduler({
+  run: async () => {
+    lastLadderSummary = await recomputeLadder(prisma);
+  },
+  shouldRunInterval: async () => {
+    if (!REDIS_STATE_ENABLED) return true;
+    try {
+      const leader = await redisState.claimLobbyLeader();
+      return leader === INSTANCE_ID;
+    } catch {
+      return true;
+    }
+  },
+});
+
 const leaderboardService = createLeaderboardService({
   prisma,
   players,
   matchRecordings,
+  onRecorded: () => ladderScheduler.requestRecompute(),
 });
 const { recordMatchResult: recordLeaderboardMatchResult } = leaderboardService;
 
@@ -979,6 +1008,11 @@ const handleHttpRequest = createRequestHandler({
   matchesMap: matches,
   players,
   matchmaking: matchmakingFeature,
+  ladder: {
+    runNow: () => ladderScheduler.runNow(),
+    isRunning: () => ladderScheduler.isRunning(),
+    lastSummary: () => lastLadderSummary,
+  },
   tournamentBroadcast: {
     emitTournamentUpdate: (
       _io: SocketServer,
@@ -1114,6 +1148,60 @@ function isGuestPlayerId(id: string | null | undefined): boolean {
   return typeof id === "string" && id.startsWith("guest_");
 }
 
+// A seat counts as beaten when the merged game state says so. The client's
+// own match-end check (coreState.checkMatchEnd) only fires on lifeState
+// "dead", so every legitimate client-detected end passes this.
+function seatIsDead(match: ServerMatchState, seat: Seat): boolean {
+  const gamePlayers = (match.game as AnyRecord | null | undefined)?.players;
+  if (!gamePlayers || typeof gamePlayers !== "object") return false;
+  const seatState = (gamePlayers as AnyRecord)[seat];
+  if (!seatState || typeof seatState !== "object") return false;
+  const rec = seatState as AnyRecord;
+  if (rec.lifeState === "dead") return true;
+  return typeof rec.life === "number" && rec.life <= 0;
+}
+
+function isResultCorroborated(
+  match: ServerMatchState,
+  loserSeat: Seat | null,
+  isDraw: boolean,
+): boolean {
+  if (isDraw) return seatIsDead(match, "p1") && seatIsDead(match, "p2");
+  if (loserSeat !== "p1" && loserSeat !== "p2") return false;
+  return seatIsDead(match, loserSeat);
+}
+
+// Salted IP hashes of every human participant, for the same-network guard.
+// A leaver is already stripped from playerIds, so callers pass the attributed
+// winner/loser too. Falls back to Redis for players hosted on other instances.
+async function resolveMatchIpHashes(
+  match: ServerMatchState,
+  extraIds: Array<string | null>,
+): Promise<Record<string, string>> {
+  const ids = new Set<string>(
+    Array.isArray(match.playerIds) ? match.playerIds : [],
+  );
+  for (const id of extraIds) if (id) ids.add(id);
+  const out: Record<string, string> = {};
+  for (const pid of ids) {
+    if (isCpuPlayerId(pid)) continue;
+    let hash: string | null = players.get(pid)?.ipHash ?? null;
+    if (!hash && REDIS_STATE_ENABLED) {
+      try {
+        hash = (await redisState.getPlayerState(pid))?.ipHash ?? null;
+      } catch {}
+    }
+    if (!hash && storeRedis) {
+      try {
+        const legacy = await storeRedis.hget(`player:${pid}`, "ipHash");
+        if (legacy) hash = legacy;
+      } catch {}
+    }
+    if (hash) out[pid] = hash;
+  }
+  return out;
+}
+
 // Returns true if there is at least one non-CPU (human) player in the lobby
 function lobbyHasHumanPlayers(lobby: LobbyState | null | undefined): boolean {
   if (!lobby || !lobby.playerIds || lobby.playerIds.size === 0) return false;
@@ -1140,12 +1228,11 @@ async function finalizeMatch(
   options: AnyRecord = {},
 ): Promise<void> {
   if (!match) return;
-  if (match._finalized) {
-    if (!match.winnerId && typeof options?.winnerId === "string") {
-      match.winnerId = options.winnerId;
-    }
-    return;
-  }
+  // A late finalize call must never rewrite an already recorded outcome.
+  // `_finalizing` covers the await below (IP hash lookup): without it two
+  // finalize calls in the same tick could both pass this guard.
+  if (match._finalized || match._finalizing) return;
+  match._finalizing = true;
 
   const now = Date.now();
   const winnerSeatOption = options?.winnerSeat;
@@ -1198,9 +1285,9 @@ async function finalizeMatch(
     loserId = null;
   }
 
-  // Determine whether this result should count towards global stats/leaderboard.
-  // For early forfeits (opponent leaves very early), we still end the match but do not
-  // record it as a rated result unless the game has progressed to at least turn 5.
+  // Decide whether this result may count for the ladder. The rules (guest,
+  // same network, unverified client result, early leave/disconnect) live in
+  // the pure rating model so the replay job applies exactly the same policy.
   const gameRaw = (match.game ?? null) as AnyRecord | null;
   const gameTurnFromGame =
     gameRaw && typeof gameRaw["turn"] === "number"
@@ -1219,16 +1306,15 @@ async function finalizeMatch(
       : gameTurnFromMatch != null && Number.isFinite(gameTurnFromMatch)
         ? gameTurnFromMatch
         : 1) || 1;
-  // Distinguish between explicit forfeits and disconnects:
-  // - "forfeit": player explicitly left/conceded - always counts as a rated loss
-  // - "disconnect": player disconnected and didn't return - apply early game protection
+  // "forfeit"/"concede": explicit player action (early ones count against the
+  // leaver only); "disconnect": player never returned (early ones are void).
   const reason = typeof options?.reason === "string" ? options.reason : null;
-  const isDisconnectReason = reason === "disconnect";
-
-  // Early disconnect protection: don't count matches where opponent disconnected before turn 5
-  // This prevents penalizing players for opponent connection issues
-  // Explicit forfeits always count regardless of turn
-  const isEarlyDisconnect = isDisconnectReason && gameTurn < 5;
+  // Who asserted the outcome. Server paths (forfeit, timer, tie) are trusted;
+  // a client patch must be corroborated by the board before it can be rated.
+  const source: "server" | "client_patch" =
+    options?.source === "client_patch" ? "client_patch" : "server";
+  const verified =
+    source === "server" || isResultCorroborated(match, loserSeat, isDraw);
   // Guests have no account to rate, and a registered player should not gain
   // or lose rating against an anonymous opponent.
   const hasGuestPlayer =
@@ -1236,8 +1322,49 @@ async function finalizeMatch(
       match.playerIds.some((pid) => isGuestPlayerId(pid))) ||
     isGuestPlayerId(winnerId) ||
     isGuestPlayerId(loserId);
-  const isRatedResult = !isEarlyDisconnect && !hasGuestPlayer;
+  const startedAtMs =
+    typeof match.startedAt === "number"
+      ? match.startedAt
+      : (matchRecordings.get(match.id)?.startTime ?? null);
+  const durationSec =
+    typeof startedAtMs === "number" && Number.isFinite(startedAtMs)
+      ? Math.max(0, Math.round((now - startedAtMs) / 1000))
+      : null;
+  let ipHashes: Record<string, string> = {};
+  try {
+    ipHashes = await resolveMatchIpHashes(match, [winnerId, loserId]);
+  } catch {
+    // Unresolvable hashes only mean the same-network guard cannot fire here;
+    // the match must still finalize.
+  }
+  const hashValues = Object.values(ipHashes);
+  const sameNetworkDetected =
+    hashValues.length >= 2 && new Set(hashValues).size === 1;
+  const sameNetworkGuardOn = isSameNetworkGuardEnabled();
+  const classification = classifyResult({
+    reason,
+    turn: gameTurn,
+    durationSec,
+    hasGuest: hasGuestPlayer,
+    sameNetwork: sameNetworkDetected && sameNetworkGuardOn,
+    verified,
+    missingUser: false,
+    loserKnown: Boolean(loserId),
+    isPrecon: match.matchType === "precon",
+  });
+  const isRatedResult = classification.rated;
+  const isEarlyDisconnect =
+    classification.unratedReason === "early_disconnect";
+  // The attributed result is kept for the history row even when the match
+  // itself ends without a declared winner (early disconnect).
+  const resultWinnerId = winnerId;
+  const resultLoserId = loserId;
 
+  if (!verified) {
+    console.warn(
+      `[match] client-reported result for ${match.id} not corroborated by game state - stored unrated`,
+    );
+  }
   if (isEarlyDisconnect) {
     console.log(
       `[match] early disconnect at turn ${gameTurn} - no winner declared for match ${match.id}`,
@@ -1292,6 +1419,8 @@ async function finalizeMatch(
       winnerId: winnerId || null,
       endReason,
       rated: isRatedResult,
+      ratedMode: classification.ratedMode,
+      unratedReason: classification.unratedReason,
     };
     io.to(room).emit("statePatch", { patch: endPatch, t: now });
     try {
@@ -1311,6 +1440,8 @@ async function finalizeMatch(
           ? options.reason
           : "normal_end",
       rated: isRatedResult,
+      ratedMode: classification.ratedMode,
+      unratedReason: classification.unratedReason,
     });
   } catch {}
   try {
@@ -1458,19 +1589,28 @@ async function finalizeMatch(
     }
   } catch {}
 
-  const leaderboardPayload = isDraw ? { isDraw: true } : { winnerId, loserId };
-
-  if (isRatedResult) {
-    recordLeaderboardMatchResult(match, leaderboardPayload).catch(
-      (err: unknown) => {
-        console.error(
-          `[leaderboard] Failed to record match result for ${match.id}:`,
-          err instanceof Error ? err.message : err,
-          { winnerId, loserId, isDraw, playerIds: match.playerIds },
-        );
-      },
+  // Every human-vs-human result is stored (guest and voided games included,
+  // flagged unrated) so history and card stats stay complete; only rated rows
+  // move the ladder.
+  recordLeaderboardMatchResult(match, {
+    ...(isDraw
+      ? { isDraw: true }
+      : { winnerId: resultWinnerId, loserId: resultLoserId }),
+    rated: classification.rated,
+    ratedMode: classification.ratedMode,
+    unratedReason: classification.unratedReason,
+    endReason,
+    turnCount: gameTurn,
+    durationSec,
+    ipHashes: Object.keys(ipHashes).length > 0 ? ipHashes : null,
+    sameNetwork: sameNetworkDetected,
+  }).catch((err: unknown) => {
+    console.error(
+      `[leaderboard] Failed to record match result for ${match.id}:`,
+      err instanceof Error ? err.message : err,
+      { winnerId, loserId, isDraw, playerIds: match.playerIds },
     );
-  }
+  });
 
   // League match reporting (fire-and-forget)
   try {
@@ -2412,10 +2552,7 @@ setInterval(() => {
 }, AUTH_LOG_CACHE_CLEANUP_INTERVAL);
 
 function shouldLogAuthRejection(socket: SocketClient): boolean {
-  const ip =
-    socket.handshake?.address ||
-    (socket.handshake?.headers?.["x-forwarded-for"] as string | undefined) ||
-    "unknown";
+  const ip = getClientIp(socket) || "unknown";
   const now = Date.now();
   const cached = authRejectionLogCache.get(ip);
 
@@ -2628,6 +2765,8 @@ io.on("connection", async (socket: SocketClient) => {
     }
 
     let player: PlayerState;
+    // Salted client IP hash for the ladder's same-network guard (never the raw IP).
+    const clientIpHash = resolveClientIpHash(socket);
 
     // Disconnect any existing sockets for this player to prevent duplicates
     // This handles cases where a user has multiple tabs or reconnects without proper cleanup
@@ -2670,6 +2809,7 @@ io.on("connection", async (socket: SocketClient) => {
         playerId,
         displayName,
         socket,
+        clientIpHash,
       );
     } else {
       // Legacy local-only state management
@@ -2681,6 +2821,7 @@ io.on("connection", async (socket: SocketClient) => {
           socketId: socket.id,
           lobbyId: null,
           matchId: null,
+          ipHash: clientIpHash,
         };
         players.set(playerId, player);
       } else {
@@ -2690,6 +2831,7 @@ io.on("connection", async (socket: SocketClient) => {
         }
         existing.displayName = displayName;
         existing.socketId = socket.id;
+        existing.ipHash = clientIpHash;
         player = existing;
       }
       playerIdBySocket.set(socket.id, playerId);
@@ -2697,7 +2839,10 @@ io.on("connection", async (socket: SocketClient) => {
       // Cache player displayName in Redis for cross-instance lookups (legacy)
       try {
         if (storeRedis) {
-          await storeRedis.hset(`player:${playerId}`, { displayName });
+          await storeRedis.hset(`player:${playerId}`, {
+            displayName,
+            ipHash: clientIpHash ?? "",
+          });
         }
       } catch {}
     }
@@ -3341,6 +3486,7 @@ io.on("connection", async (socket: SocketClient) => {
             winnerSeat: forfeitWinnerSeat ?? undefined,
             loserId: player.id,
             reason: "forfeit",
+            source: "server",
           });
         }
       } catch {}
@@ -5705,15 +5851,46 @@ io.on("connection", async (socket: SocketClient) => {
     }
   });
 
-  // Explicit end match (optional). Allows cleanup and status update.
-  socket.on("endMatch", async (payload = {}) => {
+  // Explicit end match. The payload is deliberately ignored: a client may not
+  // pick the winner. If the game state already decided the outcome it is
+  // finalized like any client-reported end (and corroborated against the
+  // board); otherwise the call is a concession by the caller.
+  socket.on("endMatch", async () => {
     if (!authed) return;
     const player = getPlayerBySocket(socket);
     if (!player || !player.matchId) return;
     const match = matches.get(player.matchId);
     if (!match) return;
     try {
-      await finalizeMatch(match, payload || {});
+      const game = match.game;
+      if (game && game.matchEnded) {
+        const stateWinner =
+          game.winner === "p1" || game.winner === "p2" ? game.winner : null;
+        await finalizeMatch(
+          match,
+          stateWinner
+            ? {
+                winnerSeat: stateWinner,
+                loserSeat: getOpponentSeatStrict(stateWinner),
+                source: "client_patch",
+              }
+            : { isDraw: true, source: "client_patch" },
+        );
+      } else {
+        const matchRef = match as unknown as { playerIds?: string[] | null };
+        const callerSeat = getSeatForPlayer(matchRef, player.id) as Seat | null;
+        const oppSeat = callerSeat ? getOpponentSeatStrict(callerSeat) : null;
+        const winnerId = oppSeat
+          ? (getPlayerIdForSeat(matchRef, oppSeat) as string | null)
+          : (inferLoserId(matchRef, player.id) as string | null);
+        await finalizeMatch(match, {
+          winnerId: winnerId ?? undefined,
+          winnerSeat: oppSeat ?? undefined,
+          loserId: player.id,
+          reason: "concede",
+          source: "server",
+        });
+      }
     } catch (err) {
       try {
         console.warn("[match] explicit finalize failed", safeErrorMessage(err));
@@ -5901,6 +6078,16 @@ io.on("connection", async (socket: SocketClient) => {
     broadcastPlayers();
   });
 });
+
+// A relaxed anti-farm guard must never be silent: say so on every boot.
+console.log(
+  `[ladder] same-network guard: ${
+    isSameNetworkGuardEnabled() ? "on" : "off"
+  } (NODE_ENV=${process.env.NODE_ENV ?? "unset"}, LADDER_SAME_NETWORK_GUARD=${
+    process.env.LADDER_SAME_NETWORK_GUARD ?? "unset"
+  })`,
+);
+ladderScheduler.start();
 
 startMaintenanceTimers({
   lobbies,

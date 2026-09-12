@@ -1,5 +1,6 @@
 import "server-only";
 import { GameFormat, TimeFrame as DbTimeFrame } from "@prisma/client";
+import LadderRecomputeButton from "@/components/admin/LadderRecomputeButton";
 import { requireAdminSession } from "@/lib/admin/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -19,21 +20,28 @@ export default async function AdminLadderPage({ searchParams }: { searchParams?:
 
   const sp = (await searchParams) ?? {};
   const fmt: GameFormat = getParam<Format>(sp?.format, FORMATS, "constructed") as GameFormat;
-  const tf: DbTimeFrame = getParam<TimeFrame>(sp?.timeFrame, TIMEFRAMES, "monthly") as DbTimeFrame;
+  const tf: DbTimeFrame = getParam<TimeFrame>(sp?.timeFrame, TIMEFRAMES, "all_time") as DbTimeFrame;
 
   const entries = await prisma.leaderboardEntry.findMany({
     where: { format: fmt, timeFrame: tf },
-    orderBy: [{ rating: "desc" }, { wins: "desc" }],
+    orderBy: [{ provisional: "asc" }, { rating: "desc" }, { winRate: "desc" }, { wins: "desc" }],
     take: 100,
+    include: { player: { select: { isGuest: true, ladderExcluded: true } } },
   });
 
   const linkTo = (format: string, timeFrame: string) => `/admin/ladder?format=${encodeURIComponent(format)}&timeFrame=${encodeURIComponent(timeFrame)}`;
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
-      <div className="mb-4">
-        <h1 className="text-2xl font-semibold text-white">Admin: Ladder</h1>
-        <p className="text-sm text-slate-400">Format and time frame filters</p>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-white">Admin: Ladder</h1>
+          <p className="text-sm text-slate-400">
+            Ratings are replayed from match history by the socket server (startup, every 10 min, after each match).
+            Unrate a match or exclude a player via <code className="text-slate-300">POST /api/admin/ladder</code>.
+          </p>
+        </div>
+        <LadderRecomputeButton />
       </div>
 
       <div className="mb-4 flex items-center gap-3">
@@ -74,25 +82,38 @@ export default async function AdminLadderPage({ searchParams }: { searchParams?:
               <th className="px-3 py-2 text-left">L</th>
               <th className="px-3 py-2 text-left">D</th>
               <th className="px-3 py-2 text-left">Win Rate</th>
-              <th className="px-3 py-2 text-left">Last Active</th>
+              <th className="px-3 py-2 text-left">Opps</th>
+              <th className="px-3 py-2 text-left">Rated</th>
+              <th className="px-3 py-2 text-left">Prov</th>
+              <th className="px-3 py-2 text-left">Last Rated</th>
+              <th className="px-3 py-2 text-left">Flags</th>
             </tr>
           </thead>
           <tbody>
             {entries.map((e, i) => (
               <tr key={e.id} className={`border-t border-slate-800/60 ${i % 2 ? "bg-slate-900/40" : "bg-slate-900/60"}`}>
-                <td className="px-3 py-2">{i + 1}</td>
-                <td className="px-3 py-2">{e.displayName}</td>
+                <td className="px-3 py-2">{e.rank > 0 ? e.rank : i + 1}</td>
+                <td className="px-3 py-2">
+                  {e.displayName}
+                  <span className="ml-2 text-[10px] text-slate-500">{e.playerId}</span>
+                </td>
                 <td className="px-3 py-2">{e.rating}</td>
                 <td className="px-3 py-2">{e.wins}</td>
                 <td className="px-3 py-2">{e.losses}</td>
                 <td className="px-3 py-2">{e.draws}</td>
                 <td className="px-3 py-2">{(e.winRate * 100).toFixed(1)}%</td>
-                <td className="px-3 py-2">{new Date(e.lastActive).toLocaleString()}</td>
+                <td className="px-3 py-2">{e.uniqueOpponents}</td>
+                <td className="px-3 py-2">{e.ratedGames}</td>
+                <td className="px-3 py-2">{e.provisional ? "yes" : ""}</td>
+                <td className="px-3 py-2">{e.lastRatedAt ? new Date(e.lastRatedAt).toLocaleDateString() : "—"}</td>
+                <td className="px-3 py-2 text-xs text-amber-300">
+                  {[e.player.isGuest ? "guest" : null, e.player.ladderExcluded ? "excluded" : null].filter(Boolean).join(", ")}
+                </td>
               </tr>
             ))}
             {entries.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-slate-400">No entries</td>
+                <td colSpan={12} className="px-3 py-6 text-center text-slate-400">No entries</td>
               </tr>
             )}
           </tbody>

@@ -2,8 +2,11 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useOnline } from "@/app/online/online-context";
+import GoldfishCoverage from "@/components/game/GoldfishCoverage";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { readGoldfishDeck, saveGoldfishDeck, type GoldfishDeckSnapshot } from "@/lib/game/cpu/goldfishTesting";
 import { betaPrecons } from "@/lib/game/cpu/precons";
+import type { DeckLoadPayload } from "@/lib/game/deckLoader";
 import type { PlayerKey } from "@/lib/game/store";
 
 type MyDeckInfo = {
@@ -28,6 +31,7 @@ interface OnlineDeckSelectorProps {
   onPrepareComplete: () => void;
   matchType?: "constructed" | "sealed" | "draft" | "precon";
   cpuPreconsOnly?: boolean;
+  goldfishTesting?: boolean;
 }
 
 export default function OnlineDeckSelector({
@@ -36,8 +40,15 @@ export default function OnlineDeckSelector({
   onPrepareComplete,
   matchType,
   cpuPreconsOnly = false,
+  goldfishTesting = false,
 }: OnlineDeckSelectorProps) {
-  const { transport, isGuest } = useOnline();
+  const { transport, isGuest, me } = useOnline();
+  const [review, setReview] = useState<GoldfishDeckSnapshot | null>(null);
+  const [lastTest, setLastTest] = useState<GoldfishDeckSnapshot | null>(null);
+  useEffect(() => {
+    if (!goldfishTesting || !me?.id) { setLastTest(null); return; }
+    try { setLastTest(readGoldfishDeck(sessionStorage,me.id)); } catch { setLastTest(null); }
+  },[goldfishTesting,me?.id]);
   const curiosaEnabled =
     process.env.NEXT_PUBLIC_ENABLE_CURIOSA_IMPORT === "true";
   const [myDecks, setMyDecks] = useState<MyDeckInfo[]>([]);
@@ -132,6 +143,12 @@ export default function OnlineDeckSelector({
     setDeckError(null);
 
     try {
+      if (goldfishTesting) {
+        const response = await fetch(`/api/decks/${encodeURIComponent(selectedDeck)}`,{cache:"no-store"});
+        if (!response.ok) { setDeckError("Failed to load deck"); return; }
+        await reviewDeck(await response.json(),selectedDeckMeta?.name || "Selected deck");
+        return;
+      }
       if (cpuPreconsOnly) {
         const response = await fetch(`/api/precons/${encodeURIComponent(selectedDeck)}`);
         const data = await response.json();
@@ -181,6 +198,7 @@ export default function OnlineDeckSelector({
         return;
       }
       const { loadDeckFromData } = await import("@/lib/game/deckLoader");
+      if (goldfishTesting) { await reviewDeck(data,"Imported deck"); return; }
       const success = await loadDeckFromData(myPlayerKey, data, setDeckError);
       if (success) await finishPrepare();
     } catch {
@@ -240,6 +258,30 @@ export default function OnlineDeckSelector({
     }
   };
 
+  async function reviewDeck(deck: DeckLoadPayload, name: string) {
+    const { enrichCardRefs } = await import("@/lib/game/cardMetadataLoader");
+    const [spellbook,atlas,collection] = await Promise.all([
+      enrichCardRefs(deck.spellbook || []),enrichCardRefs(deck.atlas || []),enrichCardRefs(deck.collection || []),
+    ]);
+    setReview({name,deck:{...deck,spellbook,atlas,collection}});
+  }
+
+  async function confirmReview() {
+    if (!review || isLoading) return;
+    setIsLoading(true); setDeckError(null);
+    try {
+      const { loadDeckFromData } = await import("@/lib/game/deckLoader");
+      // The loader shuffles a fresh copy; retain the original list, not live zones.
+      const saved = JSON.parse(JSON.stringify(review)) as GoldfishDeckSnapshot;
+      if (!await loadDeckFromData(myPlayerKey,review.deck,setDeckError)) return;
+      if (me?.id) { try { saveGoldfishDeck(sessionStorage,me.id,saved); } catch {} }
+      await finishPrepare();
+    } catch { setDeckError("Failed to load deck"); }
+    finally { setIsLoading(false); }
+  }
+
+  if (goldfishTesting && review) return <GoldfishCoverage snapshot={review} busy={isLoading} error={deckError} onConfirm={confirmReview} onBack={() => {setReview(null);setDeckError(null);}} />;
+
   return (
     <div className="w-full max-w-2xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-6">
       <div className="mb-6 text-center">
@@ -255,6 +297,10 @@ export default function OnlineDeckSelector({
       </div>
 
       <div className="space-y-4">
+        {goldfishTesting && lastTest && <div className="rounded border border-amber-700/40 p-3 space-y-2">
+          <p className="text-sm">Previous test: {lastTest.name}. Reuse the saved list with a fresh shuffle, even if the original deck has changed.</p>
+          <button disabled={isLoading} onClick={() => {setDeckError(null);setReview(lastTest);}} className="rounded bg-indigo-600 px-4 py-2">Reuse previous test deck</button>
+        </div>}
         {/* Guests: load a list on the fly (nothing is saved) */}
         {isGuest && !isPrecon && (
           <div className="bg-zinc-900/60 ring-1 ring-zinc-700 rounded p-3 space-y-2">

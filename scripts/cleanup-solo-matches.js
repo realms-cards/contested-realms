@@ -16,7 +16,8 @@ require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
-const CPU_PREFIX = "cpu:";
+// Must match isCpuPlayerId in server/index.ts (bot ids are "cpu_<id>").
+const CPU_PREFIX = "cpu_";
 
 async function main() {
   const args = process.argv.slice(2);

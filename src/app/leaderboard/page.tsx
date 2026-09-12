@@ -18,17 +18,49 @@ interface LeaderboardEntry {
   rating: number;
   tournamentWins: number;
   uniqueOpponents: number;
+  ratedGames: number;
+  provisional: boolean;
+  lastRatedAt: string | null;
+  inactive: boolean;
   lastActive: string;
 }
 
 interface CurrentUserRank {
-  rank: number;
+  rank: number | null;
   rating: number;
   wins: number;
   losses: number;
   draws: number;
   winRate: number;
   uniqueOpponents: number;
+  ratedGames: number;
+  provisional: boolean;
+  lastRatedAt: string | null;
+  inactive: boolean;
+}
+
+const PROVISIONAL_HINT =
+  "Provisional: needs 5 different opponents and 10 rated games to be ranked";
+const INACTIVE_HINT =
+  "No rated game in 14+ days: rating above 1200 decays 2 points per day";
+
+function ProvisionalPill() {
+  return (
+    <span
+      className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300"
+      title={PROVISIONAL_HINT}
+    >
+      Provisional
+    </span>
+  );
+}
+
+function InactiveHint() {
+  return (
+    <span className="text-slate-500" title={INACTIVE_HINT}>
+      · decaying
+    </span>
+  );
 }
 
 interface LeaderboardData {
@@ -244,11 +276,19 @@ export default function LeaderboardPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-2xl font-bold text-white">
-                      #{data.currentUser.rank}
+                      {data.currentUser.rank !== null
+                        ? `#${data.currentUser.rank}`
+                        : "—"}
                     </span>
                     <span className="text-sm text-slate-400">
                       of {data.pagination.total}
                     </span>
+                    {data.currentUser.provisional && <ProvisionalPill />}
+                    {data.currentUser.inactive && (
+                      <span className="text-xs">
+                        <InactiveHint />
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-6 text-sm">
@@ -332,19 +372,23 @@ export default function LeaderboardPage() {
                             ? PATRON_COLORS[patronTier]
                             : null;
                           return (
-                            <div
-                              className={`text-sm font-semibold ${
-                                patronStyle?.text ?? "text-slate-50"
-                              }`}
-                              style={
-                                patronStyle
-                                  ? {
-                                      textShadow: patronStyle.textShadowMinimal,
-                                    }
-                                  : undefined
-                              }
-                            >
-                              {entry.displayName}
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`text-sm font-semibold ${
+                                  patronStyle?.text ?? "text-slate-50"
+                                }`}
+                                style={
+                                  patronStyle
+                                    ? {
+                                        textShadow:
+                                          patronStyle.textShadowMinimal,
+                                      }
+                                    : undefined
+                                }
+                              >
+                                {entry.displayName}
+                              </span>
+                              {entry.provisional && <ProvisionalPill />}
                             </div>
                           );
                         })()}
@@ -358,6 +402,12 @@ export default function LeaderboardPage() {
                           <span>
                             Last active:{" "}
                             {new Date(entry.lastActive).toLocaleDateString()}
+                            {entry.inactive && (
+                              <>
+                                {" "}
+                                <InactiveHint />
+                              </>
+                            )}
                           </span>
                         </div>
                       </div>

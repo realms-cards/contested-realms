@@ -33,6 +33,8 @@ export interface RedisPlayerState {
   matchId: string | null;
   lobbyId: string | null;
   lastSeen: number;
+  /** Salted client IP hash for the ladder's same-network guard */
+  ipHash?: string | null;
 }
 
 export interface RedisMatchState {
@@ -149,6 +151,7 @@ export function createRedisStateManager(config: RedisStateConfig) {
     if (state.matchId !== undefined) data.matchId = state.matchId ?? "";
     if (state.lobbyId !== undefined) data.lobbyId = state.lobbyId ?? "";
     if (state.lastSeen !== undefined) data.lastSeen = String(state.lastSeen);
+    if (state.ipHash !== undefined) data.ipHash = state.ipHash ?? "";
 
     if (Object.keys(data).length > 0) {
       await redis.hset(key, data);
@@ -172,6 +175,7 @@ export function createRedisStateManager(config: RedisStateConfig) {
       matchId: data.matchId || null,
       lobbyId: data.lobbyId || null,
       lastSeen: data.lastSeen ? parseInt(data.lastSeen, 10) : 0,
+      ipHash: data.ipHash || null,
     };
   }
 
