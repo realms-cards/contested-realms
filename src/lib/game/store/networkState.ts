@@ -1474,6 +1474,7 @@ export const createNetworkSlice: StateCreator<
         ...state,
         ...next,
         ...extra,
+        cpuSnapshotRevision:(state.cpuSnapshotRevision || 0)+(replaceKeys.has("board") || replaceKeys.has("permanents") ? 1 : 0),
         lastServerTs: lastTs,
       } as Partial<GameState> as GameState;
 

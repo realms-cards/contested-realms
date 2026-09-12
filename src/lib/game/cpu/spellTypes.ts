@@ -78,7 +78,7 @@ export interface SpellChoice {
 
 export interface ProjectileOperation {
   kind: "projectileStep";
-  name: "Fireball" | "Firebolts" | "Heat Ray" | "Ice Lance";
+  name: "Fireball" | "Firebolts" | "Heat Ray" | "Ice Lance" | "Colicky Dragonettes";
   seat: PlayerKey;
   origin: string;
   region: string;

@@ -537,6 +537,7 @@ export type PendingMagic = {
   cpuRandomMinion?: { card: CardRef; fromSeat: PlayerKey; graveyardIndex: number };
   cpuRandomMinionOptions?: { card: CardRef; fromSeat: PlayerKey; graveyardIndex: number }[];
   cpuEvent?:
+    | { kind: "unitEnd"; source: import("@/lib/game/cpu/spellTypes").UnitTarget; endKey: string }
     | { kind: "projectileImpact"; projectile: import("@/lib/game/cpu/spellTypes").ProjectileOperation }
     | { kind: "geomancerFill"; seat: PlayerKey }
     | { kind: "treasurePlace"; source: import("@/lib/game/cpu/spellTypes").UnitTarget; castOwner: 1 | 2 }
@@ -1811,6 +1812,8 @@ export type GameState = {
   applyServerPatch: (patch: unknown, t?: number) => void;
   applyPatch: (patch: unknown) => void;
   lastServerTs: number;
+  /** Local-only revision for authoritative board restoration, not realm entry. */
+  cpuSnapshotRevision?: number;
   // Timestamp of the last local action we attempted to send to server
   lastLocalActionTs: number;
   // Multiplayer transport (null => offline)

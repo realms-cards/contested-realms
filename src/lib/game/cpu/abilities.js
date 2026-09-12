@@ -152,6 +152,7 @@ function abilityChoices(state, seat) {
       }
     }
   }
-  return choices;
+  const {tileLabel} = require('./tileLabels');
+  return choices.map(choice => ({...choice,label:tileLabel(choice.label,state.board.size)}));
 }
 module.exports = { abilityChoices };

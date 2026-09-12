@@ -64,7 +64,7 @@ export function installCpuController(store: StoreApi<GameState>) {
       if (seat === state.actorKey && candidates.length > 1) {
         const chosen = candidates.find(candidate => candidate.id === state.cpuChosenTrigger);
         if (!chosen) {
-          const options = candidates.map(candidate => ({id:candidate.id,label:`${candidate.spell.card.name} — ${candidate.cpuEvent?.kind === "auraEnd" ? candidate.cpuEvent.counter ? "duration counter" : "end effect" : candidate.cpuEvent?.kind === "genesis" ? "Genesis" : candidate.cpuEvent?.kind === "fightChoice" ? "fight after arrival" : candidate.cpuEvent?.kind === "treasureRecover" ? "recover treasure" : candidate.cpuEvent?.kind === "treasurePlace" ? "underwater placement" : candidate.cpuEvent?.kind === "drawChoice" ? "choose draws" : candidate.cpuEvent?.kind === "randomChoice" ? "choose random outcome" : "fire trail"}`}));
+          const options = candidates.map(candidate => ({id:candidate.id,label:`${candidate.spell.card.name} — ${candidate.cpuEvent?.kind === "unitEnd" ? "end-of-turn projectile" : candidate.cpuEvent?.kind === "auraEnd" ? candidate.cpuEvent.counter ? "duration counter" : "end effect" : candidate.cpuEvent?.kind === "genesis" ? "Genesis" : candidate.cpuEvent?.kind === "fightChoice" ? "fight after arrival" : candidate.cpuEvent?.kind === "treasureRecover" ? "recover treasure" : candidate.cpuEvent?.kind === "treasurePlace" ? "underwater placement" : candidate.cpuEvent?.kind === "drawChoice" ? "choose draws" : candidate.cpuEvent?.kind === "randomChoice" ? "choose random outcome" : "fire trail"}`}));
           if (JSON.stringify(state.cpuTriggerOptions) !== JSON.stringify(options)) store.setState({cpuTriggerOptions:options});
           return;
         }
@@ -98,7 +98,8 @@ export function installCpuController(store: StoreApi<GameState>) {
       return;
     }
     const endKey = `${state.turn}:${state.currentPlayer}`;
-    if (state.permanents !== previous.permanents || state.permanentPositions !== previous.permanentPositions || state.avatars !== previous.avatars) {
+    const restored = (state.cpuSnapshotRevision || 0) !== (previous.cpuSnapshotRevision || 0);
+    if (!restored && (state.permanents !== previous.permanents || state.permanentPositions !== previous.permanentPositions || state.avatars !== previous.avatars)) {
       const before = treasures(previous);
       for (const treasure of treasures(state)) {
         const prior = before.find(item => sameTarget(item.target,treasure.target));
@@ -115,6 +116,10 @@ export function installCpuController(store: StoreApi<GameState>) {
       endQueued = endKey;
       for (const [at,items] of Object.entries(state.permanents)) items.forEach((item,index) => {
         const name = item.card.name;
+        if (name === "Colicky Dragonettes" && item.owner === state.currentPlayer && item.cpuAuraLastEnd?.effect !== endKey) {
+          const id = `cpu_dragonettes_${endKey}_${item.instanceId || `${at}_${index}`}`, [x,y] = at.split(",").map(Number);
+          enqueue({id,tile:{x,y},spell:{at,index:-1,owner:item.owner,instanceId:id,card:item.card},cpuEvent:{kind:"unitEnd",source:{kind:"permanent",at,index,instanceId:item.instanceId || item.card.instanceId},endKey},status:"choosingTarget",createdAt:Date.now()},batch);
+        }
         if (name !== "Wildfire" && !(item.owner === state.currentPlayer && ["Thunderstorm","Entangle Terrain"].includes(name))) return;
         const id = `cpu_aura_${endKey}_${item.instanceId || `${at}_${index}`}`;
         const [x,y] = at.split(",").map(Number);
@@ -124,7 +129,7 @@ export function installCpuController(store: StoreApi<GameState>) {
           cpuEvent:{kind:"auraEnd",counter:true,source:{kind:"permanent",at,index,instanceId:item.instanceId || item.card.instanceId}},status:"choosingTarget",createdAt:Date.now()},batch);
       });
     }
-    if (state.permanents !== previous.permanents || state.avatars !== previous.avatars) {
+    if (!restored && (state.permanents !== previous.permanents || state.avatars !== previous.avatars)) {
       const before = unitsInRealm(previous);
       for (const current of unitsInRealm(state)) {
         const prior = before.find(u => sameTarget(u.target,current.target));
@@ -138,7 +143,7 @@ export function installCpuController(store: StoreApi<GameState>) {
           cpuEvent:{kind:"blazeTrail",from:prior.at,to:current.at,region:prior.region,source:current.target,forced:state.cpuForcedMovement || prior.region !== current.region},status:"choosingTarget",createdAt:Date.now()},batch);
       }
     }
-    if (state.board !== previous.board) {
+    if (!restored && state.board !== previous.board) {
       const fills: PendingMagic[] = [];
       for (const [at,tile] of Object.entries(state.board.sites)) {
         const oldCard = previous.board.sites[at]?.card;

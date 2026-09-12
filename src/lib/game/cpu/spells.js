@@ -118,6 +118,24 @@ function hasStealth(state,unit) {
 
 /** @param {SpellState} state @param {PlayerKey} seat @param {string} name @param {string} [selectionKey] @returns {SpellChoice[]} */
 function getSpellChoices(state, seat, name, selectionKey) {
+  const {tileLabel} = require('./tileLabels');
+  return rawSpellChoices(state,seat,name,selectionKey).map(choice => ({...choice,label:tileLabel(choice.label,state.board.size),
+    ...(choice.projectile ? {projectile:{...choice.projectile,decisions:choice.projectile.decisions.map(decision => ({...decision,label:tileLabel(decision.label,state.board.size),options:decision.options.map(option => ({...option,label:tileLabel(option.label,state.board.size)}))}))}} : {})}));
+}
+
+/** @param {SpellState} state @param {PlayerKey} seat @param {string} name @param {string} [selectionKey] @returns {SpellChoice[]} */
+function rawSpellChoices(state, seat, name, selectionKey) {
+  if (state.pendingMagic?.cpuEvent?.kind === 'unitEnd') {
+    const event = state.pendingMagic.cpuEvent;
+    const source = unitsInRealm(state).find(unit => sameTarget(unit.target,event.source));
+    const stamp = {kind:'auraUpdate',target:event.source,endKey:event.endKey};
+    if (!source || isDisabled(state,source)) return [{key:'unit-end/gone',label:'Source unavailable; finish end effect',caster:{kind:'avatar',seat},target:null,operations:[stamp],score:0}];
+    return ['N','E','S','W'].map(direction => {
+      const projectile = {kind:'projectileStep',name:'Colicky Dragonettes',seat,origin:source.at,region:source.region,direction,step:0,shot:0};
+      const impacts = projectileImpactChoices(state,projectile);
+      return {key:`unit-end/${direction}`,label:`Shoot ${direction} from ${source.at}`,caster:source.target,target:{kind:'projectile',direction},operations:[stamp,projectile],score:Math.max(...impacts.map(choice => choice.score))};
+    });
+  }
   if (state.pendingMagic?.cpuEvent?.kind === 'projectileImpact') return projectileImpactChoices(state,state.pendingMagic.cpuEvent.projectile);
   if (state.pendingMagic?.cpuEvent?.kind === 'geomancerFill') {
     const owner = state.pendingMagic.cpuEvent.seat, pos = state.avatars[owner]?.pos;
@@ -455,12 +473,12 @@ function projectileImpactChoices(state, op) {
     if (op.region === 'underwater' && !isWater(state,at) || op.region === 'underground' && isWater(state,at)) break;
     const eligible = units.filter(unit => unit.at === at && unit.region === op.region && !(step === 0 && unit.owner === op.seat) && !hasStealth(state,unit));
     if (!eligible.length) continue;
-    const amount = op.name === 'Fireball' ? 4 : op.name === 'Firebolts' ? 1 : op.name === 'Heat Ray' ? 2 : 3-step;
+    const amount = op.name === 'Fireball' ? 4 : op.name === 'Firebolts' || op.name === 'Colicky Dragonettes' ? 1 : op.name === 'Heat Ray' ? 2 : 3-step;
     return eligible.map(unit => {
       const targets = [unit.target];
       if (op.name === 'Fireball') targets.push(...units.filter(other => other !== unit && other.at === at && other.region === op.region).map(other => other.target));
       /** @type {import('./spellTypes').SpellOperation[]} */
-      const operations = [{kind:'damage',targets,amount,...(op.name === 'Ice Lance' ? {} : {element:'fire'}),...(op.name === 'Fireball' ? {splash:2} : {})}];
+      const operations = [{kind:'damage',targets,amount,...(op.name === 'Ice Lance' || op.name === 'Colicky Dragonettes' ? {} : {element:'fire'}),...(op.name === 'Fireball' ? {splash:2} : {})}];
       if (op.name === 'Heat Ray' || op.name === 'Ice Lance') operations.push({...op,step:step+1,preferred:op.preferred?.slice(1)});
       else operations.push(...nextBolt);
       return {key:targetKey(unit.target),label:`${op.name === 'Firebolts' ? `Bolt ${op.shot+1}` : 'Impact'}: ${unit.card.name} at ${at} takes ${amount}`,

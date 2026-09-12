@@ -14,6 +14,7 @@ export default function CpuMagicChoices() {
   const selected = choices.find(choice => choice.key === pending.cpuChoice);
   const canChoose = state.actorKey === seat && pending.status !== "confirm";
   const eventLabels: Record<NonNullable<PendingMagic["cpuEvent"]>["kind"], string> = {
+    unitEnd:"End-of-turn projectile",
     projectileImpact:"Choose the next projectile impact",
     geomancerFill:"Fill adjacent void with Rubble",
     treasurePlace:"Opponent chooses underwater placement",treasureRecover:"Recover treasure",drawChoice:"Choose a deck to draw from",

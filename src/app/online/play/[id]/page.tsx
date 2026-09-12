@@ -16,6 +16,7 @@ import AssimilatorSnailOverlay from "@/components/game/AssimilatorSnailOverlay";
 import SelfsameSimulacrumOverlay from "@/components/game/SelfsameSimulacrumOverlay";
 import AssortedAnimalsOverlay from "@/components/game/AssortedAnimalsOverlay";
 import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
+import AttackHereButton from "@/components/game/AttackHereButton";
 import AudioControls from "@/components/game/AudioControls";
 import AutoResolveConfirmOverlay from "@/components/game/AutoResolveConfirmOverlay";
 import BabelTowerOverlay from "@/components/game/BabelTowerOverlay";
@@ -3551,6 +3552,7 @@ export default function OnlineMatchPage() {
           {/* Toolbox and Collection buttons (bottom-right) */}
           {showToolbox && (
             <div className="absolute bottom-3 right-3 z-20 flex items-end gap-2">
+              {opponentPlayerId?.startsWith("cpu_") && <AttackHereButton />}
               {!isSpectatorView && !matchEnded && !tournamentId && opponentPlayerId?.startsWith("cpu_") && match?.matchType === "constructed" && <GoldfishTestControls
                 paused={pausedGoldfishMatchId === matchId}
                 onPauseChange={paused => setPausedGoldfishMatchId(paused ? matchId : null)}
