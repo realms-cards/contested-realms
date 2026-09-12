@@ -1,7 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { PanelHeader } from "@/components/ui/page-header";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import DeckDiff from "../DeckDiff";
 
 interface CollectionDeck {
@@ -82,108 +85,105 @@ export default function CollectionDecksPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Collection Decks</h2>
-        <DeckDiff />
-      </div>
-
-      <p className="text-gray-400">
-        Build decks using only cards you own. Compare any deck against your
-        collection to see which cards you&apos;re missing.
-      </p>
-
-      {/* Create New Deck */}
-      <div className="flex gap-2">
-        <input
-          type="text"
-          placeholder="New deck name..."
-          value={newDeckName}
-          onChange={(e) => setNewDeckName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-          className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2"
-        />
-        <button
-          onClick={handleCreate}
-          disabled={creating || !newDeckName.trim()}
-          className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium disabled:opacity-50"
+      <section className="rc-panel">
+        <PanelHeader
+          title="Collection Decks"
+          meta={loading ? undefined : `${decks.length} decks`}
         >
-          {creating ? "Creating..." : "Create Deck"}
-        </button>
-      </div>
+          <DeckDiff />
+        </PanelHeader>
+
+        <div className="space-y-4 px-[18px] py-3.5">
+          <p className="m-0 max-w-[68ch] text-sm leading-relaxed text-rc-fg-muted">
+            Build decks using only cards you own. Compare any deck against your
+            collection to see which cards you&apos;re missing.
+          </p>
+
+          {/* Create New Deck */}
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="text"
+              placeholder="New deck name..."
+              value={newDeckName}
+              onChange={(e) => setNewDeckName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+              className="rc-input h-10 min-w-0 flex-1"
+            />
+            <RcButton
+              onClick={handleCreate}
+              disabled={creating || !newDeckName.trim()}
+            >
+              {creating ? "Creating..." : "Create Deck"}
+            </RcButton>
+          </div>
+        </div>
+      </section>
 
       {/* Deck List */}
       {loading ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className="h-24 bg-gray-800 rounded-lg animate-pulse"
+              className="h-20 animate-pulse rounded-rc-md border border-rc-line/12 bg-black/30"
             />
           ))}
         </div>
       ) : decks.length > 0 ? (
-        <div className="space-y-4">
+        <section className="rc-panel">
           {decks.map((deck) => (
             <div
               key={deck.id}
-              className="bg-gray-800 rounded-lg p-4 flex items-center gap-4"
+              className="flex flex-wrap items-center gap-4 border-b border-rc-line/8 px-[18px] py-3 transition-colors last:border-b-0 hover:bg-rc-accent/6"
             >
-              {/* Avatar Preview */}
-              <div className="w-16 h-22 bg-gray-700 rounded flex-shrink-0 flex items-center justify-center text-2xl">
-                {deck.avatarCard ? "🧙" : "❓"}
-              </div>
-
               {/* Deck Info */}
-              <div className="flex-1 min-w-0">
-                <div className="font-bold truncate">{deck.name}</div>
-                <div className="text-sm text-gray-400">
-                  {deck.cardCount} cards
-                  {deck.avatarCard && ` • ${deck.avatarCard.name}`}
+              <div className="min-w-0 flex-1">
+                <div
+                  className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong"
+                  title={deck.name}
+                >
+                  {deck.name}
                 </div>
-                {!deck.isValid && (
-                  <div className="text-sm text-yellow-500">
-                    ⚠️ {deck.validationErrors[0]}
+                <div className="truncate rc-hint">
+                  <span className="rc-stat">{deck.cardCount}</span> cards
+                  {deck.avatarCard && ` · ${deck.avatarCard.name}`}
+                </div>
+                {!deck.isValid && deck.validationErrors[0] && (
+                  <div className="mt-0.5 truncate font-rc-mono text-[11px] tracking-[0.1em] text-rc-warning">
+                    {deck.validationErrors[0]}
                   </div>
                 )}
               </div>
 
               {/* Status */}
-              <div
-                className={`px-3 py-1 rounded text-sm ${
-                  deck.isValid
-                    ? "bg-green-900 text-green-300"
-                    : "bg-yellow-900 text-yellow-300"
-                }`}
-              >
+              <Badge tone={deck.isValid ? "ok" : "warn"}>
                 {deck.isValid ? "Valid" : "Incomplete"}
-              </div>
+              </Badge>
 
               {/* Actions */}
-              <div className="flex gap-2">
-                <Link
+              <div className="flex flex-wrap items-center gap-2">
+                <RcLinkButton
+                  variant="outline"
+                  size="sm"
                   href={`/collection/decks/${deck.id}`}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
                 >
                   Edit
-                </Link>
-                <button
+                </RcLinkButton>
+                <RcButton
+                  variant="destructive"
+                  size="sm"
                   onClick={() => handleDelete(deck.id, deck.name)}
-                  className="px-4 py-2 bg-red-900 hover:bg-red-800 rounded-lg text-sm"
                 >
                   Delete
-                </button>
+                </RcButton>
               </div>
             </div>
           ))}
-        </div>
+        </section>
       ) : (
-        <div className="text-center py-12 bg-gray-800 rounded-lg">
-          <div className="text-4xl mb-4">🃏</div>
-          <div className="text-gray-400">No collection decks yet</div>
-          <div className="text-sm text-gray-500 mt-2">
-            Create a deck above to get started
-          </div>
-        </div>
+        <RcEmpty title="No collection decks yet.">
+          create a deck above to get started
+        </RcEmpty>
       )}
     </div>
   );

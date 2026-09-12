@@ -1,7 +1,9 @@
 "use client";
 
 import React from "react";
-import AsciiPanel from "@/components/ui/AsciiPanel";
+import PanelTile from "@/components/ui/panel-tile";
+import { RcButton } from "@/components/ui/rc-button";
+import { RcDialog } from "@/components/ui/rc-dialog";
 
 export type OtherRealmsLink = {
   label: string;
@@ -103,143 +105,94 @@ export default function OtherRealms({
 
   return (
     <div className={className}>
-      <AsciiPanel>
+      <PanelTile>
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="w-full group block hover:scale-[1.01] transition-transform duration-200"
+          className="block w-full cursor-pointer"
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls="other-realms-overlay"
         >
-          <div className="flex items-center justify-center py-5">
-            <h3 className="text-xl md:text-2xl font-semibold tracking-wide">
+          <div className="flex items-center justify-center py-3 md:py-4">
+            <h4 className="m-0 font-rc-display text-[22px] leading-none text-rc-fg-strong">
               {title}
-            </h3>
+            </h4>
           </div>
         </button>
-      </AsciiPanel>
+      </PanelTile>
 
       {open && (
-        <div
-          id="other-realms-overlay"
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-[90] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
-          onMouseDown={() => setOpen(false)}
+        <RcDialog
+          title={title}
+          eyebrow="official & community"
+          onClose={() => setOpen(false)}
+          size="lg"
+          actions={
+            <RcButton variant="outline" onClick={() => setOpen(false)}>
+              Close
+            </RcButton>
+          }
         >
-          <div
-            className="relative w-full max-w-3xl bg-slate-900/95 text-white rounded-xl border border-slate-700 shadow-2xl max-h-[90vh] flex flex-col"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60">
-              <div className="flex items-start flex-col">
-                <h2 className="text-lg md:text-xl font-semibold">{title}</h2>
-                <p className="text-xs text-slate-400">
-                  Discover official and community projects
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="ml-3 text-slate-300 hover:text-white rounded-md px-2 py-1 border border-transparent hover:border-slate-600"
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto">
-              {/* Optional Linktree CTA */}
-              {linktreeUrl && (
-                <div className="px-5 pt-4">
-                  <a
-                    href={linktreeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-sm text-emerald-300 hover:text-emerald-200 hover:underline"
-                  >
-                    <span>Open Linktree</span>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      className="w-4 h-4"
-                      aria-hidden
+          {linktreeUrl && (
+            <a
+              href={linktreeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rc-link mb-4 inline-flex items-center gap-2 text-sm"
+            >
+              Open Linktree ↗
+            </a>
+          )}
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {links.map((link) => {
+              const isDisabled = link.href === "#" || link.disabledReason;
+              return (
+                <li key={link.label} className="h-full">
+                  {isDisabled ? (
+                    <div
+                      className="flex h-full w-full cursor-not-allowed flex-col justify-center rounded-rc-md border border-rc-line/12 bg-black/30 px-4 py-3 text-center text-rc-fg-dim"
+                      title={link.disabledReason || "Coming soon"}
                     >
-                      <path d="M18 13a1 1 0 0 0-1 1v3H6V7h3a1 1 0 1 0 0-2H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1Zm3-10h-6a1 1 0 1 0 0 2h3.586l-8.293 8.293a1 1 0 1 0 1.414 1.414L20 6.414V10a1 1 0 1 0 2 0V3a1 1 0 0 0-1-1Z" />
-                    </svg>
-                  </a>
-                </div>
-              )}
-
-              {/* Links */}
-              <div className="px-5 py-4">
-                <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {links.map((link) => {
-                    const isDisabled = link.href === "#" || link.disabledReason;
-                    return (
-                      <li key={link.label} className="h-full">
-                        {isDisabled ? (
-                          <div
-                            className="w-full h-full px-4 py-3 rounded-lg border border-slate-700 bg-slate-800/50 text-slate-400 cursor-not-allowed text-center flex flex-col justify-center"
-                            title={link.disabledReason || "Coming soon"}
-                          >
-                            <div className="font-medium">{link.label}</div>
-                            {link.subtitle && (
-                              <div className="text-xs opacity-80">
-                                {link.subtitle}
-                              </div>
-                            )}
+                      <div className="font-rc-sans text-sm font-medium">
+                        {link.label}
+                      </div>
+                      {link.subtitle && (
+                        <div className="mt-0.5 font-rc-mono text-[11px] tracking-[0.06em]">
+                          {link.subtitle}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <a
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group relative block h-full w-full rounded-rc-md border border-rc-line/14 bg-rc-line/6 py-3 pl-4 pr-10 transition-[border-color,background-color] hover:border-rc-accent hover:bg-rc-accent/8"
+                    >
+                      <div className="text-center">
+                        <div className="font-rc-sans text-sm font-medium text-rc-fg-strong group-hover:text-rc-accent-ring">
+                          {link.label}
+                        </div>
+                        {link.subtitle && (
+                          <div className="mt-0.5 font-rc-mono text-[11px] tracking-[0.06em] text-rc-fg-subtle">
+                            {link.subtitle}
                           </div>
-                        ) : (
-                          <a
-                            href={link.href}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block w-full h-full pl-4 pr-10 py-3 rounded-lg border border-slate-700 bg-slate-800/70 hover:bg-slate-700/70 transition-colors group relative"
-                          >
-                            <div className="text-center">
-                              <div className="font-medium group-hover:underline">
-                                {link.label}
-                              </div>
-                              {link.subtitle && (
-                                <div className="text-xs text-slate-300/80">
-                                  {link.subtitle}
-                                </div>
-                              )}
-                            </div>
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 24 24"
-                              fill="currentColor"
-                              className="w-5 h-5 text-slate-300 group-hover:text-white absolute right-3 top-1/2 -translate-y-1/2"
-                              aria-hidden
-                            >
-                              <path d="M14 3a1 1 0 1 0 0 2h3.586l-9.293 9.293a1 1 0 0 0 1.414 1.414L19 6.414V10a1 1 0 1 0 2 0V3a1 1 0 0 0-1-1h-6ZM5 6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6a1 1 0 1 0-2 0v5H6V8h5a1 1 0 1 0 0-2H5Z" />
-                            </svg>
-                          </a>
                         )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-700/60">
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-200 hover:bg-slate-700/70"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+                      </div>
+                      <span
+                        className="absolute right-3 top-1/2 -translate-y-1/2 font-rc-mono text-rc-fg-dim transition-colors group-hover:text-rc-accent-ring"
+                        aria-hidden="true"
+                      >
+                        ↗
+                      </span>
+                    </a>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </RcDialog>
       )}
     </div>
   );

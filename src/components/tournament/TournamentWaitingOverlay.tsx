@@ -1,6 +1,7 @@
 "use client";
 
-import { createPortal } from "react-dom";
+import { RcButton } from "@/components/ui/rc-button";
+import { RcDialog } from "@/components/ui/rc-dialog";
 import type { TournamentInfo } from "@/lib/net/protocol";
 
 interface TournamentWaitingOverlayProps {
@@ -67,152 +68,131 @@ export default function TournamentWaitingOverlay({
 
   const actionButton =
     tournament.status === "playing" && myCurrentMatch ? (
-      <button
-        className="rounded bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 px-6 py-3 text-lg font-semibold shadow-lg"
-        onClick={() => onMatchReady(myCurrentMatch)}
-      >
+      <RcButton size="lg" onClick={() => onMatchReady(myCurrentMatch)}>
         Join Match
-      </button>
+      </RcButton>
     ) : null;
 
-  const content = (
-    <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
-      <div className="bg-slate-900/95 rounded-xl shadow-2xl w-full max-w-4xl p-6 ring-1 ring-slate-800">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-white mb-2">
-            {tournament.name}
-          </h1>
-          <div className="text-lg text-slate-300 mb-4">
-            {getStatusMessage()}
-          </div>
-
-          {actionButton && <div className="mb-6">{actionButton}</div>}
-
-          <div className="flex justify-center gap-8 text-sm text-slate-400 mb-6">
-            <span>
-              Format:{" "}
-              {tournament.format.charAt(0).toUpperCase() +
-                tournament.format.slice(1)}
-            </span>
-            <span>
-              Type:{" "}
-              {tournament.matchType.charAt(0).toUpperCase() +
-                tournament.matchType.slice(1)}
-            </span>
-            <span>
-              Round: {tournament.currentRound}/{tournament.totalRounds}
-            </span>
-          </div>
+  return (
+    <RcDialog title={tournament.name} eyebrow="tournament" size="xl">
+      <div className="mb-6 text-center">
+        <div className="mb-4 font-rc-sans text-base text-rc-fg">
+          {getStatusMessage()}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Standings */}
-          <div className="bg-black/20 rounded-lg p-4">
-            <h3 className="text-lg font-semibold text-white mb-4">Standings</h3>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {sortedStandings.map((standing, index) => (
-                <div
-                  key={standing.playerId}
-                  className={`flex items-center justify-between px-3 py-2 rounded ${
-                    standing.playerId === myPlayerId
-                      ? "bg-blue-600/20 ring-1 ring-blue-500/30"
-                      : standing.isEliminated
-                      ? "bg-red-900/20 opacity-60"
-                      : "bg-slate-800/40"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-slate-300 w-6">
-                      {index + 1}.
-                    </span>
-                    <span className="font-medium text-white">
-                      {standing.displayName}
-                      {standing.playerId === myPlayerId && (
-                        <span className="text-blue-400 text-sm ml-2">
-                          (You)
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <div className="text-sm text-slate-300">
-                    {standing.wins}-{standing.losses}
-                    {standing.draws > 0 && `-${standing.draws}`}
-                    <span className="text-xs ml-2 opacity-70">
-                      ({standing.matchPoints} pts)
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        {actionButton && <div className="mb-6">{actionButton}</div>}
 
-          {/* Current Round Matches */}
-          {currentRound && (
-            <div className="bg-black/20 rounded-lg p-4">
-              <h3 className="text-lg font-semibold text-white mb-4">
-                Round {tournament.currentRound} Matches
-              </h3>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {currentRound.matches.map((matchId, index) => {
-                  const isMyMatch = matchId === myCurrentMatch;
-                  return (
-                    <div
-                      key={matchId}
-                      className={`px-3 py-2 rounded ${
-                        isMyMatch
-                          ? "bg-green-600/20 ring-1 ring-green-500/30"
-                          : "bg-slate-800/40"
-                      }`}
-                    >
-                      <div className="text-sm">
-                        <span className="text-slate-300">
-                          Match {index + 1}
-                        </span>
-                        {isMyMatch && (
-                          <span className="text-green-400 text-xs ml-2">
-                            (Your match)
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-slate-400 font-mono">
-                        {matchId}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Tournament Progress */}
-        <div className="mt-6 bg-black/20 rounded-lg p-4">
-          <h3 className="text-lg font-semibold text-white mb-3">
-            Tournament Progress
-          </h3>
-          <div className="flex items-center gap-2 mb-2">
-            {Array.from({ length: tournament.totalRounds }, (_, i) => (
-              <div
-                key={i}
-                className={`flex-1 h-2 rounded ${
-                  i < tournament.currentRound - 1
-                    ? "bg-green-500"
-                    : i === tournament.currentRound - 1
-                    ? "bg-blue-500"
-                    : "bg-slate-600"
-                }`}
-              />
-            ))}
-          </div>
-          <div className="flex justify-between text-xs text-slate-400">
-            <span>Round 1</span>
-            <span>Round {tournament.totalRounds}</span>
-          </div>
+        <div className="flex flex-wrap justify-center gap-x-8 gap-y-2 font-rc-mono text-xs tracking-[0.1em] text-rc-fg-subtle">
+          <span>
+            Format:{" "}
+            {tournament.format.charAt(0).toUpperCase() +
+              tournament.format.slice(1)}
+          </span>
+          <span>
+            Type:{" "}
+            {tournament.matchType.charAt(0).toUpperCase() +
+              tournament.matchType.slice(1)}
+          </span>
+          <span>
+            Round: {tournament.currentRound}/{tournament.totalRounds}
+          </span>
         </div>
       </div>
-    </div>
-  );
 
-  if (typeof document === "undefined") return null;
-  return createPortal(content, document.body);
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Standings */}
+        <div className="rounded-rc-md border border-rc-line/18 bg-black/30 p-4">
+          <h3 className="rc-eyebrow m-0 mb-3">Standings</h3>
+          <div className="thin-scrollbar max-h-64 space-y-1 overflow-y-auto">
+            {sortedStandings.map((standing, index) => (
+              <div
+                key={standing.playerId}
+                className={`flex items-center justify-between gap-3 rounded-rc-md px-3 py-2 font-rc-mono text-[13px] ${
+                  standing.playerId === myPlayerId
+                    ? "bg-rc-accent/10 text-rc-fg-strong"
+                    : standing.isEliminated
+                      ? "text-rc-fg-dim opacity-70"
+                      : "text-rc-fg"
+                }`}
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="w-6 shrink-0 tabular-nums text-rc-fg-dim">
+                    {index + 1}.
+                  </span>
+                  <span className="truncate font-semibold">
+                    {standing.displayName}
+                    {standing.playerId === myPlayerId && (
+                      <span className="ml-2 text-rc-accent-link">(You)</span>
+                    )}
+                  </span>
+                </div>
+                <div className="shrink-0 tabular-nums text-rc-fg-muted">
+                  {standing.wins}-{standing.losses}
+                  {standing.draws > 0 && `-${standing.draws}`}
+                  <span className="ml-2 text-[11px] text-rc-fg-dim">
+                    ({standing.matchPoints} pts)
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Current Round Matches */}
+        {currentRound && (
+          <div className="rounded-rc-md border border-rc-line/18 bg-black/30 p-4">
+            <h3 className="rc-eyebrow m-0 mb-3">
+              Round {tournament.currentRound} Matches
+            </h3>
+            <div className="thin-scrollbar max-h-64 space-y-1 overflow-y-auto">
+              {currentRound.matches.map((matchId, index) => {
+                const isMyMatch = matchId === myCurrentMatch;
+                return (
+                  <div
+                    key={matchId}
+                    className={`rounded-rc-md px-3 py-2 ${
+                      isMyMatch ? "bg-rc-accent/10" : ""
+                    }`}
+                  >
+                    <div className="font-rc-mono text-[13px] text-rc-fg">
+                      <span>Match {index + 1}</span>
+                      {isMyMatch && (
+                        <span className="ml-2 text-[11px] text-rc-accent-link">
+                          (Your match)
+                        </span>
+                      )}
+                    </div>
+                    <div className="rc-hint truncate">{matchId}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Tournament Progress */}
+      <div className="mt-6 rounded-rc-md border border-rc-line/18 bg-black/30 p-4">
+        <h3 className="rc-eyebrow m-0 mb-3">Tournament Progress</h3>
+        <div className="mb-2 flex items-center gap-2">
+          {Array.from({ length: tournament.totalRounds }, (_, i) => (
+            <div
+              key={i}
+              className={`h-1.5 flex-1 rounded-full ${
+                i < tournament.currentRound - 1
+                  ? "bg-rc-success"
+                  : i === tournament.currentRound - 1
+                    ? "bg-rc-accent"
+                    : "bg-rc-line/12"
+              }`}
+            />
+          ))}
+        </div>
+        <div className="flex justify-between font-rc-mono text-[11px] tracking-[0.1em] text-rc-fg-dim">
+          <span>Round 1</span>
+          <span>Round {tournament.totalRounds}</span>
+        </div>
+      </div>
+    </RcDialog>
+  );
 }

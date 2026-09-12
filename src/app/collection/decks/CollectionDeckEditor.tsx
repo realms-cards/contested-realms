@@ -4,6 +4,8 @@ import Image from "next/image";
 import { useState } from "react";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
+import { PanelHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
 import { getImageSlug } from "@/lib/utils/cardSlug";
 
 interface DeckCard {
@@ -249,16 +251,16 @@ export default function CollectionDeckEditor({
         return (
           <div
             key={card.cardId}
-            className={`flex items-start gap-3 p-2 rounded ${
+            className={`flex items-start gap-3 rounded-rc-md border p-2 transition-colors ${
               exceeded
-                ? "bg-red-900/30 ring-1 ring-red-500/30"
-                : "bg-gray-800/80"
+                ? "border-rc-danger/40 bg-rc-danger/12"
+                : "border-rc-line/12 bg-black/30 hover:border-rc-accent/40"
             }`}
           >
             {/* Card Image */}
             {showImages && (
               <div
-                className={`relative flex-none rounded overflow-hidden ring-1 ring-white/10 bg-black/40 ${
+                className={`relative flex-none overflow-hidden rounded-rc-sm border border-rc-line/12 bg-black/45 ${
                   isSite ? "aspect-[4/3] w-14" : "aspect-[3/4] w-12"
                 }`}
               >
@@ -278,10 +280,13 @@ export default function CollectionDeckEditor({
             {/* Card Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-1">
-                <div className="font-medium text-sm truncate" title={card.name}>
+                <div
+                  className="truncate font-rc-display text-[15px] leading-[1.15] text-rc-fg-strong"
+                  title={card.name}
+                >
                   {card.name}
                 </div>
-                <span className="text-gray-400 text-sm flex-none">
+                <span className="flex-none rounded-rc-sm border border-rc-line/22 bg-black/60 px-1.5 font-rc-mono text-[11px] tabular-nums text-rc-fg-strong">
                   ×{card.count}
                 </span>
               </div>
@@ -292,7 +297,7 @@ export default function CollectionDeckEditor({
                   thresholds[el] ? (
                     <span
                       key={el}
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/10"
+                      className="inline-flex items-center gap-1 rounded-rc-sm border border-rc-line/22 bg-black/45 px-1.5 py-0.5"
                     >
                       <Image
                         src={`/api/assets/${el}.png`}
@@ -300,9 +305,7 @@ export default function CollectionDeckEditor({
                         width={14}
                         height={14}
                       />
-                      <span className="text-xs font-medium">
-                        {thresholds[el]}
-                      </span>
+                      <span className="rc-stat text-xs">{thresholds[el]}</span>
                     </span>
                   ) : null
                 )}
@@ -315,7 +318,7 @@ export default function CollectionDeckEditor({
                         strokeWidth={8}
                       />
                     ) : (
-                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-black text-xs font-bold">
+                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-rc-fg-strong font-rc-mono text-xs text-rc-accent-fg">
                         {cost}
                       </span>
                     )}
@@ -325,218 +328,230 @@ export default function CollectionDeckEditor({
 
               {/* Ownership warning */}
               {exceeded && (
-                <div className="text-red-400 text-[10px] mt-0.5">
+                <div className="mt-0.5 font-rc-mono text-[10px] tracking-[0.1em] text-rc-danger">
                   Only own {card.ownedQuantity}
                 </div>
               )}
             </div>
 
             {/* Remove button */}
-            <button
+            <RcButton
+              variant="outline"
+              size="icon"
+              className="h-7 w-7 self-center"
+              aria-label={`Remove one ${card.name}`}
               onClick={() => removeCardFromDeck(card.cardId)}
               disabled={updating}
-              className="text-red-400 hover:text-red-300 px-1 text-lg leading-none self-center"
             >
               −
-            </button>
+            </RcButton>
           </div>
         );
       })}
       {cardList.length === 0 && (
-        <div className="text-gray-500 text-sm py-4 text-center">
-          No cards in {zoneName}
+        <div className="rc-hint py-4 text-center">
+          no cards in {zoneName.toLowerCase()}
         </div>
       )}
     </div>
   );
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       {/* Add Cards Panel */}
-      <div className="lg:col-span-1 space-y-4">
-        <h3 className="font-bold">Add Cards from Collection</h3>
-        <input
-          type="text"
-          placeholder="Search your collection..."
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
-            searchOwnedCards(e.target.value);
-          }}
-          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2"
-        />
+      <section className="rc-panel lg:col-span-1">
+        <PanelHeader title="Add Cards" meta="from collection" />
+        <div className="space-y-3 px-[18px] py-3.5">
+          <input
+            type="text"
+            placeholder="Search your collection..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              searchOwnedCards(e.target.value);
+            }}
+            className="rc-input h-10 w-full"
+          />
 
-        {searching ? (
-          <div className="text-center py-4 text-gray-400">Searching...</div>
-        ) : searchResults.length > 0 ? (
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {searchResults.map((card, index) => {
-              const available = card.owned - card.inDeck;
-              const autoZone = getAutoZone(card.type);
-              const isSite = card.type.toLowerCase().includes("site");
-              const isAvatar = card.type.toLowerCase().includes("avatar");
+          {searching ? (
+            <div className="rc-hint py-4 text-center">searching…</div>
+          ) : searchResults.length > 0 ? (
+            <div className="thin-scrollbar max-h-96 space-y-2 overflow-y-auto">
+              {searchResults.map((card, index) => {
+                const available = card.owned - card.inDeck;
+                const autoZone = getAutoZone(card.type);
+                const isSite = card.type.toLowerCase().includes("site");
+                const isAvatar = card.type.toLowerCase().includes("avatar");
 
-              return (
-                <div
-                  key={`${card.cardId}-${index}`}
-                  className="flex items-start gap-2 p-2 bg-gray-800/80 rounded"
-                >
-                  {/* Card Image */}
+                return (
                   <div
-                    className={`relative flex-none rounded overflow-hidden ring-1 ring-white/10 bg-black/40 ${
-                      isSite ? "aspect-[4/3] w-10" : "aspect-[3/4] w-8"
-                    }`}
+                    key={`${card.cardId}-${index}`}
+                    className="flex items-start gap-2 rounded-rc-md border border-rc-line/12 bg-black/30 p-2 transition-colors hover:border-rc-accent/40"
                   >
-                    <Image
-                      src={`/api/images/${card.slug}`}
-                      alt={card.name}
-                      fill
-                      className={
-                        isSite ? "object-contain rotate-90" : "object-cover"
-                      }
-                      sizes="40px"
-                      unoptimized
-                    />
-                  </div>
-
-                  {/* Card Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">
-                      {card.name}
-                    </div>
-                    <div className="text-[10px] text-gray-400">
-                      Own: {card.owned} | In deck: {card.inDeck}
-                    </div>
-                    {/* Thresholds and Cost */}
-                    <div className="mt-0.5 flex items-center flex-wrap gap-1">
-                      {ELEMENT_ORDER.map((el) =>
-                        card.thresholds[el] ? (
-                          <span
-                            key={el}
-                            className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-white/10"
-                          >
-                            <Image
-                              src={`/api/assets/${el}.png`}
-                              alt={el}
-                              width={10}
-                              height={10}
-                            />
-                            <span className="text-[9px]">
-                              {card.thresholds[el]}
-                            </span>
-                          </span>
-                        ) : null
-                      )}
-                      {card.cost != null && !isSite && (
-                        <span className="ml-auto">
-                          {card.cost >= 0 && card.cost <= 9 ? (
-                            <NumberBadge
-                              value={card.cost as Digit}
-                              size={12}
-                              strokeWidth={5}
-                            />
-                          ) : (
-                            <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-white text-black text-[8px] font-bold">
-                              {card.cost}
-                            </span>
-                          )}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Add Buttons */}
-                  {available > 0 ? (
-                    <div className="flex flex-col gap-1">
-                      <button
-                        onClick={() =>
-                          addCardToDeck(card.cardId, autoZone, card)
+                    {/* Card Image */}
+                    <div
+                      className={`relative flex-none overflow-hidden rounded-rc-sm border border-rc-line/12 bg-black/45 ${
+                        isSite ? "aspect-[4/3] w-10" : "aspect-[3/4] w-8"
+                      }`}
+                    >
+                      <Image
+                        src={`/api/images/${card.slug}`}
+                        alt={card.name}
+                        fill
+                        className={
+                          isSite ? "object-contain rotate-90" : "object-cover"
                         }
-                        disabled={updating}
-                        className={`px-2 py-1 rounded text-xs font-medium ${
-                          isAvatar
-                            ? "bg-purple-600 hover:bg-purple-700"
-                            : isSite
-                            ? "bg-green-600 hover:bg-green-700"
-                            : "bg-blue-600 hover:bg-blue-700"
-                        }`}
-                      >
-                        + {isAvatar ? "Avatar" : isSite ? "Atlas" : "Spell"}
-                      </button>
-                      {!isAvatar && (
-                        <button
+                        sizes="40px"
+                        unoptimized
+                      />
+                    </div>
+
+                    {/* Card Info */}
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-rc-display text-[15px] leading-[1.15] text-rc-fg-strong">
+                        {card.name}
+                      </div>
+                      <div className="font-rc-mono text-[10px] tracking-[0.1em] text-rc-fg-dim">
+                        own {card.owned} · in deck {card.inDeck}
+                      </div>
+                      {/* Thresholds and Cost */}
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                        {ELEMENT_ORDER.map((el) =>
+                          card.thresholds[el] ? (
+                            <span
+                              key={el}
+                              className="inline-flex items-center gap-0.5 rounded-rc-sm border border-rc-line/22 bg-black/45 px-1 py-0.5"
+                            >
+                              <Image
+                                src={`/api/assets/${el}.png`}
+                                alt={el}
+                                width={10}
+                                height={10}
+                              />
+                              <span className="rc-stat text-[9px]">
+                                {card.thresholds[el]}
+                              </span>
+                            </span>
+                          ) : null
+                        )}
+                        {card.cost != null && !isSite && (
+                          <span className="ml-auto">
+                            {card.cost >= 0 && card.cost <= 9 ? (
+                              <NumberBadge
+                                value={card.cost as Digit}
+                                size={12}
+                                strokeWidth={5}
+                              />
+                            ) : (
+                              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-rc-fg-strong font-rc-mono text-[8px] text-rc-accent-fg">
+                                {card.cost}
+                              </span>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Add Buttons */}
+                    {available > 0 ? (
+                      <div className="flex flex-none flex-col gap-1">
+                        <RcButton
+                          size="sm"
+                          className="h-7 px-2 text-[11px]"
                           onClick={() =>
-                            addCardToDeck(card.cardId, "Collection", card)
+                            addCardToDeck(card.cardId, autoZone, card)
                           }
                           disabled={updating}
-                          className="px-2 py-1 rounded text-xs font-medium bg-amber-600/80 hover:bg-amber-600"
                         >
-                          + Collection
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-gray-500 text-xs">All used</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : searchQuery.trim() ? (
-          <div className="text-gray-400 text-sm py-4">
-            No cards found in your collection
-          </div>
-        ) : null}
-      </div>
+                          + {isAvatar ? "Avatar" : isSite ? "Atlas" : "Spell"}
+                        </RcButton>
+                        {!isAvatar && (
+                          <RcButton
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-[11px]"
+                            onClick={() =>
+                              addCardToDeck(card.cardId, "Collection", card)
+                            }
+                            disabled={updating}
+                          >
+                            + Collection
+                          </RcButton>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="rc-hint flex-none">all used</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : searchQuery.trim() ? (
+            <div className="rc-hint py-4">no cards found in your collection</div>
+          ) : null}
+        </div>
+      </section>
 
       {/* Spellbook */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="font-bold">
-            Spellbook ({spellbook.reduce((s, c) => s + c.count, 0)})
-          </h3>
-          <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
+      <section className="rc-panel">
+        <PanelHeader
+          title="Spellbook"
+          meta={`${spellbook.reduce((s, c) => s + c.count, 0)} cards`}
+        >
+          <label className="rc-check">
             <input
               type="checkbox"
               checked={showImages}
               onChange={(e) => setShowImages(e.target.checked)}
-              className="w-3 h-3 rounded"
             />
             Images
           </label>
+        </PanelHeader>
+        <div className="px-[18px] py-3.5">
+          {renderCardList(spellbook, "Spellbook")}
         </div>
-        {renderCardList(spellbook, "Spellbook")}
-      </div>
+      </section>
 
       {/* Atlas */}
-      <div className="space-y-3">
-        <h3 className="font-bold">
-          Atlas ({atlas.reduce((s, c) => s + c.count, 0)})
-        </h3>
-        {renderCardList(atlas, "Atlas")}
+      <div className="space-y-6">
+        <section className="rc-panel">
+          <PanelHeader
+            title="Atlas"
+            meta={`${atlas.reduce((s, c) => s + c.count, 0)} cards`}
+          />
+          <div className="px-[18px] py-3.5">
+            {renderCardList(atlas, "Atlas")}
+          </div>
+        </section>
 
         {sideboard.length > 0 && (
-          <>
-            <h3 className="font-bold mt-6">
-              Sideboard ({sideboard.reduce((s, c) => s + c.count, 0)})
-            </h3>
-            {renderCardList(sideboard, "Sideboard")}
-          </>
+          <section className="rc-panel">
+            <PanelHeader
+              title="Sideboard"
+              meta={`${sideboard.reduce((s, c) => s + c.count, 0)} cards`}
+            />
+            <div className="px-[18px] py-3.5">
+              {renderCardList(sideboard, "Sideboard")}
+            </div>
+          </section>
         )}
 
         {/* Collection zone - max 10 cards for constructed */}
-        <div className="mt-6 p-3 bg-amber-900/20 rounded-lg border border-amber-700/30">
-          <h3 className="font-bold text-amber-200">
-            Collection ({collection.reduce((s, c) => s + c.count, 0)}/10)
-          </h3>
-          {collection.length > 0 ? (
-            renderCardList(collection, "Collection")
-          ) : (
-            <div className="text-amber-400/50 text-sm py-2 text-center">
-              No cards in collection zone
-            </div>
-          )}
-        </div>
+        <section className="rc-panel">
+          <PanelHeader
+            title="Collection"
+            meta={`${collection.reduce((s, c) => s + c.count, 0)}/10`}
+          />
+          <div className="px-[18px] py-3.5">
+            {collection.length > 0 ? (
+              renderCardList(collection, "Collection")
+            ) : (
+              <div className="rc-hint py-2 text-center">
+                no cards in collection zone
+              </div>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );

@@ -90,13 +90,16 @@ export default function GlobalLoadingIndicator({
     >
       {position === "badge" ? (
         <span className="block w-8 h-8 grid place-items-center">
-          <span className="text-xl opacity-70" aria-hidden="true">
+          <span
+            className="font-rc-mono text-xl text-rc-accent opacity-70"
+            aria-hidden="true"
+          >
             {SPINNER_CHARS[charIndex]}
           </span>
         </span>
       ) : (
         <span
-          className="text-4xl sm:text-5xl md:text-6xl opacity-60"
+          className="font-rc-mono text-4xl text-rc-accent opacity-60 sm:text-5xl md:text-6xl"
           aria-hidden="true"
         >
           {SPINNER_CHARS[charIndex]}

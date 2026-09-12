@@ -35,11 +35,11 @@ function formatLifeDisplay(life: number, lifeState: LifeState): string {
 function getLifeStateColor(lifeState: LifeState): string {
   switch (lifeState) {
     case "alive":
-      return "text-white";
+      return "text-rc-fg-strong";
     case "dd":
-      return "text-orange-400";
+      return "text-rc-ember";
     case "dead":
-      return "text-red-400";
+      return "text-rc-danger";
   }
 }
 
@@ -48,9 +48,9 @@ function getLifeStateIcon(lifeState: LifeState) {
     case "alive":
       return null; // No icon for alive state, just show numbers
     case "dd":
-      return <AlertTriangle className="w-4 h-4 text-orange-400" />;
+      return <AlertTriangle className="w-4 h-4 text-rc-ember" />;
     case "dead":
-      return <Skull className="w-4 h-4 text-red-400" />;
+      return <Skull className="w-4 h-4 text-rc-danger" />;
   }
 }
 
@@ -60,11 +60,14 @@ interface LifeCounterProps {
   canModify: boolean;
   dragFromHand: boolean;
   isMe: boolean;
+  /** Seat label shown on the chip ("P1" / "P2"); the name is the tooltip. */
+  label: string;
 }
 
 function LifeCounter({
   player,
   playerName,
+  label,
   canModify,
   dragFromHand,
   isMe,
@@ -113,20 +116,17 @@ function LifeCounter({
       {/* Player name above counter (for upper player) */}
       {showNameAbove && (
         <div
-          className={`font-medium rounded-full ${
-            compact ? "text-[7px] leading-none px-1 py-px" : "text-xs px-2 py-1"
-          } ${
-            isMe
-              ? "bg-green-500/20 text-green-400"
-              : "bg-gray-500/20 text-gray-400"
-          }`}
+          className={`font-rc-mono font-medium tracking-[0.14em] ${
+            compact ? "text-[7px] leading-none" : "text-[11px]"
+          } ${isMe ? "text-rc-success" : "text-rc-fg-muted"}`}
+          title={playerName}
           onContextMenu={(e) => e.preventDefault()}
         >
           {compact ? (
-            playerName
+            label
           ) : (
             <span className="inline-flex items-center gap-1">
-              {playerName}
+              {label}
               {spectatorMode && isMe
                 ? " (Watching)"
                 : showYou && isMe
@@ -141,12 +141,12 @@ function LifeCounter({
       <div className="group relative" onContextMenu={(e) => e.preventDefault()}>
         {/* Life counter */}
         <div
-          className={`${counterSize} grid place-items-center rounded-xl bg-black/70 shadow-lg ring-1 ring-white/10 ${
+          className={`${counterSize} grid place-items-center rounded-rc-lg bg-[rgba(9,13,25,0.82)] shadow-rc-panel ring-1 ring-rc-line/18 ${
             lifeState === "dd"
-              ? "ring-orange-400/50 bg-orange-900/20"
+              ? "ring-rc-ember/55 bg-rc-ember/12"
               : lifeState === "dead"
-                ? "ring-red-400/50 bg-red-900/20"
-                : "ring-white/10"
+                ? "ring-rc-danger/55 bg-rc-danger/14"
+                : "ring-rc-line/18"
           }`}
           onContextMenu={(e) => e.preventDefault()}
         >
@@ -155,14 +155,14 @@ function LifeCounter({
             {compact && lifeState !== "alive" && (
               <span className={iconSize}>
                 {lifeState === "dd" ? (
-                  <AlertTriangle className={iconSize + " text-orange-400"} />
+                  <AlertTriangle className={iconSize + " text-rc-ember"} />
                 ) : (
-                  <Skull className={iconSize + " text-red-400"} />
+                  <Skull className={iconSize + " text-rc-danger"} />
                 )}
               </span>
             )}
             <span
-              className={`${textSize} font-bold font-fantaisie ${colorClass}`}
+              className={`${textSize} font-rc-mono font-semibold tabular-nums ${colorClass}`}
             >
               {lifeDisplay}
             </span>
@@ -179,7 +179,7 @@ function LifeCounter({
               onContextMenu={(e) => e.preventDefault()}
             >
               <button
-                className="w-4 h-4 flex items-center justify-center rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 text-[8px] font-bold transition-colors"
+                className="w-4 h-4 flex items-center justify-center rounded-rc-sm bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 transition-colors hover:text-rc-accent-ring hover:ring-rc-accent disabled:opacity-30 text-[8px] font-bold"
                 onClick={() => addLife(player, +1)}
                 disabled={dragFromHand || !canIncrease || !canModify}
                 onContextMenu={(e) => e.preventDefault()}
@@ -187,7 +187,7 @@ function LifeCounter({
                 +
               </button>
               <button
-                className="w-4 h-4 flex items-center justify-center rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 text-[8px] font-bold transition-colors"
+                className="w-4 h-4 flex items-center justify-center rounded-rc-sm bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 transition-colors hover:text-rc-accent-ring hover:ring-rc-accent disabled:opacity-30 text-[8px] font-bold"
                 onClick={() => {
                   if (lifeState === "dd") {
                     setShowDeathConfirm(true);
@@ -214,7 +214,7 @@ function LifeCounter({
             onContextMenu={(e) => e.preventDefault()}
           >
             <button
-              className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="px-2 py-0.5 rounded-rc-sm bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 transition-colors hover:text-rc-accent-ring hover:ring-rc-accent disabled:opacity-30 disabled:cursor-not-allowed"
               onClick={() => addLife(player, +1)}
               disabled={dragFromHand || !canIncrease || !canModify}
               title={
@@ -229,7 +229,7 @@ function LifeCounter({
               +
             </button>
             <button
-              className="px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="px-2 py-0.5 rounded-rc-sm bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 transition-colors hover:text-rc-accent-ring hover:ring-rc-accent disabled:opacity-30 disabled:cursor-not-allowed"
               onClick={() => {
                 if (lifeState === "dd") {
                   setShowDeathConfirm(true);
@@ -256,21 +256,22 @@ function LifeCounter({
       {/* Player name below counter (for lower player) */}
       {!showNameAbove && (
         <div
-          className={`font-medium rounded-full ${
-            compact ? "text-[7px] leading-none px-1 py-px" : "text-xs px-2 py-1"
-          } ${
-            isMe
-              ? "bg-green-500/20 text-green-400"
-              : "bg-gray-500/20 text-gray-400"
-          }`}
+          className={`font-rc-mono font-medium tracking-[0.14em] ${
+            compact ? "text-[7px] leading-none" : "text-[11px]"
+          } ${isMe ? "text-rc-success" : "text-rc-fg-muted"}`}
+          title={playerName}
           onContextMenu={(e) => e.preventDefault()}
         >
           {compact ? (
-            playerName
+            label
           ) : (
             <span className="inline-flex items-center gap-1">
-              {playerName}
-              {spectatorMode && isMe ? " (Watching)" : isMe ? " (You)" : ""}
+              {label}
+              {spectatorMode && isMe
+                ? " (Watching)"
+                : showYou && isMe
+                  ? " (You)"
+                  : ""}
             </span>
           )}
         </div>
@@ -286,23 +287,23 @@ function LifeCounter({
               role="dialog"
               aria-modal="true"
               aria-labelledby="death-confirm-title"
-              className="bg-slate-900/95 text-white rounded-xl border border-slate-700 shadow-2xl w-full max-w-sm p-5"
+              className="bg-[rgba(9,13,25,0.95)] text-rc-fg rounded-rc-lg border border-rc-line/18 shadow-rc-panel w-full max-w-sm p-5"
               onMouseDown={(e) => e.stopPropagation()}
             >
               <h2
                 id="death-confirm-title"
-                className="text-lg font-semibold mb-2"
+                className="font-rc-display text-lg text-rc-fg-strong mb-2"
               >
                 Declare your DEATH?
               </h2>
-              <p className="text-sm text-slate-300 mb-4">
+              <p className="text-sm text-rc-fg-muted mb-4">
                 This action is irreversible.
               </p>
               <div className="flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowDeathConfirm(false)}
-                  className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-200 hover:bg-slate-700/70"
+                  className="px-3 py-1.5 rounded-rc-md border border-rc-line/22 font-rc-mono uppercase tracking-[0.14em] text-rc-fg-muted transition-colors hover:border-rc-accent hover:text-rc-accent-ring"
                 >
                   Cancel
                 </button>
@@ -312,7 +313,7 @@ function LifeCounter({
                     addLife(player, -1);
                     setShowDeathConfirm(false);
                   }}
-                  className="px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-700 text-white"
+                  className="px-3 py-1.5 rounded-rc-md bg-rc-danger hover:bg-rc-danger-hover font-rc-mono uppercase tracking-[0.14em] text-rc-fg-strong transition-colors"
                 >
                   Continue
                 </button>
@@ -426,45 +427,45 @@ export default function OnlineLifeCounters({
       ? "left-0.5"
       : "left-3";
 
+  // Your own seat is always the lower tile, the opponent the upper one, so the
+  // gauges never swap places when you sit in the other seat. Hotseat has no
+  // fixed "you" - its seat flips every turn - and a spectator has no seat at
+  // all, so both keep the natural P1-over-P2 order.
+  const hasOwnSeat = !!myPlayerKey && !isHotseatMode && !readOnly;
+  const topSeat: PlayerKey =
+    hasOwnSeat && myPlayerKey === "p1" ? "p2" : "p1";
+  const seatOrder: PlayerKey[] = [topSeat, topSeat === "p1" ? "p2" : "p1"];
+
   return (
     <div
       className={`absolute ${leftPosition} top-1/2 -translate-y-1/2 z-10 flex flex-col ${isMobileScreen ? "gap-1" : "gap-4"} ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
-      } text-white select-none`}
+      } text-rc-fg select-none`}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {/* P1 Life - name above */}
-      <LifeCounter
-        player="p1"
-        playerName={playerNames.p1}
-        canModify={canModifyLife}
-        dragFromHand={dragFromHand}
-        isMe={myPlayerKey === "p1"}
-        showNameAbove={true}
-        showYou={showYouLabels}
-        spectatorMode={readOnly}
-        isHotseatMode={isHotseatMode}
-        compact={isMobileScreen}
-      />
-
-      {/* P2 Life - name below */}
-      <LifeCounter
-        player="p2"
-        playerName={playerNames.p2}
-        canModify={canModifyLife}
-        dragFromHand={dragFromHand}
-        isMe={myPlayerKey === "p2"}
-        showNameAbove={false}
-        showYou={showYouLabels}
-        spectatorMode={readOnly}
-        isHotseatMode={isHotseatMode}
-        compact={isMobileScreen}
-      />
+      {/* Opponent on top, your own life at the bottom - always, whichever
+          seat you hold. Spectators keep the natural P1-over-P2 order. */}
+      {seatOrder.map((seat, index) => (
+        <LifeCounter
+          key={seat}
+          player={seat}
+          playerName={playerNames[seat]}
+          label={seat === "p1" ? "P1" : "P2"}
+          canModify={canModifyLife}
+          dragFromHand={dragFromHand}
+          isMe={myPlayerKey === seat}
+          showNameAbove={index === 0}
+          showYou={showYouLabels || hasOwnSeat}
+          spectatorMode={readOnly}
+          isHotseatMode={isHotseatMode}
+          compact={isMobileScreen}
+        />
+      ))}
 
       {/* Gamepad hint - show when gamepad connected, setting enabled, and can modify life */}
       {hasGamepad && gamepadLifeEnabled && canModifyLife && !isMobileScreen && (
         <div
-          className="text-[10px] text-gray-400 text-center px-1"
+          className="text-[10px] font-rc-mono tracking-[0.1em] text-rc-fg-dim text-center px-1"
           title="Use gamepad shoulder buttons to adjust your life"
         >
           LB/RB: Life
@@ -474,7 +475,7 @@ export default function OnlineLifeCounters({
       {/* Tie button shown between/under life counters */}
       {showTie && (
         <button
-          className={`mt-1 ${isMobileScreen ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-sm"} rounded bg-amber-600/90 hover:bg-amber-500 text-white flex items-center gap-1.5 self-start`}
+          className={`mt-1 ${isMobileScreen ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-sm"} rounded-rc-md bg-rc-warning hover:bg-rc-accent-hover font-rc-mono uppercase tracking-[0.14em] text-rc-accent-fg transition-colors flex items-center gap-1.5 self-start`}
           onClick={() => {
             const ok = window.confirm(
               "Declare a tie? This ends the match as a draw.",

@@ -2,8 +2,11 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { PanelHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
+import { RcDialog } from "@/components/ui/rc-dialog";
+import { RcEmpty } from "@/components/ui/rc-empty";
 
 interface DeckOption {
   id: string;
@@ -42,28 +45,14 @@ interface DiffResult {
 function getRarityColor(rarity: string | null): string {
   switch (rarity?.toLowerCase()) {
     case "unique":
-      return "text-purple-400";
+      return "text-rc-moonlight";
     case "elite":
-      return "text-yellow-400";
+      return "text-rc-accent-link";
     case "exceptional":
-      return "text-blue-400";
+      return "text-rc-info";
     case "ordinary":
     default:
-      return "text-gray-400";
-  }
-}
-
-function getRarityBg(rarity: string | null): string {
-  switch (rarity?.toLowerCase()) {
-    case "unique":
-      return "bg-purple-500/20";
-    case "elite":
-      return "bg-yellow-500/20";
-    case "exceptional":
-      return "bg-blue-500/20";
-    case "ordinary":
-    default:
-      return "bg-gray-500/20";
+      return "text-rc-fg-strong";
   }
 }
 
@@ -192,351 +181,306 @@ export default function DeckDiff() {
 
   return (
     <>
-      <button
+      <RcButton
+        variant="outline"
+        size="sm"
         onClick={() => setIsOpen(true)}
-        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 rounded-lg font-medium transition-all text-sm"
         title="Compare a deck against your collection to see missing cards"
       >
-        <span>🔍</span>
-        <span>Deck Diff</span>
-      </button>
+        Deck Diff
+      </RcButton>
 
-      {isOpen &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div
-            className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4"
-            onClick={handleClose}
-          >
-            <div
-              className="bg-gray-900 rounded-xl max-w-4xl w-full overflow-hidden shadow-2xl border border-gray-700 max-h-[90vh] flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="p-4 border-b border-gray-800 flex items-center justify-between flex-shrink-0">
-                <div>
-                  <h3 className="text-lg font-bold">Deck vs Collection</h3>
-                  <p className="text-sm text-gray-400">
-                    Compare a deck to see which cards you&apos;re missing
-                  </p>
+      {isOpen && (
+        <RcDialog
+          title="Deck vs Collection"
+          eyebrow="deck diff"
+          onClose={handleClose}
+          size="xl"
+        >
+          {/* Card preview tooltip */}
+          {result &&
+            hoveredCard &&
+            hoveredCard.slug &&
+            (() => {
+              const isSite = hoveredCard.type?.toLowerCase().includes("site");
+              return (
+                <div className="pointer-events-none fixed right-8 top-1/2 z-50 -translate-y-1/2">
+                  <div
+                    className={`relative overflow-hidden rounded-rc-lg border border-rc-line/18 bg-black/60 shadow-rc-md ${
+                      isSite
+                        ? "w-[400px] aspect-[7/5]"
+                        : "w-72 aspect-[5/7]"
+                    }`}
+                  >
+                    {isSite ? (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="relative h-[400px] w-[286px] rotate-90">
+                          <Image
+                            src={`/api/images/${hoveredCard.slug}`}
+                            alt={hoveredCard.name}
+                            fill
+                            className="rounded-rc-sm object-cover"
+                            sizes="400px"
+                            unoptimized
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <Image
+                        src={`/api/images/${hoveredCard.slug}`}
+                        alt={hoveredCard.name}
+                        fill
+                        className="object-cover"
+                        sizes="288px"
+                        unoptimized
+                      />
+                    )}
+                  </div>
                 </div>
-                <button
-                  onClick={handleClose}
-                  className="text-gray-400 hover:text-white p-2"
-                >
-                  ✕
-                </button>
-              </div>
+              );
+            })()}
 
-              {/* Mode Tabs */}
-              {!result && (
-                <div className="flex border-b border-gray-800 flex-shrink-0">
-                  <button
-                    onClick={() => setMode("simulator")}
-                    className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                      mode === "simulator"
-                        ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                        : "text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    My Decks
-                  </button>
-                  <button
-                    onClick={() => setMode("text")}
-                    className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                      mode === "text"
-                        ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                        : "text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    Paste Text
-                  </button>
+          {result ? (
+            /* Results View */
+            <div className="space-y-4">
+              <RcButton
+                variant="ghost"
+                size="sm"
+                onClick={() => setResult(null)}
+              >
+                ← Back to selection
+              </RcButton>
+
+              {/* Summary */}
+              <section className="rc-panel">
+                <PanelHeader
+                  title={result.deckName}
+                  meta={`${result.uniqueCards} unique`}
+                />
+                <div className="grid grid-cols-2 gap-4 px-[18px] py-3.5 text-center sm:grid-cols-4">
+                  <div>
+                    <div className="rc-stat text-2xl">
+                      {result.summary.completionPercent}%
+                    </div>
+                    <div className="rc-hint">complete</div>
+                  </div>
+                  <div>
+                    <div className="rc-stat text-2xl text-rc-success">
+                      {result.totalCards - result.summary.totalMissing}
+                    </div>
+                    <div className="rc-hint">owned</div>
+                  </div>
+                  <div>
+                    <div className="rc-stat text-2xl text-rc-danger">
+                      {result.summary.totalMissing}
+                    </div>
+                    <div className="rc-hint">missing</div>
+                  </div>
+                  <div>
+                    <div className="rc-stat text-2xl">{result.uniqueCards}</div>
+                    <div className="rc-hint">unique cards</div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Unresolved names */}
+              {result.unresolved && result.unresolved.length > 0 && (
+                <div className="rc-alert" data-tone="warning">
+                  <div className="mb-1">Could not find these cards:</div>
+                  <div className="text-[11px] tracking-[0.1em]">
+                    {result.unresolved.join(", ")}
+                  </div>
                 </div>
               )}
 
-              {/* Content */}
-              <div className="flex-1 overflow-y-auto">
-                {result ? (
-                  /* Results View */
-                  <div className="p-4 space-y-4 relative">
-                    {/* Card preview tooltip */}
-                    {hoveredCard &&
-                      hoveredCard.slug &&
-                      (() => {
-                        const isSite = hoveredCard.type
-                          ?.toLowerCase()
-                          .includes("site");
-                        return (
-                          <div className="fixed right-8 top-1/2 -translate-y-1/2 z-50 pointer-events-none">
+              {/* Missing / Owned columns */}
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                {/* Missing Cards */}
+                <section className="rc-panel">
+                  <PanelHeader
+                    title="Missing"
+                    meta={`${result.summary.uniqueMissing} unique`}
+                  />
+                  {result.missingCards.length > 0 ? (
+                    <div className="max-h-72 overflow-y-auto thin-scrollbar">
+                      {result.missingCards.map((card) => (
+                        <div
+                          key={card.cardId}
+                          className="flex cursor-pointer items-center justify-between gap-3 border-b border-rc-line/8 px-[18px] py-2 transition-colors hover:bg-rc-accent/6"
+                          onMouseEnter={() => setHoveredCard(card)}
+                          onMouseLeave={() => setHoveredCard(null)}
+                        >
+                          <div className="min-w-0">
                             <div
-                              className={`relative rounded-lg overflow-hidden shadow-2xl ring-2 ring-white/20 bg-gray-900 ${
-                                isSite
-                                  ? "w-[400px] aspect-[7/5]"
-                                  : "w-72 aspect-[5/7]"
-                              }`}
-                            >
-                              {isSite ? (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                  <div className="w-[286px] h-[400px] relative rotate-90">
-                                    <Image
-                                      src={`/api/images/${hoveredCard.slug}`}
-                                      alt={hoveredCard.name}
-                                      fill
-                                      className="object-cover rounded"
-                                      sizes="400px"
-                                      unoptimized
-                                    />
-                                  </div>
-                                </div>
-                              ) : (
-                                <Image
-                                  src={`/api/images/${hoveredCard.slug}`}
-                                  alt={hoveredCard.name}
-                                  fill
-                                  className="object-cover"
-                                  sizes="288px"
-                                  unoptimized
-                                />
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                    {/* Back button */}
-                    <button
-                      onClick={() => setResult(null)}
-                      className="text-gray-400 hover:text-white text-sm flex items-center gap-1"
-                    >
-                      ← Back to selection
-                    </button>
-
-                    {/* Summary */}
-                    <div className="bg-gray-800/50 rounded-lg p-4">
-                      <h4 className="font-bold text-lg mb-2">
-                        {result.deckName}
-                      </h4>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-                        <div>
-                          <div className="text-2xl font-bold">
-                            {result.summary.completionPercent}%
-                          </div>
-                          <div className="text-xs text-gray-400">Complete</div>
-                        </div>
-                        <div>
-                          <div className="text-2xl font-bold text-green-400">
-                            {result.totalCards - result.summary.totalMissing}
-                          </div>
-                          <div className="text-xs text-gray-400">Owned</div>
-                        </div>
-                        <div>
-                          <div className="text-2xl font-bold text-red-400">
-                            {result.summary.totalMissing}
-                          </div>
-                          <div className="text-xs text-gray-400">Missing</div>
-                        </div>
-                        <div>
-                          <div className="text-2xl font-bold">
-                            {result.uniqueCards}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            Unique Cards
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Unresolved names */}
-                    {result.unresolved && result.unresolved.length > 0 && (
-                      <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-3">
-                        <div className="text-yellow-400 text-sm font-medium mb-1">
-                          ⚠️ Could not find these cards:
-                        </div>
-                        <div className="text-xs text-yellow-300/80">
-                          {result.unresolved.join(", ")}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Missing Cards */}
-                    {result.missingCards.length > 0 && (
-                      <div>
-                        <h5 className="font-medium mb-2 text-red-400">
-                          Missing Cards ({result.summary.uniqueMissing})
-                        </h5>
-                        <div className="space-y-1">
-                          {result.missingCards.map((card) => (
-                            <div
-                              key={card.cardId}
-                              className={`flex items-center justify-between p-2 rounded cursor-pointer hover:bg-gray-700/50 ${getRarityBg(
+                              className={`truncate font-rc-display text-[19px] leading-[1.1] ${getRarityColor(
                                 card.rarity
                               )}`}
-                              onMouseEnter={() => setHoveredCard(card)}
-                              onMouseLeave={() => setHoveredCard(null)}
                             >
-                              <div className="flex items-center gap-3">
-                                <span
-                                  className={`font-medium ${getRarityColor(
-                                    card.rarity
-                                  )}`}
-                                >
-                                  {card.name}
-                                </span>
-                                {card.set && (
-                                  <span className="text-xs text-gray-500">
-                                    {card.set}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-3 text-sm">
-                                <span className="text-gray-400">
-                                  Own: {card.owned}
-                                </span>
-                                <span className="text-white">
-                                  Need: {card.needed}
-                                </span>
-                                <span className="text-red-400 font-bold">
-                                  −{card.missing}
-                                </span>
-                              </div>
+                              {card.name}
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Owned Cards (collapsed by default) */}
-                    {result.ownedCards.length > 0 && (
-                      <details className="bg-gray-800/30 rounded-lg">
-                        <summary className="p-3 cursor-pointer text-green-400 font-medium">
-                          ✓ Owned Cards ({result.ownedCards.length})
-                        </summary>
-                        <div className="p-2 space-y-1">
-                          {result.ownedCards.map((card) => (
-                            <div
-                              key={card.cardId}
-                              className="flex items-center justify-between p-2 rounded hover:bg-gray-700/50 text-sm"
-                              onMouseEnter={() => setHoveredCard(card)}
-                              onMouseLeave={() => setHoveredCard(null)}
-                            >
-                              <span className={getRarityColor(card.rarity)}>
-                                {card.name}
-                              </span>
-                              <span className="text-gray-400">
-                                {card.owned}/{card.needed}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    )}
-
-                    {/* No missing cards */}
-                    {result.missingCards.length === 0 && (
-                      <div className="text-center py-8 text-green-400">
-                        <div className="text-4xl mb-2">🎉</div>
-                        <div className="font-bold">
-                          You have all the cards for this deck!
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  /* Input Views */
-                  <div className="p-4 space-y-4">
-                    {mode === "simulator" && (
-                      <>
-                        <p className="text-sm text-gray-400">
-                          Select one of your simulator decks to compare against
-                          your collection.
-                        </p>
-                        {loadingDecks ? (
-                          <div className="flex justify-center py-8">
-                            <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full" />
-                          </div>
-                        ) : decks.length > 0 ? (
-                          <div className="space-y-2">
-                            <label className="text-sm text-gray-300">
-                              Select a deck:
-                            </label>
-                            <CustomSelect
-                              value={selectedDeckId}
-                              onChange={(v) => setSelectedDeckId(v)}
-                              placeholder="-- Choose a deck --"
-                              className="w-full"
-                              options={decks.map((d) => ({
-                                value: d.id,
-                                label: d.name + (d.format ? ` (${d.format})` : ""),
-                              }))}
-                            />
-                            <button
-                              onClick={compareDeck}
-                              disabled={loading || !selectedDeckId}
-                              className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                              {loading && (
-                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                              )}
-                              {loading ? "Comparing..." : "Compare Deck"}
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="text-center py-8 text-gray-400">
-                            <div className="text-4xl mb-2">🃏</div>
-                            <div>No simulator decks found</div>
-                            <div className="text-sm mt-1">
-                              Create a deck in the simulator first, or paste a
-                              deck list using the Paste Text tab.
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-
-                    {mode === "text" && (
-                      <>
-                        <p className="text-sm text-gray-400">
-                          Paste a decklist in text format to compare against
-                          your collection.
-                        </p>
-                        <div className="space-y-3">
-                          <textarea
-                            placeholder="4 Apprentice Wizard&#10;2 Black Obelisk&#10;1 Queen Guinevere&#10;..."
-                            value={textInput}
-                            onChange={(e) => setTextInput(e.target.value)}
-                            className="w-full h-48 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 font-mono text-sm"
-                            disabled={loading}
-                          />
-                          <p className="text-xs text-gray-500">
-                            Format: &quot;4 Card Name&quot; or &quot;4x Card
-                            Name&quot; per line
-                          </p>
-                          <button
-                            onClick={compareText}
-                            disabled={loading || !textInput.trim()}
-                            className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-                          >
-                            {loading && (
-                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            {card.set && (
+                              <div className="truncate rc-hint">{card.set}</div>
                             )}
-                            {loading ? "Comparing..." : "Compare Deck"}
-                          </button>
+                          </div>
+                          <div className="flex flex-none items-center gap-3 font-rc-mono text-[12px] tabular-nums">
+                            <span className="text-rc-fg-dim">
+                              own {card.owned}
+                            </span>
+                            <span className="text-rc-fg-strong">
+                              need {card.needed}
+                            </span>
+                            <span className="text-rc-danger">
+                              −{card.missing}
+                            </span>
+                          </div>
                         </div>
-                      </>
-                    )}
-
-                    {error && (
-                      <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-red-400 text-sm">
-                        {error}
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-[18px] py-6 text-center">
+                      <div className="font-rc-display text-[19px] text-rc-success">
+                        You have all the cards for this deck.
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </section>
+
+                {/* Owned Cards */}
+                <section className="rc-panel">
+                  <PanelHeader
+                    title="Owned"
+                    meta={`${result.ownedCards.length} unique`}
+                  />
+                  {result.ownedCards.length > 0 ? (
+                    <div className="max-h-72 overflow-y-auto thin-scrollbar">
+                      {result.ownedCards.map((card) => (
+                        <div
+                          key={card.cardId}
+                          className="flex cursor-pointer items-center justify-between gap-3 border-b border-rc-line/8 px-[18px] py-2 transition-colors hover:bg-rc-accent/6"
+                          onMouseEnter={() => setHoveredCard(card)}
+                          onMouseLeave={() => setHoveredCard(null)}
+                        >
+                          <span
+                            className={`truncate font-rc-display text-[19px] leading-[1.1] ${getRarityColor(
+                              card.rarity
+                            )}`}
+                          >
+                            {card.name}
+                          </span>
+                          <span className="flex-none font-rc-mono text-[12px] tabular-nums text-rc-success">
+                            {card.owned}/{card.needed}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rc-hint px-[18px] py-6 text-center">
+                      no owned cards in this list
+                    </div>
+                  )}
+                </section>
               </div>
             </div>
-          </div>,
-          document.body
-        )}
+          ) : (
+            /* Input Views */
+            <div className="space-y-4">
+              <p className="m-0 text-sm text-rc-fg-muted">
+                Compare a deck to see which cards you&apos;re missing.
+              </p>
+
+              <div className="rc-segment">
+                <button
+                  type="button"
+                  aria-pressed={mode === "simulator"}
+                  onClick={() => setMode("simulator")}
+                >
+                  My Decks
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={mode === "text"}
+                  onClick={() => setMode("text")}
+                >
+                  Paste Text
+                </button>
+              </div>
+
+              {mode === "simulator" && (
+                <>
+                  <p className="m-0 text-sm text-rc-fg-muted">
+                    Select one of your simulator decks to compare against your
+                    collection.
+                  </p>
+                  {loadingDecks ? (
+                    <div className="rc-hint py-6 text-center">loading…</div>
+                  ) : decks.length > 0 ? (
+                    <div className="space-y-2">
+                      <label className="rc-eyebrow block">Select a deck</label>
+                      <CustomSelect
+                        value={selectedDeckId}
+                        onChange={(v) => setSelectedDeckId(v)}
+                        placeholder="-- Choose a deck --"
+                        className="w-full"
+                        options={decks.map((d) => ({
+                          value: d.id,
+                          label: d.name + (d.format ? ` (${d.format})` : ""),
+                        }))}
+                      />
+                      <RcButton
+                        className="w-full"
+                        onClick={compareDeck}
+                        disabled={loading || !selectedDeckId}
+                      >
+                        {loading ? "Comparing..." : "Compare Deck"}
+                      </RcButton>
+                    </div>
+                  ) : (
+                    <RcEmpty title="No simulator decks found.">
+                      create a deck in the simulator, or paste a deck list in
+                      the Paste Text tab
+                    </RcEmpty>
+                  )}
+                </>
+              )}
+
+              {mode === "text" && (
+                <>
+                  <p className="m-0 text-sm text-rc-fg-muted">
+                    Paste a decklist in text format to compare against your
+                    collection.
+                  </p>
+                  <div className="space-y-3">
+                    <textarea
+                      placeholder="4 Apprentice Wizard&#10;2 Black Obelisk&#10;1 Queen Guinevere&#10;..."
+                      value={textInput}
+                      onChange={(e) => setTextInput(e.target.value)}
+                      className="rc-textarea h-48 w-full"
+                      disabled={loading}
+                    />
+                    <p className="m-0 rc-hint">
+                      format: &quot;4 Card Name&quot; or &quot;4x Card
+                      Name&quot; per line
+                    </p>
+                    <RcButton
+                      className="w-full"
+                      onClick={compareText}
+                      disabled={loading || !textInput.trim()}
+                    >
+                      {loading ? "Comparing..." : "Compare Deck"}
+                    </RcButton>
+                  </div>
+                </>
+              )}
+
+              {error && (
+                <div className="rc-alert" data-tone="danger">
+                  {error}
+                </div>
+              )}
+            </div>
+          )}
+        </RcDialog>
+      )}
     </>
   );
 }

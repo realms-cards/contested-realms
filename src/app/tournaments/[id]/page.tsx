@@ -4,9 +4,13 @@ import { Icon } from "@iconify/react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams, useRouter, usePathname, useSearchParams } from "next/navigation";
+import {
+  useParams,
+  useRouter,
+  usePathname,
+  useSearchParams,
+} from "next/navigation";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { createPortal } from "react-dom";
 import GuestGate from "@/components/auth/GuestGate";
 import FloatingChat from "@/components/chat/FloatingChat";
 import CardPreview from "@/components/game/CardPreview";
@@ -16,6 +20,12 @@ import TournamentBracket from "@/components/tournament/TournamentBracket";
 import TournamentFlowchart from "@/components/tournament/TournamentFlowchart";
 import TournamentInviteLinkButton from "@/components/tournament/TournamentInviteLinkButton";
 import TournamentRoster from "@/components/tournament/TournamentRoster";
+import AppShell from "@/components/ui/AppShell";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
+import { RcDialog } from "@/components/ui/rc-dialog";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import { useViewer } from "@/lib/guest/useViewer";
@@ -93,9 +103,9 @@ export default function TournamentDetailsPage() {
   // Round/match flow helpers
   const [startingRound, setStartingRound] = useState(false);
   const [endingRound, setEndingRound] = useState(false);
-  const [_invalidatingMatchId, setInvalidatingMatchId] = useState<string | null>(
-    null,
-  );
+  const [_invalidatingMatchId, setInvalidatingMatchId] = useState<
+    string | null
+  >(null);
   const [lockingRegistration, setLockingRegistration] = useState(false);
   // Only block with a full-screen loading overlay on the very first load
   const [initialLoaded, setInitialLoaded] = useState(false);
@@ -151,8 +161,7 @@ export default function TournamentDetailsPage() {
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as
-        | { message?: string }
-        | undefined;
+        { message?: string } | undefined;
       if (detail?.message) {
         setToast(detail.message);
         setTimeout(() => setToast(null), 3500);
@@ -223,8 +232,7 @@ export default function TournamentDetailsPage() {
     currentTournament && currentTournament.id === tournamentId
       ? (currentTournament as unknown as Tournament)
       : (tournaments.find((t) => t.id === tournamentId) as unknown as
-          | Tournament
-          | undefined) ||
+          Tournament | undefined) ||
         fallbackTournament ||
         null;
 
@@ -257,9 +265,8 @@ export default function TournamentDetailsPage() {
     );
     if (!standing) return null;
     const rank =
-      (statistics?.standings?.findIndex(
-        (s) => s.playerId === viewer.id,
-      ) ?? -1) + 1;
+      (statistics?.standings?.findIndex((s) => s.playerId === viewer.id) ??
+        -1) + 1;
     return { ...standing, rank };
   }, [statistics?.standings, viewer.id]);
   const myMatchId = useMemo(
@@ -267,6 +274,15 @@ export default function TournamentDetailsPage() {
       myStanding?.currentMatchId ? String(myStanding.currentMatchId) : null,
     [myStanding?.currentMatchId],
   );
+  // Two completion dialogs exist: a generic one (champion + top standings) and
+  // a celebration one that also reports the viewer's own result. The
+  // celebration needs the viewer's final standing, so it only renders once the
+  // standings have loaded - and when it does, the generic one must stand down
+  // or both open on top of each other.
+  const showCompletionCelebration =
+    tournament?.status === "completed" &&
+    Boolean(statistics?.standings) &&
+    Boolean(myStanding);
   // Round helpers
   const rounds = useMemo(() => statistics?.rounds || [], [statistics?.rounds]);
   const activeRound = rounds.find((r) => r.status === "active") || null;
@@ -839,7 +855,14 @@ export default function TournamentDetailsPage() {
         setConstructedLoading(false);
       }
     })();
-  }, [tId, tStatus, tFormat, isRegistered, includePublicDecks, constructedRefreshKey]);
+  }, [
+    tId,
+    tStatus,
+    tFormat,
+    isRegistered,
+    includePublicDecks,
+    constructedRefreshKey,
+  ]);
 
   const handleSubmitConstructedDeck = async (
     deckId: string,
@@ -1188,20 +1211,20 @@ export default function TournamentDetailsPage() {
     }
   };
 
-  const getStatusBadgeColor = (status: Tournament["status"]) => {
+  const getStatusTone = (status: Tournament["status"]): BadgeTone => {
     switch (status) {
       case "registering":
-        return "bg-green-100 text-green-800 border-green-200";
+        return "ok";
       case "preparing":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+        return "warn";
       case "active":
-        return "bg-blue-100 text-blue-800 border-blue-200";
+        return "gold";
       case "completed":
-        return "bg-gray-100 text-gray-800 border-gray-200";
+        return "default";
       case "cancelled":
-        return "bg-red-100 text-red-800 border-red-200";
+        return "default";
       default:
-        return "bg-gray-100 text-gray-800 border-gray-200";
+        return "default";
     }
   };
 
@@ -1218,41 +1241,41 @@ export default function TournamentDetailsPage() {
     }
   };
 
-  if (viewer.status === "loading" || (rtLoading && !initialLoaded && !viewer.isAnonymous)) {
+  if (
+    viewer.status === "loading" ||
+    (rtLoading && !initialLoaded && !viewer.isAnonymous)
+  ) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-white text-xl">Loading tournament...</div>
-      </div>
+      <AppShell width="wide">
+        <div className="rc-hint py-6 text-center">loading tournament…</div>
+      </AppShell>
     );
   }
 
   if (viewer.isAnonymous) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white">
-        <div className="container mx-auto px-4 py-8 max-w-2xl">
-          <GuestGate
-            title="You\u2019ve been invited to a tournament"
-            description="Sign in to play with your saved decks, or continue as a guest and bring a deck from sorcerytcg.com or a precon."
-            returnTo={currentHref}
-          />
-        </div>
-      </div>
+      <AppShell width="narrow">
+        <GuestGate
+          title="You\u2019ve been invited to a tournament"
+          description="Sign in to play with your saved decks, or continue as a guest and bring a deck from sorcerytcg.com or a precon."
+          returnTo={currentHref}
+        />
+      </AppShell>
     );
   }
 
   if (error || rtError) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-red-400 text-xl mb-4">{error || rtError}</div>
-          <Link
-            href="/tournaments"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
-          >
-            Back to Tournaments
-          </Link>
+      <AppShell width="narrow">
+        <div className="rc-alert" data-tone="danger">
+          {error || rtError}
         </div>
-      </div>
+        <div>
+          <RcLinkButton href="/tournaments" variant="outline">
+            Back to Tournaments
+          </RcLinkButton>
+        </div>
+      </AppShell>
     );
   }
 
@@ -1263,201 +1286,262 @@ export default function TournamentDetailsPage() {
     !initialLoaded
   ) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-white text-xl">Loading tournament...</div>
-      </div>
+      <AppShell width="wide">
+        <div className="rc-hint py-6 text-center">loading tournament…</div>
+      </AppShell>
     );
   }
 
   if (!tournament) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-white text-xl">Tournament not found</div>
-      </div>
+      <AppShell width="wide">
+        <RcEmpty
+          title="Tournament not found."
+          action={
+            <RcLinkButton href="/tournaments" variant="outline">
+              Back to Tournaments
+            </RcLinkButton>
+          }
+        >
+          it may have been ended or removed
+        </RcEmpty>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-white relative">
+    <AppShell width="wide">
       {/* Floating tournament dock (Chat/Events/Players) */}
       <FloatingChat tournamentId={tournamentId} />
       {/* Toast overlay */}
       {toast && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded bg-black/70 border border-white/20 text-sm shadow-lg">
+        <div className="rc-panel fixed bottom-4 left-1/2 z-50 -translate-x-1/2 px-4 py-2 font-rc-mono text-xs tracking-[0.08em] text-rc-fg">
           {toast}
         </div>
       )}
 
-      {/* Completion/Victory modal */}
+      {/* Completion summary, for viewers without a standing of their own */}
       {showCompletionModal &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
-            <div className="w-full max-w-3xl bg-slate-900/95 rounded-2xl ring-1 ring-white/15 shadow-2xl overflow-hidden">
-              <div className="p-6 border-b border-white/10 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="text-3xl">🏆</div>
-                  <div>
-                    <div className="text-lg font-semibold">
-                      Tournament Completed
+        !showCompletionCelebration &&
+        typeof document !== "undefined" && (
+        <RcDialog
+          eyebrow="tournament completed"
+          title={tournament.name}
+          size="lg"
+          onClose={() => setShowCompletionModal(false)}
+          actions={
+            <RcButton onClick={() => setShowCompletionModal(false)}>
+              Continue
+            </RcButton>
+          }
+        >
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            {(() => {
+              const standings = (statistics?.standings || []) as Array<{
+                playerId: string;
+                playerName: string;
+                points?: number;
+                omw?: number;
+              }>;
+              const top = standings.slice(0, 3);
+              const meId = viewer.id || "";
+              const myIdx = meId
+                ? standings.findIndex((s) => s.playerId === meId)
+                : -1;
+              const myRank = myIdx >= 0 ? myIdx + 1 : null;
+              const total = standings.length || activeCount;
+              const champion = standings[0]?.playerName || "Champion";
+              return (
+                <>
+                  <div className="md:col-span-2">
+                    <div className="rc-eyebrow mb-1.5">champion</div>
+                    <div className="font-rc-display text-[32px] leading-none text-rc-accent-link">
+                      {champion}
                     </div>
-                    <div className="text-sm text-white/70">
-                      {tournament.name}
+                    <div className="mt-4 font-rc-mono text-xs tracking-[0.08em] text-rc-fg-muted">
+                      {myRank ? (
+                        <span>
+                          Your result:{" "}
+                          <span className="rc-stat font-semibold text-rc-fg-strong">
+                            #{myRank}
+                          </span>{" "}
+                          of {total}
+                        </span>
+                      ) : (
+                        <span>Final standings are available below.</span>
+                      )}
                     </div>
                   </div>
-                </div>
-                <button
-                  onClick={() => setShowCompletionModal(false)}
-                  className="px-3 py-1.5 text-sm rounded bg-white/10 hover:bg-white/20"
-                >
-                  Close
-                </button>
-              </div>
-              <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-                {(() => {
-                  const standings = (statistics?.standings || []) as Array<{
-                    playerId: string;
-                    playerName: string;
-                    points?: number;
-                    omw?: number;
-                  }>;
-                  const top = standings.slice(0, 3);
-                  const meId = viewer.id || "";
-                  const myIdx = meId
-                    ? standings.findIndex((s) => s.playerId === meId)
-                    : -1;
-                  const myRank = myIdx >= 0 ? myIdx + 1 : null;
-                  const total = standings.length || activeCount;
-                  const champion = standings[0]?.playerName || "Champion";
-                  return (
-                    <>
-                      <div className="md:col-span-2">
-                        <div className="text-xl font-bold mb-2">Champion</div>
-                        <div className="text-3xl font-fantaisie text-emerald-400">
-                          {champion}
-                        </div>
-                        <div className="mt-4 text-sm text-white/80">
-                          {myRank ? (
-                            <span>
-                              Your result:{" "}
-                              <span className="font-semibold text-white">
-                                #{myRank}
-                              </span>{" "}
-                              of {total}
-                            </span>
-                          ) : (
-                            <span>Final standings are available below.</span>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold mb-2">
-                          Top Standings
-                        </div>
-                        <div className="space-y-2">
-                          {top.map((s, i) => (
-                            <div
-                              key={s.playerId}
-                              className="flex items-center justify-between rounded bg-white/5 px-3 py-2"
-                            >
-                              <div className="flex items-center gap-2">
-                                <div className="w-7 h-7 rounded-full bg-white/10 grid place-items-center text-sm font-bold">
-                                  {i + 1}
-                                </div>
-                                <div className="truncate max-w-[12rem]">
-                                  {s.playerName}
-                                </div>
-                              </div>
-                              <div className="text-xs text-white/70">
-                                {typeof s.points === "number"
-                                  ? `${s.points} pts`
-                                  : ""}
-                              </div>
+                  <div>
+                    <div className="rc-eyebrow mb-2">top standings</div>
+                    <div className="flex flex-col gap-2">
+                      {top.map((s, i) => (
+                        <div
+                          key={s.playerId}
+                          className="flex items-center justify-between rounded-rc-md bg-black/30 px-3 py-2"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="grid h-7 w-7 shrink-0 place-items-center rounded-rc-md border border-rc-line/14 bg-rc-line/8 font-rc-mono text-xs text-rc-fg-strong">
+                              {i + 1}
                             </div>
-                          ))}
+                            <div className="max-w-[12rem] truncate font-rc-display text-[17px] leading-tight text-rc-fg-strong">
+                              {s.playerName}
+                            </div>
+                          </div>
+                          <div className="rc-stat text-xs text-rc-fg-muted">
+                            {typeof s.points === "number"
+                              ? `${s.points} pts`
+                              : ""}
+                          </div>
                         </div>
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-              <div className="p-4 border-t border-white/10 flex items-center justify-end">
-                <button
-                  onClick={() => setShowCompletionModal(false)}
-                  className="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-black font-semibold"
-                >
-                  Continue
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+                      ))}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </RcDialog>
+      )}
 
       {/* Draft Roster Confirmation Modal */}
-      {showDraftConfirmModal &&
-        tournament &&
-        createPortal(
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-slate-800 border border-slate-600 rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
-              <div className="p-5 border-b border-white/10">
-                <h2 className="text-xl font-bold text-white">
-                  Confirm Draft Start
-                </h2>
-                <p className="text-sm text-slate-400 mt-1">
-                  Review the player roster before starting the draft. All
-                  players will be notified.
-                </p>
-              </div>
-              <div className="flex-1 overflow-y-auto p-5">
-                <TournamentRoster tournamentId={tournament.id} />
-              </div>
-              <div className="p-4 border-t border-white/10 flex items-center justify-end gap-3">
-                <button
-                  onClick={() => setShowDraftConfirmModal(false)}
-                  className="px-4 py-2 rounded bg-slate-600 hover:bg-slate-500 text-white font-medium"
-                  disabled={starting}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={executeStartTournament}
-                  disabled={starting}
-                  className="px-6 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {starting ? "Starting Draft..." : "Confirm & Start Draft"}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+      {showDraftConfirmModal && tournament && (
+        <RcDialog
+          title="Confirm Draft Start"
+          onClose={() => setShowDraftConfirmModal(false)}
+          actions={
+            <>
+              <RcButton
+                variant="outline"
+                onClick={() => setShowDraftConfirmModal(false)}
+                disabled={starting}
+              >
+                Cancel
+              </RcButton>
+              <RcButton onClick={executeStartTournament} disabled={starting}>
+                {starting ? "Starting Draft..." : "Confirm & Start Draft"}
+              </RcButton>
+            </>
+          }
+        >
+          <p className="m-0 text-rc-fg-muted">
+            Review the player roster before starting the draft. All players will
+            be notified.
+          </p>
+          <div className="mt-4 max-h-[50vh] overflow-y-auto">
+            <TournamentRoster tournamentId={tournament.id} />
+          </div>
+        </RcDialog>
+      )}
 
-      <div className="max-w-5xl mx-auto p-6 space-y-6">
+      <div className="flex flex-col gap-6">
+        {/* Header */}
+        <div className="flex flex-col gap-4">
+          <Link
+            href="/tournaments"
+            className="rc-link w-fit font-rc-mono text-xs uppercase tracking-[0.16em]"
+          >
+            ← Back to Tournaments
+          </Link>
+          <PageHeader
+            eyebrow={`${tournament.format} tournament`}
+            title={tournament.name}
+            description={
+              isOpenSeat
+                ? `Open seat event · ${activeCount} active player${
+                    activeCount === 1 ? "" : "s"
+                  }`
+                : `${activeCount} of ${tournament.maxPlayers} players · ${
+                    tournament.settings.totalRounds || 3
+                  } rounds`
+            }
+            actions={
+              <>
+                {isCreator &&
+                  tournament.status !== "completed" &&
+                  tournament.status !== "cancelled" && (
+                    <TournamentInviteLinkButton
+                      tournamentId={tournament.id}
+                      kind="tournament"
+                      inviteToken={
+                        (tournament as { inviteToken?: string | null })
+                          .inviteToken ?? null
+                      }
+                    />
+                  )}
+                {/* Invite Players button (creator only, during registration while capacity remains) */}
+                {canInvitePlayers && (
+                  <RcButton
+                    variant="outline"
+                    onClick={() => setShowInviteModal(true)}
+                  >
+                    Invite Players
+                  </RcButton>
+                )}
+
+                {canJoinTournament && (
+                  <RcButton onClick={handleJoinTournament} disabled={joining}>
+                    {joining
+                      ? "Joining..."
+                      : isSeatVacant
+                        ? "Rejoin Tournament"
+                        : "Join Tournament"}
+                  </RcButton>
+                )}
+
+                {/* End/Forfeit controls moved to bottom of page */}
+              </>
+            }
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Icon
+              icon={getFormatIcon(tournament.format)}
+              className="shrink-0 text-rc-fg-muted"
+              width={22}
+              height={22}
+              aria-hidden="true"
+            />
+            <Badge tone={getStatusTone(tournament.status)}>
+              {tournament.status}
+            </Badge>
+            {activeRoundNumber != null && (
+              <Badge tone="gold">Round {activeRoundNumber}</Badge>
+            )}
+            {isOpenSeat && (
+              <Badge tone={isRegistrationLocked ? "warn" : "default"}>
+                {isRegistrationLocked ? "registration locked" : "open seat"}
+              </Badge>
+            )}
+          </div>
+        </div>
+
         {/* Instant Join CTA when match is assigned */}
         {(() => {
           const matchId = assigned?.matchId || myAssignedMatchId || null;
           const opponentName = assigned?.opponentName || null;
           if (!matchId || tournament.status !== "active") return null;
           return (
-            <div className="mb-4 rounded-lg border-2 border-emerald-500 bg-emerald-900/30 p-4 flex items-center justify-between">
+            <div className="rc-panel flex flex-col gap-3 border-rc-success/45 px-[18px] py-3.5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <div className="text-lg font-bold text-emerald-300">
-                  Your match is ready!
+                <div className="rc-eyebrow mb-1 text-rc-success">
+                  match ready
                 </div>
-                <div className="text-sm text-emerald-200/80">
+                <div className="font-rc-display text-[22px] leading-none text-rc-fg-strong">
+                  Your match is ready
+                </div>
+                <div className="mt-1.5 font-rc-mono text-[11px] uppercase tracking-[0.14em] text-rc-fg-subtle">
                   {opponentName
                     ? `vs ${opponentName}`
-                    : `Round ${activeRoundNumber ?? ""} — match assigned`}
+                    : `Round ${activeRoundNumber ?? ""} · match assigned`}
                 </div>
               </div>
-              <button
+              <RcButton
+                size="lg"
                 onClick={() => startJoinMatch(matchId)}
                 disabled={joiningMatch}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-lg font-bold text-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {joiningMatch ? "Joining…" : "Join Match"}
-              </button>
+              </RcButton>
             </div>
           );
         })()}
@@ -1466,10 +1550,10 @@ export default function TournamentDetailsPage() {
           isOpenSeat &&
           (tournament.status === "registering" ||
             tournament.status === "preparing") && (
-            <div className="mb-4 rounded-lg border border-slate-700 bg-slate-900/80 backdrop-blur flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <div className="text-slate-200 text-sm">
+            <div className="rc-panel flex flex-wrap items-center justify-between gap-3 px-[18px] py-3.5">
+              <div className="text-sm text-rc-fg">
                 Registration is{" "}
-                <span className="font-semibold">
+                <span className="font-semibold text-rc-fg-strong">
                   {isRegistrationLocked ? "locked" : "open"}
                 </span>
                 .{" "}
@@ -1477,19 +1561,19 @@ export default function TournamentDetailsPage() {
                   ? "Unlock to allow more players to join."
                   : "Lock seats to stop new joins and prepare Round 1."}
               </div>
-              <button
+              <RcButton
+                variant="outline"
                 onClick={() =>
                   handleToggleRegistrationLock(!isRegistrationLocked)
                 }
                 disabled={lockingRegistration}
-                className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {lockingRegistration
                   ? "Updating…"
                   : isRegistrationLocked
                     ? "Unlock Seats"
                     : "Lock Seats"}
-              </button>
+              </RcButton>
             </div>
           )}
 
@@ -1499,8 +1583,8 @@ export default function TournamentDetailsPage() {
           !activeRound &&
           (pendingRound ||
             maxRoundNumber < (tournament.settings.totalRounds || 3)) && (
-            <div className="mb-6 rounded-lg border border-indigo-600 bg-indigo-900/90 backdrop-blur flex items-center justify-between px-4 py-3 shadow-lg">
-              <div className="text-indigo-100 text-sm">
+            <div className="rc-panel flex flex-wrap items-center justify-between gap-3 px-[18px] py-3.5">
+              <div className="text-sm text-rc-fg">
                 {pendingRound ? (
                   <span>
                     Round {pendingRound.roundNumber} is ready. Start when
@@ -1517,100 +1601,16 @@ export default function TournamentDetailsPage() {
                   </span>
                 )}
               </div>
-              <button
-                onClick={handleStartNextRound}
-                disabled={startingRound}
-                className="bg-indigo-500 hover:bg-indigo-400 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <RcButton onClick={handleStartNextRound} disabled={startingRound}>
                 {startingRound
                   ? "Starting…"
                   : `Start Round ${
                       pendingRound?.roundNumber ??
                       Math.max(1, maxRoundNumber + 1)
                     }`}
-              </button>
+              </RcButton>
             </div>
           )}
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 mb-8">
-          <div className="min-w-0">
-            <Link
-              href="/tournaments"
-              className="text-slate-400 hover:text-white mb-2 inline-flex items-center"
-            >
-              ← Back to Tournaments
-            </Link>
-            <div className="flex items-center space-x-3 mb-2">
-              <Icon
-                icon={getFormatIcon(tournament.format)}
-                className="shrink-0 text-slate-300"
-                width={34}
-                height={34}
-              />
-              <div className="min-w-0">
-                <h1 className="text-3xl font-fantaisie text-white">
-                  {tournament.name}
-                </h1>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
-                  <span
-                    className={`shrink-0 whitespace-nowrap px-3 py-1 rounded-full text-sm font-medium border capitalize ${getStatusBadgeColor(
-                      tournament.status,
-                    )}`}
-                  >
-                    {tournament.status}
-                  </span>
-                  <span className="text-slate-400 capitalize">
-                    {tournament.format} Tournament
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <div className="flex space-x-3">
-              {isCreator &&
-                tournament.status !== "completed" &&
-                tournament.status !== "cancelled" && (
-                  <TournamentInviteLinkButton
-                    tournamentId={tournament.id}
-                    kind="tournament"
-                    inviteToken={
-                      (tournament as { inviteToken?: string | null })
-                        .inviteToken ?? null
-                    }
-                  />
-                )}
-              {/* Invite Players button (creator only, during registration while capacity remains) */}
-              {canInvitePlayers && (
-                <button
-                  onClick={() => setShowInviteModal(true)}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
-                >
-                  <span>👥</span>
-                  <span>Invite Players</span>
-                </button>
-              )}
-
-              {canJoinTournament && (
-                <button
-                  onClick={handleJoinTournament}
-                  disabled={joining}
-                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {joining
-                    ? "Joining..."
-                    : isSeatVacant
-                      ? "Rejoin Tournament"
-                      : "Join Tournament"}
-                </button>
-              )}
-
-              {/* End/Forfeit controls moved to bottom of page */}
-            </div>
-          </div>
-        </div>
-
         {/* Prominent Submitted Deck (collapsed by default) */}
         {isRegistered &&
           (() => {
@@ -1649,25 +1649,25 @@ export default function TournamentDetailsPage() {
             );
 
             return (
-              <div className="mb-6 rounded-lg border border-emerald-700 bg-emerald-900/20">
-                <div className="p-4 flex items-center justify-between">
-                  <div className="text-emerald-200">
-                    <div className="font-semibold">Your Submitted Deck</div>
-                    <div className="text-sm opacity-80">
-                      {viewerDeckCards.length > 0
-                        ? `${totalCards} cards`
-                        : "Deck submitted — syncing list…"}
-                    </div>
-                  </div>
-                  <button
+              <section className="rc-panel">
+                <PanelHeader
+                  title="Your Submitted Deck"
+                  meta={
+                    viewerDeckCards.length > 0
+                      ? `${totalCards} cards`
+                      : "deck submitted · syncing list…"
+                  }
+                >
+                  <RcButton
+                    variant="outline"
+                    size="sm"
                     onClick={() => setShowDeckDetails((v) => !v)}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
                   >
                     {showDeckDetails ? "Hide" : "Show"}
-                  </button>
-                </div>
+                  </RcButton>
+                </PanelHeader>
                 {showDeckDetails && (
-                  <div className="px-4 pb-4">
+                  <div className="px-[18px] py-3.5">
                     {viewerDeckCards.length > 0 ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                         {viewerDeckCards.map((c) => {
@@ -1698,7 +1698,7 @@ export default function TournamentDetailsPage() {
                           return (
                             <div
                               key={`${c.cardId}`}
-                              className="rounded p-2 bg-black/70 ring-1 ring-emerald-700/40 text-white hover:bg-black/50 cursor-pointer transition-colors"
+                              className="cursor-pointer rounded-rc-md border border-rc-line/14 bg-black/35 p-2 text-rc-fg transition-colors hover:border-rc-accent/35 hover:bg-rc-accent/6"
                               onMouseEnter={() => {
                                 if (c.slug) {
                                   setHoveredCard({
@@ -1717,7 +1717,7 @@ export default function TournamentDetailsPage() {
                                       isSite
                                         ? "aspect-[4/3] w-16"
                                         : "aspect-[3/4] w-12"
-                                    } rounded overflow-hidden ring-1 ring-white/10 bg-black/40`}
+                                    } overflow-hidden rounded-rc-md border border-rc-line/14 bg-black/40`}
                                   >
                                     <Image
                                       src={`/api/images/${c.slug}`}
@@ -1737,16 +1737,16 @@ export default function TournamentDetailsPage() {
                                   <div className="flex items-start justify-between">
                                     <div className="min-w-0">
                                       <div
-                                        className="font-semibold truncate text-sm"
+                                        className="truncate font-rc-display text-[17px] leading-tight text-rc-fg-strong"
                                         title={c.name}
                                       >
                                         {c.name}
                                       </div>
-                                      <div className="text-[11px] text-slate-400 mt-0.5">
+                                      <div className="mt-0.5 font-rc-mono text-[11px] tracking-[0.08em] text-rc-fg-subtle">
                                         {c.setName}
                                       </div>
                                     </div>
-                                    <div className="text-right font-semibold text-sm">
+                                    <div className="rc-stat text-right text-sm font-semibold">
                                       x{c.quantity}
                                     </div>
                                   </div>
@@ -1782,7 +1782,7 @@ export default function TournamentDetailsPage() {
                                             strokeWidth={8}
                                           />
                                         ) : (
-                                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white text-black text-[10px] font-bold">
+                                          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-rc-accent font-rc-mono text-[10px] font-bold text-rc-accent-fg">
                                             {c.cost}
                                           </span>
                                         )}
@@ -1796,20 +1796,20 @@ export default function TournamentDetailsPage() {
                         })}
                       </div>
                     ) : (
-                      <div className="text-sm text-emerald-200/80">
-                        Loading deck list…
+                      <div className="rc-hint py-6 text-center">
+                        loading deck list…
                       </div>
                     )}
                   </div>
                 )}
-              </div>
+              </section>
             );
           })()}
 
         {/* Phase Actions */}
         {tournament.status === "preparing" && (
-          <div className="mb-6 rounded-lg border border-blue-700 bg-blue-900/20 p-4 flex items-center justify-between">
-            <div className="text-slate-200">
+          <div className="rc-panel flex flex-col gap-3 px-[18px] py-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-rc-fg">
               {tournament.format === "draft" &&
                 "Draft phase in progress. Join the draft to begin selecting cards."}
               {tournament.format === "sealed" &&
@@ -1850,10 +1850,10 @@ export default function TournamentDetailsPage() {
                       return (
                         <div className="flex items-center gap-3">
                           <span
-                            className="bg-emerald-600/20 text-emerald-200 ring-1 ring-emerald-500/30 px-4 py-2 rounded-md text-sm"
+                            className="font-rc-mono text-[11px] uppercase tracking-[0.16em] text-rc-success"
                             title="Deck submitted"
                           >
-                            Draft Deck submitted!
+                            Draft deck submitted
                           </span>
                         </div>
                       );
@@ -1864,7 +1864,7 @@ export default function TournamentDetailsPage() {
                     ).draftSessionId;
                     const isDraftReady = Boolean(draftSessionId);
                     return (
-                      <button
+                      <RcButton
                         onClick={async () => {
                           if (!isDraftReady) {
                             // Wait a moment and retry - draft engine might still be initializing
@@ -1877,14 +1877,11 @@ export default function TournamentDetailsPage() {
                           } catch {}
                         }}
                         disabled={!isDraftReady}
-                        className={`px-4 py-2 rounded-md text-sm ${
-                          isDraftReady
-                            ? "bg-blue-600 hover:bg-blue-700 text-white"
-                            : "bg-slate-600 text-slate-300 cursor-wait"
-                        }`}
+                        variant={isDraftReady ? "default" : "secondary"}
+                        className={isDraftReady ? "" : "cursor-wait"}
                       >
                         {isDraftReady ? "Enter Draft" : "Preparing Draft..."}
-                      </button>
+                      </RcButton>
                     );
                   })()}
                 {tournament.format === "sealed" &&
@@ -1920,16 +1917,16 @@ export default function TournamentDetailsPage() {
                       return (
                         <div className="flex items-center gap-3">
                           <span
-                            className="bg-emerald-600/20 text-emerald-200 ring-1 ring-emerald-500/30 px-4 py-2 rounded-md text-sm"
+                            className="font-rc-mono text-[11px] uppercase tracking-[0.16em] text-rc-success"
                             title="Deck submitted"
                           >
-                            Sealed Deck submitted!
+                            Sealed deck submitted
                           </span>
                         </div>
                       );
                     }
                     return (
-                      <button
+                      <RcButton
                         onClick={async () => {
                           try {
                             const res = await fetch(
@@ -2037,10 +2034,9 @@ export default function TournamentDetailsPage() {
                             window.location.href = `/decks/editor-3d?${params.toString()}`;
                           } catch {}
                         }}
-                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm"
                       >
                         Build Deck
-                      </button>
+                      </RcButton>
                     );
                   })()}
               </div>
@@ -2052,44 +2048,35 @@ export default function TournamentDetailsPage() {
         {tournament.status === "preparing" &&
           tournament.format === "constructed" &&
           isRegistered && (
-            <div
-              ref={constructedPanelRef}
-              className="mb-6 rounded-lg border border-emerald-700 bg-emerald-900/20"
-            >
-              <div className="p-4 flex items-center justify-between">
-                <div className="text-emerald-200">
-                  <div className="font-semibold">
-                    Select Your Constructed Deck
-                  </div>
-                  <div className="text-sm opacity-80">
-                    This deck will be used for all matches in this tournament.
-                  </div>
-                </div>
+            <section ref={constructedPanelRef} className="rc-panel">
+              <PanelHeader
+                title="Select Your Constructed Deck"
+                meta="used for every match in this tournament"
+              >
                 {constructedSelectedDeckId ? (
                   <span
-                    className="bg-emerald-600/20 text-emerald-200 ring-1 ring-emerald-500/30 px-4 py-2 rounded-md text-sm"
+                    className="font-rc-mono text-[11px] uppercase tracking-[0.16em] text-rc-success"
                     title="Deck submitted"
                   >
                     Deck submitted
                   </span>
                 ) : null}
-              </div>
-              <div className="px-4 pb-4">
+              </PanelHeader>
+              <div className="px-[18px] py-3.5">
                 {constructedError && (
-                  <div className="mb-3 text-sm text-red-300">
+                  <div className="rc-alert mb-3" data-tone="danger">
                     {constructedError}
                   </div>
                 )}
-                <div className="text-xs text-emerald-200/80 mb-2">
+                <div className="rc-hint mb-2">
                   Allowed formats:{" "}
                   {constructedAllowedFormats.length
                     ? constructedAllowedFormats.join(", ")
                     : "standard"}
                 </div>
-                <label className="flex items-center gap-2 text-xs text-emerald-200/80 mb-3">
+                <label className="rc-check mb-3">
                   <input
                     type="checkbox"
-                    className="accent-emerald-600"
                     checked={includePublicDecks}
                     onChange={(e) => {
                       const next = e.target.checked;
@@ -2106,29 +2093,31 @@ export default function TournamentDetailsPage() {
                 </label>
                 {/* Curiosa Import Section */}
                 <div className="mb-3">
-                  <button
-                    type="button"
+                  <RcButton
+                    variant="link"
+                    size="sm"
+                    className="px-0"
                     onClick={() => setShowCuriosaImport((prev) => !prev)}
-                    className="text-xs text-emerald-300 hover:text-emerald-200 underline"
                   >
                     {showCuriosaImport ? "Hide" : "Import from Sorcerytcg link"}
-                  </button>
+                  </RcButton>
                   {showCuriosaImport && (
-                    <div className="mt-2 p-3 bg-slate-800/60 rounded-lg ring-1 ring-slate-700">
-                      <div className="text-xs text-slate-300 mb-2">
-                        Paste a public Sorcerytcg deck URL to import it directly.
+                    <div className="mt-2 rounded-rc-md border border-rc-line/14 bg-black/30 p-3">
+                      <div className="rc-hint mb-2">
+                        Paste a public Sorcerytcg deck URL to import it
+                        directly.
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <input
                           type="text"
                           value={curiosaUrl}
                           onChange={(e) => setCuriosaUrl(e.target.value)}
                           placeholder="https://sorcerytcg.com/decks/..."
-                          className="flex-1 bg-slate-900/80 ring-1 ring-slate-600 rounded px-3 py-1.5 text-sm text-white placeholder:text-slate-500"
+                          className="rc-input h-9 min-w-0 flex-1"
                           disabled={curiosaImporting}
                         />
-                        <button
-                          type="button"
+                        <RcButton
+                          size="sm"
                           disabled={curiosaImporting || !curiosaUrl.trim()}
                           onClick={async () => {
                             if (!curiosaUrl.trim()) return;
@@ -2198,84 +2187,81 @@ export default function TournamentDetailsPage() {
                               setCuriosaImporting(false);
                             }
                           }}
-                          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 py-1.5 rounded text-sm flex items-center gap-1"
                         >
                           {curiosaImporting && (
-                            <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                            <span className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
                           )}
                           {curiosaImporting ? "Importing..." : "Import"}
-                        </button>
+                        </RcButton>
                       </div>
                       {curiosaError && (
-                        <div className="mt-2 text-xs text-red-400">
+                        <div className="rc-alert mt-2" data-tone="danger">
                           {curiosaError}
                         </div>
                       )}
                     </div>
                   )}
                 </div>
-                <div className="flex items-center justify-between mb-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
                   <Link
                     href="/decks"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-emerald-300 hover:text-emerald-200 underline"
+                    className="rc-link font-rc-mono text-xs tracking-[0.08em]"
                   >
                     Manage Decks
                   </Link>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setConstructedRefreshKey((k) => k + 1)
-                    }
+                  <RcButton
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setConstructedRefreshKey((k) => k + 1)}
                     disabled={constructedLoading}
-                    className="text-xs text-emerald-300 hover:text-emerald-200 underline disabled:opacity-50"
                   >
                     {constructedLoading ? "Refreshing…" : "Refresh"}
-                  </button>
+                  </RcButton>
                 </div>
                 {constructedLoading ? (
-                  <div className="text-emerald-200/80 text-sm">
-                    Loading your decks…
+                  <div className="rc-hint py-6 text-center">
+                    loading your decks…
                   </div>
                 ) : constructedDecks.length || constructedPublicDecks.length ? (
-                  <div className="space-y-4">
+                  <div className="flex flex-col gap-4">
                     {constructedDecks.length > 0 && (
                       <div>
-                        <div className="text-[11px] uppercase tracking-wide text-emerald-300/80 mb-1">
-                          My Decks
-                        </div>
-                        <div className="space-y-2">
+                        <div className="rc-eyebrow mb-1">My Decks</div>
+                        <div className="flex flex-col gap-2">
                           {constructedDecks.map((d) => (
                             <div
                               key={`my-${d.id}`}
-                              className={`flex items-center justify-between px-3 py-2 rounded ${
+                              className={`flex items-center justify-between gap-3 rounded-rc-md px-3 py-2 ${
                                 constructedSelectedDeckId === d.id
-                                  ? "bg-emerald-600/20 ring-1 ring-emerald-500/30"
-                                  : "bg-slate-800/40"
+                                  ? "bg-rc-accent/6 shadow-[inset_2px_0_0_#d4a94a]"
+                                  : "bg-black/30"
                               }`}
                             >
-                              <div className="text-sm text-slate-200">
-                                <div className="font-medium">{d.name}</div>
-                                <div className="text-xs text-slate-400">
+                              <div className="min-w-0">
+                                <div className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                                  {d.name}
+                                </div>
+                                <div className="rc-hint mt-0.5">
                                   {d.format || "constructed"}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
                                 {constructedSelectedDeckId === d.id ? (
-                                  <span className="text-emerald-300 text-xs">
+                                  <span className="font-rc-mono text-[11px] uppercase tracking-[0.16em] text-rc-success">
                                     Selected
                                   </span>
                                 ) : (
-                                  <button
+                                  <RcButton
+                                    size="sm"
                                     onClick={() =>
                                       handleSubmitConstructedDeck(d.id, false)
                                     }
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
                                     disabled={constructedLoading}
                                   >
                                     Select
-                                  </button>
+                                  </RcButton>
                                 )}
                                 <Link
                                   href={`/decks/editor-3d?id=${encodeURIComponent(
@@ -2283,7 +2269,7 @@ export default function TournamentDetailsPage() {
                                   )}&tournament=${encodeURIComponent(
                                     tournament.id,
                                   )}`}
-                                  className="text-xs text-emerald-200 underline"
+                                  className="rc-link font-rc-mono text-xs tracking-[0.08em]"
                                 >
                                   Edit
                                 </Link>
@@ -2296,40 +2282,40 @@ export default function TournamentDetailsPage() {
                     {includePublicDecks &&
                       constructedPublicDecks.length > 0 && (
                         <div>
-                          <div className="text-[11px] uppercase tracking-wide text-emerald-300/80 mb-1">
-                            Public Decks
-                          </div>
-                          <div className="space-y-2">
+                          <div className="rc-eyebrow mb-1">Public Decks</div>
+                          <div className="flex flex-col gap-2">
                             {constructedPublicDecks.map((d) => (
                               <div
                                 key={`pub-${d.id}`}
-                                className={`flex items-center justify-between px-3 py-2 rounded ${
+                                className={`flex items-center justify-between gap-3 rounded-rc-md px-3 py-2 ${
                                   constructedSelectedDeckId === d.id
-                                    ? "bg-emerald-600/20 ring-1 ring-emerald-500/30"
-                                    : "bg-slate-800/40"
+                                    ? "bg-rc-accent/6 shadow-[inset_2px_0_0_#d4a94a]"
+                                    : "bg-black/30"
                                 }`}
                               >
-                                <div className="text-sm text-slate-200">
-                                  <div className="font-medium">{d.name}</div>
-                                  <div className="text-xs text-slate-400">
+                                <div className="min-w-0">
+                                  <div className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                                    {d.name}
+                                  </div>
+                                  <div className="rc-hint mt-0.5">
                                     {d.format || "constructed"}
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {constructedSelectedDeckId === d.id ? (
-                                    <span className="text-emerald-300 text-xs">
+                                    <span className="font-rc-mono text-[11px] uppercase tracking-[0.16em] text-rc-success">
                                       Selected
                                     </span>
                                   ) : (
-                                    <button
+                                    <RcButton
+                                      size="sm"
                                       onClick={() =>
                                         handleSubmitConstructedDeck(d.id, true)
                                       }
-                                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
                                       disabled={constructedLoading}
                                     >
                                       Select
-                                    </button>
+                                    </RcButton>
                                   )}
                                   <Link
                                     href={`/decks/editor-3d?id=${encodeURIComponent(
@@ -2337,7 +2323,7 @@ export default function TournamentDetailsPage() {
                                     )}&tournament=${encodeURIComponent(
                                       tournament.id,
                                     )}`}
-                                    className="text-xs text-emerald-200 underline"
+                                    className="rc-link font-rc-mono text-xs tracking-[0.08em]"
                                   >
                                     Edit
                                   </Link>
@@ -2349,26 +2335,26 @@ export default function TournamentDetailsPage() {
                       )}
                   </div>
                 ) : (
-                  <div className="text-emerald-200/80 text-sm space-y-2">
-                    <div>
-                      No valid decks found. Constructed decks must have:
-                    </div>
-                    <ul className="list-disc list-inside text-xs opacity-80">
+                  <RcEmpty
+                    title="No valid decks found."
+                    action={
+                      <RcLinkButton href="/decks" variant="outline" size="sm">
+                        Edit your decks
+                      </RcLinkButton>
+                    }
+                  >
+                    <div>Constructed decks must have:</div>
+                    <ul className="mt-1.5 list-inside list-disc text-rc-fg-subtle">
                       <li>Exactly 1 Avatar</li>
                       <li>At least 60 cards in Spellbook</li>
                       <li>At least 30 sites in Atlas</li>
                       <li>0-10 cards in Collection</li>
                       <li>Dragonlord decks require a champion</li>
                     </ul>
-                    <div>
-                      <Link href="/decks" className="underline">
-                        Edit your decks
-                      </Link>
-                    </div>
-                  </div>
+                  </RcEmpty>
                 )}
               </div>
-            </div>
+            </section>
           )}
 
         {tournament.status === "active" &&
@@ -2396,7 +2382,7 @@ export default function TournamentDetailsPage() {
               });
               if (pendingInRound.length > 0) {
                 return (
-                  <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800/60 p-4 text-slate-200">
+                  <div className="rc-alert" data-tone="info">
                     Your match is finished. Waiting for other matches in this
                     round to complete.
                   </div>
@@ -2409,11 +2395,9 @@ export default function TournamentDetailsPage() {
 
         {/* Current Round Matches */}
         {tournament.status === "active" && activeRound && (
-          <div className="mb-6">
-            <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-white mb-4">
-                Round {activeRound.roundNumber} Matches
-              </h3>
+          <section className="rc-panel">
+            <PanelHeader title={`Round ${activeRound.roundNumber} Matches`} />
+            <div className="px-[18px] py-3.5">
               {(() => {
                 const embedded =
                   (
@@ -2432,13 +2416,13 @@ export default function TournamentDetailsPage() {
                 const list = embedded.length > 0 ? embedded : fallback;
                 if (!Array.isArray(list) || list.length === 0) {
                   return (
-                    <div className="text-slate-400">
-                      No matches in this round.
-                    </div>
+                    <RcEmpty title="No matches in this round.">
+                      pairings appear once the round starts
+                    </RcEmpty>
                   );
                 }
                 return (
-                  <div className="space-y-2">
+                  <div className="flex flex-col gap-2">
                     {list.map(
                       (m: {
                         id: string;
@@ -2453,39 +2437,38 @@ export default function TournamentDetailsPage() {
                         const isMine =
                           (myAssignedMatchId
                             ? String(m.id) === String(myAssignedMatchId)
-                            : false) ||
-                          players.some((p) => p.id === viewer.id);
+                            : false) || players.some((p) => p.id === viewer.id);
                         const isCompleted =
                           m.status === "completed" || m.completedAt;
                         return (
                           <div
                             key={m.id}
-                            className={`flex items-center justify-between px-3 py-2 rounded ${
+                            className={`flex items-center justify-between gap-3 rounded-rc-md px-3 py-2 ${
                               isMine
-                                ? "bg-emerald-600/20 ring-1 ring-emerald-500/30"
-                                : "bg-slate-800/40"
+                                ? "bg-rc-accent/6 shadow-[inset_2px_0_0_#d4a94a]"
+                                : "bg-black/30"
                             }`}
                           >
-                            <div className="text-sm text-slate-200">
+                            <div className="min-w-0 text-sm text-rc-fg">
                               {names || m.id}
                               {isMine && !isCompleted && (
-                                <span className="text-emerald-400 text-xs ml-2">
-                                  (Your match)
+                                <span className="ml-2 font-rc-mono text-[11px] uppercase tracking-[0.16em] text-rc-success">
+                                  your match
                                 </span>
                               )}
                               {isCompleted && (
-                                <span className="text-slate-400 text-xs ml-2">
-                                  (Completed)
+                                <span className="ml-2 font-rc-mono text-[11px] uppercase tracking-[0.16em] text-rc-fg-dim">
+                                  completed
                                 </span>
                               )}
                             </div>
                             {isMine && !isCompleted && (
-                              <button
+                              <RcButton
+                                size="sm"
                                 onClick={() => startJoinMatch(String(m.id))}
-                                className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold px-3 py-1 rounded-md text-sm"
                               >
                                 Join
-                              </button>
+                              </RcButton>
                             )}
                           </div>
                         );
@@ -2495,26 +2478,13 @@ export default function TournamentDetailsPage() {
                 );
               })()}
             </div>
-          </div>
+          </section>
         )}
 
         {/* Error Display */}
         {error && (
-          <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-6">
-            <div className="flex items-center">
-              <svg
-                className="w-5 h-5 mr-2"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              {error}
-            </div>
+          <div className="rc-alert" data-tone="danger">
+            {error}
           </div>
         )}
 
@@ -2522,20 +2492,22 @@ export default function TournamentDetailsPage() {
         {canStartTournament &&
           tournament.format === "draft" &&
           activeCount > 8 && (
-            <div className="mb-4 bg-amber-900/20 border border-amber-700/50 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-amber-200 font-medium">
-                    Draft Pod Configuration
-                  </h4>
-                  <p className="text-amber-200/70 text-sm mt-1">
-                    {activeCount} players will be split into pods for drafting.
-                  </p>
-                </div>
+            <section className="rc-panel">
+              <PanelHeader
+                title="Draft Pod Configuration"
+                meta={`${activeCount} players split into pods`}
+              />
+              <div className="flex flex-wrap items-center justify-between gap-3 px-[18px] py-3.5">
                 <div className="flex items-center gap-3">
-                  <label className="text-amber-200/80 text-sm">Pod Size:</label>
+                  <label
+                    htmlFor="draft-pod-size"
+                    className="font-rc-mono text-[11px] uppercase tracking-[0.16em] text-rc-fg-muted"
+                  >
+                    Pod size
+                  </label>
                   <select
-                    className="bg-slate-800 border border-amber-600/50 rounded px-3 py-1.5 text-white text-sm"
+                    id="draft-pod-size"
+                    className="rc-select h-9"
                     defaultValue={
                       ((
                         (tournament.settings as Record<string, unknown>)
@@ -2572,60 +2544,53 @@ export default function TournamentDetailsPage() {
                     <option value="8">8 players</option>
                   </select>
                 </div>
+                <div className="rc-hint">
+                  Pods: ~
+                  {Math.ceil(
+                    activeCount /
+                      (((
+                        (tournament.settings as Record<string, unknown>)
+                          ?.draftConfig as Record<string, unknown>
+                      )?.podSize as number) || 8),
+                  )}{" "}
+                  (
+                  {((
+                    (tournament.settings as Record<string, unknown>)
+                      ?.draftConfig as Record<string, unknown>
+                  )?.podSize as number) || 8}{" "}
+                  players each)
+                </div>
               </div>
-              <div className="text-amber-200/60 text-xs mt-2">
-                Pods: ~
-                {Math.ceil(
-                  activeCount /
-                    (((
-                      (tournament.settings as Record<string, unknown>)
-                        ?.draftConfig as Record<string, unknown>
-                    )?.podSize as number) || 8),
-                )}{" "}
-                (
-                {((
-                  (tournament.settings as Record<string, unknown>)
-                    ?.draftConfig as Record<string, unknown>
-                )?.podSize as number) || 8}{" "}
-                players each)
-              </div>
-            </div>
+            </section>
           )}
 
         {/* Spectacular Start Tournament Button */}
         {canStartTournament && (
-          <div className="mb-8">
-            <button
+          <div className="flex flex-col items-center gap-2">
+            <RcButton
+              size="lg"
+              className="w-full"
               onClick={handleStartTournament}
               disabled={starting}
-              className="w-full relative overflow-hidden rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-1 transition-all hover:shadow-2xl hover:shadow-blue-500/50 disabled:opacity-50 disabled:cursor-not-allowed group"
             >
-              <div className="relative bg-slate-900 rounded-lg px-8 py-6 flex items-center justify-center gap-3 transition-all group-hover:bg-slate-900/50">
-                <div className="text-3xl">🏆</div>
-                <div className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400">
-                  {starting ? "Starting Tournament..." : "Start Tournament"}
-                </div>
-                <div className="text-3xl">🏆</div>
-              </div>
-              {/* Animated border effect */}
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity blur-xl -z-10" />
-            </button>
-            <div className="text-center text-slate-400 text-sm mt-2">
+              {starting ? "Starting Tournament..." : "Start Tournament"}
+            </RcButton>
+            <div className="rc-hint text-center">
               {isOpenSeat
                 ? `Open seat ready (${activeCount} active)`
-                : `All players joined (${activeCount}/${tournament.maxPlayers}) • Click to begin`}
+                : `All players joined (${activeCount}/${tournament.maxPlayers}) · click to begin`}
             </div>
           </div>
         )}
 
         {/* Tournament Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
-            <div className="text-slate-400 text-sm">Players</div>
-            <div className="text-2xl font-bold text-white">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
+          <div className="rc-panel px-[18px] py-3.5">
+            <div className="rc-eyebrow">players</div>
+            <div className="rc-stat mt-1.5 text-2xl font-semibold">
               {activeCount}
               {isOpenSeat ? (
-                <span className="text-sm font-medium text-slate-400 ml-2">
+                <span className="ml-2 font-rc-mono text-xs uppercase tracking-[0.16em] text-rc-fg-subtle">
                   active
                 </span>
               ) : (
@@ -2633,14 +2598,13 @@ export default function TournamentDetailsPage() {
               )}
             </div>
             {isOpenSeat ? (
-              <div className="text-xs text-slate-400 mt-2">
-                {vacantCount} vacant seat{vacantCount === 1 ? "" : "s"} •{" "}
+              <div className="rc-hint mt-2">
+                {vacantCount} vacant seat{vacantCount === 1 ? "" : "s"} ·{" "}
                 {isRegistrationLocked ? "locked" : "open"}
               </div>
             ) : (
-              <div className="w-full bg-slate-700 rounded-full h-2 mt-2">
-                <div
-                  className="bg-blue-600 h-2 rounded-full transition-all"
+              <div className="rc-progress mt-2">
+                <span
                   style={{
                     width: `${Math.min(
                       (activeCount / tournament.maxPlayers) * 100,
@@ -2652,190 +2616,181 @@ export default function TournamentDetailsPage() {
             )}
           </div>
 
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
-            <div className="text-slate-400 text-sm">Rounds</div>
-            <div className="text-2xl font-bold text-white">
+          <div className="rc-panel px-[18px] py-3.5">
+            <div className="rc-eyebrow">rounds</div>
+            <div className="rc-stat mt-1.5 text-2xl font-semibold">
               {statistics?.rounds?.filter((r) => r.status === "completed")
                 .length ?? 0}
               /{tournament.settings.totalRounds || 3}
             </div>
           </div>
 
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
-            <div className="text-slate-400 text-sm">Matches</div>
-            <div className="text-2xl font-bold text-white">
+          <div className="rc-panel px-[18px] py-3.5">
+            <div className="rc-eyebrow">matches</div>
+            <div className="rc-stat mt-1.5 text-2xl font-semibold">
               {statistics?.overview.completedMatches || 0}/
               {statistics?.overview.totalMatches || 0}
             </div>
           </div>
 
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
-            <div className="text-slate-400 text-sm">Created</div>
-            <div className="text-lg font-semibold text-white">
+          <div className="rc-panel px-[18px] py-3.5">
+            <div className="rc-eyebrow">created</div>
+            <div className="rc-stat mt-1.5 text-lg font-semibold">
               {new Date(tournament.createdAt).toLocaleDateString()}
             </div>
           </div>
         </div>
 
         {/* Prominent Players roster for hosts/moderation (below stats) */}
-        <div className="mb-6">
+        <div>
           <TournamentRoster tournamentId={tournamentId} />
         </div>
         {/* Tabs */}
-        <div className="border-b border-slate-700 mb-8">
-          <nav className="flex space-x-8">
-            {(["overview", "standings", "rounds"] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`py-2 px-1 border-b-2 font-medium text-sm capitalize transition-colors ${
-                  activeTab === tab
-                    ? "border-blue-500 text-blue-400"
-                    : "border-transparent text-slate-400 hover:text-white hover:border-slate-300"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </nav>
-        </div>
+        <nav className="rc-tabs">
+          {(["overview", "standings", "rounds"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              data-active={activeTab === tab ? "true" : undefined}
+              className="rc-tab"
+            >
+              {tab}
+            </button>
+          ))}
+        </nav>
 
         {/* Tab Content */}
         {activeTab === "overview" && (
-          <div className="space-y-6">
-            <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-white mb-4">
-                Tournament Information
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div className="flex flex-col gap-6">
+            <section className="rc-panel">
+              <PanelHeader title="Tournament Information" />
+              <dl className="grid grid-cols-1 gap-4 px-[18px] py-3.5 font-rc-mono text-[13px] md:grid-cols-2">
                 <div>
-                  <span className="text-slate-400">Format:</span>
-                  <span className="text-white ml-2 capitalize">
+                  <dt className="rc-hint">Format</dt>
+                  <dd className="m-0 capitalize text-rc-fg-strong">
                     {tournament.format}
-                  </span>
+                  </dd>
                 </div>
                 <div>
-                  <span className="text-slate-400">Registration:</span>
-                  <span className="text-white ml-2">
+                  <dt className="rc-hint">Registration</dt>
+                  <dd className="m-0 text-rc-fg-strong">
                     {isOpenSeat
                       ? `Open seat (${
                           isRegistrationLocked ? "locked" : "open"
                         })`
                       : "Fixed"}
-                  </span>
+                  </dd>
                 </div>
                 <div>
-                  <span className="text-slate-400">
-                    {isOpenSeat ? "Seat Target:" : "Max Players:"}
-                  </span>
-                  <span className="text-white ml-2">
-                    {tournament.maxPlayers}
-                  </span>
+                  <dt className="rc-hint">
+                    {isOpenSeat ? "Seat Target" : "Max Players"}
+                  </dt>
+                  <dd className="rc-stat m-0">{tournament.maxPlayers}</dd>
                 </div>
                 <div>
-                  <span className="text-slate-400">Total Rounds:</span>
-                  <span className="text-white ml-2">
+                  <dt className="rc-hint">Total Rounds</dt>
+                  <dd className="rc-stat m-0">
                     {tournament.settings.totalRounds || 3}
-                  </span>
+                  </dd>
                 </div>
                 <div>
-                  <span className="text-slate-400">Round Duration:</span>
-                  <span className="text-white ml-2">
+                  <dt className="rc-hint">Round Duration</dt>
+                  <dd className="rc-stat m-0">
                     {tournament.settings.roundDuration || 60} minutes
-                  </span>
+                  </dd>
                 </div>
                 {tournament.startedAt && (
                   <div>
-                    <span className="text-slate-400">Started:</span>
-                    <span className="text-white ml-2">
+                    <dt className="rc-hint">Started</dt>
+                    <dd className="rc-stat m-0">
                       {new Date(tournament.startedAt).toLocaleString()}
-                    </span>
+                    </dd>
                   </div>
                 )}
                 {tournament.completedAt && (
                   <div>
-                    <span className="text-slate-400">Completed:</span>
-                    <span className="text-white ml-2">
+                    <dt className="rc-hint">Completed</dt>
+                    <dd className="rc-stat m-0">
                       {new Date(tournament.completedAt).toLocaleString()}
-                    </span>
+                    </dd>
                   </div>
                 )}
-              </div>
-            </div>
+              </dl>
+            </section>
 
             {/* Completed Tournament Summary */}
             {tournament.status === "completed" && (
-              <div className="bg-emerald-900/20 border border-emerald-700 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-emerald-200 mb-4">
-                  Tournament Completed
-                </h3>
-                {statistics &&
-                statistics.standings &&
-                statistics.standings.length > 0 ? (
-                  <div className="space-y-4">
-                    {/* Winner */}
-                    <div className="flex items-center justify-between bg-emerald-800/30 rounded-md p-4 border border-emerald-700/50">
-                      <div className="text-emerald-200 text-base">Winner</div>
-                      <div className="text-right">
-                        <div className="text-xl font-bold text-emerald-300">
-                          {statistics.standings[0]?.playerName}
+              <section className="rc-panel">
+                <PanelHeader title="Tournament Completed" />
+                <div className="px-[18px] py-3.5">
+                  {statistics &&
+                  statistics.standings &&
+                  statistics.standings.length > 0 ? (
+                    <div className="flex flex-col gap-4">
+                      {/* Winner */}
+                      <div className="flex items-center justify-between gap-3 rounded-rc-md bg-rc-accent/6 px-4 py-3 shadow-[inset_2px_0_0_#d4a94a]">
+                        <div className="rc-eyebrow">winner</div>
+                        <div className="text-right">
+                          <div className="font-rc-display text-[22px] leading-none text-rc-fg-strong">
+                            {statistics.standings[0]?.playerName}
+                          </div>
+                          <div className="rc-stat mt-1 text-xs text-rc-fg-muted">
+                            {statistics.standings[0]?.matchPoints} pts ·{" "}
+                            {statistics.standings[0]?.wins}-
+                            {statistics.standings[0]?.losses}-
+                            {statistics.standings[0]?.draws}
+                          </div>
                         </div>
-                        <div className="text-sm text-emerald-200/80">
-                          {statistics.standings[0]?.matchPoints} pts ·{" "}
-                          {statistics.standings[0]?.wins}-
-                          {statistics.standings[0]?.losses}-
-                          {statistics.standings[0]?.draws}
+                      </div>
+                      {/* Placements (Top 3) */}
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                        {statistics.standings.slice(0, 3).map((s, idx) => (
+                          <div
+                            key={s.playerId}
+                            className="rounded-rc-md border border-rc-line/14 bg-black/30 px-4 py-3"
+                          >
+                            <div className="rc-eyebrow">#{idx + 1}</div>
+                            <div className="mt-1 font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                              {s.playerName}
+                            </div>
+                            <div className="rc-stat mt-1 text-xs text-rc-fg-muted">
+                              {s.matchPoints} pts · {s.wins}-{s.losses}-
+                              {s.draws}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Key statistics */}
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                        <div className="rounded-rc-md border border-rc-line/14 bg-black/30 px-4 py-3">
+                          <div className="rc-eyebrow">players</div>
+                          <div className="rc-stat mt-1 text-lg font-semibold">
+                            {statistics.overview.totalPlayers}
+                          </div>
+                        </div>
+                        <div className="rounded-rc-md border border-rc-line/14 bg-black/30 px-4 py-3">
+                          <div className="rc-eyebrow">rounds</div>
+                          <div className="rc-stat mt-1 text-lg font-semibold">
+                            {statistics.overview.totalRounds}
+                          </div>
+                        </div>
+                        <div className="rounded-rc-md border border-rc-line/14 bg-black/30 px-4 py-3">
+                          <div className="rc-eyebrow">matches</div>
+                          <div className="rc-stat mt-1 text-lg font-semibold">
+                            {statistics.overview.completedMatches}/
+                            {statistics.overview.totalMatches}
+                          </div>
                         </div>
                       </div>
                     </div>
-                    {/* Placements (Top 3) */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {statistics.standings.slice(0, 3).map((s, idx) => (
-                        <div
-                          key={s.playerId}
-                          className="bg-slate-900/40 rounded-md p-4 border border-slate-700/60"
-                        >
-                          <div className="text-slate-400 text-sm">
-                            #{idx + 1}
-                          </div>
-                          <div className="text-white font-semibold">
-                            {s.playerName}
-                          </div>
-                          <div className="text-slate-300 text-sm">
-                            {s.matchPoints} pts · {s.wins}-{s.losses}-{s.draws}
-                          </div>
-                        </div>
-                      ))}
+                  ) : (
+                    <div className="rc-hint py-6 text-center">
+                      final standings will appear here
                     </div>
-                    {/* Key statistics */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div className="bg-slate-900/40 rounded-md p-4 border border-slate-700/60">
-                        <div className="text-slate-400 text-sm">Players</div>
-                        <div className="text-white text-lg font-semibold">
-                          {statistics.overview.totalPlayers}
-                        </div>
-                      </div>
-                      <div className="bg-slate-900/40 rounded-md p-4 border border-slate-700/60">
-                        <div className="text-slate-400 text-sm">Rounds</div>
-                        <div className="text-white text-lg font-semibold">
-                          {statistics.overview.totalRounds}
-                        </div>
-                      </div>
-                      <div className="bg-slate-900/40 rounded-md p-4 border border-slate-700/60">
-                        <div className="text-slate-400 text-sm">Matches</div>
-                        <div className="text-white text-lg font-semibold">
-                          {statistics.overview.completedMatches}/
-                          {statistics.overview.totalMatches}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-emerald-200/80">
-                    Final standings will appear here.
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              </section>
             )}
 
             {/* Active Tournament Standings Preview */}
@@ -2844,57 +2799,58 @@ export default function TournamentDetailsPage() {
               statistics &&
               statistics.standings &&
               statistics.standings.length > 0 && (
-                <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-                  <h3 className="text-lg font-semibold text-white mb-4">
-                    Current Standings (Top 5)
-                  </h3>
+                <section className="rc-panel">
+                  <PanelHeader title="Current Standings" meta="top 5">
+                    <RcButton
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setActiveTab("standings")}
+                    >
+                      View Full Standings →
+                    </RcButton>
+                  </PanelHeader>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="rc-table">
                       <thead>
-                        <tr className="border-b border-slate-600">
-                          <th className="text-left py-2 text-slate-300">
-                            Rank
-                          </th>
-                          <th className="text-left py-2 text-slate-300">
-                            Player
-                          </th>
-                          <th className="text-center py-2 text-slate-300">
-                            Record
-                          </th>
-                          <th className="text-center py-2 text-slate-300">
-                            Points
-                          </th>
+                        <tr>
+                          <th>Rank</th>
+                          <th>Player</th>
+                          <th className="text-center">Record</th>
+                          <th className="text-center">Points</th>
                         </tr>
                       </thead>
                       <tbody>
                         {statistics.standings
                           .slice(0, 5)
                           .map((standing, index) => {
-                            const isMe =
-                              standing.playerId === viewer.id;
+                            const isMe = standing.playerId === viewer.id;
                             return (
                               <tr
                                 key={standing.playerId}
-                                className={`border-b border-slate-700 ${
-                                  isMe ? "bg-emerald-900/20" : ""
-                                }`}
+                                className={
+                                  isMe
+                                    ? "bg-rc-accent/6 shadow-[inset_2px_0_0_#d4a94a]"
+                                    : undefined
+                                }
                               >
-                                <td className="py-2 font-semibold">
+                                <td className="font-semibold text-rc-fg-strong">
                                   #{index + 1}
                                 </td>
-                                <td className="py-2">
-                                  {standing.playerName}{" "}
+                                <td>
+                                  <span className="font-rc-display text-[17px] text-rc-fg-strong">
+                                    {standing.playerName}
+                                  </span>{" "}
                                   {isMe && (
-                                    <span className="text-emerald-400 text-xs">
-                                      (You)
+                                    <span className="text-[11px] uppercase tracking-[0.16em] text-rc-success">
+                                      you
                                     </span>
                                   )}
                                 </td>
-                                <td className="py-2 text-center">
+                                <td className="text-center">
                                   {standing.wins}-{standing.losses}-
                                   {standing.draws}
                                 </td>
-                                <td className="py-2 text-center font-semibold">
+                                <td className="text-center font-semibold text-rc-fg-strong">
                                   {standing.matchPoints}
                                 </td>
                               </tr>
@@ -2903,99 +2859,96 @@ export default function TournamentDetailsPage() {
                       </tbody>
                     </table>
                   </div>
-                  <button
-                    onClick={() => setActiveTab("standings")}
-                    className="mt-4 text-blue-400 hover:text-blue-300 text-sm"
-                  >
-                    View Full Standings →
-                  </button>
-                </div>
+                </section>
               )}
 
             {tournament.status === "registering" && (
-              <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-blue-300 mb-2">
-                  Registration Open
-                </h3>
-                <p className="text-blue-200">
-                  {isOpenSeat
-                    ? `Open seat tournament (${activeCount} active${
-                        vacantCount > 0 ? `, ${vacantCount} vacant` : ""
-                      }). ${
-                        isRegistrationLocked
-                          ? "Registration locked (replacements only)."
-                          : "Registration open."
-                      }`
-                    : `Tournament is accepting new players. ${Math.max(
-                        0,
-                        tournament.maxPlayers - activeCount,
-                      )} spots remaining.`}
-                </p>
-                {isCreator && (
-                  <p className="text-blue-200 mt-2">
-                    <strong>Creator:</strong>{" "}
+              <section className="rc-panel">
+                <PanelHeader title="Registration Open" />
+                <div className="px-[18px] py-3.5 text-sm text-rc-fg">
+                  <p className="m-0">
                     {isOpenSeat
-                      ? "You can start the tournament once at least 2 players have joined."
-                      : "You can start the tournament once all players have joined."}
+                      ? `Open seat tournament (${activeCount} active${
+                          vacantCount > 0 ? `, ${vacantCount} vacant` : ""
+                        }). ${
+                          isRegistrationLocked
+                            ? "Registration locked (replacements only)."
+                            : "Registration open."
+                        }`
+                      : `Tournament is accepting new players. ${Math.max(
+                          0,
+                          tournament.maxPlayers - activeCount,
+                        )} spots remaining.`}
                   </p>
-                )}
-              </div>
+                  {isCreator && (
+                    <p className="mt-2">
+                      <strong className="text-rc-fg-strong">Creator:</strong>{" "}
+                      {isOpenSeat
+                        ? "You can start the tournament once at least 2 players have joined."
+                        : "You can start the tournament once all players have joined."}
+                    </p>
+                  )}
+                </div>
+              </section>
             )}
           </div>
         )}
 
         {activeTab === "standings" && (
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">
-              Player Standings
-            </h3>
+          <section className="rc-panel">
+            <PanelHeader
+              title="Player Standings"
+              meta={`${statistics?.standings?.length ?? 0} players`}
+            />
             {statistics &&
             statistics.standings &&
             statistics.standings.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="rc-table">
                   <thead>
-                    <tr className="border-b border-slate-600">
-                      <th className="text-left py-2 text-slate-300">Rank</th>
-                      <th className="text-left py-2 text-slate-300">Player</th>
-                      <th className="text-center py-2 text-slate-300">Wins</th>
-                      <th className="text-center py-2 text-slate-300">
-                        Losses
-                      </th>
-                      <th className="text-center py-2 text-slate-300">Draws</th>
-                      <th className="text-center py-2 text-slate-300">
-                        Points
-                      </th>
+                    <tr>
+                      <th>Rank</th>
+                      <th>Player</th>
+                      <th className="text-center">Wins</th>
+                      <th className="text-center">Losses</th>
+                      <th className="text-center">Draws</th>
+                      <th className="text-center">Points</th>
                     </tr>
                   </thead>
                   <tbody>
                     {statistics?.standings?.map((standing, index) => (
                       <tr
                         key={standing.playerId}
-                        className="border-b border-slate-700"
+                        className={
+                          standing.playerId === viewer.id
+                            ? "bg-rc-accent/6 shadow-[inset_2px_0_0_#d4a94a]"
+                            : undefined
+                        }
                       >
-                        <td className="py-2 font-semibold">#{index + 1}</td>
-                        <td className="py-2">
+                        <td className="font-semibold text-rc-fg-strong">
+                          #{index + 1}
+                        </td>
+                        <td>
                           <span
                             className={
                               standing.playerId === viewer.id
-                                ? "text-blue-400 font-semibold"
-                                : "text-white"
+                                ? "font-rc-display text-[17px] text-rc-accent-link"
+                                : "font-rc-display text-[17px] text-rc-fg-strong"
                             }
                           >
                             {standing.playerName}
                           </span>
                         </td>
-                        <td className="py-2 text-center text-green-400">
+                        <td className="text-center text-rc-success">
                           {standing.wins}
                         </td>
-                        <td className="py-2 text-center text-red-400">
+                        <td className="text-center text-rc-danger">
                           {standing.losses}
                         </td>
-                        <td className="py-2 text-center text-yellow-400">
+                        <td className="text-center text-rc-warning">
                           {standing.draws}
                         </td>
-                        <td className="py-2 text-center font-semibold">
+                        <td className="text-center font-semibold text-rc-fg-strong">
                           {standing.matchPoints}
                         </td>
                       </tr>
@@ -3004,55 +2957,51 @@ export default function TournamentDetailsPage() {
                 </table>
               </div>
             ) : (
-              <div className="text-center py-8 text-slate-400">
-                No standings available yet.
+              <div className="px-[18px] py-3.5">
+                <RcEmpty title="No standings available yet.">
+                  they appear after the first round
+                </RcEmpty>
               </div>
             )}
-          </div>
+          </section>
         )}
 
         {activeTab === "rounds" && (
-          <div className="space-y-6">
+          <div className="flex flex-col gap-6">
             {/* Round Controls for Creator */}
             {isCreator &&
               statistics?.rounds &&
               statistics.rounds.length > 0 && (
-                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm text-slate-300">
-                      Round Management
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {statistics.rounds.some(
-                        (r) => r.status === "pending",
-                      ) && (
-                        <button
-                          onClick={handleStartNextRound}
-                          disabled={startingRound}
-                          className="bg-indigo-500 hover:bg-indigo-400 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {startingRound ? "Starting…" : "Start Next Round"}
-                        </button>
-                      )}
-                      {statistics.rounds.some(
-                        (r) => r.status === "active" && r.readyToEnd,
-                      ) && (
-                        <button
-                          onClick={() => {
-                            const activeRound = statistics.rounds.find(
-                              (r) => r.status === "active" && r.readyToEnd,
-                            );
-                            if (activeRound) handleEndRound(activeRound.id);
-                          }}
-                          disabled={endingRound}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {endingRound ? "Ending…" : "End Current Round"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                <section className="rc-panel">
+                  <PanelHeader title="Round Management">
+                    {statistics.rounds.some((r) => r.status === "pending") && (
+                      <RcButton
+                        size="sm"
+                        onClick={handleStartNextRound}
+                        disabled={startingRound}
+                      >
+                        {startingRound ? "Starting…" : "Start Next Round"}
+                      </RcButton>
+                    )}
+                    {statistics.rounds.some(
+                      (r) => r.status === "active" && r.readyToEnd,
+                    ) && (
+                      <RcButton
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const activeRound = statistics.rounds.find(
+                            (r) => r.status === "active" && r.readyToEnd,
+                          );
+                          if (activeRound) handleEndRound(activeRound.id);
+                        }}
+                        disabled={endingRound}
+                      >
+                        {endingRound ? "Ending…" : "End Current Round"}
+                      </RcButton>
+                    )}
+                  </PanelHeader>
+                </section>
               )}
 
             {/* Bracket / Flowchart View */}
@@ -3064,34 +3013,30 @@ export default function TournamentDetailsPage() {
                   matches: (round.matches || []).map((match) => ({
                     ...match,
                     status: match.status as
-                      | "pending"
-                      | "active"
-                      | "completed"
-                      | "cancelled",
+                      "pending" | "active" | "completed" | "cancelled",
                     players: Array.isArray(match.players) ? match.players : [],
                   })),
                 }));
                 return (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-end gap-1">
-                      {(
-                        [
-                          ["grid", "Grid"],
-                          ["flowchart", "Flowchart"],
-                        ] as const
-                      ).map(([view, label]) => (
-                        <button
-                          key={view}
-                          onClick={() => setRoundsView(view)}
-                          className={`px-3 py-1 rounded-md text-xs border ${
-                            roundsView === view
-                              ? "bg-blue-600 text-white border-blue-500"
-                              : "bg-slate-800 text-slate-300 border-slate-600 hover:bg-slate-700"
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-end">
+                      <div className="rc-segment">
+                        {(
+                          [
+                            ["grid", "Grid"],
+                            ["flowchart", "Flowchart"],
+                          ] as const
+                        ).map(([view, label]) => (
+                          <button
+                            key={view}
+                            type="button"
+                            aria-pressed={roundsView === view}
+                            onClick={() => setRoundsView(view)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     {roundsView === "flowchart" ? (
                       <TournamentFlowchart
@@ -3110,30 +3055,20 @@ export default function TournamentDetailsPage() {
                 );
               })()
             ) : (
-              <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-                <div className="text-center py-8 text-slate-400">
-                  No rounds started yet.
-                </div>
-              </div>
+              <RcEmpty title="No rounds started yet.">
+                the host starts round 1 when everyone is ready
+              </RcEmpty>
             )}
 
             {/* Round Details */}
             {statistics?.rounds?.map((round) => (
-              <div
-                key={round.id}
-                className="bg-slate-800/50 border border-slate-700 rounded-lg p-4"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-medium text-slate-300">
-                    Round {round.roundNumber} Details
-                  </h4>
+              <section key={round.id} className="rc-panel">
+                <PanelHeader title={`Round ${round.roundNumber} Details`}>
                   {round.readyToEnd && round.status === "active" && (
-                    <span className="text-xs uppercase tracking-wide text-emerald-300 border border-emerald-500/40 bg-emerald-900/30 px-2 py-1 rounded-full">
-                      Ready to end
-                    </span>
+                    <Badge tone="ok">Ready to end</Badge>
                   )}
-                </div>
-                <div className="text-xs text-slate-400 space-y-1">
+                </PanelHeader>
+                <div className="flex flex-col gap-1 px-[18px] py-3.5 font-rc-mono text-[11px] tracking-[0.08em] text-rc-fg-subtle">
                   {round.startedAt && (
                     <div>
                       Started: {new Date(round.startedAt).toLocaleString()}
@@ -3155,82 +3090,80 @@ export default function TournamentDetailsPage() {
                     </div>
                   )}
                 </div>
-              </div>
+              </section>
             ))}
           </div>
         )}
         {/* Bottom actions: Forfeit/End */}
-        <div className="container mx-auto px-4 pb-10">
-          <div className="mt-10 border-t border-slate-800 pt-6 flex items-center justify-between">
-            <div className="text-xs text-slate-400">Tournament actions</div>
-            <div className="flex gap-3">
-              {isRegistered &&
-                tournament.status !== "completed" &&
-                !isCreator && (
-                  <button
-                    onClick={async () => {
-                      const ok = window.confirm("Forfeit this tournament now?");
-                      if (!ok) return;
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-rc-line/12 pt-6">
+          <div className="rc-eyebrow">tournament actions</div>
+          <div className="flex flex-wrap gap-3">
+            {isRegistered &&
+              tournament.status !== "completed" &&
+              !isCreator && (
+                <RcButton
+                  variant="destructive"
+                  onClick={async () => {
+                    const ok = window.confirm("Forfeit this tournament now?");
+                    if (!ok) return;
+                    try {
+                      const res = await fetch(
+                        `/api/tournaments/${encodeURIComponent(
+                          tournament.id,
+                        )}/forfeit`,
+                        {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                        },
+                      );
+                      const data = await res.json();
+                      if (!res.ok)
+                        throw new Error(data?.error || "Failed to forfeit");
                       try {
-                        const res = await fetch(
-                          `/api/tournaments/${encodeURIComponent(
-                            tournament.id,
-                          )}/forfeit`,
-                          {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                          },
+                        localStorage.setItem(
+                          "app:toast",
+                          "You forfeited the tournament",
                         );
-                        const data = await res.json();
-                        if (!res.ok)
-                          throw new Error(data?.error || "Failed to forfeit");
+                        window.dispatchEvent(
+                          new CustomEvent("app:toast", {
+                            detail: {
+                              message: "You forfeited the tournament",
+                            },
+                          }),
+                        );
                         try {
-                          localStorage.setItem(
-                            "app:toast",
-                            "You forfeited the tournament",
-                          );
-                          window.dispatchEvent(
-                            new CustomEvent("app:toast", {
-                              detail: {
-                                message: "You forfeited the tournament",
-                              },
-                            }),
-                          );
-                          try {
-                            await refreshTournaments?.();
-                          } catch {}
-                          try {
-                            statistics?.actions?.refreshAll?.();
-                          } catch {}
-                          try {
-                            setCurrentTournamentById(tournament.id);
-                          } catch {}
+                          await refreshTournaments?.();
                         } catch {}
-                      } catch (err) {
-                        setError(
-                          err instanceof Error
-                            ? err.message
-                            : "Failed to forfeit",
-                        );
-                      }
-                    }}
-                    className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2 rounded-md text-sm"
-                    title="Forfeit this tournament"
-                  >
-                    Forfeit Tournament
-                  </button>
-                )}
-
-              {isCreator && tournament.status !== "completed" && (
-                <button
-                  onClick={handleEndTournament}
-                  className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2 rounded-md text-sm"
-                  title="End this tournament now"
+                        try {
+                          statistics?.actions?.refreshAll?.();
+                        } catch {}
+                        try {
+                          setCurrentTournamentById(tournament.id);
+                        } catch {}
+                      } catch {}
+                    } catch (err) {
+                      setError(
+                        err instanceof Error
+                          ? err.message
+                          : "Failed to forfeit",
+                      );
+                    }
+                  }}
+                  title="Forfeit this tournament"
                 >
-                  End Tournament
-                </button>
+                  Forfeit Tournament
+                </RcButton>
               )}
-            </div>
+
+            {isCreator && tournament.status !== "completed" && (
+              <RcButton
+                variant="destructive"
+                onClick={handleEndTournament}
+                title="End this tournament now"
+              >
+                End Tournament
+              </RcButton>
+            )}
           </div>
         </div>
         {/* Join Prompt Overlay */}
@@ -3239,351 +3172,316 @@ export default function TournamentDetailsPage() {
           tournament.status === "preparing" &&
           tournament.format === "constructed" &&
           isRegistered && (
-            <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-slate-900 rounded-lg border border-slate-700 p-6 w-full max-w-lg shadow-xl">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-white text-lg font-semibold">
-                    Select Your Constructed Deck
-                  </div>
-                  <button
-                    onClick={() => setConstructedModalOpen(false)}
-                    className="text-slate-300 hover:text-white"
-                  >
-                    ✕
-                  </button>
+            <RcDialog
+              title="Select Your Constructed Deck"
+              onClose={() => setConstructedModalOpen(false)}
+            >
+              {constructedError && (
+                <div className="rc-alert mb-3" data-tone="danger">
+                  {constructedError}
                 </div>
-                {constructedError && (
-                  <div className="mb-3 text-sm text-red-300">
-                    {constructedError}
-                  </div>
-                )}
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-xs text-emerald-200/80">
-                    Allowed formats:{" "}
-                    {constructedAllowedFormats.length
-                      ? constructedAllowedFormats.join(", ")
-                      : "standard"}
-                  </div>
-                  <label className="flex items-center gap-2 text-xs text-emerald-200/80">
-                    <input
-                      type="checkbox"
-                      className="accent-emerald-600"
-                      checked={includePublicDecks}
-                      onChange={async (e) => {
-                        const next = e.target.checked;
-                        setIncludePublicDecks(next);
-                        try {
-                          localStorage.setItem(
-                            "sorcery:includePublicDecks",
-                            next ? "1" : "0",
-                          );
-                        } catch {}
-                        try {
-                          setConstructedLoading(true);
-                          const res = await fetch(
-                            `/api/tournaments/${encodeURIComponent(
-                              tournament.id,
-                            )}/preparation/constructed/decks?includePublic=${
-                              e.target.checked ? "true" : "false"
-                            }`,
-                          );
-                          const data = await res.json();
-                          if (res.ok) {
-                            const decks = Array.isArray(data?.myDecks)
-                              ? (data.myDecks as Array<{
-                                  id: string;
-                                  name: string;
-                                  format?: string;
-                                }>)
-                              : Array.isArray(data?.availableDecks)
-                                ? (data.availableDecks as Array<{
-                                    id: string;
-                                    name: string;
-                                    format?: string;
-                                  }>)
-                                : [];
-                            const pubDecks = Array.isArray(data?.publicDecks)
-                              ? (data.publicDecks as Array<{
+              )}
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="rc-hint">
+                  Allowed formats:{" "}
+                  {constructedAllowedFormats.length
+                    ? constructedAllowedFormats.join(", ")
+                    : "standard"}
+                </div>
+                <label className="rc-check">
+                  <input
+                    type="checkbox"
+                    checked={includePublicDecks}
+                    onChange={async (e) => {
+                      const next = e.target.checked;
+                      setIncludePublicDecks(next);
+                      try {
+                        localStorage.setItem(
+                          "sorcery:includePublicDecks",
+                          next ? "1" : "0",
+                        );
+                      } catch {}
+                      try {
+                        setConstructedLoading(true);
+                        const res = await fetch(
+                          `/api/tournaments/${encodeURIComponent(
+                            tournament.id,
+                          )}/preparation/constructed/decks?includePublic=${
+                            e.target.checked ? "true" : "false"
+                          }`,
+                        );
+                        const data = await res.json();
+                        if (res.ok) {
+                          const decks = Array.isArray(data?.myDecks)
+                            ? (data.myDecks as Array<{
+                                id: string;
+                                name: string;
+                                format?: string;
+                              }>)
+                            : Array.isArray(data?.availableDecks)
+                              ? (data.availableDecks as Array<{
                                   id: string;
                                   name: string;
                                   format?: string;
                                 }>)
                               : [];
-                            setConstructedDecks(decks);
-                            setConstructedPublicDecks(pubDecks);
-                          }
-                        } catch {
-                        } finally {
-                          setConstructedLoading(false);
+                          const pubDecks = Array.isArray(data?.publicDecks)
+                            ? (data.publicDecks as Array<{
+                                id: string;
+                                name: string;
+                                format?: string;
+                              }>)
+                            : [];
+                          setConstructedDecks(decks);
+                          setConstructedPublicDecks(pubDecks);
                         }
-                      }}
-                    />
-                    Include public decks
-                  </label>
+                      } catch {
+                      } finally {
+                        setConstructedLoading(false);
+                      }
+                    }}
+                  />
+                  Include public decks
+                </label>
+              </div>
+              {constructedLoading ? (
+                <div className="rc-hint py-6 text-center">
+                  loading your decks…
                 </div>
-                {constructedLoading ? (
-                  <div className="text-emerald-200/80 text-sm">
-                    Loading your decks…
-                  </div>
-                ) : constructedDecks.length || constructedPublicDecks.length ? (
-                  <div className="space-y-4 max-h-80 overflow-auto pr-1">
-                    {constructedDecks.length > 0 && (
-                      <div>
-                        <div className="text-[11px] uppercase tracking-wide text-emerald-300/80 mb-1">
-                          My Decks
-                        </div>
-                        <div className="space-y-2">
-                          {constructedDecks.map((d) => (
-                            <div
-                              key={`my-modal-${d.id}`}
-                              className={`flex items-center justify-between px-3 py-2 rounded ${
-                                constructedSelectedDeckId === d.id
-                                  ? "bg-emerald-600/20 ring-1 ring-emerald-500/30"
-                                  : "bg-slate-800/40"
-                              }`}
-                            >
-                              <div className="text-sm text-slate-200">
-                                <div className="font-medium">{d.name}</div>
-                                <div className="text-xs text-slate-400">
-                                  {d.format || "constructed"}
-                                </div>
+              ) : constructedDecks.length || constructedPublicDecks.length ? (
+                <div className="thin-scrollbar flex max-h-80 flex-col gap-4 overflow-auto pr-1">
+                  {constructedDecks.length > 0 && (
+                    <div>
+                      <div className="rc-eyebrow mb-1">My Decks</div>
+                      <div className="flex flex-col gap-2">
+                        {constructedDecks.map((d) => (
+                          <div
+                            key={`my-modal-${d.id}`}
+                            className={`flex items-center justify-between gap-3 rounded-rc-md px-3 py-2 ${
+                              constructedSelectedDeckId === d.id
+                                ? "bg-rc-accent/6 shadow-[inset_2px_0_0_#d4a94a]"
+                                : "bg-black/30"
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                                {d.name}
                               </div>
-                              <div className="flex items-center gap-2">
-                                {constructedSelectedDeckId === d.id ? (
-                                  <span className="text-emerald-300 text-xs">
-                                    Selected
-                                  </span>
-                                ) : (
-                                  <button
-                                    onClick={async () => {
-                                      await handleSubmitConstructedDeck(
-                                        d.id,
-                                        false,
-                                      );
-                                      setConstructedModalOpen(false);
-                                    }}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
-                                    disabled={constructedLoading}
-                                  >
-                                    Select
-                                  </button>
-                                )}
+                              <div className="rc-hint mt-0.5">
+                                {d.format || "constructed"}
                               </div>
                             </div>
-                          ))}
-                        </div>
+                            <div className="flex items-center gap-2">
+                              {constructedSelectedDeckId === d.id ? (
+                                <span className="font-rc-mono text-[11px] uppercase tracking-[0.16em] text-rc-success">
+                                  Selected
+                                </span>
+                              ) : (
+                                <RcButton
+                                  size="sm"
+                                  onClick={async () => {
+                                    await handleSubmitConstructedDeck(
+                                      d.id,
+                                      false,
+                                    );
+                                    setConstructedModalOpen(false);
+                                  }}
+                                  disabled={constructedLoading}
+                                >
+                                  Select
+                                </RcButton>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    )}
-                    {includePublicDecks &&
-                      constructedPublicDecks.length > 0 && (
-                        <div>
-                          <div className="text-[11px] uppercase tracking-wide text-emerald-300/80 mb-1">
-                            Public Decks
-                          </div>
-                          <div className="space-y-2">
-                            {constructedPublicDecks.map((d) => (
-                              <div
-                                key={`pub-modal-${d.id}`}
-                                className={`flex items-center justify-between px-3 py-2 rounded ${
-                                  constructedSelectedDeckId === d.id
-                                    ? "bg-emerald-600/20 ring-1 ring-emerald-500/30"
-                                    : "bg-slate-800/40"
-                                }`}
-                              >
-                                <div className="text-sm text-slate-200">
-                                  <div className="font-medium">{d.name}</div>
-                                  <div className="text-xs text-slate-400">
-                                    {d.format || "constructed"}
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  {constructedSelectedDeckId === d.id ? (
-                                    <span className="text-emerald-300 text-xs">
-                                      Selected
-                                    </span>
-                                  ) : (
-                                    <button
-                                      onClick={async () => {
-                                        await handleSubmitConstructedDeck(
-                                          d.id,
-                                          true,
-                                        );
-                                        setConstructedModalOpen(false);
-                                      }}
-                                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-md text-sm"
-                                      disabled={constructedLoading}
-                                    >
-                                      Select
-                                    </button>
-                                  )}
-                                </div>
+                    </div>
+                  )}
+                  {includePublicDecks && constructedPublicDecks.length > 0 && (
+                    <div>
+                      <div className="rc-eyebrow mb-1">Public Decks</div>
+                      <div className="flex flex-col gap-2">
+                        {constructedPublicDecks.map((d) => (
+                          <div
+                            key={`pub-modal-${d.id}`}
+                            className={`flex items-center justify-between gap-3 rounded-rc-md px-3 py-2 ${
+                              constructedSelectedDeckId === d.id
+                                ? "bg-rc-accent/6 shadow-[inset_2px_0_0_#d4a94a]"
+                                : "bg-black/30"
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                                {d.name}
                               </div>
-                            ))}
+                              <div className="rc-hint mt-0.5">
+                                {d.format || "constructed"}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {constructedSelectedDeckId === d.id ? (
+                                <span className="font-rc-mono text-[11px] uppercase tracking-[0.16em] text-rc-success">
+                                  Selected
+                                </span>
+                              ) : (
+                                <RcButton
+                                  size="sm"
+                                  onClick={async () => {
+                                    await handleSubmitConstructedDeck(
+                                      d.id,
+                                      true,
+                                    );
+                                    setConstructedModalOpen(false);
+                                  }}
+                                  disabled={constructedLoading}
+                                >
+                                  Select
+                                </RcButton>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                  </div>
-                ) : (
-                  <div className="text-emerald-200/80 text-sm space-y-2">
-                    <div>
-                      No valid decks found. Constructed decks must have:
+                        ))}
+                      </div>
                     </div>
-                    <ul className="list-disc list-inside text-xs opacity-80">
-                      <li>Exactly 1 Avatar</li>
-                      <li>At least 60 cards in Spellbook</li>
-                      <li>At least 30 sites in Atlas</li>
-                      <li>0-10 cards in Collection</li>
-                      <li>Dragonlord decks require a champion</li>
-                    </ul>
-                    <div>
-                      <a className="underline" href="/decks">
-                        Edit your decks
-                      </a>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+                  )}
+                </div>
+              ) : (
+                <RcEmpty
+                  title="No valid decks found."
+                  action={
+                    <RcLinkButton href="/decks" variant="outline" size="sm">
+                      Edit your decks
+                    </RcLinkButton>
+                  }
+                >
+                  <div>Constructed decks must have:</div>
+                  <ul className="mt-1.5 list-inside list-disc text-rc-fg-subtle">
+                    <li>Exactly 1 Avatar</li>
+                    <li>At least 60 cards in Spellbook</li>
+                    <li>At least 30 sites in Atlas</li>
+                    <li>0-10 cards in Collection</li>
+                    <li>Dragonlord decks require a champion</li>
+                  </ul>
+                </RcEmpty>
+              )}
+            </RcDialog>
           )}
 
         {/* Tournament Completion Celebration Modal */}
         {showCompletionModal &&
-          tournament.status === "completed" &&
+          showCompletionCelebration &&
           statistics?.standings &&
           myStanding && (
-            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-xl border-2 border-emerald-500/50 p-8 w-full max-w-2xl shadow-2xl">
-                {/* Celebration Header */}
-                <div className="text-center mb-6">
-                  <div className="text-6xl mb-4">
-                    {myStanding.rank === 1
-                      ? "🏆"
-                      : myStanding.rank === 2
-                        ? "🥈"
-                        : myStanding.rank === 3
-                          ? "🥉"
-                          : "🎯"}
-                  </div>
-                  <h2 className="text-3xl font-bold text-white mb-2">
-                    {myStanding.rank === 1
-                      ? "Victory!"
-                      : "Tournament Complete!"}
-                  </h2>
-                  <p className="text-slate-300">{tournament.name}</p>
-                </div>
-
-                {/* Player Stats */}
-                <div className="bg-slate-800/50 rounded-lg p-6 mb-6">
-                  <div className="text-center mb-4">
-                    <div className="text-5xl font-bold text-emerald-400 mb-2">
-                      #{myStanding.rank}
-                    </div>
-                    <div className="text-xl text-slate-300">
-                      {myStanding.rank === 1
-                        ? "1st Place"
-                        : myStanding.rank === 2
-                          ? "2nd Place"
-                          : myStanding.rank === 3
-                            ? "3rd Place"
-                            : `${myStanding.rank}th Place`}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4 mt-6">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-white">
-                        {myStanding.matchPoints}
-                      </div>
-                      <div className="text-sm text-slate-400">Match Points</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-white">
-                        {myStanding.wins}-{myStanding.losses}-{myStanding.draws}
-                      </div>
-                      <div className="text-sm text-slate-400">Record</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-white">
-                        {myStanding.gameWinPercentage
-                          ? `${(myStanding.gameWinPercentage * 100).toFixed(
-                              0,
-                            )}%`
-                          : "0%"}
-                      </div>
-                      <div className="text-sm text-slate-400">Game Win %</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Top 3 Standings */}
-                {statistics.standings.length > 1 && (
-                  <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-white mb-3">
-                      Final Standings
-                    </h3>
-                    <div className="space-y-2">
-                      {statistics.standings.slice(0, 3).map((standing, idx) => {
-                        const isMe = standing.playerId === viewer.id;
-                        return (
-                          <div
-                            key={standing.playerId}
-                            className={`flex items-center justify-between p-3 rounded-lg ${
-                              isMe
-                                ? "bg-emerald-900/30 border border-emerald-500/50"
-                                : "bg-slate-800/30"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="text-2xl">
-                                {idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"}
-                              </div>
-                              <div>
-                                <div className="text-white font-semibold">
-                                  {standing.playerName}{" "}
-                                  {isMe && (
-                                    <span className="text-emerald-400 text-sm">
-                                      (You)
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-sm text-slate-400">
-                                  {standing.wins}-{standing.losses}-
-                                  {standing.draws}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-lg font-bold text-white">
-                                {standing.matchPoints} pts
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="flex gap-3">
-                  <button
+            <RcDialog
+              eyebrow={
+                myStanding.rank === 1 ? "victory" : "tournament complete"
+              }
+              title={tournament.name}
+              size="lg"
+              onClose={() => setShowCompletionModal(false)}
+              actions={
+                <>
+                  <RcButton
+                    variant="outline"
                     onClick={() => {
                       setActiveTab("standings");
                       setShowCompletionModal(false);
                     }}
-                    className="flex-1 px-4 py-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors"
                   >
                     View Full Standings
-                  </button>
-                  <button
-                    onClick={() => setShowCompletionModal(false)}
-                    className="flex-1 px-4 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition-colors"
-                  >
+                  </RcButton>
+                  <RcButton onClick={() => setShowCompletionModal(false)}>
                     Continue
-                  </button>
+                  </RcButton>
+                </>
+              }
+            >
+              {/* Player Stats */}
+              <div className="rounded-rc-md border border-rc-line/14 bg-black/30 px-6 py-5">
+                <div className="mb-4 text-center">
+                  <div className="rc-stat mb-1 text-5xl font-bold text-rc-accent">
+                    #{myStanding.rank}
+                  </div>
+                  <div className="font-rc-display text-[22px] leading-none text-rc-fg-strong">
+                    {myStanding.rank === 1
+                      ? "1st Place"
+                      : myStanding.rank === 2
+                        ? "2nd Place"
+                        : myStanding.rank === 3
+                          ? "3rd Place"
+                          : `${myStanding.rank}th Place`}
+                  </div>
+                </div>
+
+                <div className="mt-6 grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="rc-stat text-2xl font-bold">
+                      {myStanding.matchPoints}
+                    </div>
+                    <div className="rc-hint mt-1">Match Points</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="rc-stat text-2xl font-bold">
+                      {myStanding.wins}-{myStanding.losses}-{myStanding.draws}
+                    </div>
+                    <div className="rc-hint mt-1">Record</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="rc-stat text-2xl font-bold">
+                      {myStanding.gameWinPercentage
+                        ? `${(myStanding.gameWinPercentage * 100).toFixed(0)}%`
+                        : "0%"}
+                    </div>
+                    <div className="rc-hint mt-1">Game Win %</div>
+                  </div>
                 </div>
               </div>
-            </div>
+
+              {/* Top 3 Standings */}
+              {statistics.standings.length > 1 && (
+                <div className="mt-6">
+                  <div className="rc-eyebrow mb-2">final standings</div>
+                  <div className="flex flex-col gap-2">
+                    {statistics.standings.slice(0, 3).map((standing, idx) => {
+                      const isMe = standing.playerId === viewer.id;
+                      return (
+                        <div
+                          key={standing.playerId}
+                          className={`flex items-center justify-between gap-3 rounded-rc-md p-3 ${
+                            isMe
+                              ? "bg-rc-accent/6 shadow-[inset_2px_0_0_#d4a94a]"
+                              : "bg-black/30"
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-rc-md border border-rc-line/14 bg-rc-line/8 font-rc-mono text-xs text-rc-fg-strong">
+                              {idx + 1}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                                {standing.playerName}{" "}
+                                {isMe && (
+                                  <span className="font-rc-mono text-[11px] uppercase tracking-[0.16em] text-rc-success">
+                                    you
+                                  </span>
+                                )}
+                              </div>
+                              <div className="rc-stat mt-0.5 text-xs text-rc-fg-muted">
+                                {standing.wins}-{standing.losses}-
+                                {standing.draws}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="rc-stat text-right text-lg font-bold text-rc-fg-strong">
+                            {standing.matchPoints} pts
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </RcDialog>
           )}
 
         {/* Card Preview Overlay */}
@@ -3601,6 +3499,6 @@ export default function TournamentDetailsPage() {
           }}
         />
       </div>
-    </div>
+    </AppShell>
   );
 }

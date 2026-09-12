@@ -4,6 +4,10 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import { PATRON_COLORS, type PatronData } from "@/lib/patrons";
 
 interface LeaderboardEntry {
@@ -46,12 +50,9 @@ const INACTIVE_NOTE =
 
 function ProvisionalPill() {
   return (
-    <span
-      className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300"
-      title={PROVISIONAL_HINT}
-    >
+    <Badge tone="warn" title={PROVISIONAL_HINT}>
       Provisional
-    </span>
+    </Badge>
   );
 }
 
@@ -153,232 +154,200 @@ export default function LeaderboardPage() {
     return format.charAt(0).toUpperCase() + format.slice(1);
   };
 
-  const getRankBadgeColor = (rank: number) => {
-    if (rank === 1) return "from-yellow-400 to-yellow-600";
-    if (rank === 2) return "from-gray-300 to-gray-500";
-    if (rank === 3) return "from-amber-600 to-amber-800";
-    if (rank <= 10) return "from-blue-500 to-blue-700";
-    return "from-slate-600 to-slate-800";
-  };
-
   return (
     <OnlinePageShell>
-      <div className="space-y-6 pt-2">
-        {/* Header */}
-        <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:flex-wrap sm:gap-6">
-            <div>
-              <h1 className="text-2xl font-semibold text-slate-50 font-fantaisie">
-                Global Leaderboard
-              </h1>
-              <p className="text-sm text-slate-300/90">
-                Compete with players across all game formats
-              </p>
-              <p className="text-xs text-slate-400">
-                Players show up here after a rated game in the last 60 days.
-              </p>
+      <PageHeader
+        eyebrow="ranked"
+        title="Global Leaderboard"
+        description="Compete with players across all game formats. Players show up here after a rated game in the last 60 days."
+        actions={
+          <RcButton
+            variant="outline"
+            size="sm"
+            onClick={fetchLeaderboard}
+            disabled={loading}
+          >
+            Refresh Data
+          </RcButton>
+        }
+      />
+
+      {/* Filters */}
+      <section className="rc-panel">
+        <div className="flex flex-col gap-4 px-[18px] py-3.5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="rc-eyebrow">Format</span>
+            <div className="rc-segment">
+              {(["constructed", "sealed", "draft"] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  aria-pressed={format === f}
+                  onClick={() => {
+                    setFormat(f);
+                  }}
+                >
+                  {getFormatDisplay(f)}
+                </button>
+              ))}
             </div>
-            <div className="flex flex-wrap gap-3 items-center">
-              <button
-                type="button"
-                className="text-xs font-semibold uppercase tracking-wide text-blue-300 hover:text-blue-200 disabled:opacity-50 disabled:hover:text-blue-300"
-                onClick={fetchLeaderboard}
-                disabled={loading}
-              >
-                Refresh Data
-              </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="rc-eyebrow">Period</span>
+            <div className="rc-segment">
+              {(["all_time", "monthly", "weekly"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  aria-pressed={timeFrame === t}
+                  onClick={() => {
+                    setTimeFrame(t);
+                  }}
+                >
+                  {getTimeFrameDisplay(t)}
+                </button>
+              ))}
             </div>
           </div>
         </div>
+      </section>
 
-        {/* Filters */}
-        <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-slate-200 uppercase tracking-wide">
-                  Format
-                </span>
-                {(["constructed", "sealed", "draft"] as const).map((f) => (
-                  <button
-                    key={f}
-                    className={`px-3 py-1.5 text-xs rounded-lg transition-colors font-semibold uppercase tracking-wide ${
-                      format === f
-                        ? "bg-blue-600 text-white shadow-inner"
-                        : "bg-slate-800/80 text-slate-300 hover:bg-slate-700"
-                    }`}
-                    onClick={() => {
-                      setFormat(f);
-                    }}
-                  >
-                    {getFormatDisplay(f)}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-slate-200 uppercase tracking-wide">
-                  Period
-                </span>
-                {(["all_time", "monthly", "weekly"] as const).map((t) => (
-                  <button
-                    key={t}
-                    className={`px-3 py-1.5 text-xs rounded-lg transition-colors font-semibold uppercase tracking-wide ${
-                      timeFrame === t
-                        ? "bg-purple-600 text-white shadow-inner"
-                        : "bg-slate-800/80 text-slate-300 hover:bg-slate-700"
-                    }`}
-                    onClick={() => {
-                      setTimeFrame(t);
-                    }}
-                  >
-                    {getTimeFrameDisplay(t)}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+      {/* Error display */}
+      {error && (
+        <div className="rc-alert" data-tone="danger">
+          {error}
         </div>
+      )}
 
-        {/* Error display */}
-        {error && (
-          <div className="rounded-xl bg-red-900/20 ring-1 ring-red-600/30 p-4">
-            <div className="text-red-200 text-sm">{error}</div>
+      {/* Leaderboard */}
+      <section className="rc-panel">
+        <PanelHeader
+          title={`${getFormatDisplay(format)} · ${getTimeFrameDisplay(
+            timeFrame
+          )}`}
+          meta={data ? `${data.pagination.total} players` : undefined}
+        />
+
+        {/* Current User's Rank */}
+        {data?.currentUser && (
+          <div className="px-[18px] pt-3.5">
+            <div className="rc-panel flex flex-wrap items-center justify-between gap-4 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="rc-eyebrow">Your Rank</span>
+                <span className="rc-stat text-2xl">
+                  {data.currentUser.rank !== null
+                    ? `#${data.currentUser.rank}`
+                    : data.currentUser.inactive
+                      ? "Unranked"
+                      : "—"}
+                </span>
+                {data.currentUser.rank !== null && (
+                  <span className="rc-hint">of {data.pagination.total}</span>
+                )}
+                {data.currentUser.provisional && <ProvisionalPill />}
+              </div>
+              <div className="flex flex-wrap items-center gap-6">
+                <div className="text-center">
+                  <div className="rc-stat text-base">
+                    {data.currentUser.rating}
+                  </div>
+                  <div className="rc-hint">Rating</div>
+                </div>
+                <div className="text-center">
+                  <div className="rc-stat text-base text-rc-success">
+                    {formatWinRate(data.currentUser.winRate)}
+                  </div>
+                  <div className="rc-hint">Win Rate</div>
+                </div>
+                <div className="text-center">
+                  <div className="rc-stat text-base">
+                    {data.currentUser.wins}-{data.currentUser.losses}
+                    {data.currentUser.draws > 0 && `-${data.currentUser.draws}`}
+                  </div>
+                  <div className="rc-hint">
+                    W-L{data.currentUser.draws > 0 && "-D"}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="rc-stat text-base text-rc-info">
+                    {data.currentUser.uniqueOpponents}
+                  </div>
+                  <div className="rc-hint">Opponents</div>
+                </div>
+              </div>
+            </div>
+            {data.currentUser.inactive && (
+              <p className="rc-hint mt-3">{INACTIVE_NOTE}</p>
+            )}
           </div>
         )}
 
-        {/* Leaderboard */}
-        <div className="rounded-xl bg-slate-950/70 ring-1 ring-slate-800/80 p-5 shadow-lg shadow-black/20">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-semibold text-slate-100 uppercase tracking-wide">
-              {getFormatDisplay(format)} · {getTimeFrameDisplay(timeFrame)}
-            </h2>
-            {data && (
-              <span className="text-sm text-slate-400">
-                {data.pagination.total} players
-              </span>
-            )}
-          </div>
-
-          {/* Current User's Rank */}
-          {data?.currentUser && (
-            <div className="mb-4 p-4 bg-gradient-to-r from-indigo-900/40 to-purple-900/40 border border-indigo-700/50 rounded-xl">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="text-xs uppercase tracking-wide text-indigo-300 font-medium">
-                    Your Rank
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl font-bold text-white">
-                      {data.currentUser.rank !== null
-                        ? `#${data.currentUser.rank}`
-                        : data.currentUser.inactive
-                          ? "Unranked"
-                          : "—"}
-                    </span>
-                    {data.currentUser.rank !== null && (
-                      <span className="text-sm text-slate-400">
-                        of {data.pagination.total}
-                      </span>
-                    )}
-                    {data.currentUser.provisional && <ProvisionalPill />}
-                  </div>
-                </div>
-                <div className="flex items-center gap-6 text-sm">
-                  <div className="text-center">
-                    <div className="font-semibold text-white">
-                      {data.currentUser.rating}
-                    </div>
-                    <div className="text-xs text-slate-400">Rating</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-semibold text-emerald-300">
-                      {formatWinRate(data.currentUser.winRate)}
-                    </div>
-                    <div className="text-xs text-slate-400">Win Rate</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-semibold text-white">
-                      {data.currentUser.wins}-{data.currentUser.losses}
-                      {data.currentUser.draws > 0 &&
-                        `-${data.currentUser.draws}`}
-                    </div>
-                    <div className="text-xs text-slate-400">
-                      W-L{data.currentUser.draws > 0 && "-D"}
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-semibold text-cyan-300">
-                      {data.currentUser.uniqueOpponents}
-                    </div>
-                    <div className="text-xs text-slate-400">Opponents</div>
-                  </div>
-                </div>
-              </div>
-              {data.currentUser.inactive && (
-                <p className="mt-3 text-xs text-slate-300">{INACTIVE_NOTE}</p>
-              )}
-            </div>
-          )}
-
-          {loading ? (
-            <div className="text-center py-10 text-sm text-slate-400">
-              Loading leaderboard...
-            </div>
-          ) : data && data.leaderboard.length > 0 ? (
-            <div className="space-y-3">
-              {data.leaderboard.map((entry) => (
-                <div
-                  key={entry.playerId}
-                  className="flex items-center justify-between bg-slate-900/70 border border-slate-800/70 rounded-xl px-4 py-3 hover:bg-slate-900 transition-colors cursor-pointer"
-                  onClick={() =>
-                    router.push(`/leaderboard/player/${entry.playerId}`)
-                  }
-                >
-                  <div className="flex items-center gap-4">
-                    {/* Rank Badge */}
-                    <div
-                      className={`w-10 h-10 rounded-full bg-gradient-to-br ${getRankBadgeColor(
-                        entry.rank
-                      )} flex items-center justify-center text-white text-sm font-bold shadow`}
+        {loading ? (
+          <div className="rc-hint py-6 text-center">loading leaderboard…</div>
+        ) : data && data.leaderboard.length > 0 ? (
+          <div className="mt-3.5 overflow-x-auto">
+            <table className="rc-table">
+              <thead>
+                <tr>
+                  <th scope="col">Rank</th>
+                  <th scope="col">Player</th>
+                  <th scope="col">Rating</th>
+                  <th scope="col">W-L-D</th>
+                  <th scope="col">Win Rate</th>
+                  <th scope="col">Opponents</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.leaderboard.map((entry) => {
+                  const patronTier = getPatronTier(entry.playerId);
+                  const patronStyle = patronTier
+                    ? PATRON_COLORS[patronTier]
+                    : null;
+                  return (
+                    <tr
+                      key={entry.playerId}
+                      className="cursor-pointer"
+                      onClick={() =>
+                        router.push(`/leaderboard/player/${entry.playerId}`)
+                      }
                     >
-                      {entry.rank <= 999 ? entry.rank : "999+"}
-                    </div>
-
-                    {/* Player Info */}
-                    <div className="flex items-center gap-4">
-                      {entry.playerImage ? (
-                        <Image
-                          src={entry.playerImage}
-                          alt={entry.displayName}
-                          width={44}
-                          height={44}
-                          className="rounded-full ring-2 ring-slate-800"
-                          unoptimized
-                        />
-                      ) : (
-                        <div className="w-11 h-11 rounded-full bg-slate-700 flex items-center justify-center text-white text-base font-semibold ring-2 ring-slate-800/80">
-                          {entry.displayName.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                      <div>
-                        {(() => {
-                          const patronTier = getPatronTier(entry.playerId);
-                          const patronStyle = patronTier
-                            ? PATRON_COLORS[patronTier]
-                            : null;
-                          return (
-                            <div className="flex items-center gap-2">
+                      <td>
+                        <span
+                          className={`rc-stat ${
+                            entry.rank <= 3
+                              ? "text-rc-accent-link"
+                              : "text-rc-fg-muted"
+                          }`}
+                        >
+                          {entry.rank <= 999 ? entry.rank : "999+"}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          {entry.playerImage ? (
+                            <Image
+                              src={entry.playerImage}
+                              alt={entry.displayName}
+                              width={28}
+                              height={28}
+                              className="rounded-rc-md border border-rc-line/18"
+                              unoptimized
+                            />
+                          ) : (
+                            <div className="grid h-7 w-7 place-items-center rounded-rc-md border border-rc-line/18 bg-black/40 font-rc-mono text-xs text-rc-fg-muted">
+                              {entry.displayName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
                               <span
-                                className={`text-sm font-semibold ${
-                                  patronStyle?.text ?? "text-slate-50"
+                                className={`font-rc-display text-[19px] leading-[1.1] ${
+                                  patronStyle?.text ?? "text-rc-fg-strong"
                                 }`}
                                 style={
                                   patronStyle
                                     ? {
-                                        textShadow:
-                                          patronStyle.textShadowMinimal,
+                                        textShadow: patronStyle.textShadowMinimal,
                                       }
                                     : undefined
                                 }
@@ -387,96 +356,80 @@ export default function LeaderboardPage() {
                               </span>
                               {entry.provisional && <ProvisionalPill />}
                             </div>
-                          );
-                        })()}
-                        <div className="text-xs text-slate-400 flex items-center gap-2">
-                          {entry.tournamentWins > 0 && (
-                            <span className="text-amber-300 flex items-center gap-1">
-                              <span aria-hidden>🏆</span>
-                              {entry.tournamentWins}
-                            </span>
-                          )}
-                          <span>
-                            Last active:{" "}
-                            {new Date(entry.lastActive).toLocaleDateString()}
-                          </span>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                              {entry.tournamentWins > 0 && (
+                                <Badge tone="gold" title="Tournament wins">
+                                  {entry.tournamentWins} titles
+                                </Badge>
+                              )}
+                              <span className="rc-hint">
+                                Last active:{" "}
+                                {new Date(
+                                  entry.lastActive
+                                ).toLocaleDateString()}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  </div>
+                      </td>
+                      <td>
+                        <span className="rc-stat">{entry.rating}</span>
+                      </td>
+                      <td>
+                        <span className="rc-stat">
+                          {entry.wins}-{entry.losses}
+                          {entry.draws > 0 && `-${entry.draws}`}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="rc-stat text-rc-success">
+                          {formatWinRate(entry.winRate)}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="rc-stat text-rc-info">
+                          {entry.uniqueOpponents}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="px-[18px] py-3.5">
+            <RcEmpty title="No leaderboard data available.">
+              play some matches to see rankings
+            </RcEmpty>
+          </div>
+        )}
 
-                  {/* Stats */}
-                  <div className="flex items-center gap-6 text-sm text-slate-200">
-                    <div className="text-center min-w-[80px]">
-                      <div className="text-base font-semibold text-slate-50">
-                        {entry.rating}
-                      </div>
-                      <div className="text-xs uppercase tracking-wide text-slate-400">
-                        Rating
-                      </div>
-                    </div>
-                    <div className="text-center min-w-[80px]">
-                      <div className="text-base font-semibold text-emerald-300">
-                        {formatWinRate(entry.winRate)}
-                      </div>
-                      <div className="text-xs uppercase tracking-wide text-slate-400">
-                        Win Rate
-                      </div>
-                    </div>
-                    <div className="text-center min-w-[80px]">
-                      <div className="text-base font-semibold text-slate-50">
-                        {entry.wins}-{entry.losses}
-                        {entry.draws > 0 && `-${entry.draws}`}
-                      </div>
-                      <div className="text-xs uppercase tracking-wide text-slate-400">
-                        W-L{entry.draws > 0 && "-D"}
-                      </div>
-                    </div>
-                    <div className="text-center min-w-[60px]">
-                      <div className="text-base font-semibold text-cyan-300">
-                        {entry.uniqueOpponents}
-                      </div>
-                      <div className="text-xs uppercase tracking-wide text-slate-400">
-                        Opponents
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-10 text-sm text-slate-400">
-              No leaderboard data available. Play some matches to see rankings!
-            </div>
-          )}
-
-          {/* Pagination Controls */}
-          {data && data.pagination.total > PAGE_SIZE && (
-            <div className="flex items-center justify-center gap-4 mt-6 pt-4 border-t border-slate-800/50">
-              <button
-                type="button"
-                className="px-4 py-2 text-sm font-semibold rounded-lg bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0 || loading}
-              >
-                ← Previous
-              </button>
-              <span className="text-sm text-slate-300">
-                Page {page + 1} of{" "}
-                {Math.ceil(data.pagination.total / PAGE_SIZE)}
-              </span>
-              <button
-                type="button"
-                className="px-4 py-2 text-sm font-semibold rounded-lg bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={!data.pagination.hasMore || loading}
-              >
-                Next →
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+        {/* Pagination Controls */}
+        {data && data.pagination.total > PAGE_SIZE && (
+          <div className="flex items-center justify-center gap-4 border-t border-rc-line/12 px-[18px] py-3.5">
+            <RcButton
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0 || loading}
+            >
+              Previous
+            </RcButton>
+            <span className="font-rc-mono text-xs tracking-[0.1em] text-rc-fg-subtle">
+              Page {page + 1} of {Math.ceil(data.pagination.total / PAGE_SIZE)}
+            </span>
+            <RcButton
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={!data.pagination.hasMore || loading}
+            >
+              Next
+            </RcButton>
+          </div>
+        )}
+      </section>
     </OnlinePageShell>
   );
 }

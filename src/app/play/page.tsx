@@ -908,10 +908,10 @@ export default function PlayPage() {
             className={`bg-black/50 rounded-lg ${isMobile ? "p-0.5" : "p-1"} ring-1 ring-white/10 flex items-center`}
           >
             <button
-              className={`${isMobile ? "px-1 py-0.5 text-[10px]" : "px-2 py-1 text-xs"} rounded ${
+              className={`${isMobile ? "px-1 py-0.5 text-[10px]" : "px-2 py-1 text-xs"} rounded-rc-sm font-rc-mono uppercase tracking-[0.14em] transition-colors ${
                 cameraMode === "topdown"
-                  ? "bg-white/20"
-                  : "bg-transparent hover:bg-white/10"
+                  ? "bg-rc-accent text-rc-accent-fg"
+                  : "bg-transparent text-rc-fg-muted hover:text-rc-accent-ring"
               }`}
               onClick={() => {
                 setCameraMode("topdown");
@@ -922,10 +922,10 @@ export default function PlayPage() {
               2D
             </button>
             <button
-              className={`${isMobile ? "ml-0.5 px-1 py-0.5 text-[10px]" : "ml-1 px-2 py-1 text-xs"} rounded ${
+              className={`${isMobile ? "ml-0.5 px-1 py-0.5 text-[10px]" : "ml-1 px-2 py-1 text-xs"} rounded-rc-sm font-rc-mono uppercase tracking-[0.14em] transition-colors ${
                 cameraMode === "orbit"
-                  ? "bg-white/20"
-                  : "bg-transparent hover:bg-white/10"
+                  ? "bg-rc-accent text-rc-accent-fg"
+                  : "bg-transparent text-rc-fg-muted hover:text-rc-accent-ring"
               }`}
               onClick={() => {
                 setCameraMode("orbit");

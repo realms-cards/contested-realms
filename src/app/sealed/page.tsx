@@ -2,7 +2,11 @@
 
 import Image from "next/image";
 import { useMemo, useState } from "react";
+import AppShell from "@/components/ui/AppShell";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
 
 type Rarity = "Ordinary" | "Exceptional" | "Elite" | "Unique";
 type Finish = "Standard" | "Foil";
@@ -19,6 +23,15 @@ type BoosterCard = {
 };
 
 type Zone = "Spellbook" | "Atlas" | "Sideboard";
+
+const ZONES: Zone[] = ["Spellbook", "Atlas", "Sideboard"];
+
+/** Rarity pill tone: Unique reads gold, Elite reads as a highlight. */
+function rarityTone(rarity: Rarity): BadgeTone {
+  if (rarity === "Unique") return "gold";
+  if (rarity === "Elite") return "ok";
+  return "default";
+}
 
 export default function SealedPage() {
   const [setName, setSetName] = useState("Alpha");
@@ -160,249 +173,254 @@ export default function SealedPage() {
     }
   }
 
-  return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <h1 className="text-2xl font-semibold">Sealed Mode</h1>
+  const pickEntries = Object.entries(picks);
 
-      <div className="flex flex-wrap items-end gap-4">
-        <label className="flex flex-col gap-1">
-          <span className="text-sm opacity-80">Set</span>
-          <CustomSelect
-            value={setName}
-            onChange={(v) => setSetName(v)}
-            options={[
-              { value: "Alpha", label: "Alpha" },
-              { value: "Beta", label: "Beta" },
-              { value: "Arthurian Legends", label: "Arthurian Legends" },
-            ]}
-          />
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-sm opacity-80">Packs</span>
-          <input
-            type="number"
-            min={1}
-            max={12}
-            value={packsCount}
-            onChange={(e) => setPacksCount(Number(e.target.value))}
-            className="border rounded px-3 py-2 bg-transparent w-28"
-          />
-        </label>
-
-        <button
-          onClick={openPacks}
-          disabled={!canOpen || opening}
-          className="h-10 px-4 rounded bg-foreground text-background disabled:opacity-50"
-        >
-          {opening ? "Opening..." : "Open Packs"}
-        </button>
+  const renderCard = (c: BoosterCard, zones: Zone[], site: boolean) => (
+    <div
+      key={c.variantId}
+      className="rounded-rc-md border border-rc-line/12 bg-black/30 p-2"
+    >
+      <div
+        className={`relative w-full overflow-hidden rounded-rc-sm bg-black/40 mb-2 ${
+          site ? "aspect-[4/3]" : "aspect-[3/4]"
+        }`}
+      >
+        <Image
+          src={`/api/images/${c.slug}`}
+          alt={c.cardName}
+          fill
+          sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
+          className={
+            site
+              ? "object-contain rotate-90 origin-center"
+              : "object-cover"
+          }
+          unoptimized
+        />
       </div>
+      <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+        {c.cardName}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        <Badge tone={rarityTone(c.rarity)}>{c.rarity}</Badge>
+        <Badge>{c.finish}</Badge>
+      </div>
+      <div className="rc-hint mt-1.5 mb-2 truncate">{c.slug}</div>
+      <div className="flex flex-wrap gap-1.5">
+        {zones.map((zone) => (
+          <RcButton
+            key={zone}
+            variant="outline"
+            size="sm"
+            onClick={() => addCard(c, zone)}
+          >
+            + {zone}
+          </RcButton>
+        ))}
+      </div>
+    </div>
+  );
 
-      {error && <div className="text-red-500">Error: {error}</div>}
+  return (
+    <AppShell width="wide">
+      <PageHeader
+        eyebrow="limited"
+        title="Sealed"
+        description="Open a pool of packs, then build a deck from what you pulled."
+      />
 
-      {!!boosters.length && (
-        <div className="grid gap-6">
-          {boosters.map((pack, idx) => (
-            <div key={idx} className="border rounded p-4">
-              <div className="font-medium mb-3">Pack {idx + 1}</div>
-              {(() => {
-                const sites = pack.filter((c) =>
-                  (c.type || "").toLowerCase().includes("site")
-                );
-                const spells = pack.filter(
-                  (c) => !(c.type || "").toLowerCase().includes("site")
-                );
-                return (
-                  <div className="space-y-4">
-                    {!!spells.length && (
-                      <div>
-                        <div className="text-xs uppercase opacity-70 mb-2">
-                          Spellbook
-                        </div>
-                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
-                          {spells.map((c) => (
-                            <div
-                              key={c.variantId}
-                              className="border rounded p-2"
-                            >
-                              <div className="relative aspect-[3/4] w-full overflow-hidden rounded bg-muted/40 mb-2">
-                                <Image
-                                  src={`/api/images/${c.slug}`}
-                                  alt={c.cardName}
-                                  fill
-                                  sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
-                                  className="object-cover"
-                                  unoptimized
-                                />
-                              </div>
-                              <div className="font-semibold">{c.cardName}</div>
-                              <div className="opacity-80">
-                                {c.rarity} • {c.finish}
-                              </div>
-                              <div className="opacity-70 text-xs mb-2">
-                                {c.slug}
-                              </div>
-                              <div className="flex gap-2 text-xs">
-                                <button
-                                  className="px-2 py-1 border rounded"
-                                  onClick={() => addCard(c, "Spellbook")}
-                                >
-                                  + Spellbook
-                                </button>
-                                <button
-                                  className="px-2 py-1 border rounded"
-                                  onClick={() => addCard(c, "Atlas")}
-                                >
-                                  + Atlas
-                                </button>
-                                <button
-                                  className="px-2 py-1 border rounded"
-                                  onClick={() => addCard(c, "Sideboard")}
-                                >
-                                  + Side
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {!!sites.length && (
-                      <div>
-                        <div className="text-xs uppercase opacity-70 mb-2">
-                          Sites
-                        </div>
-                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
-                          {sites.map((c) => (
-                            <div
-                              key={c.variantId}
-                              className="border rounded p-2"
-                            >
-                              <div className="relative aspect-[4/3] w-full overflow-hidden rounded bg-muted/40 mb-2">
-                                <Image
-                                  src={`/api/images/${c.slug}`}
-                                  alt={c.cardName}
-                                  fill
-                                  sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
-                                  className="object-contain rotate-90 origin-center"
-                                  unoptimized
-                                />
-                              </div>
-                              <div className="font-semibold">{c.cardName}</div>
-                              <div className="opacity-80">
-                                {c.rarity} • {c.finish}
-                              </div>
-                              <div className="opacity-70 text-xs mb-2">
-                                {c.slug}
-                              </div>
-                              <div className="flex gap-2 text-xs">
-                                <button
-                                  className="px-2 py-1 border rounded"
-                                  onClick={() => addCard(c, "Atlas")}
-                                >
-                                  + Atlas
-                                </button>
-                                <button
-                                  className="px-2 py-1 border rounded"
-                                  onClick={() => addCard(c, "Spellbook")}
-                                >
-                                  + Spellbook
-                                </button>
-                                <button
-                                  className="px-2 py-1 border rounded"
-                                  onClick={() => addCard(c, "Sideboard")}
-                                >
-                                  + Side
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          ))}
+      <section className="rc-panel">
+        <PanelHeader title="Open a pool" meta={setName} />
+        <div className="flex flex-wrap items-end gap-4 px-[18px] py-3.5">
+          <label className="flex flex-col gap-1.5">
+            <span className="rc-eyebrow">Set</span>
+            <CustomSelect
+              value={setName}
+              onChange={(v) => setSetName(v)}
+              options={[
+                { value: "Alpha", label: "Alpha" },
+                { value: "Beta", label: "Beta" },
+                { value: "Arthurian Legends", label: "Arthurian Legends" },
+              ]}
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="rc-eyebrow">Packs</span>
+            <input
+              type="number"
+              min={1}
+              max={12}
+              value={packsCount}
+              onChange={(e) => setPacksCount(Number(e.target.value))}
+              className="rc-input h-9 w-28"
+            />
+          </label>
+
+          <RcButton onClick={openPacks} disabled={!canOpen || opening}>
+            {opening ? "Opening…" : "Open packs"}
+          </RcButton>
+        </div>
+      </section>
+
+      {error && (
+        <div className="rc-alert" data-tone="danger">
+          Error: {error}
         </div>
       )}
 
-      <div className="border rounded p-4">
-        <div className="font-medium mb-2">Deck Build</div>
-        <div className="text-sm opacity-80 mb-3">
-          Totals — Spellbook: {zoneCounts.Spellbook} • Atlas: {zoneCounts.Atlas}{" "}
-          • Sideboard: {zoneCounts.Sideboard}
-        </div>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {Object.entries(picks).map(([key, it]) => (
-            <div
-              key={key}
-              className="border rounded p-2 text-sm flex flex-col gap-2"
-            >
-              <div className="font-semibold">{it.name}</div>
-              <div className="opacity-80">{it.rarity}</div>
-              <div className="flex items-center gap-2">
-                <CustomSelect
-                  value={it.zone}
-                  onChange={(v) => changeZone(key, v as Zone)}
-                  options={[
-                    { value: "Spellbook", label: "Spellbook" },
-                    { value: "Atlas", label: "Atlas" },
-                    { value: "Sideboard", label: "Sideboard" },
-                  ]}
+      {!!boosters.length && (
+        <div className="grid gap-6">
+          {boosters.map((pack, idx) => {
+            const sites = pack.filter((c) =>
+              (c.type || "").toLowerCase().includes("site")
+            );
+            const spells = pack.filter(
+              (c) => !(c.type || "").toLowerCase().includes("site")
+            );
+            return (
+              <section key={idx} className="rc-panel">
+                <PanelHeader
+                  title="Pack"
+                  meta={
+                    <span className="rc-stat text-sm">
+                      {idx + 1} / {boosters.length}
+                    </span>
+                  }
                 />
-                <div className="ml-auto flex items-center gap-2">
-                  <button
-                    className="px-2 py-1 border rounded"
-                    onClick={() => removeOne(key)}
-                  >
-                    -
-                  </button>
-                  <div className="min-w-6 text-center">{it.count}</div>
-                  <button
-                    className="px-2 py-1 border rounded"
-                    onClick={() =>
-                      setPicks((prev) => ({
-                        ...prev,
-                        [key]: { ...it, count: it.count + 1 },
-                      }))
-                    }
-                  >
-                    +
-                  </button>
+                <div className="space-y-4 px-[18px] py-3.5">
+                  {!!spells.length && (
+                    <div>
+                      <div className="rc-eyebrow mb-2">Spellbook</div>
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {spells.map((c) =>
+                          renderCard(
+                            c,
+                            ["Spellbook", "Atlas", "Sideboard"],
+                            false
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {!!sites.length && (
+                    <div>
+                      <div className="rc-eyebrow mb-2">Sites</div>
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {sites.map((c) =>
+                          renderCard(
+                            c,
+                            ["Atlas", "Spellbook", "Sideboard"],
+                            true
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
+
+      <section className="rc-panel">
+        <PanelHeader
+          title="Deck build"
+          meta={`${pickEntries.length} entries`}
+        />
+        <div className="px-[18px] py-3.5">
+          <div className="mb-3 flex flex-wrap gap-6">
+            {ZONES.map((zone) => (
+              <div key={zone}>
+                <div className="rc-hint uppercase">{zone}</div>
+                <div className="rc-stat text-xl">{zoneCounts[zone]}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {pickEntries.map(([key, it]) => (
+              <div
+                key={key}
+                className="flex flex-col gap-2 rounded-rc-md border border-rc-line/12 bg-black/30 p-2"
+              >
+                <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                  {it.name}
+                </div>
+                <div>
+                  <Badge tone={rarityTone(it.rarity)}>{it.rarity}</Badge>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="rc-segment">
+                    {ZONES.map((zone) => (
+                      <button
+                        key={zone}
+                        type="button"
+                        aria-pressed={it.zone === zone}
+                        onClick={() => changeZone(key, zone)}
+                      >
+                        {zone}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="ml-auto flex items-center gap-2">
+                    <RcButton
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Remove one ${it.name}`}
+                      onClick={() => removeOne(key)}
+                    >
+                      −
+                    </RcButton>
+                    <div className="rc-stat min-w-6 text-center">
+                      {it.count}
+                    </div>
+                    <RcButton
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Add one ${it.name}`}
+                      onClick={() =>
+                        setPicks((prev) => ({
+                          ...prev,
+                          [key]: { ...it, count: it.count + 1 },
+                        }))
+                      }
+                    >
+                      +
+                    </RcButton>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      </section>
 
       <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1">
-          <span className="text-sm opacity-80">Deck name</span>
+        <label className="flex flex-col gap-1.5">
+          <span className="rc-eyebrow">Deck name</span>
           <input
             value={deckName}
             onChange={(e) => setDeckName(e.target.value)}
-            className="border rounded px-3 py-2 bg-transparent"
+            className="rc-input h-10"
           />
         </label>
-        <button
+        <RcButton
           onClick={saveDeck}
-          disabled={!Object.keys(picks).length || saving}
-          className="h-10 px-4 rounded bg-foreground text-background disabled:opacity-50"
+          disabled={!pickEntries.length || saving}
+          className="h-10"
         >
-          {saving ? "Saving..." : "Save Deck"}
-        </button>
+          {saving ? "Saving…" : "Save deck"}
+        </RcButton>
         {saveResult && (
-          <div className="text-sm">
-            Saved deck <span className="font-semibold">{saveResult.name}</span>{" "}
-            (id: {saveResult.id})
+          <div className="rc-alert" data-tone="success">
+            Saved deck{" "}
+            <span className="text-rc-fg-strong">{saveResult.name}</span> (id:{" "}
+            {saveResult.id})
           </div>
         )}
       </div>
-    </div>
+    </AppShell>
   );
 }

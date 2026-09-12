@@ -1,15 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import AsciiBottomArt from "@/components/ui/AsciiBottomArt";
 import AsciiLogo from "@/components/ui/AsciiLogo";
-import AsciiMarquee from "@/components/ui/AsciiMarquee";
-import AsciiPanel from "@/components/ui/AsciiPanel";
 import LobbyFooter from "@/components/ui/LobbyFooter";
 import OtherRealms from "@/components/ui/OtherRealms";
+import { Badge } from "@/components/ui/badge";
+import PanelTile from "@/components/ui/panel-tile";
+import { RcButton } from "@/components/ui/rc-button";
 import { FEATURE_CPU_BOTS, FEATURE_VS_CPU_PRECONS } from "@/lib/config/features";
 import { fetchPatrons, isPatron } from "@/lib/patrons";
 
@@ -50,279 +50,199 @@ export default function Home() {
     });
   }, [session]);
 
-  return (
-    <div className="min-h-dvh bg-gradient-to-b from-slate-950 to-slate-900 text-white flex flex-col items-center justify-start px-5 relative overflow-x-hidden overflow-y-auto">
-      {/* 90s-style flying marquee for Gothic announcement 
-      <AsciiMarquee duration={14} />
-      */}
+  const dismissAlpha = () => {
+    try {
+      window.localStorage.setItem("sorcery:alphaBannerDismissed", "1");
+    } catch {}
+    setShowAlphaBanner(false);
+  };
+  const dismissCookies = () => {
+    try {
+      window.localStorage.setItem("sorcery:cookieNoticeDismissed", "1");
+    } catch {}
+    setShowCookieNotice(false);
+  };
 
-      <div className="relative z-10 max-w-6xl w-full text-center space-y-6 md:space-y-7 pt-8 md:pt-10 pb-10 md:pb-12">
+  const tileTitle = "m-0 font-rc-display text-[28px] leading-none text-rc-fg-strong";
+  const subTitle = "m-0 font-rc-display text-[22px] leading-none text-rc-fg-strong";
+  const tileNote = "mt-2 font-rc-mono text-[11px] tracking-[0.1em] text-rc-fg-subtle";
+
+  return (
+    <div className="rc-app relative flex min-h-dvh flex-col items-center overflow-x-clip px-5">
+      <div
+        aria-hidden="true"
+        className="rc-grain pointer-events-none fixed inset-0 z-0"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0 shadow-[inset_0_0_120px_20px_rgba(0,0,0,0.45)]"
+      />
+
+      <div className="relative z-10 w-full max-w-6xl space-y-6 pb-10 pt-8 text-center md:space-y-7 md:pb-12 md:pt-10">
         {showAlphaBanner && (
-          <div className="max-w-5xl mx-auto relative z-30">
-            <div className="bg-orange-900/50 border border-orange-500/50 text-orange-100 rounded-md px-4 py-3 flex items-center justify-between shadow">
-              <p className="text-sm md:text-base font-medium">
-                Currently in Open Beta - Data might be lost in the future - back
-                up your decks!
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  try {
-                    window.localStorage.setItem(
-                      "sorcery:alphaBannerDismissed",
-                      "1",
-                    );
-                  } catch {}
-                  setShowAlphaBanner(false);
-                }}
-                className="ml-4 inline-flex items-center rounded px-2 py-1 text-orange-100/90 hover:text-white hover:bg-orange-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/70"
-                aria-label="Dismiss banner"
-              >
-                Dismiss
-              </button>
+          <div className="relative z-30 mx-auto flex max-w-5xl items-center justify-between gap-3.5 rounded-rc-md border border-rc-accent/35 bg-[rgba(112,65,22,0.45)] px-3.5 py-2.5 text-left font-rc-sans text-[13px] text-[#f3e0b3]">
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge tone="warn">Open Beta</Badge>
+              <span className="text-rc-fg-muted">
+                Data might be lost as the simulator evolves. Export your decks
+                often.
+              </span>
             </div>
+            <button
+              type="button"
+              onClick={dismissAlpha}
+              className="cursor-pointer rounded-rc-sm p-1 text-lg leading-none text-[#f3e0b3] transition-colors hover:text-rc-fg-strong focus:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring"
+              aria-label="Dismiss banner"
+            >
+              ×
+            </button>
           </div>
         )}
 
-        {/* ASCII Logotype */}
-        <AsciiLogo className="max-w-4xl mx-auto" />
+        {/* Logotype */}
+        <AsciiLogo className="mx-auto max-w-4xl drop-shadow-[0_0_14px_rgba(243,207,106,0.18)]" />
 
-        {/* Primary Navigation */}
-        <div className="grid grid-cols-1 md:grid-cols-1 gap-5 xl:gap-6 max-w-4xl mx-auto">
-          {/* Local Hotseat 
-          <AsciiPanel className="p-5 md:p-6">
-            <Link
-              href="/play"
-              className="group block hover:scale-[1.02] transition-transform duration-200"
-            >
-              <div className="flex items-center justify-center py-5 md:py-6">
-                <h3 className="text-2xl font-semibold tracking-wide">
-                  Local Hotseat
-                </h3>
+        {/* Primary Navigation: the lobby is open to everyone (guests can join
+            open lobbies or invite links), signing in unlocks decks + matchmaking */}
+        <div className="mx-auto grid max-w-4xl grid-cols-1 gap-5 xl:gap-6">
+          <PanelTile href="/online/lobby" className="w-full justify-self-center">
+            <div className="flex items-center justify-center py-5 md:py-6">
+              <h3 className={tileTitle}>Online Realms</h3>
+            </div>
+            {!session && (
+              <div className="-mt-3 pb-2 text-center font-rc-mono text-[11px] tracking-[0.1em] text-rc-fg-subtle">
+                sign in or play as a guest
               </div>
-            </Link>
-          </AsciiPanel>
-          */}
-
-          {/* The lobby is open to everyone: guests can join games via open
-              lobbies or invite links, signing in unlocks decks + matchmaking */}
-          <AsciiPanel className="w-full p-5 md:p-6 justify-self-center">
-            <Link
-              href="/online/lobby"
-              className="group block hover:scale-[1.02] transition-transform duration-200"
-            >
-              <div className="flex items-center justify-center py-5 md:py-6">
-                <h3 className="text-2xl font-semibold tracking-wide">
-                  Online Realms
-                </h3>
-              </div>
-              {!session && (
-                <div className="text-center text-xs opacity-70 -mt-3 pb-2">
-                  Sign in or play as a guest
-                </div>
-              )}
-            </Link>
-          </AsciiPanel>
+            )}
+          </PanelTile>
           {!session && (
-            <AsciiPanel className="w-full p-5 md:p-6 justify-self-center">
-              <button
-                type="button"
-                onClick={() => router.push("/auth/signin")}
-                className="group block w-full hover:scale-[1.02] transition-transform duration-200"
-              >
-                <div className="flex items-center justify-center py-5 md:py-6">
-                  <h3 className="text-2xl font-semibold tracking-wide">
-                    Sign In
-                  </h3>
-                </div>
-              </button>
-            </AsciiPanel>
+            <PanelTile
+              onClick={() => router.push("/auth/signin")}
+              className="w-full justify-self-center"
+            >
+              <div className="flex items-center justify-center py-5 md:py-6">
+                <h3 className={tileTitle}>Sign In</h3>
+              </div>
+            </PanelTile>
           )}
         </div>
 
         {/* Secondary Links */}
         {session && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 max-w-4xl mx-auto">
-            <AsciiPanel className="p-5 md:p-6">
-              <Link
-                href="/decks"
-                className="group block hover:scale-[1.02] transition-transform duration-200"
+          <div className="mx-auto grid max-w-4xl grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-3 md:gap-4">
+            <PanelTile href="/decks">
+              <div className="flex items-center justify-center py-3 md:py-4">
+                <h4 className={subTitle}>Your Decks</h4>
+              </div>
+            </PanelTile>
+            <PanelTile href="/collection">
+              <div className="flex items-center justify-center py-3 md:py-4">
+                <h4 className={subTitle}>Your Collection</h4>
+              </div>
+            </PanelTile>
+          </div>
+        )}
+        {/* Every row is an auto-fit grid: tiles share the row evenly and a
+            lone tile (e.g. a feature flag is off) grows to the full width,
+            so no row ever ends in a gap. */}
+        {session && (FEATURE_CPU_BOTS || FEATURE_VS_CPU_PRECONS) && (
+          <div className="mx-auto grid max-w-4xl grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-3 md:gap-4">
+            {FEATURE_CPU_BOTS && (
+              <PanelTile
+                href={
+                  userIsPatron
+                    ? "/play/goldfish"
+                    : "https://www.patreon.com/realmscards"
+                }
+                className="w-full"
               >
-                <div className="flex items-center justify-center py-3 md:py-4">
-                  <h4 className="text-lg font-semibold tracking-wide">
-                    Your Decks
-                  </h4>
+                <div className="flex flex-col items-center justify-center py-3 md:py-4">
+                  <span className="rc-eyebrow mb-1.5">experimental</span>
+                  <h4 className={subTitle}>Goldfish — Any Deck</h4>
+                  <span className={tileNote}>
+                    {userIsPatron
+                      ? "test your builds against the CPU"
+                      : "patrons only"}
+                  </span>
                 </div>
-              </Link>
-            </AsciiPanel>
-            <AsciiPanel className="p-5 md:p-6">
-              <Link
-                href="/collection"
-                className="group block hover:scale-[1.02] transition-transform duration-200"
+              </PanelTile>
+            )}
+            {FEATURE_VS_CPU_PRECONS && (
+              <PanelTile
+                href={
+                  userIsPatron
+                    ? "/play/vs-cpu"
+                    : "https://www.patreon.com/realmscards"
+                }
+                className="w-full"
               >
-                <div className="flex items-center justify-center py-3 md:py-4">
-                  <h4 className="text-lg font-semibold tracking-wide">
-                    Your Collection
-                  </h4>
+                <div
+                  className={`flex flex-col items-center justify-center py-3 md:py-4 ${
+                    userIsPatron ? "" : "opacity-60"
+                  }`}
+                >
+                  <span className="rc-eyebrow mb-1.5">experimental</span>
+                  <h4 className={subTitle}>VS CPU Precons</h4>
+                  {!userIsPatron && (
+                    <span className={tileNote}>patrons only</span>
+                  )}
                 </div>
-              </Link>
-            </AsciiPanel>
+              </PanelTile>
+            )}
           </div>
         )}
         {session && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 max-w-4xl mx-auto">
-            {FEATURE_CPU_BOTS && (
-              <AsciiPanel className="w-full p-5 md:p-6">
-                <Link href={userIsPatron ? "/play/goldfish" : "https://www.patreon.com/realmscards"} className="group block hover:scale-[1.02] transition-transform duration-200">
-                  <div className="flex flex-col items-center justify-center py-3 md:py-4">
-                    <span className="text-xs uppercase tracking-widest text-amber-400/80">Experimental</span>
-                    <h4 className="text-lg font-semibold tracking-wide">Goldfish — Any Deck</h4>
-                    <span className="text-xs text-slate-400 mt-1">{userIsPatron ? "Test your builds against CPU" : "Patrons only"}</span>
-                  </div>
-                </Link>
-              </AsciiPanel>
-            )}
-            {FEATURE_VS_CPU_PRECONS && (
-              <AsciiPanel className="w-full p-5 md:p-6">
-                {userIsPatron ? (
-                  <Link
-                    href="/play/vs-cpu"
-                    className="group block hover:scale-[1.02] transition-transform duration-200"
-                  >
-                    <div className="flex flex-col items-center justify-center py-3 md:py-4">
-                      <span className="text-xs uppercase tracking-widest text-amber-400/80">
-                        Experimental
-                      </span>
-                      <h4 className="text-lg font-semibold tracking-wide">
-                        VS CPU Precons
-                      </h4>
-                    </div>
-                  </Link>
-                ) : (
-                  <a
-                    href="https://www.patreon.com/realmscards"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group block hover:scale-[1.02] transition-transform duration-200"
-                  >
-                    <div className="flex flex-col items-center justify-center py-3 md:py-4 opacity-60">
-                      <span className="text-xs uppercase tracking-widest text-amber-400/80">
-                        Experimental
-                      </span>
-                      <h4 className="text-lg font-semibold tracking-wide">
-                        VS CPU Precons
-                      </h4>
-                      <span className="text-xs text-amber-400/70 mt-1">
-                        Patrons only
-                      </span>
-                    </div>
-                  </a>
-                )}
-              </AsciiPanel>
-            )}
-            <AsciiPanel className="w-full p-5 md:p-6">
-              <Link
-                href="/play"
-                className="group block hover:scale-[1.02] transition-transform duration-200"
-              >
-                <div className="flex items-center justify-center py-3 md:py-4">
-                  <h4 className="text-lg font-semibold tracking-wide">
-                    Solo Hotseat
-                  </h4>
-                </div>
-              </Link>
-            </AsciiPanel>
-            <AsciiPanel className="w-full p-5 md:p-6">
-              <Link
-                href="/draft-3d"
-                className="group block hover:scale-[1.02] transition-transform duration-200"
-              >
-                <div className="flex items-center justify-center py-3 md:py-4">
-                  <h4 className="text-lg font-semibold tracking-wide">
-                    Solo Draftsim
-                  </h4>
-                </div>
-              </Link>
-            </AsciiPanel>
+          <div className="mx-auto grid max-w-4xl grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-3 md:gap-4">
+            <PanelTile href="/play" className="w-full">
+              <div className="flex items-center justify-center py-3 md:py-4">
+                <h4 className={subTitle}>Solo Hotseat</h4>
+              </div>
+            </PanelTile>
+            <PanelTile href="/draft-3d" className="w-full">
+              <div className="flex items-center justify-center py-3 md:py-4">
+                <h4 className={subTitle}>Solo Draftsim</h4>
+              </div>
+            </PanelTile>
           </div>
         )}
 
         {/* Tutorial & Other Realms */}
         {session && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 max-w-4xl mx-auto">
-            <AsciiPanel className="w-full p-5 md:p-6">
-              <Link
-                href="/tutorial"
-                className="group block hover:scale-[1.02] transition-transform duration-200"
-              >
-                <div className="flex items-center justify-center py-3 md:py-4">
-                  <h4 className="text-lg font-semibold tracking-wide">
-                    Sorcery Tutorial
-                  </h4>
-                </div>
-              </Link>
-            </AsciiPanel>
-            <div className="cursor-pointer">
-              <OtherRealms />
-            </div>
+          <div className="mx-auto grid max-w-4xl grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-3 md:gap-4">
+            <PanelTile href="/tutorial" className="w-full">
+              <div className="flex items-center justify-center py-3 md:py-4">
+                <h4 className={subTitle}>Sorcery Tutorial</h4>
+              </div>
+            </PanelTile>
+            <OtherRealms className="w-full" />
           </div>
         )}
 
-        {/* Footer */}
-        <div className="text-xs text-orange-300/80">
-          <p>
-            All rights to Sorcery: Contested Realms and affiliated intellectual
-            property, including but not limited to card images, artwork, logos,
-            and trademarks, remain with Erik’s Curiosa Limited and or the
-            original artists. Visit the official site at{" "}
-            <a
-              href="https://curiosa.io"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline text-orange-200/90 hover:text-orange-100"
-            >
-              curiosa.io
-            </a>
-            .
-            <br />
-            This simulator is an independent community focused project and is
-            provided as is:
-            <br />
-            free of charge for community and educational purposes only.
-          </p>
-          <p />
-        </div>
         <LobbyFooter />
       </div>
 
-      {/* Bottom ASCII art background */}
-      <AsciiBottomArt opacityClass="text-white/12" />
+      {/* Bottom ASCII art background, warmed toward the gold palette */}
+      <AsciiBottomArt opacityClass="text-white/10" />
 
       {/* Cookie/Privacy notice toast */}
       {showCookieNotice && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-sm w-[calc(100%-2rem)]">
-          <div className="bg-slate-800/95 backdrop-blur border border-slate-700/50 rounded-lg px-4 py-3 shadow-xl flex items-center justify-between gap-3">
-            <p className="text-[11px] text-slate-300 leading-tight">
-              We are not using third party tracking cookies. All cookies are for
-              authentication and simulator functionality only. Users have the
-              ability to delete all of their own data.
+        <div className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-[380px] -translate-x-1/2">
+          <div className="rounded-rc-lg border border-rc-line/14 bg-gradient-to-b from-[rgba(26,36,58,0.96)] to-[rgba(17,26,46,0.96)] p-[18px] font-rc-sans text-[13px] leading-[1.55] text-rc-fg shadow-[0_18px_40px_rgba(0,0,0,0.55)] backdrop-blur-[8px]">
+            <div className="mb-2.5 flex items-center gap-2">
+              <span className="text-rc-spark [text-shadow:0_0_8px_rgba(253,225,160,0.5)]">
+                ✦
+              </span>
+              <span className="rc-eyebrow">cookies</span>
+            </div>
+            <p className="m-0 mb-3.5 text-rc-fg-muted">
+              No third party tracking. Cookies are only for authentication and
+              simulator functionality. You can delete your data at any time.
             </p>
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  window.localStorage.setItem(
-                    "sorcery:cookieNoticeDismissed",
-                    "1",
-                  );
-                } catch {}
-                setShowCookieNotice(false);
-              }}
-              className="shrink-0 text-slate-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-white/10"
-              aria-label="Dismiss cookie notice"
-            >
-              OK
-            </button>
+            <div className="flex justify-end gap-2">
+              <RcButton size="sm" onClick={dismissCookies}>
+                Got it
+              </RcButton>
+            </div>
           </div>
         </div>
       )}

@@ -5,7 +5,13 @@ import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import GuestGate from "@/components/auth/GuestGate";
+import AppShell from "@/components/ui/AppShell";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
+import { RcDialog } from "@/components/ui/rc-dialog";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import { useViewer } from "@/lib/guest/useViewer";
 import {
@@ -47,6 +53,22 @@ interface CreateTournamentForm {
     };
   };
 }
+
+/** Mono spaced-caps label above a form control. */
+const FIELD_LABEL =
+  "mb-1.5 block font-rc-mono text-[11px] uppercase tracking-[0.18em] text-rc-fg-subtle";
+
+/** Boxed option row inside the create form. */
+const OPTION_BOX = "rounded-rc-md border border-rc-line/18 bg-black/30 p-3.5";
+
+/**
+ * Checkbox row whose label wraps over several lines: `.rc-check` centres its
+ * box, so multi-line rows get their own top-aligned variant.
+ */
+const CHECK_ROW_TOP =
+  "flex cursor-pointer items-start gap-2 font-rc-mono text-xs leading-relaxed tracking-[0.06em] text-rc-fg-muted";
+
+const CREATE_FORM_ID = "create-tournament-form";
 
 export default function TournamentsPage() {
   const viewer = useViewer();
@@ -409,20 +431,21 @@ export default function TournamentsPage() {
     }
   };
 
-  const getStatusBadgeColor = (status: Tournament["status"]) => {
+  /** Status square + label colour, mirroring the lobby games table. */
+  const getStatusTone = (status: Tournament["status"]) => {
     switch (status) {
       case "registering":
-        return "bg-green-100 text-green-800 border-green-200";
+        return "text-rc-success";
       case "preparing":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+        return "text-rc-warning";
       case "active":
-        return "bg-blue-100 text-blue-800 border-blue-200";
+        return "text-rc-danger";
       case "completed":
-        return "bg-gray-100 text-gray-800 border-gray-200";
+        return "text-rc-fg-dim";
       case "cancelled":
-        return "bg-red-100 text-red-800 border-red-200";
+        return "text-rc-danger";
       default:
-        return "bg-gray-100 text-gray-800 border-gray-200";
+        return "text-rc-fg-dim";
     }
   };
 
@@ -439,129 +462,108 @@ export default function TournamentsPage() {
     }
   };
 
-  if (viewer.status === "loading" || (rtLoading && !initialLoaded && !viewer.isAnonymous)) {
+  if (
+    viewer.status === "loading" ||
+    (rtLoading && !initialLoaded && !viewer.isAnonymous)
+  ) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-white text-xl">Loading tournaments...</div>
-      </div>
+      <AppShell>
+        <div className="rc-hint py-6 text-center">loading tournaments…</div>
+      </AppShell>
     );
   }
 
   if (viewer.isAnonymous) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white">
-        <div className="container mx-auto px-4 py-8 max-w-2xl">
-          <GuestGate
-            title="Tournaments"
-            description="Sign in to create and play tournaments, or continue as a guest to browse them and join through an invite link."
-            returnTo={currentHref}
-          />
-        </div>
-      </div>
+      <AppShell width="narrow">
+        <GuestGate
+          variant="realms"
+          title="Tournaments"
+          description="Sign in to create and play tournaments, or continue as a guest to browse them and join through an invite link."
+          returnTo={currentHref}
+        />
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <Link
-              href="/online/lobby"
-              className="text-slate-400 hover:text-white mb-2 inline-flex items-center text-sm"
-            >
-              ← Back to Lobby
-            </Link>
-            <h1 className="text-3xl font-fantaisie text-white mb-2">
-              Tournaments
-            </h1>
-            <p className="text-slate-400">
-              Competitive events played on realms.cards — results are recorded
-              automatically
-            </p>
-          </div>
-          <button
-            onClick={handleShowCreateForm}
-            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-          >
-            Create Tournament
-          </button>
-        </div>
+    <AppShell>
+      <PageHeader
+        eyebrow="Competitive play"
+        title="Tournaments"
+        description="Competitive events played on realms.cards — results are recorded automatically"
+        actions={
+          <>
+            <RcLinkButton variant="ghost" href="/online/lobby">
+              Back to Lobby
+            </RcLinkButton>
+            <RcButton onClick={handleShowCreateForm}>
+              Create Tournament
+            </RcButton>
+          </>
+        }
+      />
 
-        {/* Tournament type chooser */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <div className="bg-slate-800 border border-blue-500/40 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xl">🎮</span>
-              <h2 className="font-semibold text-white">Platform Tournaments</h2>
-              <span className="text-xs px-1.5 py-0.5 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded">
-                This page
-              </span>
-            </div>
-            <p className="text-sm text-slate-400">
-              Sealed, draft, and constructed events where every match is played
-              here on realms.cards. Pairings, results, and standings are fully
-              automated.
-            </p>
+      {/* Tournament type chooser */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="rounded-rc-lg border border-rc-accent/35 bg-rc-panel p-[18px] shadow-rc-panel">
+          <div className="mb-1.5 flex flex-wrap items-center gap-2">
+            <h2 className="m-0 font-rc-display text-[22px] leading-none text-rc-fg-strong">
+              Platform Tournaments
+            </h2>
+            <Badge tone="gold">This page</Badge>
           </div>
-          <Link
-            href="/open-tournaments"
-            className="group block bg-slate-800 border border-slate-700 hover:border-amber-500/40 rounded-lg p-4 transition-colors"
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xl">📋</span>
-              <h2 className="font-semibold text-white">Open Events</h2>
-            </div>
-            <p className="text-sm text-slate-400">
-              Play anywhere — on realms.cards, Tabletop Simulator, or in paper.
-              Players report their scores and standings are tracked here, with
-              optional host approval.
-            </p>
-            <span className="text-sm text-amber-400 group-hover:text-amber-300 mt-2 inline-block">
-              Browse Open Events →
-            </span>
-          </Link>
+          <p className="m-0 font-rc-sans text-sm leading-relaxed text-rc-fg-muted">
+            Sealed, draft, and constructed events where every match is played
+            here on realms.cards. Pairings, results, and standings are fully
+            automated.
+          </p>
         </div>
+        <Link
+          href="/open-tournaments"
+          className="group block rounded-rc-lg border border-rc-line/18 bg-rc-panel p-[18px] shadow-rc-panel transition-colors hover:border-rc-accent/45"
+        >
+          <h2 className="m-0 mb-1.5 font-rc-display text-[22px] leading-none text-rc-fg-strong">
+            Open Events
+          </h2>
+          <p className="m-0 font-rc-sans text-sm leading-relaxed text-rc-fg-muted">
+            Play anywhere — on realms.cards, Tabletop Simulator, or in paper.
+            Players report their scores and standings are tracked here, with
+            optional host approval.
+          </p>
+          <span className="mt-2 inline-block font-rc-mono text-[11px] uppercase tracking-[0.18em] text-rc-accent-link transition-colors group-hover:text-rc-accent-ring">
+            Browse Open Events
+          </span>
+        </Link>
+      </div>
 
-        {/* View Filter */}
-        <div className="flex items-center gap-2 mb-6">
+      {/* View Filter */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="rc-segment">
           <button
-            className={`px-3 py-1.5 rounded-md text-sm border ${
-              viewFilter === "active"
-                ? "bg-blue-600 text-white border-blue-500"
-                : "bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700"
-            }`}
+            type="button"
+            aria-pressed={viewFilter === "active"}
             onClick={() => setViewFilter("active")}
           >
             Active
           </button>
           <button
-            className={`px-3 py-1.5 rounded-md text-sm border ${
-              viewFilter === "completed"
-                ? "bg-blue-600 text-white border-blue-500"
-                : "bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700"
-            }`}
+            type="button"
+            aria-pressed={viewFilter === "completed"}
             onClick={() => setViewFilter("completed")}
           >
             Completed
           </button>
           <button
-            className={`px-3 py-1.5 rounded-md text-sm border ${
-              viewFilter === "all"
-                ? "bg-blue-600 text-white border-blue-500"
-                : "bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700"
-            }`}
+            type="button"
+            aria-pressed={viewFilter === "all"}
             onClick={() => setViewFilter("all")}
           >
             All
           </button>
           <button
-            className={`px-3 py-1.5 rounded-md text-sm border ${
-              viewFilter === "mine"
-                ? "bg-blue-600 text-white border-blue-500"
-                : "bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700"
-            }`}
+            type="button"
+            aria-pressed={viewFilter === "mine"}
             onClick={() => {
               setViewFilter("mine");
               setPage(1);
@@ -569,1014 +571,953 @@ export default function TournamentsPage() {
           >
             My Tournaments
           </button>
-          {viewFilter !== "active" && (
-            <span className="text-xs text-slate-400 ml-2">
-              Showing {viewFilter} tournaments
-            </span>
-          )}
-          {viewFilter !== "active" && (
-            <div className="ml-auto flex items-center gap-2">
-              <input
-                type="search"
-                name="q"
-                autoComplete="off"
-                role="searchbox"
-                inputMode="search"
-                data-1p-ignore
-                data-lpignore="true"
-                data-bwignore="true"
-                data-dashlane-ignore="true"
-                data-np-ignore="true"
-                data-keeper-lock="true"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="Search…"
-                className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          )}
         </div>
-
-        {/* Error Display */}
-        {(error || rtError || localError) && (
-          <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-6">
-            <div className="flex items-center">
-              <svg
-                className="w-5 h-5 mr-2"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              {error || rtError || localError}
-            </div>
-          </div>
-        )}
-
-        {/* Pagination for non-active views */}
         {viewFilter !== "active" && (
-          <div className="mt-6 flex items-center justify-center gap-2">
-            <button
-              className="px-3 py-1.5 rounded-md text-sm bg-slate-800 text-slate-200 border border-slate-600 disabled:opacity-50"
-              disabled={page <= 1 || loadingLocal}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </button>
-            <span className="text-slate-400 text-sm">Page {page}</span>
-            <button
-              className="px-3 py-1.5 rounded-md text-sm bg-slate-800 text-slate-200 border border-slate-600 disabled:opacity-50"
-              disabled={loadingLocal || localTournaments.length < pageSize}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </button>
-          </div>
+          <span className="rc-hint">Showing {viewFilter} tournaments</span>
         )}
-
-        {/* Tournaments Grid */}
-        {(
-          viewFilter === "active"
-            ? tournaments.length === 0
-            : loadingLocal
-              ? false
-              : localTournaments.length === 0
-        ) ? (
-          <div className="text-center py-12">
-            <Icon
-              icon="game-icons:laurels-trophy"
-              className="mx-auto mb-4 text-slate-500"
-              width={72}
-              height={72}
+        {viewFilter !== "active" && (
+          <div className="ml-auto flex items-center gap-2">
+            <input
+              type="search"
+              name="q"
+              autoComplete="off"
+              role="searchbox"
+              inputMode="search"
+              data-1p-ignore
+              data-lpignore="true"
+              data-bwignore="true"
+              data-dashlane-ignore="true"
+              data-np-ignore="true"
+              data-keeper-lock="true"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search…"
+              className="rc-input h-9 min-w-[200px]"
             />
-            <h2 className="text-2xl font-semibold text-slate-300 mb-2">
-              No tournaments found
-            </h2>
-            {viewFilter === "active" ? (
-              <>
-                <br />
-                <button
-                  onClick={handleShowCreateForm}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-                >
-                  Create Tournament
-                </button>
-              </>
-            ) : (
-              <p className="text-slate-500">
-                Try switching filters or check back later.
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {(viewFilter === "active" ? tournaments : localTournaments).map(
-              (tournament) => {
-                const registrationSettings = (
-                  tournament as unknown as {
-                    settings?: Record<string, unknown>;
-                  }
-                ).settings?.registration as Record<string, unknown> | undefined;
-                const isOpenSeat = registrationSettings?.mode === "open";
-                const isLocked = registrationSettings?.locked === true;
-                const registeredPlayers =
-                  (
-                    tournament as unknown as {
-                      registeredPlayers?: Array<{ seatStatus?: string }>;
-                    }
-                  ).registeredPlayers ?? [];
-                const activeCount = getCurrentPlayersCount(tournament);
-                const vacantCount = Math.max(
-                  0,
-                  registeredPlayers.filter((p) => p.seatStatus === "vacant")
-                    .length,
-                );
-                const canJoin = isOpenSeat
-                  ? vacantCount > 0 ||
-                    (!isLocked &&
-                      (tournament.status === "registering" ||
-                        tournament.status === "preparing"))
-                  : tournament.status === "registering" &&
-                    activeCount < tournament.maxPlayers;
-
-                return (
-                  <div
-                    key={tournament.id}
-                    className="bg-slate-800 border border-slate-700 rounded-lg p-6 hover:bg-slate-750 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-4">
-                      <div className="flex min-w-0 items-center space-x-2">
-                        <Icon
-                          icon={getFormatIcon(tournament.format)}
-                          className="shrink-0 text-slate-300"
-                          width={26}
-                          height={26}
-                        />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-fantaisie text-lg text-white truncate">
-                              {tournament.name}
-                            </h3>
-                            {(tournament as unknown as { isPrivate?: boolean })
-                              .isPrivate && (
-                              <span className="flex shrink-0 items-center gap-1 text-xs px-1.5 py-0.5 bg-purple-600/20 text-purple-300 border border-purple-500/30 rounded">
-                                <Icon
-                                  icon="game-icons:padlock"
-                                  width={11}
-                                  height={11}
-                                />
-                                Private
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-slate-400 text-sm capitalize">
-                            {tournament.format}
-                          </p>
-                        </div>
-                      </div>
-                      <span
-                        className={`shrink-0 whitespace-nowrap px-2 py-1 rounded-full text-xs font-medium border capitalize ${getStatusBadgeColor(
-                          tournament.status,
-                        )}`}
-                      >
-                        {tournament.status}
-                      </span>
-                    </div>
-
-                    <div className="space-y-2 mb-4">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-400">Players:</span>
-                        <span className="text-white">
-                          {activeCount}
-                          {isOpenSeat ? "" : `/${tournament.maxPlayers}`}
-                        </span>
-                      </div>
-
-                      <div className="w-full bg-slate-700 rounded-full h-2">
-                        <div
-                          className="bg-blue-600 h-2 rounded-full transition-all"
-                          style={{
-                            width: `${Math.min(
-                              (activeCount / tournament.maxPlayers) * 100,
-                              100,
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                      {isOpenSeat && (
-                        <div className="flex justify-between text-xs text-slate-400">
-                          <span>Open Seat: {isLocked ? "Locked" : "Open"}</span>
-                          {vacantCount > 0 && (
-                            <span>Vacant: {vacantCount}</span>
-                          )}
-                        </div>
-                      )}
-
-                      {tournament.startedAt && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-slate-400">Started:</span>
-                          <span className="text-white">
-                            {new Date(
-                              tournament.startedAt,
-                            ).toLocaleDateString()}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex space-x-2">
-                      <Link
-                        href={`/tournaments/${tournament.id}`}
-                        className="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-center px-4 py-2 rounded text-sm font-medium transition-colors"
-                      >
-                        View Details
-                      </Link>
-
-                      {canJoin && (
-                        <button
-                          onClick={() => handleJoinTournament(tournament.id)}
-                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
-                        >
-                          Join
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              },
-            )}
-          </div>
-        )}
-
-        {/* Create Tournament Modal */}
-        {showCreateForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-white">
-                  Create Tournament
-                </h2>
-                <button
-                  onClick={() => setShowCreateForm(false)}
-                  className="text-slate-400 hover:text-white"
-                >
-                  ×
-                </button>
-              </div>
-
-              <p className="text-sm text-slate-400 mb-4">
-                All matches in this tournament are played on realms.cards and
-                results are recorded automatically. Planning to play on
-                Tabletop Simulator or in paper?{" "}
-                <Link
-                  href="/open-tournaments"
-                  className="text-blue-400 hover:text-blue-300"
-                >
-                  Create an Open Event instead →
-                </Link>
-              </p>
-
-              <form onSubmit={handleCreateTournament} className="space-y-4">
-                <div>
-                  <label className="block text-slate-300 text-sm font-medium mb-2">
-                    Tournament Name
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={form.name}
-                      onChange={(e) =>
-                        setForm((prev) => ({ ...prev, name: e.target.value }))
-                      }
-                      className="flex-1 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter tournament name"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          name: generateTournamentName(),
-                        }))
-                      }
-                      className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-2 text-xs transition-colors"
-                      title="Generate random name"
-                    >
-                      🎲
-                    </button>
-                  </div>
-                </div>
-
-                {/* Privacy Toggle */}
-                <div>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.isPrivate}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          isPrivate: e.target.checked,
-                        }))
-                      }
-                      className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
-                    />
-                    <span className="text-slate-300 text-sm">
-                      Private tournament (invite-only)
-                    </span>
-                  </label>
-                  {form.isPrivate && (
-                    <p className="text-slate-400 text-xs mt-1 ml-6">
-                      Only invited players can see and join this tournament
-                    </p>
-                  )}
-                </div>
-                <div className="bg-slate-700/50 rounded-lg p-3 border border-slate-600">
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.registrationMode === "open"}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          registrationMode: e.target.checked ? "open" : "fixed",
-                          registrationLocked: e.target.checked
-                            ? prev.registrationLocked
-                            : false,
-                        }))
-                      }
-                      className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
-                    />
-                    <div>
-                      <span className="text-slate-200 text-sm font-medium">
-                        Flexible Registration
-                      </span>
-                      <p className="text-slate-400 text-xs mt-0.5">
-                        Players can join or leave freely. You control when to
-                        lock registration and start.
-                      </p>
-                    </div>
-                  </label>
-                  {form.registrationMode === "open" && (
-                    <label className="mt-2 flex items-center gap-2 text-slate-300 text-xs ml-6 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={form.registrationLocked}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            registrationLocked: e.target.checked,
-                          }))
-                        }
-                        className="w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
-                      />
-                      Start with registration locked
-                    </label>
-                  )}
-                </div>
-
-                {/* Tournament Structure Row */}
-                <div className="flex flex-wrap gap-4">
-                  <div>
-                    <label className="block text-slate-300 text-sm font-medium mb-1">
-                      Format
-                    </label>
-                    <CustomSelect
-                      value={form.format}
-                      onChange={(v) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          format: v as "sealed" | "draft" | "constructed",
-                        }))
-                      }
-                      options={[
-                        { value: "constructed", label: "Constructed" },
-                        { value: "sealed", label: "Sealed" },
-                        { value: "draft", label: "Draft" },
-                      ]}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-300 text-sm font-medium mb-1">
-                      {form.registrationMode === "open"
-                        ? "Seat Cap"
-                        : "Players"}
-                    </label>
-                    {form.registrationMode === "open" ? (
-                      <input
-                        type="number"
-                        min={2}
-                        max={128}
-                        value={form.maxPlayers}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            maxPlayers: Math.max(
-                              2,
-                              Math.min(128, parseInt(e.target.value) || 2),
-                            ),
-                          }))
-                        }
-                        className="w-20 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    ) : (
-                      <CustomSelect
-                        value={String(form.maxPlayers)}
-                        onChange={(v) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            maxPlayers: parseInt(v),
-                          }))
-                        }
-                        options={[
-                          { value: "2", label: "2" },
-                          { value: "4", label: "4" },
-                          { value: "8", label: "8" },
-                          { value: "16", label: "16" },
-                          { value: "32", label: "32" },
-                          { value: "64", label: "64" },
-                        ]}
-                      />
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-slate-300 text-sm font-medium mb-1">
-                      Rounds
-                    </label>
-                    <CustomSelect
-                      value={String(form.settings.totalRounds || 3)}
-                      onChange={(v) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          settings: {
-                            ...prev.settings,
-                            totalRounds: parseInt(v),
-                          },
-                        }))
-                      }
-                      options={[
-                        { value: "2", label: "2" },
-                        { value: "3", label: "3" },
-                        { value: "4", label: "4" },
-                        { value: "5", label: "5" },
-                      ]}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-300 text-sm font-medium mb-1">
-                      Round Time
-                    </label>
-                    <CustomSelect
-                      value={String(roundTimeLimit)}
-                      onChange={(v) => setRoundTimeLimit(parseInt(v))}
-                      options={[
-                        { value: "30", label: "30 min" },
-                        { value: "45", label: "45 min" },
-                        { value: "60", label: "60 min" },
-                        { value: "90", label: "90 min" },
-                      ]}
-                    />
-                  </div>
-                </div>
-
-                {/* Timer warning + tiebreak extra turns */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-300 text-sm font-medium mb-1">
-                      Timer Warning At
-                    </label>
-                    <CustomSelect
-                      value={String(timerWarningMinutes)}
-                      onChange={(v) => setTimerWarningMinutes(parseInt(v))}
-                      options={[
-                        { value: "5", label: "5 min left" },
-                        { value: "10", label: "10 min left" },
-                        { value: "15", label: "15 min left" },
-                      ]}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-300 text-sm font-medium mb-1">
-                      Extra Turns (Tiebreak)
-                    </label>
-                    <CustomSelect
-                      value={String(tiebreakExtraTurns)}
-                      onChange={(v) => setTiebreakExtraTurns(parseInt(v))}
-                      options={[
-                        { value: "0", label: "None" },
-                        { value: "3", label: "3 turns" },
-                        { value: "5", label: "5 turns" },
-                        { value: "10", label: "10 turns" },
-                      ]}
-                    />
-                    <p className="text-slate-400 text-xs mt-1">
-                      Played after time expires, then the tiebreaker decides
-                      the match.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Host-Only Mode */}
-                <div className="bg-slate-700/50 rounded-lg p-3 border border-slate-600">
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={hostOnlyMode}
-                      onChange={(e) => setHostOnlyMode(e.target.checked)}
-                      className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
-                    />
-                    <div>
-                      <span className="text-slate-200 text-sm font-medium">
-                        Host Only Mode
-                      </span>
-                      <p className="text-slate-400 text-xs mt-0.5">
-                        You will manage the tournament but not participate as a
-                        player.
-                      </p>
-                    </div>
-                  </label>
-                </div>
-
-                {/* Second Player Seer */}
-                <div className="bg-slate-700/50 rounded-lg p-3 border border-slate-600">
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={enableSeer}
-                      onChange={(e) => setEnableSeer(e.target.checked)}
-                      className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
-                    />
-                    <div>
-                      <span className="text-slate-200 text-sm font-medium">
-                        Enable Second Seer
-                      </span>
-                      <p className="text-slate-400 text-xs mt-0.5">
-                        The second player scries 1 before each game starts.
-                      </p>
-                    </div>
-                  </label>
-                </div>
-
-                {/* Sealed Booster Configuration */}
-                {form.format === "sealed" && (
-                  <div className="space-y-3 bg-slate-700/30 rounded-lg p-4 border border-slate-600/50">
-                    {/* Cube sealed toggle */}
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={sealedUseCube}
-                        onChange={(e) => setSealedUseCube(e.target.checked)}
-                        className="rounded"
-                      />
-                      <span className="text-slate-300 text-sm">
-                        Use Cube for sealed
-                      </span>
-                    </label>
-
-                    {sealedUseCube ? (
-                      /* Cube selector + pack count */
-                      <div className="space-y-2">
-                        <div>
-                          <label className="block text-slate-300 text-sm font-medium mb-2">
-                            Select Cube
-                          </label>
-                          <CustomSelect
-                            value={sealedCubeId}
-                            onChange={(v) => setSealedCubeId(v)}
-                            disabled={cubes.length === 0}
-                            className="w-full"
-                            placeholder={
-                              cubes.length === 0
-                                ? "No cubes available"
-                                : "-- Select a cube --"
-                            }
-                            options={cubes.map((cube) => ({
-                              value: cube.id,
-                              label: cube.name,
-                            }))}
-                          />
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <label className="block text-slate-300 text-sm font-medium">
-                            Pack Count
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setSealedBoosterCount((c) => Math.max(1, c - 1))
-                              }
-                              className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
-                            >
-                              -
-                            </button>
-                            <span className="w-12 text-center text-white font-semibold">
-                              {sealedBoosterCount}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setSealedBoosterCount((c) =>
-                                  Math.min(10, c + 1),
-                                )
-                              }
-                              className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                        <label className="flex items-start gap-2 text-slate-300 text-xs cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={sealedIncludeCubeSideboard}
-                            onChange={(e) =>
-                              setSealedIncludeCubeSideboard(e.target.checked)
-                            }
-                            className="mt-0.5 w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-500"
-                          />
-                          <span>
-                            Include cube&apos;s sideboard cards in the standard
-                            card pool during deckbuilding.
-                          </span>
-                        </label>
-                      </div>
-                    ) : (
-                      /* Set-based booster configuration */
-                      <>
-                        <div className="flex items-center gap-3">
-                          <label className="block text-slate-300 text-sm font-medium">
-                            Booster Count
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newCount = Math.max(
-                                  1,
-                                  sealedBoosterCount - 1,
-                                );
-                                setSealedBoosterCount(newCount);
-                                setSealedBoosters((prev) =>
-                                  prev.slice(0, newCount),
-                                );
-                              }}
-                              className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
-                            >
-                              -
-                            </button>
-                            <span className="w-12 text-center text-white font-semibold">
-                              {sealedBoosterCount}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newCount = Math.min(
-                                  10,
-                                  sealedBoosterCount + 1,
-                                );
-                                setSealedBoosterCount(newCount);
-                                setSealedBoosters((prev) => [
-                                  ...prev,
-                                  ...Array(newCount - prev.length).fill(
-                                    defaultSetName,
-                                  ),
-                                ]);
-                              }}
-                              className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {sealedBoosters.map((setName, idx) => (
-                            <div
-                              key={`sealed-booster-${idx}`}
-                              className="flex items-center gap-2"
-                            >
-                              <div className="text-slate-400 text-sm w-16 shrink-0">
-                                Pack {idx + 1}
-                              </div>
-                              <CustomSelect
-                                value={setName}
-                                onChange={(v) => {
-                                  setSealedBoosters((prev) => {
-                                    const next = [...prev];
-                                    next[idx] = v;
-                                    return next;
-                                  });
-                                }}
-                                className="flex-1"
-                                options={draftableSets.map((name) => ({
-                                  value: name,
-                                  label: name,
-                                }))}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    )}
-
-                    {/* Sealed Time Limit */}
-                    <div>
-                      <label className="block text-slate-300 text-sm font-medium mb-2">
-                        Time Limit (minutes)
-                      </label>
-                      <input
-                        type="number"
-                        min={10}
-                        max={90}
-                        step={5}
-                        value={sealedTimeLimit}
-                        onChange={(e) =>
-                          setSealedTimeLimit(
-                            Math.max(
-                              10,
-                              Math.min(90, parseInt(e.target.value) || 40),
-                            ),
-                          )
-                        }
-                        className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <p className="text-slate-400 text-xs mt-1">
-                        Warning-only time limit for deck construction (10-90
-                        minutes)
-                      </p>
-                    </div>
-
-                    {/* Free Avatars Toggle */}
-                    <label className="flex items-start gap-2 text-slate-300 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={sealedFreeAvatars}
-                        onChange={(e) => setSealedFreeAvatars(e.target.checked)}
-                        className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-500"
-                      />
-                      <span>
-                        Free Avatars (remove from packs, all available in deck
-                        editor)
-                      </span>
-                    </label>
-                  </div>
-                )}
-
-                {/* Draft Booster Configuration */}
-                {form.format === "draft" && (
-                  <div className="space-y-3 bg-slate-700/30 rounded-lg p-4 border border-slate-600/50">
-                    {/* Cube draft toggle */}
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={useCube}
-                        onChange={(e) => setUseCube(e.target.checked)}
-                        className="rounded"
-                      />
-                      <span className="text-slate-300 text-sm">
-                        Use Cube for draft
-                      </span>
-                    </label>
-
-                    {useCube ? (
-                      /* Cube selector + sideboard option */
-                      <div className="space-y-2">
-                        <div>
-                          <label className="block text-slate-300 text-sm font-medium mb-2">
-                            Select Cube
-                          </label>
-                          <CustomSelect
-                            value={cubeId}
-                            onChange={(v) => setCubeId(v)}
-                            disabled={cubes.length === 0}
-                            className="w-full"
-                            placeholder={
-                              cubes.length === 0
-                                ? "No cubes available"
-                                : "-- Select a cube --"
-                            }
-                            options={cubes.map((cube) => ({
-                              value: cube.id,
-                              label: cube.name,
-                            }))}
-                          />
-                        </div>
-                        <label className="flex items-start gap-2 text-slate-300 text-xs cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={includeCubeSideboard}
-                            onChange={(e) =>
-                              setIncludeCubeSideboard(e.target.checked)
-                            }
-                            className="mt-0.5 w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-500"
-                          />
-                          <span>
-                            When drafting from a cube, offer the cube&apos;s
-                            sideboard cards in the standard card pool during
-                            deckbuilding.
-                          </span>
-                        </label>
-                      </div>
-                    ) : (
-                      /* Set-based booster configuration */
-                      <>
-                        <div className="flex items-center gap-3">
-                          <label className="block text-slate-300 text-sm font-medium">
-                            Booster Count
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newCount = Math.max(
-                                  1,
-                                  draftBoosterCount - 1,
-                                );
-                                setDraftBoosterCount(newCount);
-                                setDraftBoosters((prev) =>
-                                  prev.slice(0, newCount),
-                                );
-                              }}
-                              className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
-                            >
-                              -
-                            </button>
-                            <span className="w-12 text-center text-white font-semibold">
-                              {draftBoosterCount}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newCount = Math.min(
-                                  5,
-                                  draftBoosterCount + 1,
-                                );
-                                setDraftBoosterCount(newCount);
-                                setDraftBoosters((prev) => [
-                                  ...prev,
-                                  ...Array(newCount - prev.length).fill(
-                                    defaultSetName,
-                                  ),
-                                ]);
-                              }}
-                              className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white font-bold"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {draftBoosters.map((setName, idx) => (
-                            <div
-                              key={`draft-booster-${idx}`}
-                              className="flex items-center gap-2"
-                            >
-                              <div className="text-slate-400 text-sm w-16 shrink-0">
-                                Pack {idx + 1}
-                              </div>
-                              <CustomSelect
-                                value={setName}
-                                onChange={(v) => {
-                                  setDraftBoosters((prev) => {
-                                    const next = [...prev];
-                                    next[idx] = v;
-                                    return next;
-                                  });
-                                }}
-                                className="flex-1"
-                                options={draftableSets.map((name) => ({
-                                  value: name,
-                                  label: name,
-                                }))}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    )}
-
-                    {/* Draft Time Limits */}
-                    <div className="grid grid-cols-2 gap-2 mt-3">
-                      <div>
-                        <label className="block text-slate-300 text-sm font-medium mb-2">
-                          Pick Time Limit (sec)
-                        </label>
-                        <input
-                          type="number"
-                          min={30}
-                          max={300}
-                          step={15}
-                          value={draftPickTimeLimit}
-                          onChange={(e) =>
-                            setDraftPickTimeLimit(
-                              Math.max(
-                                30,
-                                Math.min(300, parseInt(e.target.value) || 60),
-                              ),
-                            )
-                          }
-                          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <p className="text-slate-400 text-xs mt-1">
-                          Time per pick (30-300 seconds)
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-slate-300 text-sm font-medium mb-2">
-                          Construction Time (min)
-                        </label>
-                        <input
-                          type="number"
-                          min={10}
-                          max={60}
-                          step={5}
-                          value={draftConstructionTimeLimit}
-                          onChange={(e) =>
-                            setDraftConstructionTimeLimit(
-                              Math.max(
-                                10,
-                                Math.min(60, parseInt(e.target.value) || 20),
-                              ),
-                            )
-                          }
-                          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <p className="text-slate-400 text-xs mt-1">
-                          Deck building (10-60 minutes)
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Free Avatars Toggle */}
-                    <label className="flex items-start gap-2 text-slate-300 text-sm cursor-pointer mt-3">
-                      <input
-                        type="checkbox"
-                        checked={draftFreeAvatars}
-                        onChange={(e) => setDraftFreeAvatars(e.target.checked)}
-                        className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-500"
-                      />
-                      <span>
-                        Free Avatars (remove from packs, all available in deck
-                        editor)
-                      </span>
-                    </label>
-
-                    {/* Pod Size for large tournaments */}
-                    {form.maxPlayers > 8 && (
-                      <div className="mt-3 bg-amber-900/20 border border-amber-700/50 rounded-lg p-3">
-                        <label className="block text-amber-200 text-sm font-medium mb-2">
-                          Draft Pod Size
-                        </label>
-                        <p className="text-amber-200/70 text-xs mb-2">
-                          For tournaments with more than 8 players, players will
-                          be split into pods.
-                        </p>
-                        <CustomSelect
-                          value={String(draftPodSize)}
-                          onChange={(v) => setDraftPodSize(parseInt(v))}
-                          options={[
-                            { value: "4", label: "4 players per pod" },
-                            { value: "5", label: "5 players per pod" },
-                            { value: "6", label: "6 players per pod" },
-                            { value: "7", label: "7 players per pod" },
-                            { value: "8", label: "8 players per pod" },
-                          ]}
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="flex space-x-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateForm(false)}
-                    className="flex-1 bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded font-medium transition-colors"
-                    disabled={creating}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={creating}
-                  >
-                    {creating ? "Creating..." : "Create Tournament"}
-                  </button>
-                </div>
-              </form>
-            </div>
           </div>
         )}
       </div>
-    </div>
+
+      {/* Error Display */}
+      {(error || rtError || localError) && (
+        <div className="rc-alert" data-tone="danger">
+          {error || rtError || localError}
+        </div>
+      )}
+
+      {/* Pagination for non-active views */}
+      {viewFilter !== "active" && (
+        <div className="flex items-center justify-center gap-3">
+          <RcButton
+            variant="outline"
+            size="sm"
+            disabled={page <= 1 || loadingLocal}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Previous
+          </RcButton>
+          <span className="rc-hint">Page {page}</span>
+          <RcButton
+            variant="outline"
+            size="sm"
+            disabled={loadingLocal || localTournaments.length < pageSize}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </RcButton>
+        </div>
+      )}
+
+      {/* Tournaments Grid */}
+      {(
+        viewFilter === "active"
+          ? tournaments.length === 0
+          : loadingLocal
+            ? false
+            : localTournaments.length === 0
+      ) ? (
+        <RcEmpty
+          title={
+                <>
+                  <Icon
+                    icon="game-icons:laurels-trophy"
+                    className="mx-auto mb-3 block text-rc-fg-dim"
+                    width={56}
+                    height={56}
+                    aria-hidden="true"
+                  />
+                  No tournaments found.
+                </>
+              }
+          action={
+            viewFilter === "active" ? (
+              <RcButton onClick={handleShowCreateForm}>
+                Create Tournament
+              </RcButton>
+            ) : undefined
+          }
+        >
+          {viewFilter === "active"
+            ? ""
+            : "try switching filters or check back later"}
+        </RcEmpty>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {(viewFilter === "active" ? tournaments : localTournaments).map(
+            (tournament) => {
+              const registrationSettings = (
+                tournament as unknown as {
+                  settings?: Record<string, unknown>;
+                }
+              ).settings?.registration as Record<string, unknown> | undefined;
+              const isOpenSeat = registrationSettings?.mode === "open";
+              const isLocked = registrationSettings?.locked === true;
+              const registeredPlayers =
+                (
+                  tournament as unknown as {
+                    registeredPlayers?: Array<{ seatStatus?: string }>;
+                  }
+                ).registeredPlayers ?? [];
+              const activeCount = getCurrentPlayersCount(tournament);
+              const vacantCount = Math.max(
+                0,
+                registeredPlayers.filter((p) => p.seatStatus === "vacant")
+                  .length,
+              );
+              const canJoin = isOpenSeat
+                ? vacantCount > 0 ||
+                  (!isLocked &&
+                    (tournament.status === "registering" ||
+                      tournament.status === "preparing"))
+                : tournament.status === "registering" &&
+                  activeCount < tournament.maxPlayers;
+
+              return (
+                <div
+                  key={tournament.id}
+                  className="rc-panel flex flex-col p-[18px]"
+                >
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3
+                        className="m-0 truncate font-rc-display text-[22px] leading-[1.1] text-rc-fg-strong"
+                        title={tournament.name}
+                      >
+                        {tournament.name}
+                      </h3>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <Badge>
+                          <Icon
+                            icon={getFormatIcon(tournament.format)}
+                            width={13}
+                            height={13}
+                            aria-hidden="true"
+                          />
+                          {tournament.format}
+                        </Badge>
+                        {(tournament as unknown as { isPrivate?: boolean })
+                          .isPrivate && (
+                          <Badge tone="warn">
+                            <Icon
+                              icon="game-icons:padlock"
+                              width={11}
+                              height={11}
+                              aria-hidden="true"
+                            />
+                            Private
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div
+                      className={`flex shrink-0 items-center gap-2 font-rc-mono text-[11px] uppercase tracking-[0.14em] ${getStatusTone(
+                        tournament.status,
+                      )}`}
+                    >
+                      <span className="rc-dot" />
+                      <span>{tournament.status}</span>
+                    </div>
+                  </div>
+
+                  <div className="mb-4 space-y-2">
+                    <div className="flex items-center justify-between font-rc-mono text-xs tracking-[0.1em]">
+                      <span className="text-rc-fg-subtle">Players</span>
+                      <span className="rc-stat">
+                        {activeCount}
+                        {isOpenSeat ? "" : `/${tournament.maxPlayers}`}
+                      </span>
+                    </div>
+
+                    <div className="rc-progress">
+                      <span
+                        style={{
+                          width: `${Math.min(
+                            (activeCount / tournament.maxPlayers) * 100,
+                            100,
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                    {isOpenSeat && (
+                      <div className="flex justify-between gap-2 font-rc-mono text-[11px] tracking-[0.1em] text-rc-fg-subtle">
+                        <span>Open Seat: {isLocked ? "Locked" : "Open"}</span>
+                        {vacantCount > 0 && <span>Vacant: {vacantCount}</span>}
+                      </div>
+                    )}
+
+                    {tournament.startedAt && (
+                      <div className="flex items-center justify-between font-rc-mono text-xs tracking-[0.1em]">
+                        <span className="text-rc-fg-subtle">Started</span>
+                        <span className="rc-stat">
+                          {new Date(tournament.startedAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-auto flex gap-2">
+                    <RcLinkButton
+                      variant="outline"
+                      href={`/tournaments/${tournament.id}`}
+                      className="flex-1"
+                    >
+                      View Details
+                    </RcLinkButton>
+
+                    {canJoin && (
+                      <RcButton
+                        onClick={() => handleJoinTournament(tournament.id)}
+                        className="flex-1"
+                      >
+                        Join
+                      </RcButton>
+                    )}
+                  </div>
+                </div>
+              );
+            },
+          )}
+        </div>
+      )}
+
+      {/* Create Tournament Modal */}
+      {showCreateForm && (
+        <RcDialog
+          title="Create Tournament"
+          size="lg"
+          onClose={() => setShowCreateForm(false)}
+          actions={
+            <>
+              <RcButton
+                variant="outline"
+                onClick={() => setShowCreateForm(false)}
+                disabled={creating}
+              >
+                Cancel
+              </RcButton>
+              <RcButton type="submit" form={CREATE_FORM_ID} disabled={creating}>
+                {creating ? "Creating..." : "Create Tournament"}
+              </RcButton>
+            </>
+          }
+        >
+          <p className="mb-4 text-sm leading-relaxed text-rc-fg-muted">
+            All matches in this tournament are played on realms.cards and
+            results are recorded automatically. Planning to play on Tabletop
+            Simulator or in paper?{" "}
+            <Link href="/open-tournaments" className="rc-link">
+              Create an Open Event instead
+            </Link>
+          </p>
+
+          <form
+            id={CREATE_FORM_ID}
+            onSubmit={handleCreateTournament}
+            className="space-y-4"
+          >
+            <div>
+              <label className={FIELD_LABEL}>Tournament Name</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, name: e.target.value }))
+                  }
+                  className="rc-input h-10 min-w-0 flex-1"
+                  placeholder="Enter tournament name"
+                  required
+                />
+                <RcButton
+                  variant="outline"
+                  onClick={() =>
+                    setForm((prev) => ({
+                      ...prev,
+                      name: generateTournamentName(),
+                    }))
+                  }
+                  title="Generate random name"
+                >
+                  Random
+                </RcButton>
+              </div>
+            </div>
+
+            {/* Privacy Toggle */}
+            <div>
+              <label className="rc-check">
+                <input
+                  type="checkbox"
+                  checked={form.isPrivate}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      isPrivate: e.target.checked,
+                    }))
+                  }
+                />
+                Private tournament (invite-only)
+              </label>
+              {form.isPrivate && (
+                <p className="rc-hint ml-6 mt-1">
+                  Only invited players can see and join this tournament
+                </p>
+              )}
+            </div>
+            <div className={OPTION_BOX}>
+              <label className={CHECK_ROW_TOP}>
+                <input
+                  type="checkbox"
+                  className="mt-0.5 accent-rc-accent"
+                  checked={form.registrationMode === "open"}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      registrationMode: e.target.checked ? "open" : "fixed",
+                      registrationLocked: e.target.checked
+                        ? prev.registrationLocked
+                        : false,
+                    }))
+                  }
+                />
+                <span>
+                  <span className="block text-[13px] uppercase tracking-[0.14em] text-rc-fg-strong">
+                    Flexible Registration
+                  </span>
+                  <span className="mt-0.5 block tracking-[0.04em] text-rc-fg-subtle">
+                    Players can join or leave freely. You control when to lock
+                    registration and start.
+                  </span>
+                </span>
+              </label>
+              {form.registrationMode === "open" && (
+                <label className="rc-check ml-6 mt-2">
+                  <input
+                    type="checkbox"
+                    checked={form.registrationLocked}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        registrationLocked: e.target.checked,
+                      }))
+                    }
+                  />
+                  Start with registration locked
+                </label>
+              )}
+            </div>
+
+            {/* Tournament Structure Row */}
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <label className={FIELD_LABEL}>Format</label>
+                <CustomSelect
+                  value={form.format}
+                  onChange={(v) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      format: v as "sealed" | "draft" | "constructed",
+                    }))
+                  }
+                  options={[
+                    { value: "constructed", label: "Constructed" },
+                    { value: "sealed", label: "Sealed" },
+                    { value: "draft", label: "Draft" },
+                  ]}
+                />
+              </div>
+              <div>
+                <label className={FIELD_LABEL}>
+                  {form.registrationMode === "open" ? "Seat Cap" : "Players"}
+                </label>
+                {form.registrationMode === "open" ? (
+                  <input
+                    type="number"
+                    min={2}
+                    max={128}
+                    value={form.maxPlayers}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        maxPlayers: Math.max(
+                          2,
+                          Math.min(128, parseInt(e.target.value) || 2),
+                        ),
+                      }))
+                    }
+                    className="rc-input h-10 w-24"
+                  />
+                ) : (
+                  <CustomSelect
+                    value={String(form.maxPlayers)}
+                    onChange={(v) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        maxPlayers: parseInt(v),
+                      }))
+                    }
+                    options={[
+                      { value: "2", label: "2" },
+                      { value: "4", label: "4" },
+                      { value: "8", label: "8" },
+                      { value: "16", label: "16" },
+                      { value: "32", label: "32" },
+                      { value: "64", label: "64" },
+                    ]}
+                  />
+                )}
+              </div>
+              <div>
+                <label className={FIELD_LABEL}>Rounds</label>
+                <CustomSelect
+                  value={String(form.settings.totalRounds || 3)}
+                  onChange={(v) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      settings: {
+                        ...prev.settings,
+                        totalRounds: parseInt(v),
+                      },
+                    }))
+                  }
+                  options={[
+                    { value: "2", label: "2" },
+                    { value: "3", label: "3" },
+                    { value: "4", label: "4" },
+                    { value: "5", label: "5" },
+                  ]}
+                />
+              </div>
+              <div>
+                <label className={FIELD_LABEL}>Round Time</label>
+                <CustomSelect
+                  value={String(roundTimeLimit)}
+                  onChange={(v) => setRoundTimeLimit(parseInt(v))}
+                  options={[
+                    { value: "30", label: "30 min" },
+                    { value: "45", label: "45 min" },
+                    { value: "60", label: "60 min" },
+                    { value: "90", label: "90 min" },
+                  ]}
+                />
+              </div>
+            </div>
+
+            {/* Timer warning + tiebreak extra turns */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className={FIELD_LABEL}>Timer Warning At</label>
+                <CustomSelect
+                  value={String(timerWarningMinutes)}
+                  onChange={(v) => setTimerWarningMinutes(parseInt(v))}
+                  options={[
+                    { value: "5", label: "5 min left" },
+                    { value: "10", label: "10 min left" },
+                    { value: "15", label: "15 min left" },
+                  ]}
+                />
+              </div>
+              <div>
+                <label className={FIELD_LABEL}>Extra Turns (Tiebreak)</label>
+                <CustomSelect
+                  value={String(tiebreakExtraTurns)}
+                  onChange={(v) => setTiebreakExtraTurns(parseInt(v))}
+                  options={[
+                    { value: "0", label: "None" },
+                    { value: "3", label: "3 turns" },
+                    { value: "5", label: "5 turns" },
+                    { value: "10", label: "10 turns" },
+                  ]}
+                />
+                <p className="rc-hint mt-1.5 leading-relaxed">
+                  Played after time expires, then the tiebreaker decides the
+                  match.
+                </p>
+              </div>
+            </div>
+
+            {/* Host-Only Mode */}
+            <div className={OPTION_BOX}>
+              <label className={CHECK_ROW_TOP}>
+                <input
+                  type="checkbox"
+                  className="mt-0.5 accent-rc-accent"
+                  checked={hostOnlyMode}
+                  onChange={(e) => setHostOnlyMode(e.target.checked)}
+                />
+                <span>
+                  <span className="block text-[13px] uppercase tracking-[0.14em] text-rc-fg-strong">
+                    Host Only Mode
+                  </span>
+                  <span className="mt-0.5 block tracking-[0.04em] text-rc-fg-subtle">
+                    You will manage the tournament but not participate as a
+                    player.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            {/* Second Player Seer */}
+            <div className={OPTION_BOX}>
+              <label className={CHECK_ROW_TOP}>
+                <input
+                  type="checkbox"
+                  className="mt-0.5 accent-rc-accent"
+                  checked={enableSeer}
+                  onChange={(e) => setEnableSeer(e.target.checked)}
+                />
+                <span>
+                  <span className="block text-[13px] uppercase tracking-[0.14em] text-rc-fg-strong">
+                    Enable Second Seer
+                  </span>
+                  <span className="mt-0.5 block tracking-[0.04em] text-rc-fg-subtle">
+                    The second player scries 1 before each game starts.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            {/* Sealed Booster Configuration */}
+            {form.format === "sealed" && (
+              <div className={`${OPTION_BOX} space-y-3`}>
+                {/* Cube sealed toggle */}
+                <label className="rc-check">
+                  <input
+                    type="checkbox"
+                    checked={sealedUseCube}
+                    onChange={(e) => setSealedUseCube(e.target.checked)}
+                  />
+                  Use Cube for sealed
+                </label>
+
+                {sealedUseCube ? (
+                  /* Cube selector + pack count */
+                  <div className="space-y-2">
+                    <div>
+                      <label className={FIELD_LABEL}>Select Cube</label>
+                      <CustomSelect
+                        value={sealedCubeId}
+                        onChange={(v) => setSealedCubeId(v)}
+                        disabled={cubes.length === 0}
+                        className="w-full"
+                        placeholder={
+                          cubes.length === 0
+                            ? "No cubes available"
+                            : "-- Select a cube --"
+                        }
+                        options={cubes.map((cube) => ({
+                          value: cube.id,
+                          label: cube.name,
+                        }))}
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className={`${FIELD_LABEL} mb-0`}>
+                        Pack Count
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <RcButton
+                          variant="outline"
+                          size="sm"
+                          aria-label="Fewer packs"
+                          onClick={() =>
+                            setSealedBoosterCount((c) => Math.max(1, c - 1))
+                          }
+                          className="w-9 px-0"
+                        >
+                          -
+                        </RcButton>
+                        <span className="rc-stat w-10 text-center">
+                          {sealedBoosterCount}
+                        </span>
+                        <RcButton
+                          variant="outline"
+                          size="sm"
+                          aria-label="More packs"
+                          onClick={() =>
+                            setSealedBoosterCount((c) => Math.min(10, c + 1))
+                          }
+                          className="w-9 px-0"
+                        >
+                          +
+                        </RcButton>
+                      </div>
+                    </div>
+                    <label className={CHECK_ROW_TOP}>
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 accent-rc-accent"
+                        checked={sealedIncludeCubeSideboard}
+                        onChange={(e) =>
+                          setSealedIncludeCubeSideboard(e.target.checked)
+                        }
+                      />
+                      <span className="tracking-[0.04em]">
+                        Include cube&apos;s sideboard cards in the standard card
+                        pool during deckbuilding.
+                      </span>
+                    </label>
+                  </div>
+                ) : (
+                  /* Set-based booster configuration */
+                  <>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className={`${FIELD_LABEL} mb-0`}>
+                        Booster Count
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <RcButton
+                          variant="outline"
+                          size="sm"
+                          aria-label="Fewer boosters"
+                          onClick={() => {
+                            const newCount = Math.max(
+                              1,
+                              sealedBoosterCount - 1,
+                            );
+                            setSealedBoosterCount(newCount);
+                            setSealedBoosters((prev) =>
+                              prev.slice(0, newCount),
+                            );
+                          }}
+                          className="w-9 px-0"
+                        >
+                          -
+                        </RcButton>
+                        <span className="rc-stat w-10 text-center">
+                          {sealedBoosterCount}
+                        </span>
+                        <RcButton
+                          variant="outline"
+                          size="sm"
+                          aria-label="More boosters"
+                          onClick={() => {
+                            const newCount = Math.min(
+                              10,
+                              sealedBoosterCount + 1,
+                            );
+                            setSealedBoosterCount(newCount);
+                            setSealedBoosters((prev) => [
+                              ...prev,
+                              ...Array(newCount - prev.length).fill(
+                                defaultSetName,
+                              ),
+                            ]);
+                          }}
+                          className="w-9 px-0"
+                        >
+                          +
+                        </RcButton>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {sealedBoosters.map((setName, idx) => (
+                        <div
+                          key={`sealed-booster-${idx}`}
+                          className="flex items-center gap-2"
+                        >
+                          <div className="w-16 shrink-0 font-rc-mono text-[11px] uppercase tracking-[0.14em] text-rc-fg-subtle">
+                            Pack {idx + 1}
+                          </div>
+                          <CustomSelect
+                            value={setName}
+                            onChange={(v) => {
+                              setSealedBoosters((prev) => {
+                                const next = [...prev];
+                                next[idx] = v;
+                                return next;
+                              });
+                            }}
+                            className="flex-1"
+                            options={draftableSets.map((name) => ({
+                              value: name,
+                              label: name,
+                            }))}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Sealed Time Limit */}
+                <div>
+                  <label className={FIELD_LABEL}>Time Limit (minutes)</label>
+                  <input
+                    type="number"
+                    min={10}
+                    max={90}
+                    step={5}
+                    value={sealedTimeLimit}
+                    onChange={(e) =>
+                      setSealedTimeLimit(
+                        Math.max(
+                          10,
+                          Math.min(90, parseInt(e.target.value) || 40),
+                        ),
+                      )
+                    }
+                    className="rc-input h-10 w-full"
+                  />
+                  <p className="rc-hint mt-1.5 leading-relaxed">
+                    Warning-only time limit for deck construction (10-90
+                    minutes)
+                  </p>
+                </div>
+
+                {/* Free Avatars Toggle */}
+                <label className={CHECK_ROW_TOP}>
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 accent-rc-accent"
+                    checked={sealedFreeAvatars}
+                    onChange={(e) => setSealedFreeAvatars(e.target.checked)}
+                  />
+                  <span className="tracking-[0.04em]">
+                    Free Avatars (remove from packs, all available in deck
+                    editor)
+                  </span>
+                </label>
+              </div>
+            )}
+
+            {/* Draft Booster Configuration */}
+            {form.format === "draft" && (
+              <div className={`${OPTION_BOX} space-y-3`}>
+                {/* Cube draft toggle */}
+                <label className="rc-check">
+                  <input
+                    type="checkbox"
+                    checked={useCube}
+                    onChange={(e) => setUseCube(e.target.checked)}
+                  />
+                  Use Cube for draft
+                </label>
+
+                {useCube ? (
+                  /* Cube selector + sideboard option */
+                  <div className="space-y-2">
+                    <div>
+                      <label className={FIELD_LABEL}>Select Cube</label>
+                      <CustomSelect
+                        value={cubeId}
+                        onChange={(v) => setCubeId(v)}
+                        disabled={cubes.length === 0}
+                        className="w-full"
+                        placeholder={
+                          cubes.length === 0
+                            ? "No cubes available"
+                            : "-- Select a cube --"
+                        }
+                        options={cubes.map((cube) => ({
+                          value: cube.id,
+                          label: cube.name,
+                        }))}
+                      />
+                    </div>
+                    <label className={CHECK_ROW_TOP}>
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 accent-rc-accent"
+                        checked={includeCubeSideboard}
+                        onChange={(e) =>
+                          setIncludeCubeSideboard(e.target.checked)
+                        }
+                      />
+                      <span className="tracking-[0.04em]">
+                        When drafting from a cube, offer the cube&apos;s
+                        sideboard cards in the standard card pool during
+                        deckbuilding.
+                      </span>
+                    </label>
+                  </div>
+                ) : (
+                  /* Set-based booster configuration */
+                  <>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className={`${FIELD_LABEL} mb-0`}>
+                        Booster Count
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <RcButton
+                          variant="outline"
+                          size="sm"
+                          aria-label="Fewer boosters"
+                          onClick={() => {
+                            const newCount = Math.max(1, draftBoosterCount - 1);
+                            setDraftBoosterCount(newCount);
+                            setDraftBoosters((prev) => prev.slice(0, newCount));
+                          }}
+                          className="w-9 px-0"
+                        >
+                          -
+                        </RcButton>
+                        <span className="rc-stat w-10 text-center">
+                          {draftBoosterCount}
+                        </span>
+                        <RcButton
+                          variant="outline"
+                          size="sm"
+                          aria-label="More boosters"
+                          onClick={() => {
+                            const newCount = Math.min(5, draftBoosterCount + 1);
+                            setDraftBoosterCount(newCount);
+                            setDraftBoosters((prev) => [
+                              ...prev,
+                              ...Array(newCount - prev.length).fill(
+                                defaultSetName,
+                              ),
+                            ]);
+                          }}
+                          className="w-9 px-0"
+                        >
+                          +
+                        </RcButton>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {draftBoosters.map((setName, idx) => (
+                        <div
+                          key={`draft-booster-${idx}`}
+                          className="flex items-center gap-2"
+                        >
+                          <div className="w-16 shrink-0 font-rc-mono text-[11px] uppercase tracking-[0.14em] text-rc-fg-subtle">
+                            Pack {idx + 1}
+                          </div>
+                          <CustomSelect
+                            value={setName}
+                            onChange={(v) => {
+                              setDraftBoosters((prev) => {
+                                const next = [...prev];
+                                next[idx] = v;
+                                return next;
+                              });
+                            }}
+                            className="flex-1"
+                            options={draftableSets.map((name) => ({
+                              value: name,
+                              label: name,
+                            }))}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Draft Time Limits */}
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div>
+                    <label className={FIELD_LABEL}>Pick Time Limit (sec)</label>
+                    <input
+                      type="number"
+                      min={30}
+                      max={300}
+                      step={15}
+                      value={draftPickTimeLimit}
+                      onChange={(e) =>
+                        setDraftPickTimeLimit(
+                          Math.max(
+                            30,
+                            Math.min(300, parseInt(e.target.value) || 60),
+                          ),
+                        )
+                      }
+                      className="rc-input h-10 w-full"
+                    />
+                    <p className="rc-hint mt-1.5">
+                      Time per pick (30-300 seconds)
+                    </p>
+                  </div>
+                  <div>
+                    <label className={FIELD_LABEL}>
+                      Construction Time (min)
+                    </label>
+                    <input
+                      type="number"
+                      min={10}
+                      max={60}
+                      step={5}
+                      value={draftConstructionTimeLimit}
+                      onChange={(e) =>
+                        setDraftConstructionTimeLimit(
+                          Math.max(
+                            10,
+                            Math.min(60, parseInt(e.target.value) || 20),
+                          ),
+                        )
+                      }
+                      className="rc-input h-10 w-full"
+                    />
+                    <p className="rc-hint mt-1.5">
+                      Deck building (10-60 minutes)
+                    </p>
+                  </div>
+                </div>
+
+                {/* Free Avatars Toggle */}
+                <label className={`${CHECK_ROW_TOP} mt-3`}>
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 accent-rc-accent"
+                    checked={draftFreeAvatars}
+                    onChange={(e) => setDraftFreeAvatars(e.target.checked)}
+                  />
+                  <span className="tracking-[0.04em]">
+                    Free Avatars (remove from packs, all available in deck
+                    editor)
+                  </span>
+                </label>
+
+                {/* Pod Size for large tournaments */}
+                {form.maxPlayers > 8 && (
+                  <div className="mt-3 rounded-rc-md border border-rc-warning/35 bg-rc-warning/10 p-3">
+                    <label className={FIELD_LABEL}>Draft Pod Size</label>
+                    <p className="rc-hint mb-2 leading-relaxed">
+                      For tournaments with more than 8 players, players will be
+                      split into pods.
+                    </p>
+                    <CustomSelect
+                      value={String(draftPodSize)}
+                      onChange={(v) => setDraftPodSize(parseInt(v))}
+                      options={[
+                        { value: "4", label: "4 players per pod" },
+                        { value: "5", label: "5 players per pod" },
+                        { value: "6", label: "6 players per pod" },
+                        { value: "7", label: "7 players per pod" },
+                        { value: "8", label: "8 players per pod" },
+                      ]}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </form>
+        </RcDialog>
+      )}
+    </AppShell>
   );
 }

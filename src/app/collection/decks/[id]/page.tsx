@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { PanelHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
 import CollectionDeckEditor from "../CollectionDeckEditor";
 
 interface DeckCard {
@@ -116,21 +119,16 @@ export default function CollectionDeckEditorPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full" />
-      </div>
-    );
+    return <div className="rc-hint py-6 text-center">loading…</div>;
   }
 
   if (error) {
     return (
-      <div className="text-center py-12">
-        <div className="text-red-400 mb-4">{error}</div>
-        <Link
-          href="/collection/decks"
-          className="text-blue-400 hover:underline"
-        >
+      <div className="space-y-4">
+        <div className="rc-alert" data-tone="danger">
+          {error}
+        </div>
+        <Link href="/collection/decks" className="rc-link text-sm">
           ← Back to decks
         </Link>
       </div>
@@ -141,85 +139,75 @@ export default function CollectionDeckEditorPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <Link
-            href="/collection/decks"
-            className="text-gray-400 hover:text-white text-sm"
-          >
-            ← Back to decks
-          </Link>
-          <h1 className="text-2xl font-bold mt-1">{deck.name}</h1>
-        </div>
-        <button
-          onClick={handleExport}
-          disabled={exporting || !deck.validation.isValid}
-          className="px-6 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium disabled:opacity-50"
-        >
-          {exporting ? "Exporting..." : "Export to Simulator"}
-        </button>
-      </div>
+      <Link href="/collection/decks" className="rc-link text-sm">
+        ← Back to decks
+      </Link>
 
-      {/* Stats Bar */}
-      <div className="flex gap-4 flex-wrap">
-        <div
-          className={`px-3 py-1 rounded text-sm ${
-            deck.stats.hasAvatar
-              ? "bg-green-900 text-green-300"
-              : "bg-red-900 text-red-300"
-          }`}
+      <section className="rc-panel">
+        <PanelHeader
+          title={deck.name}
+          meta={`${deck.stats.spellbookCount + deck.stats.atlasCount} cards`}
         >
-          Avatar: {deck.stats.avatarCount}/{deck.requirements?.avatarCount ?? 1}
-        </div>
-        <div
-          className={`px-3 py-1 rounded text-sm ${
-            deck.stats.spellbookCount >= (deck.requirements?.minSpellbook ?? 50)
-              ? "bg-green-900 text-green-300"
-              : "bg-yellow-900 text-yellow-300"
-          }`}
-        >
-          Spellbook: {deck.stats.spellbookCount}/
-          {deck.requirements?.minSpellbook ?? 50}
-        </div>
-        <div
-          className={`px-3 py-1 rounded text-sm ${
-            deck.stats.atlasCount >= (deck.requirements?.minAtlas ?? 30)
-              ? "bg-green-900 text-green-300"
-              : "bg-yellow-900 text-yellow-300"
-          }`}
-        >
-          Atlas: {deck.stats.atlasCount}/{deck.requirements?.minAtlas ?? 30}
-        </div>
-        {(deck.requirements?.maxCollection ?? 0) > 0 && (
-          <div
-            className={`px-3 py-1 rounded text-sm ${
-              deck.stats.collectionCount <=
-              (deck.requirements?.maxCollection ?? 10)
-                ? "bg-gray-700"
-                : "bg-red-900 text-red-300"
-            }`}
+          <RcButton
+            onClick={handleExport}
+            disabled={exporting || !deck.validation.isValid}
           >
-            Collection: {deck.stats.collectionCount}/
-            {deck.requirements?.maxCollection ?? 10}
-          </div>
-        )}
-        {deck.stats.sideboardCount > 0 && (
-          <div className="px-3 py-1 rounded text-sm bg-gray-700">
-            Sideboard: {deck.stats.sideboardCount}
-          </div>
-        )}
-      </div>
+            {exporting ? "Exporting..." : "Export to Simulator"}
+          </RcButton>
+        </PanelHeader>
+
+        {/* Stats Bar */}
+        <div className="flex flex-wrap gap-2 px-[18px] py-3.5">
+          <Badge tone={deck.stats.hasAvatar ? "ok" : "warn"}>
+            Avatar {deck.stats.avatarCount}/
+            {deck.requirements?.avatarCount ?? 1}
+          </Badge>
+          <Badge
+            tone={
+              deck.stats.spellbookCount >=
+              (deck.requirements?.minSpellbook ?? 50)
+                ? "ok"
+                : "warn"
+            }
+          >
+            Spellbook {deck.stats.spellbookCount}/
+            {deck.requirements?.minSpellbook ?? 50}
+          </Badge>
+          <Badge
+            tone={
+              deck.stats.atlasCount >= (deck.requirements?.minAtlas ?? 30)
+                ? "ok"
+                : "warn"
+            }
+          >
+            Atlas {deck.stats.atlasCount}/{deck.requirements?.minAtlas ?? 30}
+          </Badge>
+          {(deck.requirements?.maxCollection ?? 0) > 0 && (
+            <Badge
+              tone={
+                deck.stats.collectionCount <=
+                (deck.requirements?.maxCollection ?? 10)
+                  ? "default"
+                  : "warn"
+              }
+            >
+              Collection {deck.stats.collectionCount}/
+              {deck.requirements?.maxCollection ?? 10}
+            </Badge>
+          )}
+          {deck.stats.sideboardCount > 0 && (
+            <Badge>Sideboard {deck.stats.sideboardCount}</Badge>
+          )}
+        </div>
+      </section>
 
       {/* Validation Errors */}
       {deck.validation.errors.length > 0 && (
-        <div className="bg-red-900/30 border border-red-700 rounded-lg p-4">
-          <div className="font-medium text-red-300 mb-2">
-            Validation Errors:
-          </div>
-          <ul className="text-sm text-red-200 space-y-1">
+        <div className="rc-alert" data-tone="danger">
+          <div className="mb-2">Validation errors</div>
+          <ul className="m-0 list-none space-y-1 p-0">
             {deck.validation.errors.map((err, i) => (
-              <li key={i}>• {err.message}</li>
+              <li key={i}>· {err.message}</li>
             ))}
           </ul>
         </div>

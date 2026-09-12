@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { RcButton } from "@/components/ui/rc-button";
 import { prepareTournamentMatchBootstrap } from "@/lib/tournament/matchBootstrap";
 
 interface MatchAssignment {
@@ -92,51 +93,51 @@ export default function TournamentMatchPrompt() {
   if (!mounted || assignments.length === 0) return null;
 
   return createPortal(
-    <div className="fixed top-4 right-4 z-[9998] flex flex-col gap-2 max-w-sm">
+    <div className="fixed right-4 top-4 z-[9998] flex max-w-sm flex-col gap-2">
       {assignments.map((assignment) => (
         <div
           key={assignment.id}
-          className="bg-slate-900 border-2 border-emerald-500 rounded-lg shadow-xl p-4 animate-slide-in"
+          className="rc-panel animate-slide-in border-rc-accent/45 p-4"
         >
           <div className="flex items-start gap-3">
-            <div className="text-2xl">&#9876;&#65039;</div>
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold text-emerald-400">
-                Match Ready!
-              </div>
-              <div className="text-sm text-white/80 mt-1">
+            <div className="min-w-0 flex-1">
+              <div className="rc-eyebrow">Match ready</div>
+              <div className="mt-1.5 font-rc-sans text-sm text-rc-fg">
                 {assignment.opponentName
                   ? `Your match vs ${assignment.opponentName} is ready`
                   : "Your tournament match is ready"}
               </div>
               {joinErrors[assignment.id] && (
-                <div className="text-xs text-amber-300 mt-2">
+                <div className="mt-2 font-rc-mono text-[11px] tracking-[0.1em] text-rc-warning">
                   {joinErrors[assignment.id]}
                 </div>
               )}
-              <div className="flex gap-2 mt-3">
-                <button
+              <div className="mt-3 flex gap-2">
+                <RcButton
+                  size="sm"
                   onClick={() => handleJoinMatch(assignment)}
                   disabled={joining === assignment.id}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-sm font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {joining === assignment.id
                     ? "Joining…"
                     : joinErrors[assignment.id]
                       ? "Retry"
                       : "Join Match"}
-                </button>
-                <button
+                </RcButton>
+                <RcButton
+                  size="sm"
+                  variant="ghost"
                   onClick={() => removeAssignment(assignment.id)}
-                  className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded text-sm text-white/70"
                 >
                   Dismiss
-                </button>
+                </RcButton>
               </div>
             </div>
             <button
+              type="button"
               onClick={() => removeAssignment(assignment.id)}
-              className="text-white/50 hover:text-white text-lg leading-none"
+              aria-label="Dismiss"
+              className="-mr-1 -mt-1 cursor-pointer rounded-rc-md px-1.5 text-lg leading-none text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-accent-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring"
             >
               ×
             </button>

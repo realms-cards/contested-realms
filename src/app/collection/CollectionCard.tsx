@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { memo, useState, useEffect } from "react";
 import { CodexTooltip } from "@/components/collection/CodexTooltip";
+import { RcButton } from "@/components/ui/rc-button";
 import { useCodex } from "@/contexts/CodexContext";
 import type { CollectionCardResponse } from "@/lib/collection/types";
 import CardDetailOverlay from "./CardDetailOverlay";
@@ -21,33 +22,43 @@ const TAG_PATTERNS = [
   {
     tag: "promo",
     pattern: /\bpromo\b/i,
-    color: "bg-purple-500",
+    color: "border border-rc-accent/35 bg-rc-accent/18 text-rc-accent-link",
     label: "Promo",
   },
-  { tag: "mint", pattern: /\bmint\b/i, color: "bg-green-500", label: "Mint" },
+  {
+    tag: "mint",
+    pattern: /\bmint\b/i,
+    color: "border border-rc-success/35 bg-rc-success/22 text-[#c5d6a8]",
+    label: "Mint",
+  },
   {
     tag: "nm",
     pattern: /\b(near[- ]?mint|nm)\b/i,
-    color: "bg-green-400",
+    color: "border border-rc-success/25 bg-rc-success/14 text-[#c5d6a8]",
     label: "NM",
   },
   {
     tag: "normal",
     pattern: /\bnormal\b/i,
-    color: "bg-gray-500",
+    color: "border border-rc-line/22 bg-rc-line/10 text-rc-fg-muted",
     label: "Normal",
   },
-  { tag: "poor", pattern: /\bpoor\b/i, color: "bg-red-500", label: "Poor" },
+  {
+    tag: "poor",
+    pattern: /\bpoor\b/i,
+    color: "border border-rc-danger/40 bg-rc-danger/20 text-[#f0c2b5]",
+    label: "Poor",
+  },
   {
     tag: "wanted",
     pattern: /\bwanted\b/i,
-    color: "bg-blue-500",
+    color: "border border-rc-info/40 bg-rc-info/18 text-[#d5deec]",
     label: "Wanted",
   },
   {
     tag: "selling",
     pattern: /\b(selling|for sale|fs)\b/i,
-    color: "bg-yellow-500 text-black",
+    color: "border border-rc-accent/35 bg-[rgba(112,65,22,0.55)] text-[#f3e0b3]",
     label: "Selling",
   },
 ] as const;
@@ -63,7 +74,7 @@ function getTagStyle(tag: string): { color: string; label: string } {
   const found = TAG_PATTERNS.find((t) => t.tag === tag);
   return found
     ? { color: found.color, label: found.label }
-    : { color: "bg-gray-500", label: tag };
+    : { color: "border border-rc-line/22 bg-rc-line/10 text-rc-fg-muted", label: tag };
 }
 
 function CollectionCardInner({
@@ -134,7 +145,7 @@ function CollectionCardInner({
   return (
     <>
       <div
-        className={`relative group rounded-lg overflow-hidden bg-gray-800 hover:z-50 ${
+        className={`group relative overflow-hidden rounded-rc-md border border-rc-line/12 bg-black/30 transition-colors hover:z-50 hover:border-rc-accent/40 ${
           isSite ? "col-span-2" : ""
         } ${isFoil ? "foil-card" : ""} ${updating ? "opacity-50 pointer-events-none" : ""}`}
         style={
@@ -169,35 +180,35 @@ function CollectionCardInner({
 
           {/* Foil Indicator */}
           {isFoil && (
-            <div className="absolute top-2 right-2 bg-yellow-500 text-black text-xs px-2 py-0.5 rounded font-bold">
-              FOIL
+            <div className="absolute right-2 top-2 rounded-rc-sm border border-rc-accent/35 bg-rc-accent/85 px-2 py-0.5 font-rc-mono text-[10px] uppercase tracking-[0.18em] text-rc-accent-fg">
+              Foil
             </div>
           )}
 
           {/* No Image Warning */}
           {!hasValidImage && (
             <div
-              className="absolute top-2 left-2 bg-orange-500 text-white text-xs px-2 py-0.5 rounded font-bold"
+              className="absolute left-2 top-2 rounded-rc-sm border border-rc-ember/45 bg-rc-ember/85 px-2 py-0.5 font-rc-mono text-[10px] uppercase tracking-[0.18em] text-[#fbf6e8]"
               title="This card has no image - it may be from a special product not in our database"
             >
-              ⚠️
+              No art
             </div>
           )}
 
           {/* Quantity Badge */}
-          <div className="absolute bottom-2 right-2 bg-black/80 text-white px-2 py-1 rounded-full text-sm font-bold min-w-[2rem] text-center">
+          <div className="absolute bottom-2 right-2 min-w-[2rem] rounded-rc-sm border border-rc-line/22 bg-black/60 px-2 py-1 text-center font-rc-mono text-[12px] tabular-nums text-rc-fg-strong">
             ×{card.quantity}
           </div>
 
           {/* Tags from notes */}
           {tags.length > 0 && (
-            <div className="absolute top-2 left-2 flex flex-wrap gap-1">
+            <div className="absolute left-2 top-2 flex flex-wrap gap-1">
               {tags.map((tag) => {
                 const { color, label } = getTagStyle(tag);
                 return (
                   <span
                     key={tag}
-                    className={`${color} text-xs px-1.5 py-0.5 rounded font-medium`}
+                    className={`${color} rounded-rc-sm px-1.5 py-0.5 font-rc-mono text-[10px] uppercase tracking-[0.12em]`}
                   >
                     {label}
                   </span>
@@ -209,24 +220,24 @@ function CollectionCardInner({
 
         {/* Card Info */}
         <div className="p-2">
-          <div className="text-sm font-medium truncate" title={card.card.name}>
+          <div
+            className="truncate font-rc-display text-[15px] leading-[1.15] text-rc-fg-strong"
+            title={card.card.name}
+          >
             {card.card.name}
           </div>
-          <div className="text-xs text-gray-400 flex items-center gap-1">
+          <div className="flex items-center gap-1 truncate font-rc-mono text-[11px] tracking-[0.1em] text-rc-fg-subtle">
             {card.set?.name || "Unknown Set"}
             {card.meta?.rarity && (
               <span className={`ml-1 ${getRarityColor(card.meta.rarity)}`}>
-                • {card.meta.rarity}
+                · {card.meta.rarity}
               </span>
             )}
           </div>
           {/* Notes preview */}
           {showNotes && card.notes && (
-            <div
-              className="text-xs text-gray-500 truncate mt-0.5"
-              title={card.notes}
-            >
-              📝 {card.notes}
+            <div className="mt-0.5 truncate rc-hint" title={card.notes}>
+              {card.notes}
             </div>
           )}
           {/* Codex errata info */}
@@ -237,7 +248,7 @@ function CollectionCardInner({
 
         {/* Hover Actions - hidden on touch devices */}
         <div
-          className={`absolute inset-0 bg-black/70 rounded-lg flex-col items-center justify-center gap-2 p-2 transition-opacity ${
+          className={`absolute inset-0 flex-col items-center justify-center gap-2 rounded-rc-md bg-black/80 p-2 transition-opacity ${
             showCodex ? "pt-16" : ""
           } ${
             isTouchDevice
@@ -247,23 +258,29 @@ function CollectionCardInner({
         >
           {/* Quantity controls */}
           <div className="flex items-center gap-2">
-            <button
+            <RcButton
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              aria-label="Decrease quantity"
               onClick={() => onQuantityChange?.(card.quantity - 1)}
               disabled={card.quantity <= 1}
-              className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded-full font-bold disabled:opacity-50"
             >
               −
-            </button>
-            <span className="text-xl font-bold w-8 text-center">
+            </RcButton>
+            <span className="w-8 text-center rc-stat text-lg">
               {card.quantity}
             </span>
-            <button
+            <RcButton
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              aria-label="Increase quantity"
               onClick={() => onQuantityChange?.(card.quantity + 1)}
               disabled={card.quantity >= 99}
-              className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded-full font-bold disabled:opacity-50"
             >
               +
-            </button>
+            </RcButton>
           </div>
 
           {/* Notes editing */}
@@ -273,7 +290,7 @@ function CollectionCardInner({
                 value={notesValue}
                 onChange={(e) => setNotesValue(e.target.value)}
                 placeholder="Add notes... (promo, mint, nm, poor, wanted, selling)"
-                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white resize-none"
+                className="rc-textarea w-full resize-none px-2 py-1 text-xs"
                 rows={2}
                 autoFocus
                 onKeyDown={(e) => {
@@ -292,60 +309,70 @@ function CollectionCardInner({
                 {TAG_PATTERNS.map(({ tag, label, color }) => (
                   <button
                     key={tag}
+                    type="button"
                     onClick={() => toggleTag(label)}
-                    className={`text-xs px-1.5 py-0.5 rounded transition-all ${
+                    className={`cursor-pointer rounded-rc-sm px-1.5 py-0.5 font-rc-mono text-[10px] uppercase tracking-[0.12em] transition-all ${
                       isTagActive(label)
-                        ? `${color} ring-2 ring-white/50`
-                        : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+                        ? `${color} ring-1 ring-rc-accent-ring`
+                        : "border border-rc-line/22 bg-rc-line/6 text-rc-fg-muted hover:bg-rc-line/12"
                     }`}
                   >
                     {label}
                   </button>
                 ))}
               </div>
-              <div className="flex gap-1 mt-1">
-                <button
+              <div className="mt-1 flex gap-1">
+                <RcButton
+                  size="sm"
+                  className="h-7 px-2 text-[11px]"
                   onClick={() => {
                     onNotesChange?.(notesValue);
                     setEditingNotes(false);
                   }}
-                  className="text-xs bg-green-600 hover:bg-green-500 px-2 py-0.5 rounded"
                 >
                   Save
-                </button>
-                <button
+                </RcButton>
+                <RcButton
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-[11px]"
                   onClick={() => {
                     setNotesValue(card.notes || "");
                     setEditingNotes(false);
                   }}
-                  className="text-xs bg-gray-600 hover:bg-gray-500 px-2 py-0.5 rounded"
                 >
                   Cancel
-                </button>
+                </RcButton>
               </div>
             </div>
           ) : (
-            <button
+            <RcButton
+              variant="link"
+              size="sm"
+              className="h-auto px-0 text-[11px]"
               onClick={() => setEditingNotes(true)}
-              className="text-cyan-400 hover:text-cyan-300 text-xs"
             >
-              {card.notes ? "📝 Edit Notes" : "📝 Add Notes"}
-            </button>
+              {card.notes ? "Edit notes" : "Add notes"}
+            </RcButton>
           )}
 
-          <button
+          <RcButton
+            variant="outline"
+            size="sm"
+            className="h-7 px-3 text-[11px]"
             onClick={() => setShowDetail(true)}
-            className="text-white bg-gray-600 hover:bg-gray-500 text-xs px-3 py-1 rounded"
           >
             Details
-          </button>
+          </RcButton>
 
-          <button
+          <RcButton
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-[11px] text-rc-danger hover:text-rc-danger-hover"
             onClick={onDelete}
-            className="text-red-400 hover:text-red-300 text-xs underline"
           >
             Remove
-          </button>
+          </RcButton>
 
           <CardPriceTag
             cardId={card.cardId}
@@ -359,15 +386,17 @@ function CollectionCardInner({
       {/* Mobile Fullscreen Modal */}
       {showMobileModal && (
         <div
-          className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-4"
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[rgba(6,10,20,0.94)] p-4"
           onClick={() => setShowMobileModal(false)}
         >
           {/* Close button */}
           <button
-            className="absolute top-4 right-4 text-white text-2xl p-2"
+            type="button"
+            aria-label="Close"
+            className="absolute right-4 top-4 cursor-pointer rounded-rc-md p-2 text-2xl leading-none text-rc-fg-muted transition-colors hover:text-rc-fg-strong"
             onClick={() => setShowMobileModal(false)}
           >
-            ✕
+            ×
           </button>
 
           {/* Card Image - large */}
@@ -381,26 +410,26 @@ function CollectionCardInner({
               unoptimized
             />
             {isFoil && (
-              <div className="absolute top-2 right-2 bg-yellow-500 text-black text-xs px-2 py-0.5 rounded font-bold">
-                FOIL
+              <div className="absolute right-2 top-2 rounded-rc-sm border border-rc-accent/35 bg-rc-accent/85 px-2 py-0.5 font-rc-mono text-[10px] uppercase tracking-[0.18em] text-rc-accent-fg">
+                Foil
               </div>
             )}
           </div>
 
           {/* Card Info */}
-          <div className="text-center mb-4">
-            <h2 className="text-xl font-bold text-white">{card.card.name}</h2>
-            <p className="text-gray-400">
+          <div className="mb-4 text-center">
+            <h2 className="m-0 font-rc-display text-[28px] leading-[1.1] text-rc-fg-strong">
+              {card.card.name}
+            </h2>
+            <p className="font-rc-mono text-xs tracking-[0.1em] text-rc-fg-subtle">
               {card.set?.name || "Unknown Set"}
               {card.meta?.rarity && (
                 <span className={`ml-2 ${getRarityColor(card.meta.rarity)}`}>
-                  • {card.meta.rarity}
+                  · {card.meta.rarity}
                 </span>
               )}
             </p>
-            {card.notes && (
-              <p className="text-gray-500 text-sm mt-1">📝 {card.notes}</p>
-            )}
+            {card.notes && <p className="mt-1 rc-hint">{card.notes}</p>}
           </div>
 
           {/* Actions */}
@@ -410,23 +439,29 @@ function CollectionCardInner({
           >
             {/* Quantity controls */}
             <div className="flex items-center gap-4">
-              <button
+              <RcButton
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 text-xl"
+                aria-label="Decrease quantity"
                 onClick={() => onQuantityChange?.(card.quantity - 1)}
                 disabled={card.quantity <= 1}
-                className="w-12 h-12 bg-gray-700 hover:bg-gray-600 rounded-full text-2xl font-bold disabled:opacity-50"
               >
                 −
-              </button>
-              <span className="text-3xl font-bold w-12 text-center text-white">
+              </RcButton>
+              <span className="w-12 text-center rc-stat text-3xl">
                 {card.quantity}
               </span>
-              <button
+              <RcButton
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 text-xl"
+                aria-label="Increase quantity"
                 onClick={() => onQuantityChange?.(card.quantity + 1)}
                 disabled={card.quantity >= 99}
-                className="w-12 h-12 bg-gray-700 hover:bg-gray-600 rounded-full text-2xl font-bold disabled:opacity-50"
               >
                 +
-              </button>
+              </RcButton>
             </div>
 
             {/* Notes */}
@@ -436,76 +471,82 @@ function CollectionCardInner({
                   value={notesValue}
                   onChange={(e) => setNotesValue(e.target.value)}
                   placeholder="Add notes..."
-                  className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white resize-none"
+                  className="rc-textarea w-full resize-none"
                   rows={2}
                   autoFocus
                 />
-                <div className="flex flex-wrap gap-1 mt-2">
+                <div className="mt-2 flex flex-wrap gap-1">
                   {TAG_PATTERNS.map(({ tag, label, color }) => (
                     <button
                       key={tag}
+                      type="button"
                       onClick={() => toggleTag(label)}
-                      className={`text-xs px-2 py-1 rounded transition-all ${
+                      className={`cursor-pointer rounded-rc-sm px-2 py-1 font-rc-mono text-[10px] uppercase tracking-[0.12em] transition-all ${
                         isTagActive(label)
-                          ? `${color} ring-2 ring-white/50`
-                          : "bg-gray-700 text-gray-300"
+                          ? `${color} ring-1 ring-rc-accent-ring`
+                          : "border border-rc-line/22 bg-rc-line/6 text-rc-fg-muted"
                       }`}
                     >
                       {label}
                     </button>
                   ))}
                 </div>
-                <div className="flex gap-2 mt-2">
-                  <button
+                <div className="mt-2 flex gap-2">
+                  <RcButton
+                    className="flex-1"
                     onClick={() => {
                       onNotesChange?.(notesValue);
                       setEditingNotes(false);
                     }}
-                    className="flex-1 bg-green-600 hover:bg-green-500 px-3 py-2 rounded text-sm"
                   >
                     Save
-                  </button>
-                  <button
+                  </RcButton>
+                  <RcButton
+                    variant="outline"
+                    className="flex-1"
                     onClick={() => {
                       setNotesValue(card.notes || "");
                       setEditingNotes(false);
                     }}
-                    className="flex-1 bg-gray-600 hover:bg-gray-500 px-3 py-2 rounded text-sm"
                   >
                     Cancel
-                  </button>
+                  </RcButton>
                 </div>
               </div>
             ) : (
-              <button
+              <RcButton
+                variant="link"
+                size="sm"
                 onClick={() => setEditingNotes(true)}
-                className="text-cyan-400 text-sm py-2"
               >
-                {card.notes ? "📝 Edit Notes" : "📝 Add Notes"}
-              </button>
+                {card.notes ? "Edit notes" : "Add notes"}
+              </RcButton>
             )}
 
             {/* Details */}
-            <button
+            <RcButton
+              variant="outline"
+              className="w-full"
               onClick={() => {
                 setShowMobileModal(false);
                 setShowDetail(true);
               }}
-              className="w-full bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded"
             >
               View Details
-            </button>
+            </RcButton>
 
             {/* Delete */}
-            <button
+            <RcButton
+              variant="ghost"
+              size="sm"
+              className="text-rc-danger hover:text-rc-danger-hover"
               onClick={() => {
                 onDelete?.();
                 setShowMobileModal(false);
               }}
-              className="text-red-400 text-sm py-2"
             >
               Remove from Collection
-            </button>
+            </RcButton>
 
             <CardPriceTag
               cardId={card.cardId}
@@ -531,14 +572,14 @@ function CollectionCardInner({
 function getRarityColor(rarity: string): string {
   switch (rarity.toLowerCase()) {
     case "unique":
-      return "text-purple-400";
+      return "text-rc-moonlight";
     case "elite":
-      return "text-yellow-400";
+      return "text-rc-accent-link";
     case "exceptional":
-      return "text-blue-400";
+      return "text-rc-info";
     case "ordinary":
     default:
-      return "text-gray-400";
+      return "text-rc-fg-subtle";
   }
 }
 

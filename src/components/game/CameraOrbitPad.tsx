@@ -66,7 +66,7 @@ export default function CameraOrbitPad({ controlsRef, isMobile }: Props) {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
-      className={`${isMobile ? "ml-0.5 p-1" : "ml-1 p-1.5"} rounded-full hover:bg-white/10 text-white cursor-grab active:cursor-grabbing touch-none`}
+      className={`${isMobile ? "ml-0.5 p-1" : "ml-1 p-1.5"} rounded-full text-rc-fg-muted transition-colors hover:bg-rc-accent/10 hover:text-rc-accent-ring cursor-grab active:cursor-grabbing touch-none`}
     >
       <svg
         className={isMobile ? "w-3 h-3" : "w-4 h-4"}

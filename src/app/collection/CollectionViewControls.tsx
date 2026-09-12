@@ -18,37 +18,33 @@ export default function CollectionViewControls({
   onZoomChange,
 }: CollectionViewControlsProps) {
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex flex-wrap items-center gap-4">
       {/* View Mode Toggle */}
-      <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1">
+      <div className="rc-segment">
         <button
+          type="button"
+          aria-pressed={viewMode === "grid"}
+          aria-label="Grid view"
           onClick={() => onViewModeChange("grid")}
-          className={`p-2 rounded transition-colors ${
-            viewMode === "grid"
-              ? "bg-gray-600 text-white"
-              : "text-gray-400 hover:text-white"
-          }`}
           title="Grid view"
         >
-          <LayoutGrid className="w-4 h-4" />
+          <LayoutGrid className="h-4 w-4" />
         </button>
         <button
+          type="button"
+          aria-pressed={viewMode === "list"}
+          aria-label="List view"
           onClick={() => onViewModeChange("list")}
-          className={`p-2 rounded transition-colors ${
-            viewMode === "list"
-              ? "bg-gray-600 text-white"
-              : "text-gray-400 hover:text-white"
-          }`}
           title="List view"
         >
-          <List className="w-4 h-4" />
+          <List className="h-4 w-4" />
         </button>
       </div>
 
       {/* Zoom Slider - Only show in grid mode */}
       {viewMode === "grid" && (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400">Size:</span>
+          <span className="rc-hint">Size</span>
           <input
             type="range"
             min="50"
@@ -56,9 +52,10 @@ export default function CollectionViewControls({
             step="10"
             value={zoom}
             onChange={(e) => onZoomChange(Number(e.target.value))}
-            className="w-24 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+            aria-label="Card size"
+            className="h-1.5 w-24 cursor-pointer appearance-none rounded-full bg-black/45 accent-rc-accent"
           />
-          <span className="text-xs text-gray-400 w-8">{zoom}%</span>
+          <span className="rc-hint w-8 tabular-nums">{zoom}%</span>
         </div>
       )}
     </div>

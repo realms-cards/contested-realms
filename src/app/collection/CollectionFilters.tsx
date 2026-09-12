@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { RcButton } from "@/components/ui/rc-button";
 import type {
   CollectionFilters as FilterType,
   CollectionSortField,
@@ -88,32 +89,27 @@ export default function CollectionFilters({
   const hasActiveFilters = Object.values(filters).some(Boolean);
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4 space-y-4">
+    <section className="rc-panel space-y-3 px-[18px] py-3.5">
       {/* Search */}
-      <div>
-        <input
-          type="text"
-          placeholder="Search cards..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
+      <input
+        type="text"
+        placeholder="Search cards..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        className="rc-input h-10 w-full"
+      />
 
       {/* Filters Row */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-2.5">
         {/* Set Filter */}
         <CustomSelect
           value={filters.setId ? String(filters.setId) : ""}
           onChange={(v) =>
-            handleFilterChange(
-              "setId",
-              v ? parseInt(v) : undefined,
-            )
+            handleFilterChange("setId", v ? parseInt(v) : undefined)
           }
           placeholder="All Sets"
           options={sets.map((set) => ({
@@ -125,9 +121,7 @@ export default function CollectionFilters({
         {/* Element Filter */}
         <CustomSelect
           value={filters.element || ""}
-          onChange={(v) =>
-            handleFilterChange("element", v || undefined)
-          }
+          onChange={(v) => handleFilterChange("element", v || undefined)}
           placeholder="All Elements"
           options={ELEMENTS.map((el) => ({
             value: el,
@@ -138,9 +132,7 @@ export default function CollectionFilters({
         {/* Type Filter */}
         <CustomSelect
           value={filters.type || ""}
-          onChange={(v) =>
-            handleFilterChange("type", v || undefined)
-          }
+          onChange={(v) => handleFilterChange("type", v || undefined)}
           placeholder="All Types"
           options={TYPES.map((type) => ({
             value: type,
@@ -151,9 +143,7 @@ export default function CollectionFilters({
         {/* Rarity Filter */}
         <CustomSelect
           value={filters.rarity || ""}
-          onChange={(v) =>
-            handleFilterChange("rarity", v || undefined)
-          }
+          onChange={(v) => handleFilterChange("rarity", v || undefined)}
           placeholder="All Rarities"
           options={RARITIES.map((rarity) => ({
             value: rarity,
@@ -165,10 +155,7 @@ export default function CollectionFilters({
         <CustomSelect
           value={`${sort}:${order}`}
           onChange={(v) => {
-            const [s, o] = v.split(":") as [
-              CollectionSortField,
-              SortOrder,
-            ];
+            const [s, o] = v.split(":") as [CollectionSortField, SortOrder];
             onSortChange(s, o);
           }}
           options={[
@@ -185,14 +172,11 @@ export default function CollectionFilters({
 
         {/* Clear Filters */}
         {hasActiveFilters && (
-          <button
-            onClick={clearFilters}
-            className="text-gray-400 hover:text-white text-sm underline"
-          >
+          <RcButton variant="ghost" size="sm" onClick={clearFilters}>
             Clear Filters
-          </button>
+          </RcButton>
         )}
       </div>
-    </div>
+    </section>
   );
 }

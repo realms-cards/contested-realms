@@ -1,5 +1,7 @@
 "use client";
 
+import { RcEmpty } from "@/components/ui/rc-empty";
+
 interface Standing {
   playerId: string;
   displayName: string;
@@ -19,64 +21,64 @@ interface Props {
 export function OpenTournamentStandings({ standings }: Props) {
   if (standings.length === 0) {
     return (
-      <div className="text-center py-8 text-slate-400">
-        No standings yet. Add players and complete matches to see standings.
-      </div>
+      <RcEmpty title="No standings yet.">
+        add players and complete matches to see standings
+      </RcEmpty>
     );
   }
 
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-slate-700/50 text-slate-300">
-            <th className="text-left px-4 py-2 font-medium">#</th>
-            <th className="text-left px-4 py-2 font-medium">Player</th>
-            <th className="text-center px-4 py-2 font-medium">W</th>
-            <th className="text-center px-4 py-2 font-medium">L</th>
-            <th className="text-center px-4 py-2 font-medium">D</th>
-            <th className="text-center px-4 py-2 font-medium">Pts</th>
-            <th className="text-center px-4 py-2 font-medium">GW%</th>
-            <th className="text-center px-4 py-2 font-medium">OMW%</th>
-          </tr>
-        </thead>
-        <tbody>
-          {standings.map((standing, index) => (
-            <tr
-              key={standing.playerId}
-              className={`border-t border-slate-700 ${
-                standing.isEliminated ? "opacity-50" : ""
-              }`}
-            >
-              <td className="px-4 py-2 text-slate-400">{index + 1}</td>
-              <td className="px-4 py-2 text-white">
-                {standing.displayName}
-                {standing.isEliminated && (
-                  <span className="ml-2 text-xs text-red-400">(removed)</span>
-                )}
-              </td>
-              <td className="text-center px-4 py-2 text-green-400">
-                {standing.wins}
-              </td>
-              <td className="text-center px-4 py-2 text-red-400">
-                {standing.losses}
-              </td>
-              <td className="text-center px-4 py-2 text-slate-400">
-                {standing.draws}
-              </td>
-              <td className="text-center px-4 py-2 text-white font-medium">
-                {standing.matchPoints}
-              </td>
-              <td className="text-center px-4 py-2 text-slate-400">
-                {(standing.gameWinPercentage * 100).toFixed(1)}%
-              </td>
-              <td className="text-center px-4 py-2 text-slate-400">
-                {(standing.opponentMatchWinPercentage * 100).toFixed(1)}%
-              </td>
+    <section className="rc-panel overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="rc-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Player</th>
+              <th>W</th>
+              <th>L</th>
+              <th>D</th>
+              <th>Pts</th>
+              <th>GW%</th>
+              <th>OMW%</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {standings.map((standing, index) => (
+              <tr
+                key={standing.playerId}
+                className={standing.isEliminated ? "opacity-50" : ""}
+              >
+                <td className="text-rc-fg-dim tabular-nums">{index + 1}</td>
+                <td className="text-rc-fg-strong">
+                  {standing.displayName}
+                  {standing.isEliminated && (
+                    <span className="ml-2 text-[11px] uppercase tracking-[0.14em] text-rc-danger">
+                      (removed)
+                    </span>
+                  )}
+                </td>
+                <td className="tabular-nums text-rc-success">
+                  {standing.wins}
+                </td>
+                <td className="tabular-nums text-rc-danger">
+                  {standing.losses}
+                </td>
+                <td className="tabular-nums text-rc-fg-subtle">
+                  {standing.draws}
+                </td>
+                <td className="rc-stat">{standing.matchPoints}</td>
+                <td className="tabular-nums text-rc-fg-subtle">
+                  {(standing.gameWinPercentage * 100).toFixed(1)}%
+                </td>
+                <td className="tabular-nums text-rc-fg-subtle">
+                  {(standing.opponentMatchWinPercentage * 100).toFixed(1)}%
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

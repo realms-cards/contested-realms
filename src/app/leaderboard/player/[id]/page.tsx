@@ -3,6 +3,11 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
+import AppShell from "@/components/ui/AppShell";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import { PATRON_COLORS, type PatronData } from "@/lib/patrons";
 
 interface PlayerStats {
@@ -66,6 +71,20 @@ interface PlayerStats {
     finalRank: number;
     isEliminated: boolean;
   }>;
+}
+
+/** One stat tile in the overall-statistics grid. */
+function StatTile({ label, value, tone }: {
+  label: string;
+  value: string;
+  tone?: string;
+}) {
+  return (
+    <div className="rc-panel px-4 py-3 text-center">
+      <div className={`rc-stat text-2xl ${tone ?? ""}`}>{value}</div>
+      <div className="rc-eyebrow mt-1">{label}</div>
+    </div>
+  );
 }
 
 export default function PlayerDetailPage({
@@ -147,9 +166,9 @@ export default function PlayerDetailPage({
     }
   };
 
-  const getMatchResultColor = (isWin: boolean, isDraw: boolean) => {
-    if (isDraw) return "text-yellow-400";
-    return isWin ? "text-green-400" : "text-red-400";
+  const getMatchResultTone = (isWin: boolean, isDraw: boolean): BadgeTone => {
+    if (isDraw) return "warn";
+    return isWin ? "ok" : "default";
   };
 
   const getMatchResultText = (isWin: boolean, isDraw: boolean) => {
@@ -188,284 +207,299 @@ export default function PlayerDetailPage({
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="text-center py-8 text-sm text-slate-400">
-          Loading player statistics...
+      <AppShell width="wide">
+        <div className="rc-hint py-6 text-center">
+          loading player statistics…
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="space-y-6">
-        <div className="rounded-xl bg-red-900/20 ring-1 ring-red-600/30 p-4">
-          <div className="text-red-200 text-sm">
-            {error || "Player not found"}
-          </div>
+      <AppShell width="wide">
+        <div className="rc-alert" data-tone="danger">
+          {error || "Player not found"}
         </div>
-        <button
-          className="rounded bg-slate-700 hover:bg-slate-600 px-4 py-2 text-sm"
-          onClick={() => router.back()}
-        >
-          Go Back
-        </button>
-      </div>
+        <div>
+          <RcButton variant="outline" onClick={() => router.back()}>
+            Go Back
+          </RcButton>
+        </div>
+      </AppShell>
     );
   }
 
+  const patronTier = playerId ? getPatronTier(playerId) : null;
+  const patronStyle = patronTier ? PATRON_COLORS[patronTier] : null;
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4">
-        <div className="flex items-center gap-4">
-          <button
-            className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-2 text-sm"
-            onClick={() => router.back()}
-          >
-            ← Back
-          </button>
-          <div className="flex items-center gap-4">
+    <AppShell width="wide">
+      <PageHeader
+        eyebrow="player"
+        title={
+          <span className="flex items-center gap-4">
             {data.player.image ? (
               <Image
                 src={data.player.image}
                 alt={data.player.name}
-                width={64}
-                height={64}
-                className="rounded-full"
+                width={56}
+                height={56}
+                className="rounded-rc-md border border-rc-line/18"
                 unoptimized
               />
             ) : (
-              <div className="w-16 h-16 rounded-full bg-slate-600 flex items-center justify-center text-white text-xl font-bold">
+              <span className="grid h-14 w-14 place-items-center rounded-rc-md border border-rc-line/18 bg-black/40 font-rc-mono text-xl text-rc-fg-muted">
                 {data.player.name?.charAt(0).toUpperCase() || "?"}
-              </div>
+              </span>
             )}
-            <div>
-              {(() => {
-                const patronTier = playerId ? getPatronTier(playerId) : null;
-                const patronStyle = patronTier
-                  ? PATRON_COLORS[patronTier]
-                  : null;
-                return (
-                  <h1
-                    className={`text-2xl font-bold ${
-                      patronStyle?.text ?? "text-white"
-                    }`}
-                    style={
-                      patronStyle
-                        ? { textShadow: patronStyle.textShadow }
-                        : undefined
-                    }
-                  >
-                    {data.player.name}
-                  </h1>
-                );
-              })()}
-              <p className="text-sm text-slate-300">
-                Member since{" "}
-                {new Date(data.player.memberSince).toLocaleDateString()}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+            <span
+              className={patronStyle?.text ?? undefined}
+              style={
+                patronStyle ? { textShadow: patronStyle.textShadow } : undefined
+              }
+            >
+              {data.player.name}
+            </span>
+          </span>
+        }
+        description={`Member since ${new Date(
+          data.player.memberSince
+        ).toLocaleDateString()}`}
+        actions={
+          <RcButton variant="outline" size="sm" onClick={() => router.back()}>
+            Back
+          </RcButton>
+        }
+      />
 
       {/* Overall Stats */}
-      <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4">
-        <h2 className="text-lg font-semibold text-white mb-4">
-          Overall Statistics
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="text-center">
-            <div className="text-2xl font-bold text-white">
-              {data.overallStats.totalGames}
-            </div>
-            <div className="text-sm text-slate-400">Total Games</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-green-400">
-              {formatWinRate(data.overallStats.overallWinRate)}
-            </div>
-            <div className="text-sm text-slate-400">Overall Win Rate</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-white">
-              {data.overallStats.totalWins}-{data.overallStats.totalLosses}
-              {data.overallStats.totalDraws > 0 &&
-                `-${data.overallStats.totalDraws}`}
-            </div>
-            <div className="text-sm text-slate-400">
-              W-L{data.overallStats.totalDraws > 0 && "-D"}
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-yellow-400">
-              {data.overallStats.tournamentWins}
-            </div>
-            <div className="text-sm text-slate-400">Tournament Wins</div>
-          </div>
+      <section className="rc-panel">
+        <PanelHeader title="Overall Statistics" />
+        <div className="grid grid-cols-2 gap-3 px-[18px] py-3.5 md:grid-cols-4">
+          <StatTile
+            label="Total Games"
+            value={String(data.overallStats.totalGames)}
+          />
+          <StatTile
+            label="Overall Win Rate"
+            value={formatWinRate(data.overallStats.overallWinRate)}
+            tone="text-rc-success"
+          />
+          <StatTile
+            label={`W-L${data.overallStats.totalDraws > 0 ? "-D" : ""}`}
+            value={`${data.overallStats.totalWins}-${
+              data.overallStats.totalLosses
+            }${
+              data.overallStats.totalDraws > 0
+                ? `-${data.overallStats.totalDraws}`
+                : ""
+            }`}
+          />
+          <StatTile
+            label="Tournament Wins"
+            value={String(data.overallStats.tournamentWins)}
+            tone="text-rc-accent-link"
+          />
         </div>
-      </div>
+      </section>
 
       {/* Format Rankings */}
-      <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4">
-        <h2 className="text-lg font-semibold text-white mb-4">
-          Format Rankings
-        </h2>
-        <div className="space-y-3">
-          {data.leaderboardRankings.map((ranking) => (
-            <div
-              key={`${ranking.format}-${ranking.timeFrame}`}
-              className="flex items-center justify-between bg-black/20 rounded-lg p-3"
-            >
-              <div className="flex items-center gap-3">
-                <div className="text-sm">
-                  <div className="font-semibold text-white">
-                    {getFormatDisplay(ranking.format)} -{" "}
-                    {getTimeFrameDisplay(ranking.timeFrame)}
-                  </div>
-                  <div className="text-xs text-slate-400 flex items-center gap-2">
-                    <span>
-                      {ranking.rank > 0 ? `Rank #${ranking.rank}` : "Unranked"}
-                    </span>
-                    {ranking.provisional && (
-                      <span
-                        className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300"
-                        title="Needs 5 different opponents and 10 rated games to be ranked"
-                      >
-                        Provisional
+      <section className="rc-panel">
+        <PanelHeader
+          title="Format Rankings"
+          meta={`${data.leaderboardRankings.length} entries`}
+        />
+        {data.leaderboardRankings.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="rc-table">
+              <thead>
+                <tr>
+                  <th scope="col">Format</th>
+                  <th scope="col">Rank</th>
+                  <th scope="col">Rating</th>
+                  <th scope="col">Win Rate</th>
+                  <th scope="col">W-L-D</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.leaderboardRankings.map((ranking) => (
+                  <tr key={`${ranking.format}-${ranking.timeFrame}`}>
+                    <td>
+                      <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                        {getFormatDisplay(ranking.format)}
+                      </div>
+                      <div className="rc-hint mt-0.5">
+                        {getTimeFrameDisplay(ranking.timeFrame)} ·{" "}
+                        {ranking.uniqueOpponents} opp · {ranking.ratedGames}{" "}
+                        rated
+                      </div>
+                    </td>
+                    <td>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rc-stat">
+                          {ranking.rank > 0 ? `#${ranking.rank}` : "Unranked"}
+                        </span>
+                        {ranking.provisional && (
+                          <Badge
+                            tone="warn"
+                            title="Needs 5 different opponents and 10 rated games to be ranked"
+                          >
+                            Provisional
+                          </Badge>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <span className="rc-stat">{ranking.rating}</span>
+                    </td>
+                    <td>
+                      <span className="rc-stat">
+                        {formatWinRate(ranking.winRate)}
                       </span>
-                    )}
-                    <span>
-                      {ranking.uniqueOpponents} opp · {ranking.ratedGames} rated
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-6 text-sm">
-                <div className="text-center">
-                  <div className="font-bold text-white">{ranking.rating}</div>
-                  <div className="text-xs text-slate-400">Rating</div>
-                </div>
-                <div className="text-center">
-                  <div className="font-bold text-white">
-                    {formatWinRate(ranking.winRate)}
-                  </div>
-                  <div className="text-xs text-slate-400">Win Rate</div>
-                </div>
-                <div className="text-center">
-                  <div className="font-bold text-white">
-                    {ranking.wins}-{ranking.losses}
-                    {ranking.draws > 0 && `-${ranking.draws}`}
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    W-L{ranking.draws > 0 && "-D"}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+                    </td>
+                    <td>
+                      <span className="rc-stat">
+                        {ranking.wins}-{ranking.losses}
+                        {ranking.draws > 0 && `-${ranking.draws}`}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="px-[18px] py-3.5">
+            <RcEmpty title="No ranked formats yet.">
+              play a rated match to get placed
+            </RcEmpty>
+          </div>
+        )}
+      </section>
 
       {/* Recent Matches */}
-      <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4">
-        <h2 className="text-lg font-semibold text-white mb-4">
-          Recent Matches
-        </h2>
-        <div className="space-y-2">
-          {data.recentMatches.length > 0 ? (
-            data.recentMatches.map((match) => (
-              <div
-                key={match.id}
-                className={`flex items-center justify-between bg-black/20 rounded-lg p-3 ${
-                  match.rated ? "" : "opacity-60"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-3 h-3 rounded-full ${getMatchResultColor(
-                      match.isWin,
-                      match.isDraw
-                    ).replace("text-", "bg-")}`}
-                  />
-                  <div>
-                    <div className="text-sm font-semibold text-white">
-                      {match.lobbyName || `Match ${match.matchId.slice(-6)}`}
-                    </div>
-                    <div className="text-xs text-slate-400">
-                      {getFormatDisplay(match.format)} •{" "}
-                      {new Date(match.completedAt).toLocaleDateString()}
-                      {match.opponent &&
-                        ` • vs ${match.opponent.name ?? "Unknown"}`}
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div
-                    className={`text-sm font-bold ${getMatchResultColor(
-                      match.isWin,
-                      match.isDraw
-                    )}`}
-                  >
-                    {getMatchResultText(match.isWin, match.isDraw)}
-                  </div>
-                  {match.tournamentId && (
-                    <div className="text-xs text-yellow-400">Tournament</div>
-                  )}
-                  {(() => {
-                    const note = getLadderNote(match);
-                    return note ? (
-                      <div className="text-xs text-slate-500">{note}</div>
-                    ) : null;
-                  })()}
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="text-center py-4 text-sm text-slate-400">
-              No recent matches found
-            </div>
-          )}
-        </div>
-      </div>
+      <section className="rc-panel">
+        <PanelHeader
+          title="Recent Matches"
+          meta={`${data.recentMatches.length} matches`}
+        />
+        {data.recentMatches.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="rc-table">
+              <thead>
+                <tr>
+                  <th scope="col">Match</th>
+                  <th scope="col">Format</th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.recentMatches.map((match) => {
+                  const ladderNote = getLadderNote(match);
+                  return (
+                    <tr
+                      key={match.id}
+                      className={match.rated ? undefined : "opacity-60"}
+                    >
+                      <td>
+                        <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                          {match.lobbyName || `Match ${match.matchId.slice(-6)}`}
+                        </div>
+                        {match.opponent && (
+                          <div className="rc-hint mt-0.5">
+                            vs {match.opponent.name ?? "Unknown"}
+                          </div>
+                        )}
+                      </td>
+                      <td>{getFormatDisplay(match.format)}</td>
+                      <td>
+                        {new Date(match.completedAt).toLocaleDateString()}
+                      </td>
+                      <td>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            tone={getMatchResultTone(match.isWin, match.isDraw)}
+                          >
+                            {getMatchResultText(match.isWin, match.isDraw)}
+                          </Badge>
+                          {match.tournamentId && (
+                            <Badge tone="gold">Tournament</Badge>
+                          )}
+                        </div>
+                        {ladderNote && (
+                          <div className="rc-hint mt-1">{ladderNote}</div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="px-[18px] py-3.5">
+            <RcEmpty title="No recent matches found.">
+              completed matches show up here
+            </RcEmpty>
+          </div>
+        )}
+      </section>
 
       {/* Tournament History */}
       {data.tournamentHistory.length > 0 && (
-        <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4">
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Tournament History
-          </h2>
-          <div className="space-y-2">
-            {data.tournamentHistory.map((tournament, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between bg-black/20 rounded-lg p-3"
-              >
-                <div>
-                  <div className="font-semibold text-white">
-                    {tournament.tournament.name}
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    {getFormatDisplay(tournament.tournament.format)} •{" "}
-                    {tournament.tournament.status}
-                  </div>
-                </div>
-                <div className="text-right text-sm">
-                  <div className="font-bold text-white">
-                    Rank #{tournament.finalRank}
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    {tournament.wins}-{tournament.losses}
-                    {tournament.draws > 0 && `-${tournament.draws}`} •{" "}
-                    {tournament.matchPoints} pts
-                  </div>
-                </div>
-              </div>
-            ))}
+        <section className="rc-panel">
+          <PanelHeader
+            title="Tournament History"
+            meta={`${data.tournamentHistory.length} events`}
+          />
+          <div className="overflow-x-auto">
+            <table className="rc-table">
+              <thead>
+                <tr>
+                  <th scope="col">Tournament</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Rank</th>
+                  <th scope="col">W-L-D</th>
+                  <th scope="col">Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.tournamentHistory.map((tournament, index) => (
+                  <tr key={index}>
+                    <td>
+                      <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                        {tournament.tournament.name}
+                      </div>
+                      <div className="rc-hint mt-0.5">
+                        {getFormatDisplay(tournament.tournament.format)}
+                      </div>
+                    </td>
+                    <td>
+                      <Badge>{tournament.tournament.status}</Badge>
+                    </td>
+                    <td>
+                      <span className="rc-stat">
+                        #{tournament.finalRank}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="rc-stat">
+                        {tournament.wins}-{tournament.losses}
+                        {tournament.draws > 0 && `-${tournament.draws}`}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="rc-stat">{tournament.matchPoints}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
+        </section>
       )}
-    </div>
+    </AppShell>
   );
 }

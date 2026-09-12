@@ -4,6 +4,9 @@ import { useParams, useRouter, usePathname, useSearchParams } from "next/navigat
 import { useEffect, useState, useCallback, useRef } from "react";
 import GuestGate from "@/components/auth/GuestGate";
 import FloatingChat from "@/components/chat/FloatingChat";
+import AppShell from "@/components/ui/AppShell";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
 import { useRealtimeTournamentsOptional } from "@/contexts/RealtimeTournamentContext";
 import { useViewer } from "@/lib/guest/useViewer";
 
@@ -166,111 +169,111 @@ export default function TournamentDraftPage() {
 
   if (viewer.status === "loading" || (loading && !viewer.isAnonymous)) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white grid place-items-center">
-        <div className="text-slate-300">Joining draft session…</div>
-      </div>
+      <AppShell>
+        <div className="rc-hint py-16 text-center">joining draft session…</div>
+      </AppShell>
     );
   }
 
   if (viewer.isAnonymous) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white">
-        <div className="container mx-auto px-4 py-8 max-w-2xl">
-          <GuestGate
-            title="Tournament draft"
-            description="Sign in or continue as a guest to take your seat in the draft."
-            returnTo={currentHref}
-          />
-        </div>
-      </div>
+      <AppShell width="narrow">
+        <GuestGate
+          title="Tournament draft"
+          description="Sign in or continue as a guest to take your seat in the draft."
+          returnTo={currentHref}
+        />
+      </AppShell>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white grid place-items-center">
-        <div className="p-4 bg-rose-900/40 border border-rose-700 rounded">
+      <AppShell width="narrow">
+        <div className="rc-alert" data-tone="danger">
           {error}
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
+    <AppShell>
       <FloatingChat tournamentId={tournamentId} mode="bubble" />
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Tournament Draft</h1>
-          <a
+      <PageHeader
+        eyebrow="tournament"
+        title="Tournament Draft"
+        description="Take your seat — the draft starts once every player has joined."
+        actions={
+          <RcLinkButton
+            variant="outline"
+            size="sm"
             href={`/tournaments/${tournamentId}`}
-            className="text-slate-300 hover:text-white text-sm"
           >
-            Back to Overview
-          </a>
-        </div>
-        <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div className="text-slate-300">
-              Status:{" "}
-              <span className="font-semibold text-white capitalize">
-                {session?.status || "waiting"}
-              </span>
-            </div>
-            <div className="text-slate-300">
-              Players:{" "}
-              <span className="font-semibold text-white">
-                {playersJoined}/{totalPlayers}
-              </span>
-            </div>
-          </div>
-          <div className="mt-3 text-sm text-slate-300">
-            Session ID:{" "}
-            <span className="font-mono text-slate-200">{session?.id}</span>
-          </div>
-        </div>
+            Back to overview
+          </RcLinkButton>
+        }
+      />
 
-        <div className="mt-6">
-          <h2 className="text-lg font-semibold mb-2">Participants</h2>
-          <div className="grid gap-2">
-            {session?.participants?.length ? (
-              session.participants.map((p) => (
-                <div
-                  key={p.playerId}
-                  className="flex items-center justify-between bg-black/20 border border-slate-700 rounded px-3 py-2"
-                >
-                  <div className="text-white">{p.playerName}</div>
-                  <div className="text-xs text-slate-300">
-                    Seat {p.seatNumber} • {p.status}
-                  </div>
+      <section className="rc-panel px-[18px] py-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-4 font-rc-mono text-[13px] text-rc-fg-muted">
+          <div>
+            Status:{" "}
+            <span className="capitalize text-rc-fg-strong">
+              {session?.status || "waiting"}
+            </span>
+          </div>
+          <div>
+            Players:{" "}
+            <span className="tabular-nums text-rc-fg-strong">
+              {playersJoined}/{totalPlayers}
+            </span>
+          </div>
+        </div>
+        <div className="rc-hint mt-3 truncate">Session ID: {session?.id}</div>
+      </section>
+
+      <section className="rc-panel">
+        <PanelHeader
+          title="Participants"
+          meta={`${session?.participants?.length ?? 0} seated`}
+        />
+        <div className="grid gap-2 px-[18px] py-3.5">
+          {session?.participants?.length ? (
+            session.participants.map((p) => (
+              <div
+                key={p.playerId}
+                className="flex items-center justify-between gap-3 rounded-rc-md border border-rc-line/14 bg-black/30 px-3 py-2"
+              >
+                <div className="truncate font-rc-mono text-sm font-semibold text-rc-fg-strong">
+                  {p.playerName}
                 </div>
-              ))
-            ) : (
-              <div className="text-slate-400">No participants yet</div>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-8 flex items-center gap-3">
-          <button
-            className="px-4 py-2 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm"
-            onClick={() => joinDraft()}
-          >
-            Refresh
-          </button>
-          {session?.status === "completed" && (
-            <button
-              className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white text-sm"
-              onClick={() => {
-                void proceedToDeckBuild();
-              }}
-              title="Proceed to deck construction"
-            >
-              Proceed to Deck Construction
-            </button>
+                <div className="shrink-0 font-rc-mono text-[11px] uppercase tracking-[0.12em] text-rc-fg-subtle">
+                  Seat {p.seatNumber} · {p.status}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rc-hint py-6 text-center">no participants yet</div>
           )}
         </div>
+      </section>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <RcButton variant="outline" onClick={() => joinDraft()}>
+          Refresh
+        </RcButton>
+        {session?.status === "completed" && (
+          <RcButton
+            onClick={() => {
+              void proceedToDeckBuild();
+            }}
+            title="Proceed to deck construction"
+          >
+            Proceed to Deck Construction
+          </RcButton>
+        )}
       </div>
-    </div>
+    </AppShell>
   );
 }

@@ -57,7 +57,7 @@ export default function HelpOverlay({
         aria-controls={baseId}
         aria-label={triggerAriaLabel}
         className={
-          "inline-flex items-center justify-center w-6 h-6 rounded-full border border-slate-600/70 text-slate-200/90 hover:text-white hover:border-slate-400/80 bg-slate-800/60 hover:bg-slate-700/60 transition-colors text-xs font-semibold " +
+          "inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-rc-line/28 bg-black/30 font-rc-mono text-xs font-semibold text-rc-fg-muted transition-colors hover:border-rc-accent hover:text-rc-accent-ring " +
           triggerClassName
         }
       >
@@ -69,42 +69,42 @@ export default function HelpOverlay({
         createPortal(
           <div
             id={baseId}
-            className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm grid justify-items-center p-4 min-h-[100svh]"
+            className="fixed inset-0 z-[9999] grid min-h-[100svh] justify-items-center bg-[rgba(6,10,20,0.82)] p-4 backdrop-blur-[4px]"
             onMouseDown={() => setOpen(false)}
           >
             <div
               role="dialog"
               aria-modal="true"
               aria-labelledby={labelId}
-              className="relative place-self-center w-full max-w-3xl bg-slate-900/95 text-white rounded-xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col"
+              className="rc-panel relative flex w-full max-w-3xl flex-col overflow-hidden place-self-center shadow-[0_18px_40px_rgba(0,0,0,0.55),0_0_18px_rgba(243,207,106,0.2)]"
               onMouseDown={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60">
-                <h2 id={labelId} className="text-lg md:text-xl font-semibold">
+              <div className="flex items-center justify-between border-b border-rc-line/14 px-5 py-4">
+                <h2 id={labelId} className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
                   {title}
                 </h2>
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="ml-3 text-slate-300 hover:text-white rounded-md px-2 py-1 border border-transparent hover:border-slate-600"
+                  className="ml-3 cursor-pointer rounded-rc-md px-2 py-1 text-xl leading-none text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
                   aria-label="Close"
                 >
-                  ✕
+                  ×
                 </button>
               </div>
 
               {/* Body */}
-              <div className="px-5 py-4 max-h-[70svh] overflow-auto">
+              <div className="thin-scrollbar max-h-[70svh] overflow-auto px-5 py-4 font-rc-sans text-[15px] leading-[1.65] text-rc-fg">
                 {children}
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-700/60">
+              <div className="flex items-center justify-end gap-2 border-t border-rc-line/14 px-5 py-3">
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-200 hover:bg-slate-700/70"
+                  className="inline-flex h-9 cursor-pointer items-center rounded-rc-md border border-rc-line/28 px-3 font-rc-sans text-sm text-rc-fg transition-colors hover:border-rc-accent hover:bg-rc-accent/8"
                 >
                   Close
                 </button>

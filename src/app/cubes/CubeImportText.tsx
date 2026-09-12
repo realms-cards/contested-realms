@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 
 export default function CubeImportText() {
   const enabled = process.env.NEXT_PUBLIC_ENABLE_TEXT_IMPORT === "true";
@@ -65,11 +66,14 @@ export default function CubeImportText() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="w-full bg-zinc-900/70 ring-1 ring-white/10 rounded-xl p-4 space-y-3">
-      <div className="text-sm font-medium">Import Cube from Text</div>
+    <form
+      onSubmit={onSubmit}
+      className="w-full space-y-3 rounded-rc-md border border-rc-line/12 bg-black/30 p-4"
+    >
+      <div className="rc-eyebrow">import cube from text</div>
       <div className="grid gap-2 sm:grid-cols-5">
         <textarea
-          className="sm:col-span-3 w-full h-40 bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white font-mono text-xs"
+          className="rc-textarea h-40 w-full sm:col-span-3"
           placeholder="Paste card list or deck text here"
           value={text}
           onChange={(event) => setText(event.target.value)}
@@ -77,31 +81,33 @@ export default function CubeImportText() {
         />
         <div className="sm:col-span-2 flex flex-col gap-2">
           <input
-            className="w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
+            className="rc-input h-10 w-full"
             placeholder="Optional cube name"
             value={name}
             onChange={(event) => setName(event.target.value)}
             disabled={loading}
           />
-          <button
-            type="submit"
-            disabled={loading || !text.trim()}
-            className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-          >
-            {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+          <RcButton type="submit" disabled={loading || !text.trim()}>
+            {loading && (
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-rc-accent-fg border-t-transparent" />
+            )}
             {loading ? "Importing..." : "Import"}
-          </button>
+          </RcButton>
         </div>
       </div>
       {error && (
-        <div className="text-red-400 text-xs bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">{error}</div>
+        <div className="rc-alert" data-tone="danger">
+          {error}
+        </div>
       )}
       {unresolved && unresolved.length > 0 && (
-        <div className="text-xs bg-zinc-800/60 rounded px-3 py-2 ring-1 ring-zinc-700">
-          <div className="font-medium mb-1">Unresolved cards (please correct names):</div>
-          <ul className="list-disc pl-5 space-y-0.5">
+        <div className="rc-alert" data-tone="warning">
+          <div className="mb-1">Unresolved cards (please correct names):</div>
+          <ul className="list-disc space-y-0.5 pl-5">
             {unresolved.map((item, index) => (
-              <li key={`${item.name}-${index}`}>{item.count} × {item.name}</li>
+              <li key={`${item.name}-${index}`}>
+                {item.count} × {item.name}
+              </li>
             ))}
           </ul>
         </div>

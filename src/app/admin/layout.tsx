@@ -19,18 +19,16 @@ export default async function AdminLayout({
     { href: "/admin/ladder", label: "Ladder" },
   ];
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900/70 backdrop-blur">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-          <div className="text-sm font-semibold tracking-wide text-slate-300">
-            Admin
-          </div>
-          <nav className="flex items-center gap-2">
+    <div className="rc-app min-h-screen">
+      <header className="sticky top-0 z-10 border-b border-rc-line/18 bg-[rgba(7,10,20,0.72)] backdrop-blur-[6px]">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div className="rc-eyebrow">Admin</div>
+          <nav className="flex flex-wrap items-center gap-4">
             {links.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}
-                className="text-xs px-2 py-1 rounded border border-slate-700 text-slate-200 hover:bg-slate-800"
+                className="font-rc-mono text-[11px] uppercase tracking-[0.18em] text-rc-fg-muted transition-colors hover:text-rc-accent-ring"
               >
                 {l.label}
               </Link>
@@ -38,7 +36,7 @@ export default async function AdminLayout({
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">{children}</main>
     </div>
   );
 }

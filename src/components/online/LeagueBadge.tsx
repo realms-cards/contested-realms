@@ -15,6 +15,11 @@ const LEAGUE_SHORT_NAMES: Record<string, string> = {
   "sorcerers-summit": "Summit",
 };
 
+/** Short badge label for a league ("Summit"), falling back to its full name. */
+export function getLeagueShortName(slug: string, name: string): string {
+  return LEAGUE_SHORT_NAMES[slug] || name;
+}
+
 export function LeagueBadge({
   slug,
   name,
@@ -22,7 +27,7 @@ export function LeagueBadge({
   compact = false,
 }: LeagueBadgeProps) {
   const emoji = LEAGUE_EMOJIS[slug] || "\uD83C\uDFC6";
-  const shortName = LEAGUE_SHORT_NAMES[slug] || name;
+  const shortName = getLeagueShortName(slug, name);
   const color = badgeColor || "#7c3aed";
 
   if (compact) {

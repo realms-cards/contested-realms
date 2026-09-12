@@ -1,7 +1,8 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Loader2, MessageCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { RcButton } from "@/components/ui/rc-button";
+import { playerColor } from "@/lib/lobby/playerColor";
 import type { ChatScope, ServerChatPayloadT } from "@/lib/net/protocol";
 import { fetchPatrons, PATRON_COLORS, type PatronData } from "@/lib/patrons";
 
@@ -14,15 +15,24 @@ interface LobbyChatConsoleProps {
   setChatInput: (value: string) => void;
   onSendChat: (message: string, scope: ChatScope) => void;
   myPlayerId?: string | null;
-  position?: "bottom-left" | "top-right" | "top-left";
   // Pagination for global chat history
   chatHasMore?: boolean;
   chatLoading?: boolean;
   onRequestMoreHistory?: () => void;
-  // Inline mode: renders as a normal flow element instead of fixed position
-  inline?: boolean;
 }
 
+// Patron tiers keep their glow colours; everyone else gets the deterministic
+// palette colour for their id (see playerColor).
+const PATRON_HEX = {
+  apprentice: "#60a5fa",
+  grandmaster: "#fbbf24",
+  kingofthe: "#34d399",
+} as const;
+
+/**
+ * Lobby Chat panel: Lobby | Global scopes, timestamped message log with
+ * per-player username colours, and a prompt-style composer.
+ */
 export default function LobbyChatConsole({
   connected,
   chatLog,
@@ -32,27 +42,23 @@ export default function LobbyChatConsole({
   setChatInput,
   onSendChat,
   myPlayerId,
-  position = "bottom-left",
   chatHasMore,
   chatLoading,
   onRequestMoreHistory,
-  inline = false,
 }: LobbyChatConsoleProps) {
-  const [consoleOpen, setConsoleOpen] = useState<boolean>(true);
   const [patrons, setPatrons] = useState<PatronData | null>(null);
 
-  // Fetch patrons on mount
   useEffect(() => {
     fetchPatrons().then(setPatrons);
   }, []);
 
   const lobbyMessages = useMemo(
     () => chatLog.filter((m) => m.scope === "lobby"),
-    [chatLog]
+    [chatLog],
   );
   const globalMessages = useMemo(
     () => chatLog.filter((m) => m.scope === "global"),
-    [chatLog]
+    [chatLog],
   );
   const activeMessages = chatTab === "lobby" ? lobbyMessages : globalMessages;
 
@@ -63,280 +69,205 @@ export default function LobbyChatConsole({
   const lastHistoryRequestRef = useRef<number>(0);
   const prevScrollHeightRef = useRef<number>(0);
 
-  // Auto-scroll to latest message only when NEW messages arrive (not when loading history)
-  // and only if user is already near the bottom
-  // Also preserve scroll position when prepending history
+  // Scroll to the newest message when new ones arrive (if already near the
+  // bottom); keep the viewport stable when older history is prepended.
   useEffect(() => {
-    if (!consoleOpen) return;
     const el = chatRef.current;
     if (!el) return;
-
     const prevCount = prevMessageCountRef.current;
     const currentCount = activeMessages.length;
     const prevScrollHeight = prevScrollHeightRef.current;
 
-    // If we were loading history, preserve scroll position
     if (loadingHistoryRef.current && currentCount > prevCount) {
-      // History was prepended - maintain scroll position relative to old content
-      const scrollDelta = el.scrollHeight - prevScrollHeight;
-      el.scrollTop = el.scrollTop + scrollDelta;
+      el.scrollTop = el.scrollTop + (el.scrollHeight - prevScrollHeight);
       loadingHistoryRef.current = false;
     } else if (currentCount > prevCount && isNearBottomRef.current) {
-      // New messages at the end - scroll to bottom
       el.scrollTop = el.scrollHeight;
     }
 
     prevMessageCountRef.current = currentCount;
     prevScrollHeightRef.current = el.scrollHeight;
-  }, [consoleOpen, activeMessages.length]);
+  }, [activeMessages.length]);
 
-  // Scroll to bottom when switching tabs
+  // Jump to the bottom on mount and when switching scope
   useEffect(() => {
     const el = chatRef.current;
-    if (!el || !consoleOpen) return;
+    if (!el) return;
     el.scrollTop = el.scrollHeight;
     isNearBottomRef.current = true;
     prevMessageCountRef.current = activeMessages.length;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on tab/console toggle, not message changes
-  }, [chatTab, consoleOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on scope change, not message changes
+  }, [chatTab]);
 
-  // Load more history when scrolling to top (global chat only)
-  // Also track if user is near bottom for auto-scroll behavior
   const handleScroll = () => {
     const el = chatRef.current;
     if (!el) return;
-
-    // Track if user is near the bottom (within 50px)
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     isNearBottomRef.current = distanceFromBottom < 50;
 
-    // Load more history when near top (global chat only)
-    // Throttle requests to prevent rapid firing (500ms cooldown)
     if (
       chatTab === "global" &&
       chatHasMore &&
       onRequestMoreHistory &&
-      !chatLoading
+      !chatLoading &&
+      el.scrollTop < 40
     ) {
-      if (el.scrollTop < 40) {
-        const now = Date.now();
-        if (now - lastHistoryRequestRef.current > 500) {
-          lastHistoryRequestRef.current = now;
-          loadingHistoryRef.current = true;
-          prevScrollHeightRef.current = el.scrollHeight;
-          onRequestMoreHistory();
-        }
+      const now = Date.now();
+      if (now - lastHistoryRequestRef.current > 500) {
+        lastHistoryRequestRef.current = now;
+        loadingHistoryRef.current = true;
+        prevScrollHeightRef.current = el.scrollHeight;
+        onRequestMoreHistory();
       }
     }
   };
 
+  const canSend = connected && chatInput.trim().length > 0;
   const handleSend = () => {
     const msg = chatInput.trim();
     if (!msg || !connected) return;
-    const scope: ChatScope = chatTab;
-    onSendChat(msg, scope);
+    onSendChat(msg, chatTab);
     setChatInput("");
   };
 
-  const positionClasses = (() => {
-    switch (position) {
-      case "top-right":
-        return "right-3 top-2";
-      case "top-left":
-        return "left-3 top-2";
-      default:
-        return "left-3 bottom-2";
-    }
-  })();
-
-  const containerWidth = consoleOpen ? "w-80" : "w-64";
-  const headerPadding = consoleOpen ? "px-3 py-2" : "px-2 py-1";
-
-  // Inline mode: normal flow element; fixed mode: floating overlay
-  const containerClasses = inline
-    ? "text-white w-full h-full flex flex-col overflow-hidden"
-    : `fixed ${positionClasses} z-30 text-white ${containerWidth} transition-all pointer-events-auto`;
-
-  const innerClasses = inline
-    ? "bg-slate-900/60 ring-1 ring-slate-800 rounded-xl flex flex-col h-full overflow-hidden"
-    : "bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow";
+  const patronTierFor = (id: string | undefined) => {
+    if (!id || !patrons) return null;
+    if (patrons.kingofthe?.some((p) => p.id === id)) return "kingofthe";
+    if (patrons.grandmaster.some((p) => p.id === id)) return "grandmaster";
+    if (patrons.apprentice.some((p) => p.id === id)) return "apprentice";
+    return null;
+  };
 
   return (
-    <div className={containerClasses}>
-      <div className={innerClasses}>
-        {/* Header */}
-        <div
-          className={`flex items-center justify-between ${headerPadding} text-sm border-b border-white/10 select-none`}
-        >
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 text-xs opacity-90">
-              <MessageCircle className="w-3 h-3" />
-              <span>Lobby Chat</span>
-            </div>
-            {/* Scope toggles */}
-            <div className="flex items-center gap-1 ml-2">
-              <button
-                className={`px-2 py-0.5 rounded text-[11px] transition-colors ${
-                  chatTab === "lobby"
-                    ? "bg-white/20 text-white"
-                    : "hover:bg-white/10 opacity-80"
-                }`}
-                onClick={() => setChatTab("lobby")}
-              >
-                Lobby
-                {lobbyMessages.length > 0 && (
-                  <span className="ml-1 bg-emerald-500/80 text-white text-[10px] px-1 rounded-full">
-                    {lobbyMessages.length}
-                  </span>
-                )}
-              </button>
-              <button
-                className={`px-2 py-0.5 rounded text-[11px] transition-colors ${
-                  chatTab === "global"
-                    ? "bg-white/20 text-white"
-                    : "hover:bg-white/10 opacity-80"
-                }`}
-                onClick={() => setChatTab("global")}
-              >
-                Global
-                {globalMessages.length > 0 && (
-                  <span className="ml-1 bg-sky-500/80 text-white text-[10px] px-1 rounded-full">
-                    {globalMessages.length}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-
+    <section className="rc-panel flex min-h-[560px] flex-col">
+      <div className="rc-panel-head">
+        <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
+          Lobby Chat
+        </h2>
+        <div className="flex-1" />
+        <div className="rc-segment" role="group" aria-label="Chat scope">
           <button
-            className="rounded bg-white/10 hover:bg-white/20 px-2 py-0.5 text-xs transition-colors"
-            onClick={() => setConsoleOpen((o) => !o)}
+            type="button"
+            aria-pressed={chatTab === "lobby"}
+            onClick={() => setChatTab("lobby")}
           >
-            {consoleOpen ? (
-              <ChevronDown className="w-4 h-4" />
-            ) : (
-              <ChevronUp className="w-4 h-4" />
-            )}
+            Lobby{lobbyMessages.length > 0 ? ` · ${lobbyMessages.length}` : ""}
+          </button>
+          <button
+            type="button"
+            aria-pressed={chatTab === "global"}
+            onClick={() => setChatTab("global")}
+          >
+            Global
+            {globalMessages.length > 0 ? ` · ${globalMessages.length}` : ""}
           </button>
         </div>
+      </div>
 
-        {/* Content */}
-        {consoleOpen && (
-          <div
-            className={
-              inline
-                ? "flex-1 flex flex-col min-h-0 overflow-hidden"
-                : "h-56 flex flex-col"
-            }
-          >
-            <div
-              ref={chatRef}
-              data-allow-wheel="true"
-              className="flex-1 overflow-y-auto thin-scrollbar px-3 py-3 text-xs space-y-1 min-h-0 max-h-full"
-              onScroll={handleScroll}
-            >
-              {/* Loading indicator for history */}
-              {chatTab === "global" && chatLoading && (
-                <div className="flex items-center justify-center py-2 text-slate-400">
-                  <Loader2 className="w-3 h-3 animate-spin mr-1.5" />
-                  <span className="text-[10px]">Loading older messages...</span>
-                </div>
-              )}
-              {/* Load more hint when scrolled to top */}
-              {chatTab === "global" &&
-                chatHasMore &&
-                !chatLoading &&
-                activeMessages.length > 0 && (
-                  <div className="text-center py-1 text-[10px] text-slate-500">
-                    ↑ Scroll up for more
-                  </div>
-                )}
-              {activeMessages.length === 0 && !chatLoading && (
-                <div className="opacity-60">No messages</div>
-              )}
-              {activeMessages.map((m, i) => {
-                const fromName = m.from?.displayName ?? "System";
-                const isMine = myPlayerId && m.from?.id === myPlayerId;
-                const patronTier =
-                  m.from?.id && patrons
-                    ? patrons.kingofthe?.some((p) => p.id === m.from?.id)
-                      ? "kingofthe"
-                      : patrons.grandmaster.some((p) => p.id === m.from?.id)
-                      ? "grandmaster"
-                      : patrons.apprentice.some((p) => p.id === m.from?.id)
-                      ? "apprentice"
-                      : null
-                    : null;
-                const patronStyle = patronTier
-                  ? PATRON_COLORS[patronTier]
-                  : null;
-                const timeStr = m.ts
-                  ? new Date(m.ts).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })
-                  : null;
-                return (
-                  <div
-                    key={`${m.scope}-${i}-${m.from?.id ?? "system"}`}
-                    className={`opacity-90 ${
-                      isMine ? "text-slate-50" : "text-slate-100"
-                    }`}
-                  >
-                    <div className="flex flex-col">
-                      <div>
-                        <span
-                          className={`font-medium ${patronStyle?.text ?? ""}`}
-                          style={
-                            patronStyle
-                              ? { textShadow: patronStyle.textShadowMinimal }
-                              : undefined
-                          }
-                        >
-                          {fromName}
-                        </span>
-                        {timeStr && (
-                          <span className="text-[9px] text-slate-400 ml-1.5">
-                            {timeStr}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-slate-200">{m.content}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {/* Chat input */}
-            <div className="px-3 pb-3 pt-2 border-t border-white/10 flex gap-2 select-none">
-              <input
-                className={`flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs${!connected ? " opacity-50 cursor-wait" : ""}`}
-                placeholder={
-                  !connected
-                    ? "Reconnecting…"
-                    : chatTab === "global"
-                      ? "Type a global message"
-                      : "Type a lobby message"
-                }
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleSend();
-                  }
-                }}
-              />
-              <button
-                className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 text-xs transition-colors"
-                onClick={handleSend}
-                disabled={!connected || !chatInput.trim()}
-              >
-                Send
-              </button>
-            </div>
+      <div
+        ref={chatRef}
+        data-allow-wheel="true"
+        onScroll={handleScroll}
+        className="thin-scrollbar flex max-h-[520px] min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-[18px] py-1.5"
+      >
+        {chatTab === "global" && chatLoading && (
+          <div className="py-2 text-center font-rc-mono text-[10px] tracking-[0.1em] text-rc-fg-dim">
+            loading older messages…
           </div>
         )}
+        {chatTab === "global" &&
+          chatHasMore &&
+          !chatLoading &&
+          activeMessages.length > 0 && (
+            <div className="py-1 text-center font-rc-mono text-[10px] tracking-[0.1em] text-rc-fg-dim">
+              ↑ scroll up for more
+            </div>
+          )}
+        {activeMessages.length === 0 && !chatLoading && (
+          <div className="py-6 text-center font-rc-mono text-xs tracking-[0.1em] text-rc-fg-dim">
+            {chatTab === "lobby"
+              ? "no lobby messages yet"
+              : "the realm is silent"}
+          </div>
+        )}
+        {activeMessages.map((m, i) => {
+          const fromId = m.from?.id;
+          const fromName = m.from?.displayName ?? "System";
+          const isMine = !!myPlayerId && fromId === myPlayerId;
+          const tier = patronTierFor(fromId);
+          const color = tier
+            ? PATRON_HEX[tier]
+            : isMine
+              ? "#e3ba55"
+              : playerColor(fromId);
+          const timeStr = m.ts
+            ? new Date(m.ts).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "";
+          return (
+            <div
+              key={`${m.scope}-${i}-${fromId ?? "system"}`}
+              className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-rc-mono text-[13px] leading-[1.55]"
+            >
+              <span className="pt-[3px] text-[11px] tracking-[0.06em] tabular-nums text-rc-fg-dim">
+                {timeStr}
+              </span>
+              <div className="min-w-0 break-words">
+                <span
+                  className="font-semibold"
+                  style={{
+                    color,
+                    textShadow: tier
+                      ? PATRON_COLORS[tier].textShadowMinimal
+                      : undefined,
+                  }}
+                  title={tier ? `${fromName} · patron` : fromName}
+                >
+                  {fromName}
+                </span>
+                <span className="text-rc-fg-dim"> › </span>
+                <span className="whitespace-pre-wrap text-rc-fg">{m.content}</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
-    </div>
+
+      <div className="flex gap-2.5 border-t border-rc-line/18 px-[18px] py-3.5">
+        <div
+          className={`flex h-10 flex-1 items-center gap-2.5 rounded-rc-md border border-rc-line/22 bg-black/45 px-3.5 transition-[border-color,box-shadow] focus-within:border-rc-accent-ring focus-within:shadow-[0_0_0_1px_#f3cf6a] ${
+            !connected ? "opacity-50" : ""
+          }`}
+        >
+          <span className="font-rc-mono text-rc-accent-link" aria-hidden="true">
+            &gt;
+          </span>
+          <textarea
+            rows={1}
+            aria-label={
+              chatTab === "global" ? "Global chat message" : "Lobby chat message"
+            }
+            className="h-full min-w-0 flex-1 resize-none border-0 bg-transparent py-[11px] font-rc-mono text-[13px] leading-[18px] text-rc-fg outline-none"
+            placeholder={
+              !connected ? "reconnecting…" : "say something to the realm_"
+            }
+            value={chatInput}
+            disabled={!connected}
+            onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+          />
+        </div>
+        <RcButton onClick={handleSend} disabled={!canSend} className="h-10">
+          Send
+        </RcButton>
+      </div>
+    </section>
   );
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { RcButton } from "@/components/ui/rc-button";
 import { MATCH_APPROVAL_STATUS } from "@/lib/open-tournament/constants";
 import type { OpenTournamentSettings } from "@/lib/open-tournament/types";
 
@@ -48,10 +50,10 @@ export function OpenTournamentMatchCard({
 
     try {
       const loserId = isDraw
-        ? player2?.id ?? ""
+        ? (player2?.id ?? "")
         : winnerId === player1?.id
-          ? player2?.id ?? ""
-          : player1?.id ?? "";
+          ? (player2?.id ?? "")
+          : (player1?.id ?? "");
 
       const res = await fetch(
         `/api/open-tournaments/${tournamentId}/matches/${match.id}/result`,
@@ -99,34 +101,35 @@ export function OpenTournamentMatchCard({
     }
   };
 
+  const playerName = (playerId: unknown) =>
+    playerId === player1?.id ? player1?.name : player2?.name;
+
   return (
     <div
-      className={`bg-slate-800 border rounded-lg p-4 ${
-        isPending
-          ? "border-amber-700"
-          : isCompleted
-            ? "border-slate-600"
-            : "border-slate-700"
+      className={`rounded-rc-lg border bg-rc-panel p-4 shadow-rc-panel ${
+        isPending ? "border-rc-warning/45" : "border-rc-line/18"
       }`}
     >
       {/* Players */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex-1">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <div
-            className={`text-sm font-medium ${
+            className={`truncate font-rc-display text-[19px] leading-[1.1] ${
               isCompleted && results?.winnerId === player1?.id
-                ? "text-green-400"
-                : "text-white"
+                ? "text-rc-success"
+                : "text-rc-fg-strong"
             }`}
           >
             {player1?.name ?? "TBD"}
           </div>
-          <div className="text-xs text-slate-500 mt-0.5">vs</div>
+          <div className="my-0.5 font-rc-mono text-[11px] tracking-[0.14em] text-rc-fg-dim">
+            vs
+          </div>
           <div
-            className={`text-sm font-medium ${
+            className={`truncate font-rc-display text-[19px] leading-[1.1] ${
               isCompleted && results?.winnerId === player2?.id
-                ? "text-green-400"
-                : "text-white"
+                ? "text-rc-success"
+                : "text-rc-fg-strong"
             }`}
           >
             {player2?.name ?? "TBD"}
@@ -134,76 +137,72 @@ export function OpenTournamentMatchCard({
         </div>
 
         {/* Status badge */}
-        <div className="text-right">
-          {isPending && (
-            <span className="text-xs px-2 py-0.5 bg-amber-900/50 text-amber-300 border border-amber-700 rounded-full">
-              Pending approval
-            </span>
-          )}
+        <div className="flex shrink-0 flex-col items-end gap-1 text-right">
+          {isPending && <Badge tone="warn">Pending approval</Badge>}
           {isCompleted && (
-            <span className="text-xs px-2 py-0.5 bg-slate-700 text-slate-300 border border-slate-600 rounded-full">
-              {results?.isDraw ? "Draw" : `${(results?.winnerId === player1?.id ? player1?.name : player2?.name) ?? "?"} won`}
-            </span>
+            <Badge tone="ok">
+              {results?.isDraw
+                ? "Draw"
+                : `${playerName(results?.winnerId) ?? "?"} won`}
+            </Badge>
           )}
-          {!isCompleted && !isPending && (
-            <span className="text-xs px-2 py-0.5 bg-blue-900/50 text-blue-300 border border-blue-700 rounded-full">
-              pending
-            </span>
-          )}
+          {!isCompleted && !isPending && <Badge>pending</Badge>}
           {isCompleted && results?.source ? (
-            <div className="text-xs text-slate-500 mt-1 capitalize">
-              via {String(results.source)}
-            </div>
+            <div className="rc-hint">via {String(results.source)}</div>
           ) : null}
         </div>
       </div>
 
       {error && (
-        <div className="text-xs text-red-400 mb-2">{error}</div>
+        <div className="rc-alert mb-2" data-tone="danger">
+          {error}
+        </div>
       )}
 
       {/* Host approval buttons */}
       {isPending && isHost && (
-        <div className="flex gap-2 mb-2">
-          <button
+        <div className="mb-2 flex gap-2">
+          <RcButton
+            size="sm"
             onClick={() => handleApproval(true)}
             disabled={submitting}
-            className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1.5 rounded text-xs"
+            className="flex-1"
           >
             Approve
-          </button>
-          <button
+          </RcButton>
+          <RcButton
+            variant="destructive"
+            size="sm"
             onClick={() => handleApproval(false)}
             disabled={submitting}
-            className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-3 py-1.5 rounded text-xs"
+            className="flex-1"
           >
             Reject
-          </button>
+          </RcButton>
         </div>
       )}
 
       {/* Report result button */}
       {!isCompleted && !isPending && !showReportForm && (
-        <button
+        <RcButton
+          variant="outline"
+          size="sm"
           onClick={() => setShowReportForm(true)}
-          className="w-full bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-xs"
+          className="w-full"
         >
           Report Result
-        </button>
+        </RcButton>
       )}
 
       {/* Report result form */}
       {!isCompleted && !isPending && showReportForm && (
-        <div className="space-y-2 mt-2 pt-2 border-t border-slate-700">
+        <div className="mt-2 space-y-2.5 border-t border-rc-line/12 pt-3">
           {/* Source */}
-          <div className="flex gap-2">
+          <div className="rc-segment">
             {settings.matchResolution.allowRealms && (
               <button
-                className={`px-2 py-1 rounded text-xs ${
-                  source === "realms"
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-700 text-slate-300"
-                }`}
+                type="button"
+                aria-pressed={source === "realms"}
                 onClick={() => setSource("realms")}
               >
                 Realms
@@ -212,21 +211,15 @@ export function OpenTournamentMatchCard({
             {settings.matchResolution.allowManualReport && (
               <>
                 <button
-                  className={`px-2 py-1 rounded text-xs ${
-                    source === "tts"
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-700 text-slate-300"
-                  }`}
+                  type="button"
+                  aria-pressed={source === "tts"}
                   onClick={() => setSource("tts")}
                 >
                   TTS
                 </button>
                 <button
-                  className={`px-2 py-1 rounded text-xs ${
-                    source === "manual"
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-700 text-slate-300"
-                  }`}
+                  type="button"
+                  aria-pressed={source === "manual"}
                   onClick={() => setSource("manual")}
                 >
                   Manual
@@ -236,8 +229,8 @@ export function OpenTournamentMatchCard({
           </div>
 
           {/* Winner selection */}
-          <div className="space-y-1">
-            <label className="flex items-center gap-2 text-xs text-slate-300">
+          <div className="space-y-2">
+            <label className="rc-check">
               <input
                 type="checkbox"
                 checked={isDraw}
@@ -245,20 +238,16 @@ export function OpenTournamentMatchCard({
                   setIsDraw(e.target.checked);
                   if (e.target.checked) setWinnerId("");
                 }}
-                className="accent-blue-500"
               />
               Draw
             </label>
             {!isDraw && (
-              <div className="flex gap-2">
+              <div className="rc-segment">
                 {match.players.map((p) => (
                   <button
                     key={p.id}
-                    className={`flex-1 px-2 py-1 rounded text-xs ${
-                      winnerId === p.id
-                        ? "bg-green-600 text-white"
-                        : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                    }`}
+                    type="button"
+                    aria-pressed={winnerId === p.id}
                     onClick={() => setWinnerId(p.id)}
                   >
                     {p.name} wins
@@ -270,19 +259,21 @@ export function OpenTournamentMatchCard({
 
           {/* Submit */}
           <div className="flex gap-2">
-            <button
+            <RcButton
+              size="sm"
               onClick={handleSubmitResult}
               disabled={submitting || (!winnerId && !isDraw)}
-              className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1.5 rounded text-xs"
+              className="flex-1"
             >
               {submitting ? "Submitting..." : "Submit Result"}
-            </button>
-            <button
+            </RcButton>
+            <RcButton
+              variant="ghost"
+              size="sm"
               onClick={() => setShowReportForm(false)}
-              className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-xs"
             >
               Cancel
-            </button>
+            </RcButton>
           </div>
         </div>
       )}

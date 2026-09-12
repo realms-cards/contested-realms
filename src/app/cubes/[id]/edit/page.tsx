@@ -1,12 +1,13 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AuthButton from "@/components/auth/AuthButton";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
+import { PanelHeader } from "@/components/ui/page-header";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
 
 type ApiCard = {
   cardId: number;
@@ -249,9 +250,7 @@ export default function CubeEditorPage() {
   if (status === "loading" || loading) {
     return (
       <OnlinePageShell>
-        <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-6 text-center">
-          <div className="text-sm text-slate-300">Loading...</div>
-        </div>
+        <div className="rc-hint py-6 text-center">loading…</div>
       </OnlinePageShell>
     );
   }
@@ -259,16 +258,14 @@ export default function CubeEditorPage() {
   if (!session) {
     return (
       <OnlinePageShell>
-        <div className="pt-2">
-          <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-6 text-center space-y-4">
-            <div className="text-sm text-slate-200">
-              Please sign in to edit cubes.
-            </div>
-            <div className="flex justify-center">
-              <AuthButton />
-            </div>
+        <section className="rc-panel px-[18px] py-8 text-center">
+          <div className="font-rc-sans text-sm text-rc-fg-muted">
+            Please sign in to edit cubes.
           </div>
-        </div>
+          <div className="mt-4 flex justify-center">
+            <AuthButton />
+          </div>
+        </section>
       </OnlinePageShell>
     );
   }
@@ -276,16 +273,13 @@ export default function CubeEditorPage() {
   if (error) {
     return (
       <OnlinePageShell>
-        <div className="pt-2 space-y-4">
-          <div className="rounded-xl bg-red-900/20 ring-1 ring-red-600/40 p-5 text-sm text-red-200">
+        <div className="space-y-4">
+          <div className="rc-alert" data-tone="danger">
             Error: {error}
           </div>
-          <Link
-            href="/cubes"
-            className="inline-block rounded-lg bg-slate-800/80 hover:bg-slate-700/80 px-4 py-2 text-sm font-medium text-slate-200"
-          >
+          <RcLinkButton href="/cubes" variant="outline">
             Back to Cubes
-          </Link>
+          </RcLinkButton>
         </div>
       </OnlinePageShell>
     );
@@ -293,65 +287,54 @@ export default function CubeEditorPage() {
 
   return (
     <OnlinePageShell>
-      <div className="space-y-6 pt-2">
+      <>
         {/* Header */}
-        <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex-1">
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Cube Name"
-                className="w-full text-2xl font-semibold font-fantaisie text-slate-50 bg-transparent border-b border-slate-600 focus:border-blue-500 outline-none pb-1"
-              />
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Description (optional)"
-                rows={2}
-                className="mt-2 w-full text-sm text-slate-300/90 bg-transparent border border-slate-700 rounded px-2 py-1 focus:border-blue-500 outline-none resize-none"
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href="/cubes"
-                className="rounded-lg bg-slate-800/80 hover:bg-slate-700/80 px-4 py-2 text-sm font-medium text-slate-200"
-              >
-                Cancel
-              </Link>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="rounded-lg bg-blue-600 hover:bg-blue-500 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-              >
-                {saving ? "Saving..." : "Save"}
-              </button>
-            </div>
+        <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="rc-eyebrow mb-1.5">edit cube</div>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Cube Name"
+              className="w-full border-0 border-b border-rc-line/22 bg-transparent pb-1 font-rc-display text-[clamp(26px,2.4vw,34px)] leading-none text-rc-fg-strong outline-none focus:border-rc-accent-ring"
+            />
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Description (optional)"
+              rows={2}
+              className="rc-textarea mt-3 w-full resize-none"
+            />
           </div>
-        </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <RcLinkButton href="/cubes" variant="outline">
+              Cancel
+            </RcLinkButton>
+            <RcButton onClick={handleSave} disabled={saving}>
+              {saving ? "Saving..." : "Save"}
+            </RcButton>
+          </div>
+        </header>
 
         {/* Search */}
-        <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5">
-          <div className="text-sm font-medium text-slate-200 mb-2">
-            Add Cards
-          </div>
+        <section className="rc-panel">
+          <PanelHeader title="Add Cards" />
+          <div className="px-[18px] py-3.5">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search for cards..."
-            className="w-full bg-slate-800/80 border border-slate-700 rounded px-3 py-2 text-sm text-slate-100 focus:border-blue-500 outline-none"
+            className="rc-input h-10 w-full"
           />
-          {searching && (
-            <div className="mt-2 text-xs text-slate-400">Searching...</div>
-          )}
+          {searching && <div className="rc-hint mt-2">searching…</div>}
           {searchResults.length > 0 && (
             <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
               {searchResults.map((card) => (
                 <div
                   key={`${card.cardId}-${card.slug}`}
-                  className="relative group bg-slate-800/60 rounded-lg overflow-hidden ring-1 ring-slate-700/50"
+                  className="group relative overflow-hidden rounded-rc-md border border-rc-line/12 bg-black/30"
                 >
                   <div className="aspect-[3/4] relative">
                     <Image
@@ -368,49 +351,43 @@ export default function CubeEditorPage() {
                     />
                   </div>
                   <div className="p-2">
-                    <div className="text-xs text-slate-200 truncate">
+                    <div className="truncate font-rc-sans text-xs text-rc-fg">
                       {card.name}
                     </div>
-                    <div className="text-[10px] text-slate-400">
-                      {card.type || "Unknown"}
-                    </div>
+                    <div className="rc-hint">{card.type || "Unknown"}</div>
                   </div>
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <button
-                      onClick={() => addCard(card, "main")}
-                      className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-500"
-                    >
+                  <div className="absolute inset-0 flex items-center justify-center gap-2 bg-[rgba(6,10,20,0.82)] opacity-0 transition-opacity group-hover:opacity-100">
+                    <RcButton size="sm" onClick={() => addCard(card, "main")}>
                       + Main
-                    </button>
-                    <button
+                    </RcButton>
+                    <RcButton
+                      variant="outline"
+                      size="sm"
+                      className="bg-black/35"
                       onClick={() => addCard(card, "sideboard")}
-                      className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-500"
                     >
                       + Side
-                    </button>
+                    </RcButton>
                   </div>
                 </div>
               ))}
             </div>
           )}
-        </div>
+          </div>
+        </section>
 
         {/* Main Deck */}
-        <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-lg font-semibold text-slate-200">
-              Main Deck
-            </div>
-            <div className="text-sm text-slate-400">{totalMain} cards</div>
-          </div>
+        <section className="rc-panel">
+          <PanelHeader title="Main Deck" meta={`${totalMain} cards`} />
+          <div className="px-[18px] py-3.5">
           {mainCards.length === 0 ? (
-            <div className="text-sm text-slate-400">No cards in main deck</div>
+            <div className="rc-hint">No cards in main deck</div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
               {mainCards.map((card) => (
                 <div
                   key={`main-${card.cardId}`}
-                  className="relative group bg-slate-800/60 rounded-lg overflow-hidden ring-1 ring-slate-700/50"
+                  className="group relative overflow-hidden rounded-rc-md border border-rc-line/12 bg-black/30"
                 >
                   <div className="aspect-[3/4] relative">
                     <Image
@@ -425,62 +402,62 @@ export default function CubeEditorPage() {
                       sizes="120px"
                       unoptimized
                     />
-                    <div className="absolute top-1 right-1 bg-black/80 rounded px-1.5 py-0.5 text-xs text-white font-bold">
+                    <div className="absolute top-1 right-1 rounded-rc-sm bg-black/80 px-1.5 py-0.5 font-rc-mono text-xs text-rc-fg-strong">
                       {card.count}x
                     </div>
                   </div>
                   <div className="p-1.5">
-                    <div className="text-[10px] text-slate-200 truncate">
+                    <div className="truncate font-rc-sans text-[10px] text-rc-fg">
                       {card.name}
                     </div>
                   </div>
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
-                    <button
+                  <div className="absolute inset-0 flex items-center justify-center gap-1 bg-[rgba(6,10,20,0.82)] opacity-0 transition-opacity group-hover:opacity-100">
+                    <RcButton
+                      variant="outline"
+                      size="icon"
+                      className="h-6 w-6 bg-black/35"
+                      aria-label="Remove one copy"
                       onClick={() =>
                         updateCardCount(card.cardId, "main", card.count - 1)
                       }
-                      className="w-6 h-6 text-xs bg-rose-600 text-white rounded hover:bg-rose-500"
                     >
                       -
-                    </button>
-                    <span className="text-white text-sm font-bold px-1">
-                      {card.count}
-                    </span>
-                    <button
+                    </RcButton>
+                    <span className="rc-stat px-1 text-sm">{card.count}</span>
+                    <RcButton
+                      size="icon"
+                      className="h-6 w-6"
+                      aria-label="Add one copy"
                       onClick={() =>
                         updateCardCount(card.cardId, "main", card.count + 1)
                       }
-                      className="w-6 h-6 text-xs bg-blue-600 text-white rounded hover:bg-blue-500"
                     >
                       +
-                    </button>
+                    </RcButton>
                   </div>
                 </div>
               ))}
             </div>
           )}
-        </div>
+          </div>
+        </section>
 
         {/* Sideboard */}
-        <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-lg font-semibold text-slate-200">
-              Sideboard
-            </div>
-            <div className="text-sm text-slate-400">{totalSideboard} cards</div>
-          </div>
-          <p className="text-xs text-slate-400 mb-3">
+        <section className="rc-panel">
+          <PanelHeader title="Sideboard" meta={`${totalSideboard} cards`} />
+          <div className="px-[18px] py-3.5">
+          <p className="rc-hint mb-3">
             Avatars in the sideboard will be draftable in packs. Non-avatar
             sideboard cards are available as extras during deck building.
           </p>
           {sideboardCards.length === 0 ? (
-            <div className="text-sm text-slate-400">No cards in sideboard</div>
+            <div className="rc-hint">No cards in sideboard</div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
               {sideboardCards.map((card) => (
                 <div
                   key={`side-${card.cardId}`}
-                  className="relative group bg-slate-800/60 rounded-lg overflow-hidden ring-1 ring-purple-700/50"
+                  className="group relative overflow-hidden rounded-rc-md border border-rc-accent/25 bg-black/30"
                 >
                   <div className="aspect-[3/4] relative">
                     <Image
@@ -495,17 +472,21 @@ export default function CubeEditorPage() {
                       sizes="120px"
                       unoptimized
                     />
-                    <div className="absolute top-1 right-1 bg-purple-900/80 rounded px-1.5 py-0.5 text-xs text-white font-bold">
+                    <div className="absolute top-1 right-1 rounded-rc-sm bg-rc-accent/85 px-1.5 py-0.5 font-rc-mono text-xs text-rc-accent-fg">
                       {card.count}x
                     </div>
                   </div>
                   <div className="p-1.5">
-                    <div className="text-[10px] text-slate-200 truncate">
+                    <div className="truncate font-rc-sans text-[10px] text-rc-fg">
                       {card.name}
                     </div>
                   </div>
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
-                    <button
+                  <div className="absolute inset-0 flex items-center justify-center gap-1 bg-[rgba(6,10,20,0.82)] opacity-0 transition-opacity group-hover:opacity-100">
+                    <RcButton
+                      variant="outline"
+                      size="icon"
+                      className="h-6 w-6 bg-black/35"
+                      aria-label="Remove one copy"
                       onClick={() =>
                         updateCardCount(
                           card.cardId,
@@ -513,14 +494,14 @@ export default function CubeEditorPage() {
                           card.count - 1
                         )
                       }
-                      className="w-6 h-6 text-xs bg-rose-600 text-white rounded hover:bg-rose-500"
                     >
                       -
-                    </button>
-                    <span className="text-white text-sm font-bold px-1">
-                      {card.count}
-                    </span>
-                    <button
+                    </RcButton>
+                    <span className="rc-stat px-1 text-sm">{card.count}</span>
+                    <RcButton
+                      size="icon"
+                      className="h-6 w-6"
+                      aria-label="Add one copy"
                       onClick={() =>
                         updateCardCount(
                           card.cardId,
@@ -528,17 +509,17 @@ export default function CubeEditorPage() {
                           card.count + 1
                         )
                       }
-                      className="w-6 h-6 text-xs bg-purple-600 text-white rounded hover:bg-purple-500"
                     >
                       +
-                    </button>
+                    </RcButton>
                   </div>
                 </div>
               ))}
             </div>
           )}
-        </div>
-      </div>
+          </div>
+        </section>
+      </>
     </OnlinePageShell>
   );
 }

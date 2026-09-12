@@ -1,8 +1,9 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useEffect, useState, useRef } from "react";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import type {
   CollectionListResponse,
   CollectionFilters as FilterType,
@@ -222,6 +223,32 @@ export default function CollectionPage() {
     }, 500);
   };
 
+  const handleDeleteCollection = async () => {
+    if (deleteConfirmText !== "DELETE") {
+      alert('Please type "DELETE" to confirm');
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      const res = await fetch("/api/collection", {
+        method: "DELETE",
+      });
+      const result = await res.json();
+      if (res.ok) {
+        setDeleteConfirmText("");
+        setShowDangerZone(false);
+        refreshCollection();
+        alert(`Deleted ${result.deleted} cards from your collection.`);
+      } else {
+        alert(result.error || "Failed to delete collection");
+      }
+    } catch {
+      alert("Failed to delete collection");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Listen for collection:refresh events from import/export
   useEffect(() => {
     const handleRefresh = () => refreshCollection();
@@ -237,33 +264,26 @@ export default function CollectionPage() {
     !Object.values(filters).some(Boolean)
   ) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-6">
-        <div className="text-6xl">📦</div>
-        <h2 className="text-2xl font-bold">Your Collection is Empty</h2>
-        <p className="text-gray-400 text-center max-w-md">
-          Start tracking your physical Sorcery cards! Add cards to see set
-          completion, build decks from your collection, and view pricing.
-        </p>
-        <div className="flex gap-4">
-          <button
-            onClick={() => setShowQuickAdd(true)}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
-          >
-            Quick Add Cards
-          </button>
-          <Link
-            href="/collection/scan"
-            className="px-6 py-3 bg-cyan-600 hover:bg-cyan-700 rounded-lg font-medium transition-colors flex items-center gap-2"
-          >
-            📷 Scan Cards
-          </Link>
-          <Link
-            href="/collection/browser"
-            className="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
-          >
-            Browse All Cards
-          </Link>
-        </div>
+      <>
+        <RcEmpty
+          title="Your Collection is Empty"
+          action={
+            <>
+              <RcButton onClick={() => setShowQuickAdd(true)}>
+                Quick Add Cards
+              </RcButton>
+              <RcLinkButton variant="outline" href="/collection/scan">
+                Scan Cards
+              </RcLinkButton>
+              <RcLinkButton variant="outline" href="/collection/browser">
+                Browse All Cards
+              </RcLinkButton>
+            </>
+          }
+        >
+          Start tracking your physical Sorcery cards — set completion, decks
+          from what you own, and pricing.
+        </RcEmpty>
 
         {showQuickAdd && (
           <QuickAdd
@@ -271,120 +291,95 @@ export default function CollectionPage() {
             onCardAdded={handleCardAdded}
           />
         )}
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {/* Stats Bar */}
       {data?.stats && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 bg-gray-800/50 rounded-lg px-4 py-2 text-sm">
-          <span className="text-gray-400">
-            <span className="font-bold text-white">{data.stats.totalCards}</span> cards
-          </span>
-          <span className="text-gray-600">|</span>
-          <span className="text-gray-400">
-            <span className="font-bold text-white">{data.stats.uniqueCards}</span> unique
-          </span>
-          {data.stats.totalValue != null && (
-            <>
-              <span className="text-gray-600">|</span>
-              <span className="text-gray-400">
-                <span className="font-bold text-green-400">${data.stats.totalValue.toFixed(2)}</span> est.
-              </span>
-            </>
-          )}
-          <div className="flex items-center gap-2 ml-auto">
-            <button
-              onClick={() => setShowQuickAdd(true)}
-              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs font-medium transition-colors"
-            >
+        <section className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
+          <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="rc-panel px-[18px] py-3">
+              <div className="rc-eyebrow">cards</div>
+              <div className="rc-stat text-2xl">{data.stats.totalCards}</div>
+            </div>
+            <div className="rc-panel px-[18px] py-3">
+              <div className="rc-eyebrow">unique</div>
+              <div className="rc-stat text-2xl">{data.stats.uniqueCards}</div>
+            </div>
+            {data.stats.totalValue != null && (
+              <div className="rc-panel px-[18px] py-3">
+                <div className="rc-eyebrow">est. value</div>
+                <div className="rc-stat text-2xl text-rc-success">
+                  ${data.stats.totalValue.toFixed(2)}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 lg:self-center">
+            <RcButton size="sm" onClick={() => setShowQuickAdd(true)}>
               + Add
-            </button>
-            <Link
-              href="/collection/scan"
-              className="px-3 py-1 bg-cyan-600 hover:bg-cyan-700 rounded text-xs font-medium transition-colors"
-            >
+            </RcButton>
+            <RcLinkButton variant="outline" size="sm" href="/collection/scan">
               Scan
-            </Link>
+            </RcLinkButton>
             <div className="relative">
-              <button
+              <RcButton
+                variant="ghost"
+                size="sm"
+                className="text-rc-warning hover:text-rc-warning"
                 onClick={() => setShowDangerZone(!showDangerZone)}
-                className="p-1 text-yellow-500 hover:text-yellow-400 hover:bg-gray-700 rounded transition-colors text-xs"
                 title="Danger Zone"
               >
-                ⚠️
-              </button>
+                Danger Zone
+              </RcButton>
               {showDangerZone && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-gray-900 border border-red-900/50 rounded-lg p-4 shadow-xl z-50">
-                  <h3 className="text-red-400 font-bold mb-2">
-                    Danger Zone
-                  </h3>
-                  <p className="text-sm text-gray-400 mb-4">
+                <div className="rc-panel absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-32px)] p-4">
+                  <div className="rc-eyebrow text-rc-danger">danger zone</div>
+                  <p className="mt-2 font-rc-sans text-sm text-rc-fg-muted">
                     Permanently delete your entire collection. This cannot be
                     undone.
                   </p>
-                  <div className="flex flex-col gap-3">
+                  <div className="mt-4 flex flex-col gap-3">
                     <input
                       type="text"
                       placeholder='Type "DELETE" to confirm'
                       value={deleteConfirmText}
                       onChange={(e) => setDeleteConfirmText(e.target.value)}
-                      className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm w-full"
+                      className="rc-input h-10 w-full"
                     />
-                    <button
-                      onClick={async () => {
-                        if (deleteConfirmText !== "DELETE") {
-                          alert('Please type "DELETE" to confirm');
-                          return;
-                        }
-                        setIsDeleting(true);
-                        try {
-                          const res = await fetch("/api/collection", {
-                            method: "DELETE",
-                          });
-                          const result = await res.json();
-                          if (res.ok) {
-                            setDeleteConfirmText("");
-                            setShowDangerZone(false);
-                            refreshCollection();
-                            alert(
-                              `Deleted ${result.deleted} cards from your collection.`,
-                            );
-                          } else {
-                            alert(
-                              result.error || "Failed to delete collection",
-                            );
-                          }
-                        } catch {
-                          alert("Failed to delete collection");
-                        } finally {
-                          setIsDeleting(false);
-                        }
-                      }}
+                    <RcButton
+                      variant="destructive"
+                      onClick={handleDeleteCollection}
                       disabled={isDeleting || deleteConfirmText !== "DELETE"}
-                      className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-900 disabled:opacity-50 rounded text-sm font-medium transition-colors"
                     >
                       {isDeleting ? "Deleting..." : "Delete Entire Collection"}
-                    </button>
+                    </RcButton>
                   </div>
                 </div>
               )}
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Filters Toggle + View Controls */}
-      <div className="flex items-center justify-between">
-        <button
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <RcButton
+          variant="ghost"
+          size="sm"
           onClick={() => setShowFilters((v) => !v)}
-          className="flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors"
         >
-          <ChevronDown className={`w-4 h-4 transition-transform ${showFilters ? "" : "-rotate-90"}`} />
+          <ChevronDown
+            className={`h-4 w-4 transition-transform ${
+              showFilters ? "" : "-rotate-90"
+            }`}
+          />
           Filters
-        </button>
+        </RcButton>
         <CollectionViewControls
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
@@ -406,14 +401,18 @@ export default function CollectionPage() {
 
       {/* Error State */}
       {error && (
-        <div className="bg-red-900/50 border border-red-700 rounded-lg p-4 text-center">
+        <div
+          className="rc-alert flex flex-wrap items-center justify-center gap-3"
+          data-tone="danger"
+        >
           {error}
           <button
+            type="button"
             onClick={() => {
               setError(null);
               refreshCollection();
             }}
-            className="ml-4 underline"
+            className="rc-link underline"
           >
             Retry
           </button>
@@ -441,26 +440,28 @@ export default function CollectionPage() {
 
       {/* Pagination */}
       {data?.pagination && data.pagination.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <button
+        <div className="flex items-center justify-center gap-3">
+          <RcButton
+            variant="outline"
+            size="sm"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="px-3 py-2 bg-gray-700 rounded disabled:opacity-50"
           >
             Previous
-          </button>
-          <span className="px-4">
+          </RcButton>
+          <span className="font-rc-mono text-xs tracking-[0.1em] text-rc-fg-subtle">
             Page {page} of {data.pagination.totalPages}
           </span>
-          <button
+          <RcButton
+            variant="outline"
+            size="sm"
             onClick={() =>
               setPage((p) => Math.min(data.pagination.totalPages, p + 1))
             }
             disabled={page === data.pagination.totalPages}
-            className="px-3 py-2 bg-gray-700 rounded disabled:opacity-50"
           >
             Next
-          </button>
+          </RcButton>
         </div>
       )}
 

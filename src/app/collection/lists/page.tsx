@@ -3,6 +3,11 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { PanelHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
+import { RcDialog } from "@/components/ui/rc-dialog";
+import { RcEmpty } from "@/components/ui/rc-empty";
 
 interface CardList {
   id: string;
@@ -89,15 +94,16 @@ export default function ListsPage() {
 
   if (loading) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold">Card Lists</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="space-y-6">
+        <section className="rc-panel">
+          <PanelHeader title="Card Lists" />
+          <div className="rc-hint px-[18px] py-6 text-center">loading…</div>
+        </section>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="bg-gray-800 rounded-lg p-4 h-32 animate-pulse"
+              className="h-32 animate-pulse rounded-rc-md border border-rc-line/12 bg-black/30"
             />
           ))}
         </div>
@@ -107,43 +113,33 @@ export default function ListsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h2 className="text-xl font-bold">Card Lists</h2>
-          <p className="text-sm text-gray-400">
-            Create wishlists, trade binders, want-to-buy lists, and more
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-gray-400">
+      <section className="rc-panel">
+        <PanelHeader
+          title="Card Lists"
+          meta={`${lists.length} ${lists.length === 1 ? "list" : "lists"}`}
+        >
+          <label className="rc-check">
             <input
               type="checkbox"
               checked={includePublic}
               onChange={(e) => setIncludePublic(e.target.checked)}
-              className="rounded border-gray-600"
             />
             Show public lists
           </label>
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors"
-          >
-            📥 Import
-          </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors"
-          >
-            + New List
-          </button>
-        </div>
-      </div>
+          <RcButton variant="outline" onClick={() => setShowImportModal(true)}>
+            Import
+          </RcButton>
+          <RcButton onClick={() => setShowCreateModal(true)}>New List</RcButton>
+        </PanelHeader>
+        <p className="m-0 max-w-[68ch] px-[18px] py-3.5 text-sm leading-relaxed text-rc-fg-muted">
+          Create wishlists, trade binders, want-to-buy lists, and more.
+        </p>
+      </section>
 
       {error && (
-        <div className="bg-red-900/50 border border-red-700 rounded-lg p-4 text-center">
+        <div className="rc-alert" data-tone="danger">
           {error}
-          <button onClick={fetchLists} className="ml-4 underline">
+          <button type="button" onClick={fetchLists} className="rc-link ml-4">
             Retry
           </button>
         </div>
@@ -151,41 +147,37 @@ export default function ListsPage() {
 
       {/* Empty State */}
       {lists.length === 0 && !error && (
-        <div className="flex flex-col items-center justify-center py-16 gap-6 text-center">
-          <div className="text-6xl">📋</div>
-          <h3 className="text-2xl font-bold">No Lists Yet</h3>
-          <p className="text-gray-400 max-w-md">
-            Create lists to organize cards however you like - wishlists, trade
-            binders, cards to buy, or themed collections.
-          </p>
-          <div className="flex gap-4">
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
-            >
-              Create Your First List
-            </button>
-            <button
-              onClick={() => setShowImportModal(true)}
-              className="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
-            >
-              Import from Text
-            </button>
-          </div>
-        </div>
+        <RcEmpty
+          title="No lists yet."
+          action={
+            <>
+              <RcButton onClick={() => setShowCreateModal(true)}>
+                Create Your First List
+              </RcButton>
+              <RcButton
+                variant="outline"
+                onClick={() => setShowImportModal(true)}
+              >
+                Import from Text
+              </RcButton>
+            </>
+          }
+        >
+          wishlists, trade binders, cards to buy, themed collections
+        </RcEmpty>
       )}
 
       {/* Lists Grid */}
       {lists.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {lists.map((list) => (
             <div
               key={list.id}
-              className="bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-750 transition-colors group"
+              className="group overflow-hidden rounded-rc-md border border-rc-line/12 bg-black/30 transition-colors hover:border-rc-accent/40"
             >
               {/* Preview Image */}
               <div
-                className="h-24 bg-gray-700 relative cursor-pointer"
+                className="relative h-24 cursor-pointer bg-black/45"
                 onClick={() => router.push(`/collection/lists/${list.id}`)}
               >
                 {list.previewCard?.slug && (
@@ -193,80 +185,85 @@ export default function ListsPage() {
                     src={`/api/images/${list.previewCard.slug}`}
                     alt={list.previewCard.name}
                     fill
-                    className="object-cover opacity-60 group-hover:opacity-80 transition-opacity"
+                    className="object-cover opacity-50 transition-opacity group-hover:opacity-70"
                     sizes="(max-width: 768px) 100vw, 33vw"
                     unoptimized
                   />
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-gray-800 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[rgba(7,10,20,0.95)] to-transparent" />
                 <div className="absolute bottom-2 left-3 right-3">
-                  <h3 className="font-bold text-lg truncate">{list.name}</h3>
+                  <h3
+                    className="m-0 truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong"
+                    title={list.name}
+                  >
+                    {list.name}
+                  </h3>
                 </div>
               </div>
 
               {/* Content */}
-              <div className="p-3 space-y-2">
+              <div className="space-y-2 p-3">
                 {list.description && (
-                  <p className="text-sm text-gray-400 line-clamp-2">
+                  <p className="m-0 line-clamp-2 text-sm text-rc-fg-muted">
                     {list.description}
                   </p>
                 )}
 
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-400">
-                    {list.cardCount} card{list.cardCount !== 1 ? "s" : ""}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="rc-hint">
+                    <span className="rc-stat">{list.cardCount}</span> card
+                    {list.cardCount !== 1 ? "s" : ""}
                   </span>
                   <div className="flex items-center gap-2">
-                    {list.isPublic && (
-                      <span className="px-2 py-0.5 bg-green-600/20 text-green-400 rounded text-xs">
-                        Public
-                      </span>
-                    )}
+                    {list.isPublic && <Badge tone="ok">Public</Badge>}
                     {!list.isOwner && list.ownerName && (
-                      <span className="text-xs text-gray-500">
-                        by {list.ownerName}
-                      </span>
+                      <span className="rc-hint">by {list.ownerName}</span>
                     )}
                   </div>
                 </div>
 
                 {/* Actions */}
                 {list.isOwner && (
-                  <div className="flex items-center gap-2 pt-2 border-t border-gray-700">
-                    <button
+                  <div className="flex flex-wrap items-center gap-2 border-t border-rc-line/8 pt-2">
+                    <RcButton
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
                       onClick={() =>
                         router.push(`/collection/lists/${list.id}`)
                       }
-                      className="flex-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm transition-colors"
                     >
                       View
-                    </button>
-                    <button
+                    </RcButton>
+                    <RcButton
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleTogglePublic(list)}
-                      className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm transition-colors"
                       title={list.isPublic ? "Make private" : "Make public"}
                     >
-                      {list.isPublic ? "🔓" : "🔒"}
-                    </button>
-                    <button
+                      {list.isPublic ? "Make private" : "Make public"}
+                    </RcButton>
+                    <RcButton
+                      variant="outline"
+                      size="sm"
                       onClick={() =>
                         window.open(
                           `/api/lists/${list.id}/export?format=text`,
                           "_blank"
                         )
                       }
-                      className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm transition-colors"
                       title="Export"
                     >
-                      📤
-                    </button>
-                    <button
+                      Export
+                    </RcButton>
+                    <RcButton
+                      variant="destructive"
+                      size="sm"
                       onClick={() => handleDelete(list.id, list.name)}
-                      className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-sm transition-colors"
                       title="Delete"
                     >
-                      🗑️
-                    </button>
+                      Delete
+                    </RcButton>
                   </div>
                 )}
               </div>
@@ -355,67 +352,66 @@ function CreateListModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-lg p-6 max-w-md w-full">
-        <h2 className="text-xl font-bold mb-4">Create New List</h2>
+    <RcDialog
+      title="Create New List"
+      eyebrow="card lists"
+      onClose={onClose}
+      size="sm"
+      actions={
+        <>
+          <RcButton variant="outline" onClick={onClose}>
+            Cancel
+          </RcButton>
+          <RcButton
+            type="submit"
+            form="create-list-form"
+            disabled={submitting || !name.trim()}
+          >
+            {submitting ? "Creating..." : "Create List"}
+          </RcButton>
+        </>
+      }
+    >
+      <form id="create-list-form" onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="rc-eyebrow mb-1 block">Name *</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="My Wishlist"
+            className="rc-input h-10 w-full"
+            maxLength={100}
+            required
+          />
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Name *</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="My Wishlist"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              maxLength={100}
-              required
-            />
+        <div>
+          <label className="rc-eyebrow mb-1 block">Description</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Cards I want to get..."
+            className="rc-textarea h-20 w-full resize-none"
+          />
+        </div>
+
+        <label className="rc-check">
+          <input
+            type="checkbox"
+            checked={isPublic}
+            onChange={(e) => setIsPublic(e.target.checked)}
+          />
+          Make this list public
+        </label>
+
+        {error && (
+          <div className="rc-alert" data-tone="danger">
+            {error}
           </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Cards I want to get..."
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 h-20 resize-none"
-            />
-          </div>
-
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={isPublic}
-              onChange={(e) => setIsPublic(e.target.checked)}
-              className="rounded border-gray-600"
-            />
-            <span className="text-sm">Make this list public</span>
-          </label>
-
-          {error && <div className="text-red-400 text-sm">{error}</div>}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting || !name.trim()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
-            >
-              {submitting ? "Creating..." : "Create List"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        )}
+      </form>
+    </RcDialog>
   );
 }
 
@@ -490,106 +486,99 @@ function ImportListModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-bold mb-4">Import List from Text</h2>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              List Name *
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Imported Wishlist"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              maxLength={100}
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Description
-            </label>
-            <input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Card List *
-            </label>
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={`Enter cards, one per line:\n4 Lightning Bolt\n2x Fireball\nBlack Lotus`}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 h-48 resize-none font-mono text-sm"
-              required
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Format: &quot;quantity card name&quot; or just &quot;card
-              name&quot; per line
-            </p>
-          </div>
-
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={isPublic}
-              onChange={(e) => setIsPublic(e.target.checked)}
-              className="rounded border-gray-600"
-            />
-            <span className="text-sm">Make this list public</span>
-          </label>
-
-          {error && <div className="text-red-400 text-sm">{error}</div>}
-
-          {result && (
-            <div className="bg-gray-800 rounded-lg p-3 text-sm">
-              <p className="text-green-400">✓ Added {result.added} cards</p>
-              {result.notFound.length > 0 && (
-                <div className="mt-2">
-                  <p className="text-yellow-400">
-                    ⚠ Not found ({result.notFound.length}):
-                  </p>
-                  <p className="text-gray-400 text-xs mt-1">
-                    {result.notFound.slice(0, 10).join(", ")}
-                    {result.notFound.length > 10 &&
-                      ` +${result.notFound.length - 10} more`}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+    <RcDialog
+      title="Import List from Text"
+      eyebrow="card lists"
+      onClose={onClose}
+      size="md"
+      actions={
+        <>
+          <RcButton variant="outline" onClick={onClose}>
+            {result ? "Close" : "Cancel"}
+          </RcButton>
+          {!result && (
+            <RcButton
+              type="submit"
+              form="import-list-form"
+              disabled={submitting || !name.trim() || !text.trim()}
             >
-              {result ? "Close" : "Cancel"}
-            </button>
-            {!result && (
-              <button
-                type="submit"
-                disabled={submitting || !name.trim() || !text.trim()}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {submitting ? "Importing..." : "Import List"}
-              </button>
+              {submitting ? "Importing..." : "Import List"}
+            </RcButton>
+          )}
+        </>
+      }
+    >
+      <form id="import-list-form" onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="rc-eyebrow mb-1 block">List Name *</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Imported Wishlist"
+            className="rc-input h-10 w-full"
+            maxLength={100}
+            required
+          />
+        </div>
+
+        <div>
+          <label className="rc-eyebrow mb-1 block">Description</label>
+          <input
+            type="text"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Optional description"
+            className="rc-input h-10 w-full"
+          />
+        </div>
+
+        <div>
+          <label className="rc-eyebrow mb-1 block">Card List *</label>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={`Enter cards, one per line:\n4 Lightning Bolt\n2x Fireball\nBlack Lotus`}
+            className="rc-textarea h-48 w-full resize-none"
+            required
+          />
+          <p className="m-0 mt-1 rc-hint">
+            format: &quot;quantity card name&quot; or just &quot;card
+            name&quot; per line
+          </p>
+        </div>
+
+        <label className="rc-check">
+          <input
+            type="checkbox"
+            checked={isPublic}
+            onChange={(e) => setIsPublic(e.target.checked)}
+          />
+          Make this list public
+        </label>
+
+        {error && (
+          <div className="rc-alert" data-tone="danger">
+            {error}
+          </div>
+        )}
+
+        {result && (
+          <div className="rc-alert" data-tone="success">
+            <p className="m-0">Added {result.added} cards</p>
+            {result.notFound.length > 0 && (
+              <div className="mt-2">
+                <p className="m-0">Not found ({result.notFound.length}):</p>
+                <p className="m-0 mt-1 text-[11px] tracking-[0.1em]">
+                  {result.notFound.slice(0, 10).join(", ")}
+                  {result.notFound.length > 10 &&
+                    ` +${result.notFound.length - 10} more`}
+                </p>
+              </div>
             )}
           </div>
-        </form>
-      </div>
-    </div>
+        )}
+      </form>
+    </RcDialog>
   );
 }

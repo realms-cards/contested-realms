@@ -305,15 +305,15 @@ export default function FloatingChat({
         bottom: `calc(env(safe-area-inset-bottom, 0px) + 16px)`,
       }}
     >
-      <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow">
+      <div className="rc-panel backdrop-blur-[6px]">
         {/* Header: show when open, or always for panel mode */}
         {(open || mode !== "bubble") && (
-          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-white/10 select-none">
+          <div className="flex select-none items-center justify-between border-b border-rc-line/14 px-3 py-2 text-sm">
             <div className="flex items-center gap-2">
               <button
-                className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                className={`flex cursor-pointer items-center gap-1 rounded-rc-sm px-2 py-1 font-rc-mono text-[11px] uppercase tracking-[0.14em] transition-colors ${
                   activeTab === "chat"
-                    ? "bg-white/20 text-white"
+                    ? "bg-rc-accent text-rc-accent-fg"
                     : "hover:bg-white/10 opacity-70"
                 }`}
                 onClick={() => {
@@ -323,15 +323,15 @@ export default function FloatingChat({
               >
                 <MessageCircle className="w-3 h-3" /> Chat
                 {chat.length > 0 && (
-                  <span className="bg-green-500 text-white text-xs px-1 rounded-full">
+                  <span className="rounded-full bg-rc-success px-1 font-rc-mono text-[10px] text-[#0b1020]">
                     {chat.length}
                   </span>
                 )}
               </button>
               <button
-                className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                className={`flex cursor-pointer items-center gap-1 rounded-rc-sm px-2 py-1 font-rc-mono text-[11px] uppercase tracking-[0.14em] transition-colors ${
                   activeTab === "events"
-                    ? "bg-white/20 text-white"
+                    ? "bg-rc-accent text-rc-accent-fg"
                     : "hover:bg-white/10 opacity-70"
                 }`}
                 onClick={() => {
@@ -341,15 +341,15 @@ export default function FloatingChat({
               >
                 <ScrollText className="w-3 h-3" /> Events
                 {events.length > 0 && (
-                  <span className="bg-blue-500 text-white text-xs px-1 rounded-full">
+                  <span className="rounded-full bg-rc-info px-1 font-rc-mono text-[10px] text-[#0b1020]">
                     {events.length}
                   </span>
                 )}
               </button>
               <button
-                className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                className={`flex cursor-pointer items-center gap-1 rounded-rc-sm px-2 py-1 font-rc-mono text-[11px] uppercase tracking-[0.14em] transition-colors ${
                   activeTab === "players"
-                    ? "bg-white/20 text-white"
+                    ? "bg-rc-accent text-rc-accent-fg"
                     : "hover:bg-white/10 opacity-70"
                 }`}
                 onClick={() => {
@@ -361,7 +361,7 @@ export default function FloatingChat({
               </button>
             </div>
             <button
-              className="rounded bg-white/10 hover:bg-white/20 px-2 py-0.5 text-xs transition-colors"
+              className="cursor-pointer rounded-rc-sm border border-rc-line/22 px-2 py-0.5 text-rc-fg-muted transition-colors hover:border-rc-accent hover:text-rc-accent-ring"
               onClick={() => setOpen((v) => !v)}
             >
               {open ? (
@@ -378,9 +378,9 @@ export default function FloatingChat({
           <div className="max-h-64">
             {activeTab === "chat" && (
               <div className="flex flex-col">
-                <div className="overflow-y-auto px-3 py-3 text-xs space-y-1 max-h-48">
+                <div className="thin-scrollbar max-h-48 space-y-1 overflow-y-auto px-3 py-3 font-rc-mono text-xs">
                   {chat.length === 0 && (
-                    <div className="opacity-60">No messages</div>
+                    <div className="rc-hint">no messages</div>
                   )}
                   {chat.slice(-200).map((m, i) => (
                     <div key={i} className="opacity-90">
@@ -388,9 +388,9 @@ export default function FloatingChat({
                     </div>
                   ))}
                 </div>
-                <div className="px-3 pb-3 pt-2 border-t border-white/10 flex gap-2 select-none">
+                <div className="flex select-none gap-2 border-t border-rc-line/14 px-3 pb-3 pt-2">
                   <input
-                    className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-xs"
+                    className="rc-input h-8 flex-1 text-xs"
                     placeholder="Type a message..."
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
@@ -400,7 +400,7 @@ export default function FloatingChat({
                     disabled={!tournamentId}
                   />
                   <button
-                    className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 text-xs transition-colors"
+                    className="cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent px-3 py-1 font-rc-sans text-xs font-medium text-rc-accent-fg transition-transform hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={send}
                     disabled={!tournamentId || !chatInput.trim()}
                   >
@@ -411,13 +411,13 @@ export default function FloatingChat({
             )}
             {activeTab === "events" && (
               <div className="flex flex-col">
-                <div className="overflow-y-auto px-3 py-3 text-xs space-y-1 max-h-64">
+                <div className="thin-scrollbar max-h-64 space-y-1 overflow-y-auto px-3 py-3 font-rc-mono text-xs">
                   {events
                     .filter(
                       (ev) => filters[ev.kind] && (!filters.mineOnly || ev.mine)
                     )
                     .slice(-200).length === 0 && (
-                    <div className="opacity-60">No events yet</div>
+                    <div className="rc-hint">no events yet</div>
                   )}
                   {events
                     .filter(
@@ -444,7 +444,7 @@ export default function FloatingChat({
               </div>
             )}
             {activeTab === "players" && (
-              <div className="overflow-y-auto px-3 py-3 text-xs space-y-1 max-h-64">
+              <div className="thin-scrollbar max-h-64 space-y-1 overflow-y-auto px-3 py-3 font-rc-mono text-xs">
                 {computePlayers(rt, tournamentId).map((p) => (
                   <div key={p.id} className="flex items-center justify-between">
                     <div className="flex items-center gap-2 min-w-0">
@@ -455,13 +455,13 @@ export default function FloatingChat({
                       />
                       <span className="truncate">{p.name}</span>
                     </div>
-                    <div className="text-[10px] text-slate-300 ml-3 whitespace-nowrap">
+                    <div className="ml-3 whitespace-nowrap font-rc-mono text-[10px] text-rc-fg-subtle">
                       {p.state}
                     </div>
                   </div>
                 ))}
                 {computePlayers(rt, tournamentId).length === 0 && (
-                  <div className="opacity-60">No players</div>
+                  <div className="rc-hint">no players</div>
                 )}
               </div>
             )}
@@ -472,7 +472,7 @@ export default function FloatingChat({
       {/* Toast */}
       {toast && !open && (
         <div
-          className="absolute top-[-70px] left-0 right-0 bg-black/70 rounded-lg px-4 py-3 text-sm text-white shadow-xl cursor-pointer transform transition-all duration-300 ease-out z-20"
+          className="rc-panel absolute left-0 right-0 top-[-70px] z-20 transform cursor-pointer px-4 py-3 font-rc-sans text-sm transition-all duration-300 ease-out"
           onClick={() => {
             setOpen(true);
             setToast(null);
@@ -480,9 +480,8 @@ export default function FloatingChat({
           }}
         >
           <div className="flex items-center gap-2">
-            <span className="text-lg">💬</span>
-            <span className="font-medium truncate">{toast}</span>
-            <span className="text-xs opacity-75 ml-auto">Click to view</span>
+                        <span className="font-medium truncate">{toast}</span>
+            <span className="ml-auto font-rc-mono text-[10px] uppercase tracking-[0.14em] text-rc-fg-subtle">click to view</span>
           </div>
         </div>
       )}
@@ -496,19 +495,19 @@ export default function FloatingChat({
       {mode === "bubble" && !open && (
         <button
           aria-label="Open tournament chat"
-          className="fixed left-4 bottom-4 z-[5001] w-11 h-11 rounded-full bg-black/70 ring-1 ring-white/20 backdrop-blur flex items-center justify-center hover:bg-black/60"
+          className="fixed bottom-4 left-4 z-[5001] flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-rc-line/22 bg-black/70 backdrop-blur transition-colors hover:border-rc-accent"
           style={{
             left: `calc(env(safe-area-inset-left, 0px) + 16px)`,
             bottom: `calc(env(safe-area-inset-bottom, 0px) + 16px)`,
           }}
           onClick={() => setOpen(true)}
         >
-          <MessageCircle className="w-5 h-5 text-white" />
+          <MessageCircle className="h-5 w-5 text-rc-fg-muted" />
         </button>
       )}
       {mode === "bubble" && toast && !open && (
         <div
-          className="fixed z-[5002] bg-black/70 rounded-lg px-4 py-3 text-sm text-white shadow-xl cursor-pointer transform transition-all duration-300 ease-out"
+          className="rc-panel fixed z-[5002] transform cursor-pointer px-4 py-3 font-rc-sans text-sm transition-all duration-300 ease-out"
           style={{
             left: `calc(env(safe-area-inset-left, 0px) + 16px)`,
             bottom: `calc(env(safe-area-inset-bottom, 0px) + 86px)`,
@@ -520,9 +519,8 @@ export default function FloatingChat({
           }}
         >
           <div className="flex items-center gap-2">
-            <span className="text-lg">💬</span>
-            <span className="font-medium truncate max-w-[60vw]">{toast}</span>
-            <span className="text-xs opacity-75 ml-auto">Click to view</span>
+                        <span className="font-medium truncate max-w-[60vw]">{toast}</span>
+            <span className="ml-auto font-rc-mono text-[10px] uppercase tracking-[0.14em] text-rc-fg-subtle">click to view</span>
           </div>
         </div>
       )}

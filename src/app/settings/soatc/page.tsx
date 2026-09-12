@@ -1,16 +1,10 @@
 "use client";
 
-import {
-  ExternalLink,
-  Check,
-  AlertCircle,
-  Trophy,
-  Clock,
-  ChevronDown,
-  ChevronUp,
-} from "lucide-react";
-import Link from "next/link";
+import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { useState, useEffect } from "react";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
 import { useSoatcSettings } from "@/lib/hooks/useSoatcStatus";
 
 interface MatchHistoryEntry {
@@ -30,6 +24,18 @@ interface MatchHistoryEntry {
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const RESULT_TONE: Record<MatchHistoryEntry["result"], BadgeTone> = {
+  win: "ok",
+  loss: "danger",
+  draw: "default",
+};
+
+const HOW_IT_WORKS = [
+  "Enter your SATC UUID from your ranking profile above.",
+  "When you play against another SATC participant, the match can be flagged as a league match.",
+  "After the match, you'll get a result JSON to submit to the SATC ranking system.",
+];
 
 export default function SoatcSettingsPage() {
   const { soatcUuid, soatcAutoDetect, loading, saving, error, updateSettings } =
@@ -86,7 +92,7 @@ export default function SoatcSettingsPage() {
 
     if (uuidInput && !validateUuid(uuidInput)) {
       setValidationError(
-        "Invalid UUID format. Expected format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+        "Invalid UUID format. Expected format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
       );
       return;
     }
@@ -102,52 +108,60 @@ export default function SoatcSettingsPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="max-w-2xl mx-auto">
-        <div className="animate-pulse">Loading SATC settings...</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-2xl mx-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <Trophy className="w-8 h-8 text-amber-400" />
-          <h1 className="text-2xl font-bold">Sorcerers at the Core</h1>
-        </div>
-
-        <p className="text-stone-400 mb-8">
+  const header = (
+    <PageHeader
+      eyebrow="settings"
+      title="Sorcerers at the Core"
+      description={
+        <>
           Connect your Realms.cards account with the{" "}
           <a
             href="https://ranking.sorcerersatthecore.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-amber-400 hover:text-amber-300 inline-flex items-center gap-1"
+            className="rc-link inline-flex items-center gap-1"
           >
             SATC Ranking System
-            <ExternalLink className="w-3 h-3" />
+            <ExternalLink className="h-3 w-3" />
           </a>{" "}
           to participate in monthly tournaments.
-        </p>
+        </>
+      }
+      actions={soatcUuid ? <Badge tone="ok">account linked</Badge> : null}
+    />
+  );
 
-        <div className="space-y-6">
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        {header}
+        <div className="rc-hint py-6 text-center">
+          loading SATC settings...
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {header}
+
+      <section className="rc-panel">
+        <PanelHeader title="League account" />
+        <div className="space-y-5 px-[18px] py-4">
           {/* UUID Input */}
-          <div className="bg-stone-800/50 rounded-lg p-6 border border-stone-700">
-            <label
-              htmlFor="soatc-uuid"
-              className="block text-sm font-medium text-stone-300 mb-2"
-            >
+          <div>
+            <label htmlFor="soatc-uuid" className="rc-eyebrow block">
               Your SATC UUID
             </label>
-            <p className="text-xs text-stone-500 mb-3">
+            <p className="mt-1.5 font-rc-sans text-xs leading-relaxed text-rc-fg-muted">
               Find your UUID by scrolling down to the bottom of this page when
               logged in:{" "}
               <a
                 href="https://ranking.sorcerersatthecore.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-amber-400 hover:text-amber-300"
+                className="rc-link"
               >
                 ranking.sorcerersatthecore.com
               </a>
@@ -161,188 +175,154 @@ export default function SoatcSettingsPage() {
                 setValidationError(null);
               }}
               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              className="w-full px-4 py-2 bg-stone-900 border border-stone-600 rounded-lg 
-                         text-stone-100 placeholder-stone-500
-                         focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent
-                         font-mono text-sm"
+              className="rc-input mt-3 h-10 w-full max-w-xl"
             />
             {validationError && (
-              <p className="mt-2 text-sm text-red-400 flex items-center gap-1">
-                <AlertCircle className="w-4 h-4" />
+              <div className="rc-alert mt-2" data-tone="danger">
                 {validationError}
-              </p>
+              </div>
             )}
           </div>
 
           {/* Auto-detect Toggle */}
-          <div className="bg-stone-800/50 rounded-lg p-6 border border-stone-700">
-            <div className="flex items-start gap-4">
+          <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-4">
+            <label className="rc-check items-start">
               <input
                 id="auto-detect"
                 type="checkbox"
                 checked={autoDetect}
                 onChange={(e) => setAutoDetect(e.target.checked)}
                 disabled={!uuidInput}
-                className="mt-1 w-5 h-5 rounded border-stone-600 bg-stone-900 
-                           text-amber-500 focus:ring-amber-500 focus:ring-offset-stone-800
-                           disabled:opacity-50 disabled:cursor-not-allowed"
+                className="mt-0.5 h-4 w-4 disabled:cursor-not-allowed disabled:opacity-50"
               />
-              <div>
-                <label
-                  htmlFor="auto-detect"
-                  className={`block font-medium ${
-                    uuidInput ? "text-stone-100" : "text-stone-500"
-                  }`}
+              <span className="min-w-0">
+                <span
+                  className={
+                    uuidInput
+                      ? "block text-rc-fg-strong"
+                      : "block text-rc-fg-dim"
+                  }
                 >
                   Auto-detect SATC tournament matches
-                </label>
-                <p className="text-sm text-stone-500 mt-1">
+                </span>
+                <span className="mt-1 block font-rc-sans text-xs normal-case leading-relaxed tracking-normal text-rc-fg-muted">
                   When enabled, matches against other tournament participants
                   will automatically be flagged as league matches.
-                </p>
-              </div>
-            </div>
+                </span>
+              </span>
+            </label>
           </div>
 
           {/* Error Display */}
           {error && (
-            <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-red-400" />
-              <p className="text-red-300">{error}</p>
+            <div className="rc-alert" data-tone="danger">
+              {error}
             </div>
           )}
 
           {/* Save Button */}
-          <div className="flex items-center gap-4">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-6 py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-stone-600 
-                         rounded-lg font-medium transition-colors
-                         disabled:cursor-not-allowed"
-            >
-              {saving ? "Saving..." : "Save Settings"}
-            </button>
-            {saveSuccess && (
-              <span className="text-green-400 flex items-center gap-1">
-                <Check className="w-4 h-4" />
-                Saved!
-              </span>
-            )}
+          <div className="flex flex-wrap items-center gap-3">
+            <RcButton onClick={handleSave} disabled={saving}>
+              {saving ? "Saving..." : "Save settings"}
+            </RcButton>
+            {saveSuccess && <Badge tone="ok">saved</Badge>}
           </div>
         </div>
+      </section>
 
-        {/* Match History Section */}
-        {soatcUuid && (
-          <div className="mt-8">
-            <button
+      {/* Match History Section */}
+      {soatcUuid && (
+        <section className="rc-panel">
+          <PanelHeader
+            title="Match history"
+            meta={`${matchHistory.length} matches`}
+          >
+            <RcButton
+              variant="ghost"
+              size="sm"
               onClick={() => setMatchHistoryExpanded(!matchHistoryExpanded)}
-              className="w-full flex items-center justify-between p-4 bg-stone-800/50 rounded-lg border border-stone-700 hover:bg-stone-800/70 transition-colors"
+              aria-expanded={matchHistoryExpanded}
             >
-              <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-amber-400" />
-                <span className="font-medium">Match History</span>
-                <span className="text-sm text-stone-500">
-                  ({matchHistory.length} matches)
-                </span>
-              </div>
+              {matchHistoryExpanded ? "Hide" : "Show"}
               {matchHistoryExpanded ? (
-                <ChevronUp className="w-5 h-5 text-stone-400" />
+                <ChevronUp className="h-4 w-4 text-rc-fg-muted" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-stone-400" />
+                <ChevronDown className="h-4 w-4 text-rc-fg-muted" />
               )}
-            </button>
+            </RcButton>
+          </PanelHeader>
 
-            {matchHistoryExpanded && (
-              <div className="mt-2 bg-stone-800/30 rounded-lg border border-stone-700 overflow-hidden">
-                {matchHistoryLoading ? (
-                  <div className="p-4 text-center text-stone-400">
-                    Loading match history...
-                  </div>
-                ) : matchHistory.length === 0 ? (
-                  <div className="p-4 text-center text-stone-500">
-                    No tournament matches recorded yet. Play a league match and
-                    it will appear here!
-                  </div>
-                ) : (
-                  <div className="divide-y divide-stone-700">
-                    {matchHistory.map((match) => (
-                      <div
-                        key={match.id}
-                        className="p-4 flex items-center justify-between gap-4"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`text-xs font-medium px-2 py-0.5 rounded ${
-                                match.result === "win"
-                                  ? "bg-green-900/50 text-green-400"
-                                  : match.result === "loss"
-                                  ? "bg-red-900/50 text-red-400"
-                                  : "bg-stone-700 text-stone-300"
-                              }`}
-                            >
-                              {match.result.toUpperCase()}
-                            </span>
-                            <span className="text-sm text-stone-300 truncate">
-                              vs {match.opponent.name || "Unknown"}
-                            </span>
-                          </div>
-                          <div className="mt-1 text-xs text-stone-500 flex items-center gap-2">
-                            <span>{match.tournamentName}</span>
-                            <span>•</span>
-                            <span className="capitalize">{match.format}</span>
-                            <span>•</span>
-                            <span>
-                              {new Date(match.completedAt).toLocaleDateString()}
-                            </span>
-                          </div>
+          {matchHistoryExpanded && (
+            <div className="px-[18px] py-3.5">
+              {matchHistoryLoading ? (
+                <div className="rc-hint py-6 text-center">
+                  loading match history...
+                </div>
+              ) : matchHistory.length === 0 ? (
+                <div className="rc-hint py-6 text-center">
+                  no tournament matches recorded yet — play a league match and
+                  it will appear here
+                </div>
+              ) : (
+                <div className="divide-y divide-rc-line/8">
+                  {matchHistory.map((match) => (
+                    <div
+                      key={match.id}
+                      className="flex items-center justify-between gap-4 py-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone={RESULT_TONE[match.result]}>
+                            {match.result}
+                          </Badge>
+                          <span className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                            vs {match.opponent.name || "Unknown"}
+                          </span>
                         </div>
-                        <Link
-                          href={`/replay/${match.matchId}`}
-                          className="shrink-0 px-3 py-1.5 text-xs bg-stone-700 hover:bg-stone-600 rounded transition-colors"
-                        >
-                          Replay
-                        </Link>
+                        <div className="rc-hint mt-1 flex flex-wrap items-center gap-2">
+                          <span>{match.tournamentName}</span>
+                          <span>·</span>
+                          <span className="capitalize">{match.format}</span>
+                          <span>·</span>
+                          <span>
+                            {new Date(match.completedAt).toLocaleDateString()}
+                          </span>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                      <RcLinkButton
+                        href={`/replay/${match.matchId}`}
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                      >
+                        Replay
+                      </RcLinkButton>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
-        {/* Info Section */}
-        <div className="mt-12 p-6 bg-stone-800/30 rounded-lg border border-stone-700">
-          <h2 className="text-lg font-semibold mb-4">How it works</h2>
-          <ol className="space-y-3 text-stone-400 text-sm">
-            <li className="flex gap-3">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-600 text-white flex items-center justify-center text-xs font-bold">
-                1
+      {/* Info Section */}
+      <section className="rc-panel">
+        <PanelHeader title="How it works" />
+        <ol className="space-y-3 px-[18px] py-4">
+          {HOW_IT_WORKS.map((step, index) => (
+            <li
+              key={step}
+              className="flex gap-3 font-rc-sans text-sm leading-relaxed text-rc-fg-muted"
+            >
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-rc-accent/35 bg-rc-accent/16 font-rc-mono text-[11px] text-rc-accent-link">
+                {index + 1}
               </span>
-              <span>Enter your SATC UUID from your ranking profile above.</span>
+              <span>{step}</span>
             </li>
-            <li className="flex gap-3">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-600 text-white flex items-center justify-center text-xs font-bold">
-                2
-              </span>
-              <span>
-                When you play against another SATC participant, the match can be
-                flagged as a league match.
-              </span>
-            </li>
-            <li className="flex gap-3">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-600 text-white flex items-center justify-center text-xs font-bold">
-                3
-              </span>
-              <span>
-                After the match, you&apos;ll get a result JSON to submit to the
-                SATC ranking system.
-              </span>
-            </li>
-          </ol>
-        </div>
+          ))}
+        </ol>
+      </section>
     </div>
   );
 }

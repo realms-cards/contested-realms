@@ -31,17 +31,18 @@ export default function ThemeToggle() {
       <button
         onClick={toggle}
         className="
-          inline-flex items-center gap-2 px-3 py-1.5
-          rounded-full border border-white/20 bg-white/10
-          text-[13px] text-white/90 backdrop-blur-sm
-          hover:bg-white/15 hover:border-white/30
+          inline-flex cursor-pointer items-center gap-2 px-3 py-1.5
+          rounded-full border border-rc-line/22 bg-rc-panel
+          font-rc-mono text-[11px] uppercase tracking-[0.14em]
+          text-rc-fg-muted backdrop-blur-sm
+          hover:border-rc-accent hover:text-rc-accent-ring
           transition-colors duration-150
-          focus:outline-none focus:ring-1 focus:ring-white/40
+          focus:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring
         "
         aria-label="Toggle theme mode"
         title={`Switch to ${mode === "grayscale" ? "colorful" : "grayscale"} mode`}
       >
-        <span className="inline-block w-2 h-2 rounded-full bg-white/80" />
+        <span className="inline-block w-2 h-2 rounded-full bg-rc-accent" />
         <span>{mode === "grayscale" ? "Grayscale" : "Colorful"}</span>
       </button>
     </div>

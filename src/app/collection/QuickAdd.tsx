@@ -84,43 +84,51 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
   };
 
   return (
-    <Modal onClose={handleClose} backdropClassName="items-start pt-20">
-      <div className="flex gap-4 items-start">
+    <Modal
+      onClose={handleClose}
+      backdropClassName="items-start pt-20 bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px]"
+    >
+      <div className="flex items-start gap-4">
         {/* Main modal */}
-        <div className="bg-gray-900 rounded-xl max-w-lg w-full overflow-hidden">
+        <div className="rc-panel w-full max-w-lg overflow-hidden">
           {/* Header */}
-          <div className="p-4 border-b border-gray-800 flex items-center justify-between">
-            <h3 className="text-lg font-bold">Quick Add Cards</h3>
+          <div className="rc-panel-head">
+            <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
+              Quick Add Cards
+            </h2>
+            <div className="flex-1" />
             <button
+              type="button"
               onClick={handleClose}
-              className="text-gray-400 hover:text-white"
+              aria-label="Close"
+              className="cursor-pointer rounded-rc-md px-2 py-0.5 text-xl leading-none text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring"
             >
-              ✕
+              ×
             </button>
           </div>
 
           {/* Finish Toggle */}
-          <div className="px-4 py-2 border-b border-gray-800 flex gap-2">
-            <button
-              onClick={() => setFinish("Standard")}
-              className={`px-3 py-1 rounded text-sm ${
-                finish === "Standard" ? "bg-blue-600" : "bg-gray-800"
-              }`}
-            >
-              Standard
-            </button>
-            <button
-              onClick={() => setFinish("Foil")}
-              className={`px-3 py-1 rounded text-sm ${
-                finish === "Foil" ? "bg-yellow-600" : "bg-gray-800"
-              }`}
-            >
-              ✨ Foil
-            </button>
+          <div className="border-b border-rc-line/12 px-[18px] py-3">
+            <div className="rc-segment">
+              <button
+                type="button"
+                aria-pressed={finish === "Standard"}
+                onClick={() => setFinish("Standard")}
+              >
+                Standard
+              </button>
+              <button
+                type="button"
+                aria-pressed={finish === "Foil"}
+                onClick={() => setFinish("Foil")}
+              >
+                Foil
+              </button>
+            </div>
           </div>
 
           {/* Search */}
-          <div className="p-4">
+          <div className="px-[18px] py-3.5">
             <input
               ref={inputRef}
               type="text"
@@ -131,31 +139,30 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
               autoCorrect="off"
               autoCapitalize="off"
               spellCheck={false}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="rc-input h-11 w-full"
             />
           </div>
 
           {/* Results */}
-          <div className="max-h-64 overflow-y-auto">
+          <div className="thin-scrollbar max-h-64 overflow-y-auto">
             {indexLoading ? (
-              <div className="p-4 text-center text-gray-400">
-                Loading cards...
-              </div>
+              <div className="rc-hint py-6 text-center">loading cards…</div>
             ) : results.length > 0 ? (
-              <div className="divide-y divide-gray-800">
+              <div>
                 {results
                   .filter((card) => card.cardName)
                   .map((card) => (
                     <button
+                      type="button"
                       key={`${card.cardId}-${card.variantId}`}
                       onClick={() => handleQuickAdd(card)}
                       onMouseEnter={() => setHoverCard(card)}
                       onMouseLeave={() => setHoverCard(null)}
-                      className="w-full p-3 flex items-center gap-3 hover:bg-gray-800 transition-colors"
+                      className="flex w-full cursor-pointer items-center gap-3 border-t border-rc-line/8 px-[18px] py-3 text-left transition-colors hover:bg-rc-accent/6"
                     >
                       <div
-                        className={`relative rounded overflow-hidden flex-shrink-0 bg-black ${
-                          card.isSite ? "w-14 h-10" : "w-10 h-14"
+                        className={`relative flex-shrink-0 overflow-hidden rounded-rc-sm bg-black ${
+                          card.isSite ? "h-10 w-14" : "h-14 w-10"
                         }`}
                       >
                         <Image
@@ -170,34 +177,36 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
                           unoptimized
                         />
                       </div>
-                      <div className="flex-1 text-left">
-                        <div className="font-medium">{card.cardName}</div>
-                        <div className="text-xs text-gray-400">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                          {card.cardName}
+                        </div>
+                        <div className="rc-hint mt-1">
                           {card.set || "Unknown Set"}
                         </div>
                       </div>
-                      <div className="text-blue-400 text-sm">+ Add</div>
+                      <span className="font-rc-mono text-[11px] uppercase tracking-[0.16em] text-rc-accent-link">
+                        + Add
+                      </span>
                     </button>
                   ))}
               </div>
             ) : query.trim() ? (
-              <div className="p-4 text-center text-gray-400">
-                No cards found
-              </div>
+              <div className="rc-hint py-6 text-center">No cards found</div>
             ) : null}
           </div>
 
           {/* Tip */}
-          <div className="p-4 border-t border-gray-800 text-center text-xs text-gray-500">
+          <div className="rc-hint border-t border-rc-line/12 px-[18px] py-3 text-center">
             Click a card to add 1 copy. Search and add another!
           </div>
         </div>
 
         {/* Hover preview panel */}
         {hoverCard && (
-          <div className="hidden md:block w-48 flex-shrink-0">
+          <div className="hidden w-48 flex-shrink-0 md:block">
             <div
-              className={`relative rounded-lg overflow-hidden bg-black shadow-xl ${
+              className={`relative overflow-hidden rounded-rc-lg bg-black shadow-rc-panel ${
                 hoverCard.isSite ? "aspect-[3.5/2.5]" : "aspect-[2.5/3.5]"
               }`}
             >
@@ -214,8 +223,10 @@ export default function QuickAdd({ onClose, onCardAdded }: QuickAddProps) {
               />
             </div>
             <div className="mt-2 text-center">
-              <div className="font-medium text-sm">{hoverCard.cardName}</div>
-              <div className="text-xs text-gray-400">{hoverCard.set}</div>
+              <div className="font-rc-display text-[17px] leading-[1.1] text-rc-fg-strong">
+                {hoverCard.cardName}
+              </div>
+              <div className="rc-hint mt-1">{hoverCard.set}</div>
             </div>
           </div>
         )}
