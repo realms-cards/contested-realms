@@ -9,7 +9,7 @@ import { SRGBColorSpace } from "three";
 export const PLAYMAT_THICKNESS = 0.015;
 
 // Default playmat path
-const DEFAULT_PLAYMAT = "/playmat.jpg";
+export const DEFAULT_PLAYMAT = "/playmat.jpg";
 
 // Timeout for custom playmat loading (ms)
 const PLAYMAT_LOAD_TIMEOUT = 8000;

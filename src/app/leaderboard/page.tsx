@@ -358,9 +358,13 @@ export default function LeaderboardPage() {
                             </div>
                             <div className="mt-0.5 flex flex-wrap items-center gap-2">
                               {entry.tournamentWins > 0 && (
-                                <Badge tone="gold" title="Tournament wins">
-                                  {entry.tournamentWins} titles
-                                </Badge>
+                                <span
+                                  className="flex items-center gap-1 font-rc-mono text-xs tabular-nums text-rc-accent-link"
+                                  title={`${entry.tournamentWins} tournament ${entry.tournamentWins === 1 ? "win" : "wins"}`}
+                                >
+                                  <span aria-hidden>🏆</span>
+                                  {entry.tournamentWins}
+                                </span>
                               )}
                               <span className="rc-hint">
                                 Last active:{" "}

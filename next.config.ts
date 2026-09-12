@@ -21,6 +21,26 @@ const nextConfig: NextConfig = {
     ],
   },
 
+  // Board assets in public/ are large and rarely change. Let browsers reuse
+  // them for a week (revalidating in the background) instead of re-checking
+  // every match. Development overrides these headers; the service worker
+  // caches the same files there.
+  async headers() {
+    const boardAssetCache = [
+      {
+        key: "Cache-Control",
+        value: "public, max-age=604800, stale-while-revalidate=2592000",
+      },
+    ];
+    return [
+      { source: "/3dmodels/:path*", headers: boardAssetCache },
+      { source: "/hdri/:path*", headers: boardAssetCache },
+      { source: "/ktx2/:path*", headers: boardAssetCache },
+      { source: "/playmat.jpg", headers: boardAssetCache },
+      { source: "/playmat-overlay.png", headers: boardAssetCache },
+    ];
+  },
+
   // Exclude Three.js and React Three Fiber packages from server-side bundling
   // This prevents @react-three/drei's Html component from being confused with next/document Html
   serverExternalPackages: [

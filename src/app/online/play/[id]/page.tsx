@@ -146,6 +146,7 @@ import {
   arePortalsFullyAssigned,
   needsPortalPhaseForHarbinger,
 } from "@/lib/game/store/portalState";
+import { preloadBoardEnvironment } from "@/lib/game/components/BoardEnvironment";
 import { prefetchCardImages } from "@/lib/game/textures/prefetchCardImages";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { useSoatcPlayers } from "@/lib/hooks/useSoatcStatus";
@@ -2263,6 +2264,19 @@ export default function OnlineMatchPage() {
       offStarted();
     };
   }, [transport, matchId]);
+
+  // --- Board preload: the canvas only mounts once setup closes, so start
+  // loading the lighting, grid overlay and both players' playmats while the
+  // D20 and mulligan screens are up.
+  const boardPlaymatUrl = useGameStore((s) => s.playmatUrl);
+  const boardPlaymatUrls = useGameStore((s) => s.playmatUrls);
+  useEffect(() => {
+    preloadBoardEnvironment([
+      boardPlaymatUrl,
+      boardPlaymatUrls.p1,
+      boardPlaymatUrls.p2,
+    ]);
+  }, [boardPlaymatUrl, boardPlaymatUrls]);
 
   // --- Card art prefetch: warm the HTTP cache for my deck + both avatars
   // during Setup, so the board doesn't fire a 50+ request burst the moment

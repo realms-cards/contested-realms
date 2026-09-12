@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
+import { RcButton } from "@/components/ui/rc-button";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import D20Dice from "@/lib/game/components/D20Dice";
 import { useGameStore } from "@/lib/game/store";
@@ -382,45 +383,45 @@ export default function OnlineD20Screen({
     }
   };
 
+  const seatText = (seat: PlayerKey) =>
+    seat === "p1" ? "text-rc-info" : "text-rc-danger";
+  const seatDot = (seat: PlayerKey) =>
+    seat === "p1" ? "bg-rc-info" : "bg-rc-danger";
+
   return (
-    <div className="w-full max-w-[92vw] sm:max-w-4xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-4 sm:p-6">
-      <div className="mb-6 text-center">
-        <div className="text-base sm:text-lg font-semibold mb-1 font-fantaisie sm:text-xl">
+    <div className="w-full max-w-[92vw] rounded-rc-md border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-4 text-rc-fg shadow-rc-panel sm:max-w-4xl sm:rounded-rc-lg sm:p-6">
+      <div className="mb-4 text-center sm:mb-5">
+        <div className="rc-eyebrow">Match setup</div>
+        <div className="mt-1 font-rc-display text-[24px] leading-none text-rc-fg-strong sm:text-[30px]">
           Roll D20
         </div>
-        <div className="text-sm opacity-80">
-          Playing as:{" "}
-          <span
-            className={`font-medium font-fantaisie ${
-              myPlayerKey === "p1" ? "bg-blue-500" : "bg-red-500"
-            }`}
-          >
+        <div className="mt-2 font-rc-sans text-xs text-rc-fg-muted sm:text-sm">
+          Playing as{" "}
+          <span className={`font-rc-mono font-medium ${seatText(myPlayerKey)}`}>
             {playerNames[myPlayerKey]}
           </span>
         </div>
         {(myAvatarName || opponentAvatarName) && (
-          <div className="mt-2 text-xs opacity-75 space-y-0.5">
+          <div className="mt-2 flex flex-wrap items-baseline justify-center gap-x-2.5 gap-y-1">
             {myAvatarName && (
-              <div>
-                Your Avatar:{" "}
-                <span className="font-fantaisie">{myAvatarName}</span>
-              </div>
+              <span className="font-rc-display text-base text-rc-fg-strong sm:text-lg">
+                {myAvatarName}
+              </span>
+            )}
+            {myAvatarName && opponentAvatarName && (
+              <span className="rc-eyebrow">vs</span>
             )}
             {opponentAvatarName && (
-              <div>
-                Opponent Avatar:{" "}
-                <span className="font-fantaisie">{opponentAvatarName}</span>
-              </div>
+              <span className="font-rc-display text-base text-rc-fg-strong sm:text-lg">
+                {opponentAvatarName}
+              </span>
             )}
           </div>
         )}
-        <div className="text-xs opacity-60 mt-2">
-          Click your die to roll. Highest roll gets to choose player order.
-        </div>
       </div>
 
       {/* 3D Canvas for dice rolling */}
-      <div className="bg-black/30 rounded-xl ring-1 ring-white/10 mb-6 h-[42vh] min-h-[240px] sm:h-[300px]">
+      <div className="mb-4 h-[42vh] min-h-[240px] overflow-hidden rounded-rc-md border border-rc-line/12 bg-black/30 sm:mb-5 sm:h-[300px]">
         <ClientCanvas camera={{ position: [0, 0, 4], fov: 60 }}>
           <ambientLight intensity={0.4} />
           <directionalLight position={[5, 5, 5]} intensity={0.8} />
@@ -459,96 +460,115 @@ export default function OnlineD20Screen({
         </ClientCanvas>
       </div>
 
-      {/* Status and controls */}
-      <div className="space-y-4">
-        <div className="flex justify-between items-center text-sm">
-          <div className="flex items-center gap-2">
+      {/* Seats and rolls */}
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+        {(["p1", "p2"] as const).map((seat) => {
+          const roll = d20Rolls[seat];
+          const isWinner = bothDiceComplete && setupWinner === seat;
+          const alignEnd = seat === "p2";
+          return (
             <div
-              className={`w-2 h-2 rounded-full ${
-                myPlayerKey === "p1" ? "bg-blue-500" : "bg-gray-500"
-              }`}
-            />
-            <span>{playerNames.p1}</span>
-            <span className="font-fantaisie">{d20Rolls.p1 ?? "—"}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div
-              className={`w-2 h-2 rounded-full ${
-                myPlayerKey === "p2" ? "bg-red-500" : "bg-gray-500"
-              }`}
-            />
-            <span>{playerNames.p2}</span>
-            <span className="font-fantaisie">{d20Rolls.p2 ?? "—"}</span>
-          </div>
-        </div>
+              key={seat}
+              className={`flex items-center justify-between gap-3 rounded-rc-md border px-3 py-2 sm:px-4 ${
+                alignEnd ? "flex-row-reverse text-right" : ""
+              } ${isWinner ? "border-rc-accent/45" : "border-rc-line/12"}`}
+            >
+              <div className="min-w-0">
+                <div
+                  className={`flex items-center gap-1.5 ${
+                    alignEnd ? "flex-row-reverse" : ""
+                  }`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${seatDot(seat)}`} />
+                  <span className="rc-eyebrow">
+                    {seat.toUpperCase()}
+                    {seat === myPlayerKey ? " · You" : ""}
+                  </span>
+                </div>
+                <div className="mt-0.5 truncate text-sm text-rc-fg-strong">
+                  {playerNames[seat]}
+                </div>
+              </div>
+              <div
+                className={`rc-stat text-2xl sm:text-3xl ${
+                  isWinner ? "text-rc-accent-link" : ""
+                }`}
+              >
+                {roll ?? "—"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
+      {/* Status and controls */}
+      <div className="mt-4 space-y-3 text-center sm:mt-5">
         {!bothRolled && (
-          <div className="text-center text-sm opacity-70">
-            {myRoll === null
-              ? "Click your die to roll!"
-              : `Waiting for ${opponentName} to roll...`}
+          <div>
+            <div className="font-rc-display text-lg text-rc-fg-strong sm:text-xl">
+              {myRoll === null
+                ? "Click your die to roll"
+                : `Waiting for ${opponentName} to roll…`}
+            </div>
+            <div className="rc-hint mt-1">
+              Highest roll chooses who goes first.
+            </div>
             {/* Show retry indicator if we're retrying our roll */}
             {retryCount > 0 && d20PendingRoll && (
-              <div className="text-yellow-500 text-xs mt-1">
-                Retrying roll... ({retryCount}/{D20_MAX_RETRIES})
+              <div className="mt-1 font-rc-mono text-xs text-rc-warning">
+                Retrying roll… ({retryCount}/{D20_MAX_RETRIES})
               </div>
             )}
           </div>
         )}
 
         {bothRolled && bothDiceComplete && isTie && (
-          <div className="text-center text-sm opacity-70 font-fantaisie text-xl">
-            Tied! Rolling again...
+          <div className="font-rc-display text-xl text-rc-fg-strong">
+            Tied! Rolling again…
           </div>
         )}
 
         {bothRolled && bothDiceComplete && !setupWinner && !isTie && (
-          <div className="text-center text-sm opacity-70 font-fantaisie text-xl">
-            Waiting for server to confirm winner…
-          </div>
+          <div className="rc-hint">Waiting for server to confirm winner…</div>
         )}
 
         {bothRolled && bothDiceComplete && setupWinner && !choiceMade && (
-          <div className="text-center space-y-3">
-            <div className="text-yellow-400 font-fantaisie text-xl">
-              {playerNames[setupWinner]} wins the roll! (rolled{" "}
-              {setupWinner === "p1" ? d20Rolls.p1 : d20Rolls.p2})
+          <div className="space-y-3">
+            <div className="font-rc-display text-xl text-rc-accent-link sm:text-2xl">
+              {playerNames[setupWinner]} wins the roll with{" "}
+              {setupWinner === "p1" ? d20Rolls.p1 : d20Rolls.p2}
             </div>
 
             {canChoose && (
               <>
-                <div className="text-sm text-green-400 font-medium">
-                  Choose your seat:
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
-                  <button
-                    className="bg-green-600 hover:bg-green-700 rounded px-4 py-2 sm:px-6 text-sm font-medium transition-colors"
-                    onClick={() => handleChoose("p1")}
-                  >
-                    Take Player 1 Seat (Goes First)
-                  </button>
-                  <button
-                    className="bg-blue-600 hover:bg-blue-700 rounded px-4 py-2 sm:px-6 text-sm font-medium transition-colors"
+                <div className="rc-eyebrow">Choose your seat</div>
+                <div className="flex flex-col justify-center gap-2 sm:flex-row sm:gap-3">
+                  <RcButton size="lg" onClick={() => handleChoose("p1")}>
+                    Go first · Player 1
+                  </RcButton>
+                  <RcButton
+                    size="lg"
+                    variant="outline"
                     onClick={() => handleChoose("p2")}
                   >
-                    Take Player 2 Seat (Goes Second)
-                  </button>
+                    Go second · Player 2
+                  </RcButton>
                 </div>
               </>
             )}
 
             {!canChoose && (
-              <div className="text-sm opacity-70">
-                Waiting for {playerNames[setupWinner]} to choose their seat...
+              <div className="rc-hint">
+                Waiting for {playerNames[setupWinner]} to choose their seat…
               </div>
             )}
           </div>
         )}
         {choiceMade && setupWinner && (
-          <div className="text-center text-sm text-green-400">
+          <div className="font-rc-mono text-sm text-rc-success">
             {playerNames[setupWinner]} chose{" "}
             {phase === "Start" ? "their seat" : "to make a choice"}. Starting
-            game...
+            game…
           </div>
         )}
       </div>

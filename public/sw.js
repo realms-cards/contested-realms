@@ -7,6 +7,9 @@ const CACHE_VERSION = "v4";
 const CARD_CACHE_NAME = `realms-cards-${CACHE_VERSION}`;
 const STATIC_CACHE_NAME = `realms-static-${CACHE_VERSION}`;
 const API_CACHE_NAME = `realms-api-${CACHE_VERSION}`;
+// Versioned separately so board changes don't flush the card art cache
+const BOARD_CACHE_NAME = "realms-board-v1";
+const BOARD_ASSET_TTL_MS = 604800000; // 1 week
 
 // Patterns for card images to cache
 const CARD_IMAGE_PATTERNS = [
@@ -26,6 +29,16 @@ const API_CACHE_PATTERNS = [
   /\/api\/codex/,
 ];
 
+// Board assets (table models, lighting HDR, default playmat and grid overlay,
+// KTX2 transcoder): large, same-origin, and rarely changed. Custom playmats
+// are left to the HTTP cache because their /me/ URLs depend on the signed-in user.
+const BOARD_ASSET_PATTERNS = [
+  /\/3dmodels\//,
+  /\/hdri\//,
+  /\/ktx2\//,
+  /\/playmat[\w-]*\.(jpg|jpeg|png|webp|svg)$/i,
+];
+
 // Static assets to pre-cache on install
 const STATIC_ASSETS = [
   "/icons/icon-192.png",
@@ -37,6 +50,13 @@ const STATIC_ASSETS = [
 function isCardImageRequest(request) {
   const url = request.url;
   return CARD_IMAGE_PATTERNS.some((pattern) => pattern.test(url));
+}
+
+// Check if a request is for a board asset
+function isBoardAssetRequest(request) {
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return false;
+  return BOARD_ASSET_PATTERNS.some((pattern) => pattern.test(url.pathname));
 }
 
 // Check if a request is a static asset
@@ -87,10 +107,12 @@ self.addEventListener("activate", (event) => {
               return (
                 (name.startsWith("realms-cards-") ||
                   name.startsWith("realms-static-") ||
-                  name.startsWith("realms-api-")) &&
+                  name.startsWith("realms-api-") ||
+                  name.startsWith("realms-board-")) &&
                 name !== CARD_CACHE_NAME &&
                 name !== STATIC_CACHE_NAME &&
-                name !== API_CACHE_NAME
+                name !== API_CACHE_NAME &&
+                name !== BOARD_CACHE_NAME
               );
             })
             .map((name) => {
@@ -119,6 +141,14 @@ self.addEventListener("fetch", (event) => {
   if (isCardImageRequest(request)) {
     event.respondWith(
       cacheFirstWithBackgroundUpdate(request, CARD_CACHE_NAME, event)
+    );
+    return;
+  }
+
+  // Board assets: served from cache, refreshed in the background after a week
+  if (isBoardAssetRequest(request)) {
+    event.respondWith(
+      cacheFirstWithTTL(request, BOARD_CACHE_NAME, BOARD_ASSET_TTL_MS)
     );
     return;
   }

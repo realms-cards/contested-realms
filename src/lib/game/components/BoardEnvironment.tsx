@@ -1,4 +1,4 @@
-import { Environment, useGLTF, useTexture } from "@react-three/drei";
+import { Environment, useEnvironment, useGLTF, useTexture } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
 import { Suspense, useEffect, useMemo } from "react";
@@ -14,6 +14,7 @@ import {
 } from "three";
 import { TextureErrorBoundary } from "@/components/game/TextureErrorBoundary";
 import {
+  DEFAULT_PLAYMAT,
   SafePlaymat,
   PLAYMAT_THICKNESS,
 } from "@/lib/game/components/SafePlaymat";
@@ -103,6 +104,12 @@ function _getFabricNormalMap(): DataTexture {
   return cachedFabricNormalMap;
 }
 
+const TABLE_MODEL_URL = "/3dmodels/tables/mahogany_table.glb";
+// Self-hosted copy of drei's "apartment" preset (lebombo_1k). The preset
+// downloads from raw.githack.com on every match, which is slow and uncached.
+const ENVIRONMENT_HDR_URL = "/hdri/lebombo_1k.hdr";
+const PLAYMAT_OVERLAY_URL = "/playmat-overlay.png";
+
 type BoardEnvironmentProps = {
   matW: number;
   matH: number;
@@ -128,7 +135,7 @@ function noopRaycast(
 }
 
 function MahoganyTable({ scale = 1, topY = 0 }: { scale?: number; topY?: number }) {
-  const { scene } = useGLTF("/3dmodels/tables/mahogany_table.glb");
+  const { scene } = useGLTF(TABLE_MODEL_URL);
 
   // Increase environment map intensity on table materials for better reflections
   // and enable shadow receiving
@@ -161,7 +168,7 @@ function MahoganyTable({ scale = 1, topY = 0 }: { scale?: number; topY?: number 
 }
 
 // Preload the table model
-useGLTF.preload("/3dmodels/tables/mahogany_table.glb");
+useGLTF.preload(TABLE_MODEL_URL);
 
 // Playmat component moved to SafePlaymat.tsx for better error handling
 
@@ -175,7 +182,7 @@ useGLTF.preload("/3dmodels/tables/mahogany_table.glb");
 const GRID_OVERLAY_Y = -0.0005;
 
 function PlaymatOverlay({ matW, matH }: { matW: number; matH: number }) {
-  const tex = useTexture("/playmat-overlay.png");
+  const tex = useTexture(PLAYMAT_OVERLAY_URL);
   tex.colorSpace = SRGBColorSpace;
   return (
     <mesh
@@ -223,7 +230,7 @@ export function BoardEnvironment({
     <>
       {/* HDRI environment for realistic lighting and reflections */}
       <Environment
-        preset="apartment"
+        files={ENVIRONMENT_HDR_URL}
         background={false}
         environmentIntensity={0.3}
       />
@@ -319,4 +326,49 @@ export function BoardEnvironment({
       </RigidBody>
     </>
   );
+}
+
+const preloadedBoardUrls = new Set<string>();
+const warmingImages = new Set<HTMLImageElement>();
+
+/**
+ * Start loading the board's lighting, grid overlay and playmats before the
+ * board canvas mounts (online matches only mount it once the D20 and mulligan
+ * screens close), so the table is complete when play begins. The table model
+ * is already preloaded when this module loads.
+ */
+export function preloadBoardEnvironment(
+  playmatUrls: Array<string | null | undefined> = [],
+): void {
+  if (typeof window === "undefined") return;
+  const once = (url: string, load: () => void) => {
+    if (preloadedBoardUrls.has(url)) return;
+    preloadedBoardUrls.add(url);
+    try {
+      load();
+    } catch {
+      preloadedBoardUrls.delete(url);
+    }
+  };
+
+  once(ENVIRONMENT_HDR_URL, () =>
+    useEnvironment.preload({ files: ENVIRONMENT_HDR_URL }),
+  );
+  once(PLAYMAT_OVERLAY_URL, () => useTexture.preload(PLAYMAT_OVERLAY_URL));
+  once(DEFAULT_PLAYMAT, () => useTexture.preload(DEFAULT_PLAYMAT));
+
+  // Custom playmats are only warmed in the HTTP cache: SafePlaymat validates
+  // them with an <img> first, and a failed loader preload would stick.
+  for (const url of playmatUrls) {
+    if (!url || url === DEFAULT_PLAYMAT) continue;
+    once(url, () => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      const done = () => warmingImages.delete(img);
+      img.onload = done;
+      img.onerror = done;
+      warmingImages.add(img);
+      img.src = url;
+    });
+  }
 }
