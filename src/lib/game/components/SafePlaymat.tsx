@@ -20,15 +20,21 @@ type PlaymatMeshProps = {
   matW: number;
   matH: number;
   url: string;
+  onLoaded?: (url: string) => void;
 };
 
 /**
  * Internal component that actually renders the playmat mesh.
  * This is wrapped by SafePlaymat to handle loading/errors.
  */
-function PlaymatMesh({ matW, matH, url }: PlaymatMeshProps) {
+function PlaymatMesh({ matW, matH, url, onLoaded }: PlaymatMeshProps) {
   const tex = useTexture(url);
   tex.colorSpace = SRGBColorSpace;
+
+  // useTexture suspends until loaded, so this only runs once the art is in
+  useEffect(() => {
+    onLoaded?.(url);
+  }, [onLoaded, url]);
 
   const materials = useMemo(() => {
     const edgeMat = new THREE.MeshStandardMaterial({
@@ -68,6 +74,8 @@ type SafePlaymatProps = {
   url: string | null;
   onLoadError?: (url: string, error: Error) => void;
   onPlaymatFailed?: () => void;
+  /** Called once the playmat that will stay on screen has loaded. */
+  onReady?: () => void;
 };
 
 /**
@@ -83,6 +91,7 @@ export function SafePlaymat({
   url,
   onLoadError,
   onPlaymatFailed: _onPlaymatFailed,
+  onReady,
 }: SafePlaymatProps) {
   // Determine what URL to use - default immediately if no custom URL
   const isCustom = url && url !== DEFAULT_PLAYMAT;
@@ -176,8 +185,25 @@ export function SafePlaymat({
     finalUrl = DEFAULT_PLAYMAT;
   }
 
+  // Ready once a custom playmat has been validated (or rejected) and the mesh
+  // shows the URL that will stay, so the default never counts as final while
+  // a custom one is still being checked.
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+  const finalDecided = !isCustom || customValidated !== null;
+  useEffect(() => {
+    if (finalDecided && loadedUrl === finalUrl) onReady?.();
+  }, [finalDecided, loadedUrl, finalUrl, onReady]);
+
   // Key forces React to remount PlaymatMesh when URL changes, ensuring texture updates
-  return <PlaymatMesh key={finalUrl} matW={matW} matH={matH} url={finalUrl} />;
+  return (
+    <PlaymatMesh
+      key={finalUrl}
+      matW={matW}
+      matH={matH}
+      url={finalUrl}
+      onLoaded={setLoadedUrl}
+    />
+  );
 }
 
 export default SafePlaymat;

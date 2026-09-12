@@ -1641,7 +1641,7 @@ export default function LobbiesCentral({
             })}
         </div>
       ) : (
-        <div className="relative mx-[18px] mb-[18px] overflow-hidden rounded-rc-md border border-dashed border-rc-line/22 bg-black/30 px-6 py-10 text-center">
+        <div className="relative mx-[18px] mb-[18px] flex min-h-[288px] flex-col items-center justify-center overflow-hidden rounded-rc-md border border-dashed border-rc-line/22 bg-black/30 px-6 py-10 text-center">
           {skull && (
             <pre
               aria-hidden="true"

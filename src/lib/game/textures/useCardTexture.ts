@@ -12,6 +12,7 @@ import {
 } from "three";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 import { getGraphicsSettings } from "@/hooks/useGraphicsSettings";
+import { markCardTextureSettled } from "@/lib/game/boardReveal";
 import {
   getCardImageCdnUrl,
   getAssetUrl,
@@ -364,6 +365,11 @@ export function useCardTexture({
   const globalPreferRaster = getGraphicsSettings().preferRaster;
   const preferRaster = preferRasterProp || globalPreferRaster;
 
+  // Card art the match curtain waits on (see boardReveal). Explicit texture
+  // URLs (card backs, sleeves) and tokens are not tracked.
+  const settleKey =
+    textureUrl === undefined && slug && !slug.startsWith("token:") ? slug : "";
+
   const baseUrl = useMemo(() => {
     // ALWAYS prioritize textureUrl when provided, even if empty string
     if (textureUrl !== undefined) {
@@ -513,6 +519,7 @@ export function useCardTexture({
           setTex(t);
           // frameloop="demand": make sure the arrival is actually painted
           invalidate();
+          if (settleKey) markCardTextureSettled(settleKey);
           return;
         } catch (err) {
           // Fall through to raster
@@ -552,6 +559,7 @@ export function useCardTexture({
           setTex(t);
           // frameloop="demand": make sure the arrival is actually painted
           invalidate();
+          if (settleKey) markCardTextureSettled(settleKey);
         } catch {
           if (!cancelled) {
             setTex(null);
@@ -564,6 +572,9 @@ export function useCardTexture({
                 () => setRetryNonce((n) => n + 1),
                 rs.count * 2000,
               );
+            } else if (settleKey) {
+              // Out of retries: stop holding the match reveal for this card
+              markCardTextureSettled(settleKey);
             }
           }
         }
@@ -584,7 +595,7 @@ export function useCardTexture({
       }
       heldKeyRef.current = null;
     };
-  }, [baseUrl, ktx2Url, gl, invalidate, retryNonce]);
+  }, [baseUrl, ktx2Url, gl, invalidate, retryNonce, settleKey]);
 
   return tex;
 }

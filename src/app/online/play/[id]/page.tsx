@@ -2,8 +2,16 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { useThree, useFrame, invalidate } from "@react-three/fiber";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { useOnline } from "@/app/online/online-context";
@@ -66,6 +74,7 @@ import LilithOverlay from "@/components/game/LilithOverlay";
 import MagicHudOverlay from "@/components/game/MagicHudOverlay";
 import MatchEndOverlay from "@/components/game/MatchEndOverlay";
 import MatchInfoPopup from "@/components/game/MatchInfoPopup";
+import MatchLoadingPanel from "@/components/game/MatchLoadingPanel";
 import MephistophelesOverlay from "@/components/game/MephistophelesOverlay";
 import MephistophelesSummonOverlay from "@/components/game/MephistophelesSummonOverlay";
 import MerlinOverlay from "@/components/game/MerlinOverlay";
@@ -146,6 +155,15 @@ import {
   arePortalsFullyAssigned,
   needsPortalPhaseForHarbinger,
 } from "@/lib/game/store/portalState";
+import {
+  countSettledTextures,
+  getBoardAssetStatus,
+  getBoardAssetsServerVersion,
+  getBoardAssetsVersion,
+  isBoardEnvironmentReady,
+  resetBoardAssets,
+  subscribeToBoardAssets,
+} from "@/lib/game/boardReveal";
 import { preloadBoardEnvironment } from "@/lib/game/components/BoardEnvironment";
 import { prefetchCardImages } from "@/lib/game/textures/prefetchCardImages";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
@@ -164,6 +182,13 @@ import {
   usePlayerNameMap,
   useRemoteCursorTelemetry,
 } from "./matchHooks";
+
+// One backdrop for the whole match start (deck, D20, mulligan, loading), so
+// each step crossfades into the next instead of flashing between screens.
+const MATCH_STAGE_BACKDROP = "bg-[rgba(4,6,11,0.92)] backdrop-blur-md";
+const STAGE_EASE = [0.22, 1, 0.36, 1] as const;
+// Longest the curtain waits for board assets before revealing anyway.
+const BOARD_LOAD_TIMEOUT_MS = 20000;
 
 export default function OnlineMatchPage() {
   const params = useParams();
@@ -2328,6 +2353,48 @@ export default function OnlineMatchPage() {
     return () => window.clearTimeout(t);
   }, [setupOpen, assetsReady, matchId]);
 
+  // --- Board reveal: keep the curtain up until the table, lighting, playmat
+  // and my hand's card art have actually loaded, then reveal them together.
+  // The client-ready signal below waits for this too, so the match clock
+  // starts when the board appears. Capped so a stuck asset never holds a match.
+  const reduceMotion = useReducedMotion();
+  const boardAssetsVersion = useSyncExternalStore(
+    subscribeToBoardAssets,
+    getBoardAssetsVersion,
+    getBoardAssetsServerVersion,
+  );
+  const myHandSlugKey = useGameStore((s) => {
+    if (!resolvedSeat || isSpectatorView) return "";
+    return (s.zones[resolvedSeat]?.hand ?? [])
+      .map((card) => card?.slug ?? "")
+      .filter((slug) => slug.length > 0 && !slug.startsWith("token:"))
+      .join("|");
+  });
+  const boardLoadStatus = useMemo(() => {
+    void boardAssetsVersion;
+    const handSlugs = myHandSlugKey
+      ? Array.from(new Set(myHandSlugKey.split("|")))
+      : [];
+    const handLoaded = countSettledTextures(handSlugs);
+    return {
+      assets: getBoardAssetStatus(),
+      handLoaded,
+      handTotal: handSlugs.length,
+      ready: isBoardEnvironmentReady() && handLoaded === handSlugs.length,
+    };
+  }, [boardAssetsVersion, myHandSlugKey]);
+  const [boardLoadTimedOut, setBoardLoadTimedOut] = useState(false);
+  useEffect(() => {
+    if (setupOpen || boardLoadStatus.ready) return undefined;
+    const t = window.setTimeout(
+      () => setBoardLoadTimedOut(true),
+      BOARD_LOAD_TIMEOUT_MS,
+    );
+    return () => window.clearTimeout(t);
+  }, [setupOpen, boardLoadStatus.ready]);
+  const boardLoaded =
+    !setupOpen && (boardLoadStatus.ready || boardLoadTimedOut);
+
   // --- Board unlock handshake: the match only starts once BOTH clients have
   // finished loading. The server stamps the match clock and broadcasts
   // "matchReady"; until then we hold a curtain over the board so the turn
@@ -2344,7 +2411,8 @@ export default function OnlineMatchPage() {
   }, [transport, matchId]);
   useEffect(() => {
     if (!transport || !matchId || isSpectatorView) return;
-    if (!assetsReady || !bothPlayersReady || !portalSetupComplete) return;
+    if (!assetsReady || !boardLoaded || !bothPlayersReady || !portalSetupComplete)
+      return;
     if (clientReadySentForRef.current === matchId) return;
     clientReadySentForRef.current = matchId;
     try {
@@ -2358,11 +2426,14 @@ export default function OnlineMatchPage() {
     matchId,
     isSpectatorView,
     assetsReady,
+    boardLoaded,
     bothPlayersReady,
     portalSetupComplete,
   ]);
   // Spectators never gate the match; they watch as soon as their own art is in.
-  const boardReady = isSpectatorView ? assetsReady : matchReady;
+  // Either way the board is only revealed once it has loaded locally.
+  const boardReady =
+    (isSpectatorView ? assetsReady : matchReady) && boardLoaded;
 
   // Debug: page mount/unmount
   useEffect(() => {
@@ -2783,6 +2854,8 @@ export default function OnlineMatchPage() {
     setRematchInfo(null);
     setAssetsReady(false);
     setMatchReady(false);
+    setBoardLoadTimedOut(false);
+    resetBoardAssets();
     clientReadySentForRef.current = null;
     setAssetProgress(null);
     assetPrefetchForRef.current = null;
@@ -3113,6 +3186,57 @@ export default function OnlineMatchPage() {
     );
   }
 
+  // Match setup flow: each step crossfades into the next on one backdrop
+  const setupStep = !prepared
+    ? "prepare"
+    : needsPortalPhase && !portalSetupComplete
+      ? "portal"
+      : serverPhase === "Setup"
+        ? "d20"
+        : !mulliganReady
+          ? "mulligan"
+          : !bothPlayersReady
+            ? "waiting"
+            : "starting";
+  const setupStepMotion = reduceMotion
+    ? {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+      }
+    : {
+        initial: { opacity: 0, y: 16, scale: 0.985 },
+        animate: { opacity: 1, y: 0, scale: 1 },
+        exit: { opacity: 0, y: -12, scale: 0.985 },
+      };
+  const boardLoadSteps = [
+    {
+      label: "Card art",
+      detail: assetProgress
+        ? `${assetProgress.loaded}/${assetProgress.total}`
+        : undefined,
+      done: assetsReady,
+    },
+    {
+      label: "Table & lighting",
+      done: boardLoadStatus.assets.table && boardLoadStatus.assets.lighting,
+    },
+    {
+      label: "Playmat",
+      done: boardLoadStatus.assets.playmat && boardLoadStatus.assets.grid,
+    },
+    ...(boardLoadStatus.handTotal > 0
+      ? [
+          {
+            label: "Your hand",
+            detail: `${boardLoadStatus.handLoaded}/${boardLoadStatus.handTotal}`,
+            done: boardLoadStatus.handLoaded === boardLoadStatus.handTotal,
+          },
+        ]
+      : []),
+    ...(isSpectatorView ? [] : [{ label: "Opponent ready", done: matchReady }]),
+  ];
+
   return (
     <div className="fixed inset-0 w-screen h-[100dvh] select-none">
       {/* Camera controls - left: reset icon + 2D/3D buttons (hidden when uiHidden) */}
@@ -3230,8 +3354,25 @@ export default function OnlineMatchPage() {
         />
       )}
 
+      <AnimatePresence>
       {inThisMatch && setupOpen && myPlayerKey && (
-        <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
+        <motion.div
+          key="match-setup"
+          className={`absolute inset-0 z-20 flex items-center justify-center p-6 ${MATCH_STAGE_BACKDROP}`}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, transition: { duration: 0.45, ease: STAGE_EASE } }}
+          transition={{ duration: 0.35, ease: STAGE_EASE }}
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={setupStep}
+              className="flex w-full items-center justify-center"
+              initial={setupStepMotion.initial}
+              animate={setupStepMotion.animate}
+              exit={setupStepMotion.exit}
+              transition={{ duration: 0.4, ease: STAGE_EASE }}
+            >
           {!prepared ? (
             // For tournament matches (any mode), never show deck loaders/selectors.
             // Decks come from the tournament submission and are auto-loaded via match.playerDecks.
@@ -3347,20 +3488,20 @@ export default function OnlineMatchPage() {
             />
           ) : mulliganReady && !bothPlayersReady ? (
             /* Waiting for opponent to finish mulligan */
-            <div className="w-full max-w-md bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-6 text-center">
-              <div className="text-lg font-semibold mb-2">
-                Mulligan Complete
+            <div className="w-full max-w-sm rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-center text-rc-fg shadow-rc-panel">
+              <div className="rc-eyebrow">Mulligan complete</div>
+              <div className="mt-1 font-rc-display text-[26px] leading-none text-rc-fg-strong">
+                Hand kept
               </div>
-              <div className="text-sm opacity-80 mb-4">
-                Waiting for opponent to finish mulligan...
+              <div className="rc-hint mt-2">
+                Waiting for your opponent to finish their mulligan…
               </div>
-              <div className="animate-pulse text-green-400">Ready!</div>
             </div>
           ) : (
-            <div className="text-center text-white">
-              <div className="animate-pulse">Starting game...</div>
-            </div>
+            <div className="rc-hint animate-pulse">Starting game…</div>
           )}
+            </motion.div>
+          </AnimatePresence>
 
           {/* Chat console available during setup phase */}
           <OnlineConsole
@@ -3379,8 +3520,9 @@ export default function OnlineMatchPage() {
             myPlayerId={myPlayerId}
             playerNames={playerNames}
           />
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {inThisMatch && (
         <>
@@ -3807,28 +3949,53 @@ export default function OnlineMatchPage() {
           {/* 3D Board Canvas - fills entire viewport */}
           {!setupOpen && (
             <div className="absolute inset-0 w-full h-full">
-              {!boardReady && (
-                <div
-                  className="fixed inset-0 z-[120] flex flex-col items-center justify-center bg-slate-950/95 backdrop-blur-sm"
-                  onPointerDown={(e) => e.stopPropagation()}
-                >
-                  <div className="text-white text-lg font-medium">
-                    {assetsReady
-                      ? "Waiting for opponent…"
-                      : "Loading card art…"}
-                  </div>
-                  {!assetsReady && assetProgress && (
-                    <div className="mt-2 text-sm text-slate-300">
-                      {assetProgress.loaded} / {assetProgress.total}
-                    </div>
-                  )}
-                  {assetsReady && (
-                    <div className="mt-2 text-sm text-slate-300">
-                      The match starts once both players have loaded.
-                    </div>
-                  )}
-                </div>
-              )}
+              <AnimatePresence>
+                {!boardReady && (
+                  <motion.div
+                    key="board-curtain"
+                    className={`fixed inset-0 z-[120] flex items-center justify-center p-6 ${MATCH_STAGE_BACKDROP}`}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{
+                      opacity: 0,
+                      transition: {
+                        duration: reduceMotion ? 0.2 : 0.8,
+                        ease: STAGE_EASE,
+                      },
+                    }}
+                    transition={{ duration: 0.45, ease: STAGE_EASE }}
+                  >
+                    <MatchLoadingPanel
+                      title={
+                        boardLoaded ? "Waiting for opponent" : "Setting the table"
+                      }
+                      subtitle={
+                        boardLoaded
+                          ? "The match starts once both players have loaded."
+                          : "The board appears once everything is ready."
+                      }
+                      steps={boardLoadSteps}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              {/* The board fades in and settles from a slight zoom once revealed */}
+              <motion.div
+                className="absolute inset-0"
+                initial={false}
+                animate={
+                  boardReady
+                    ? { opacity: 1, scale: 1 }
+                    : reduceMotion
+                      ? { opacity: 0, scale: 1 }
+                      : { opacity: 0, scale: 1.035 }
+                }
+                transition={{
+                  duration: reduceMotion ? 0.2 : 1.1,
+                  ease: STAGE_EASE,
+                }}
+              >
               <ClientCanvas
                 camera={cameraOptions}
                 shadows
@@ -4050,6 +4217,7 @@ export default function OnlineMatchPage() {
                 />
                 <TrackpadOrbitAdapter />
               </ClientCanvas>
+              </motion.div>
             </div>
           )}
         </>

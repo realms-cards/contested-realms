@@ -13,6 +13,7 @@ import {
   type Raycaster,
 } from "three";
 import { TextureErrorBoundary } from "@/components/game/TextureErrorBoundary";
+import { markBoardAssetReady } from "@/lib/game/boardReveal";
 import {
   DEFAULT_PLAYMAT,
   SafePlaymat,
@@ -137,6 +138,11 @@ function noopRaycast(
 function MahoganyTable({ scale = 1, topY = 0 }: { scale?: number; topY?: number }) {
   const { scene } = useGLTF(TABLE_MODEL_URL);
 
+  // useGLTF suspends until loaded, so this only runs once the model is in
+  useEffect(() => {
+    markBoardAssetReady("table");
+  }, []);
+
   // Increase environment map intensity on table materials for better reflections
   // and enable shadow receiving
   scene.traverse((child) => {
@@ -170,6 +176,21 @@ function MahoganyTable({ scale = 1, topY = 0 }: { scale?: number; topY?: number 
 // Preload the table model
 useGLTF.preload(TABLE_MODEL_URL);
 
+/**
+ * Suspends on the same HDR as <Environment> and reports once it has loaded.
+ * <Environment> cannot report itself, and a sibling inside its Suspense
+ * boundary is not a reliable signal.
+ */
+function LightingReady() {
+  useEnvironment({ files: ENVIRONMENT_HDR_URL });
+  useEffect(() => {
+    markBoardAssetReady("lighting");
+  }, []);
+  return null;
+}
+
+const markPlaymatReady = () => markBoardAssetReady("playmat");
+
 // Playmat component moved to SafePlaymat.tsx for better error handling
 
 // The grid overlay sits just below the playmat's top surface (y=0) and just
@@ -184,6 +205,10 @@ const GRID_OVERLAY_Y = -0.0005;
 function PlaymatOverlay({ matW, matH }: { matW: number; matH: number }) {
   const tex = useTexture(PLAYMAT_OVERLAY_URL);
   tex.colorSpace = SRGBColorSpace;
+
+  useEffect(() => {
+    markBoardAssetReady("grid");
+  }, []);
   return (
     <mesh
       rotation-x={-Math.PI / 2}
@@ -226,6 +251,13 @@ export function BoardEnvironment({
   // Memoize the URL to prevent unnecessary texture reloads
   const stableUrl = useMemo(() => playmatUrl ?? null, [playmatUrl]);
 
+  // Parts this scene does not show count as loaded for the match reveal
+  useEffect(() => {
+    if (!showTable) markBoardAssetReady("table");
+    if (!showPlaymat) markBoardAssetReady("playmat");
+    if (suppressGrid) markBoardAssetReady("grid");
+  }, [showTable, showPlaymat, suppressGrid]);
+
   return (
     <>
       {/* HDRI environment for realistic lighting and reflections */}
@@ -234,6 +266,9 @@ export function BoardEnvironment({
         background={false}
         environmentIntensity={0.3}
       />
+      <Suspense fallback={null}>
+        <LightingReady />
+      </Suspense>
 
       {/* Mahogany table underneath the playmat. With the playmat visible the
           tabletop tucks flush under it (slightly embedded to avoid a seam);
@@ -253,6 +288,8 @@ export function BoardEnvironment({
           <TextureErrorBoundary
             fallback={null}
             onError={(err) => {
+              // A failed playmat must not hold the match reveal
+              markPlaymatReady();
               if (process.env.NODE_ENV !== "production") {
                 console.warn(
                   "[BoardEnvironment] Playmat texture error:",
@@ -261,7 +298,12 @@ export function BoardEnvironment({
               }
             }}
           >
-            <SafePlaymat matW={matW} matH={matH} url={stableUrl} />
+            <SafePlaymat
+              matW={matW}
+              matH={matH}
+              url={stableUrl}
+              onReady={markPlaymatReady}
+            />
           </TextureErrorBoundary>
         </Suspense>
       )}
