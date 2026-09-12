@@ -15,7 +15,7 @@ interface Credit {
 // White glow effect for credits (similar to patron colors)
 const CREDITS_GLOW = {
   textShadow:
-    "0 0 6px rgba(255,255,255,0.9), 0 0 14px rgba(255,255,255,0.55), 0 0 20px rgba(200,200,200,0.35)",
+    "0 0 6px rgba(253,225,160,0.9), 0 0 14px rgba(253,225,160,0.55), 0 0 20px rgba(212,169,74,0.35)",
 };
 
 const CREDITS: Credit[] = [
@@ -64,7 +64,7 @@ export default function CreditsMarquee({ onHoverChange }: CreditsMarqueeProps) {
   CREDITS.forEach((credit, i) => {
     if (i > 0) {
       creditElements.push(
-        <span key={`sep-${i}`} className="text-slate-500">
+        <span key={`sep-${i}`} className="text-rc-fg-dim">
           {" "}
           ·{" "}
         </span>,
@@ -76,7 +76,7 @@ export default function CreditsMarquee({ onHoverChange }: CreditsMarqueeProps) {
         href={credit.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-white hover:text-blue-300 hover:underline transition-all duration-300"
+        className="text-rc-fg transition-colors duration-300 hover:text-rc-accent-ring hover:underline"
         style={CREDITS_GLOW}
         onMouseEnter={() => handleHoverChange(true)}
         onMouseLeave={() => handleHoverChange(false)}
@@ -88,7 +88,7 @@ export default function CreditsMarquee({ onHoverChange }: CreditsMarqueeProps) {
 
   return (
     <div
-      className="h-7 overflow-x-hidden overflow-y-visible border-t border-slate-500/30"
+      className="h-7 overflow-x-hidden overflow-y-visible border-t border-rc-line/14"
       style={{ width: "100vw", marginLeft: "calc(-50vw + 50%)" }}
     >
       {phase === "label" ? (
@@ -96,7 +96,7 @@ export default function CreditsMarquee({ onHoverChange }: CreditsMarqueeProps) {
           key="credits-label"
           className="h-7 flex items-center justify-center animate-credits-fade-in"
         >
-          <span className="text-sm font-medium text-white" style={CREDITS_GLOW}>
+          <span className="font-rc-mono text-xs uppercase tracking-[0.18em] text-rc-spark" style={CREDITS_GLOW}>
             credits
           </span>
         </div>
@@ -109,7 +109,7 @@ export default function CreditsMarquee({ onHoverChange }: CreditsMarqueeProps) {
             animationPlayState: isHovered ? "paused" : "running",
           }}
         >
-          <span className="text-sm font-medium">{creditElements}</span>
+          <span className="font-rc-mono text-[13px]">{creditElements}</span>
         </div>
       )}
     </div>

@@ -6,6 +6,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { Badge } from "@/components/ui/badge";
+import { RcButton } from "@/components/ui/rc-button";
 
 type DeckItemProps = {
   deck: {
@@ -26,35 +28,8 @@ type DeckItemProps = {
   variant?: "grid" | "list"; // Display mode
 };
 
-type TagTone = "default" | "public" | "private" | "info" | "warning" | "error";
-
-const TAG_TONE_STYLES: Record<TagTone, string> = {
-  default: "bg-foreground/10 text-foreground/80 border-white/10",
-  public: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
-  private: "bg-zinc-800/70 text-zinc-300 border-zinc-600/60",
-  info: "bg-blue-500/15 text-blue-200 border-blue-400/20",
-  warning: "bg-amber-500/15 text-amber-200 border-amber-400/20",
-  error: "bg-rose-500/15 text-rose-200 border-rose-400/20",
-};
-
-function Tag({
-  children,
-  tone = "default",
-}: {
-  children: ReactNode;
-  tone?: TagTone;
-}) {
-  return (
-    <span
-      className={clsx(
-        "inline-flex items-center text-xs px-2 py-0.5 rounded border leading-tight max-w-full overflow-hidden text-ellipsis whitespace-nowrap",
-        TAG_TONE_STYLES[tone]
-      )}
-    >
-      {children}
-    </span>
-  );
-}
+/** Icon-only row action (list view); grid overlay uses the default icon size. */
+const ROW_ACTION = "h-7 w-7 bg-black/35";
 
 function normalizeFormatLabel(format: string | undefined) {
   if (!format) return "";
@@ -173,51 +148,46 @@ export default function DeckItem({
     // Show loading tag for pending decks
     if (deck.isPending) {
       items.push(
-        <Tag key="loading" tone="info">
-          <span className="inline-flex items-center gap-1">
-            <span className="w-3 h-3 border border-blue-300 border-t-transparent rounded-full animate-spin" />
-            Loading...
-          </span>
-        </Tag>
+        <Badge key="loading" tone="gold">
+          <span className="h-3 w-3 animate-spin rounded-full border border-rc-accent-link border-t-transparent" />
+          Loading...
+        </Badge>
       );
     }
     if (formatLabel && deck.format?.toLowerCase() !== "sandbox") {
-      items.push(
-        <Tag key="format" tone="default">
-          {formatLabel}
-        </Tag>
-      );
+      items.push(<Badge key="format">{formatLabel}</Badge>);
     }
     if (isOwner || typeof deck.isPublic === "boolean") {
       items.push(
-        <Tag key="visibility" tone={effectiveIsPublic ? "public" : "private"}>
+        <Badge key="visibility" tone={effectiveIsPublic ? "ok" : "default"}>
           {effectiveIsPublic ? "Public" : "Private"}
-        </Tag>
+        </Badge>
       );
     }
     if (deck.imported) {
       items.push(
-        <Tag key="imported" tone="info">
+        <Badge key="imported" tone="gold">
           Imported
-        </Tag>
+        </Badge>
       );
     }
     if (deck.avatarState === "multiple") {
       items.push(
-        <Tag key="avatar-wip" tone="warning">
+        <Badge key="avatar-wip" tone="warn">
           WIP (Multiple Avatars)
-        </Tag>
+        </Badge>
       );
     } else if (deck.avatarState === "none" && !deck.isPending) {
       items.push(
-        <Tag key="avatar-missing" tone="error">
+        <Badge key="avatar-missing" tone="danger">
           Avatar Missing
-        </Tag>
+        </Badge>
       );
     }
     return items;
   }, [
     deck.avatarState,
+    deck.format,
     deck.imported,
     deck.isPending,
     deck.isPublic,
@@ -231,8 +201,8 @@ export default function DeckItem({
     if (deck.isPending) {
       return (
         <div className="flex-shrink-0 pointer-events-none">
-          <div className="relative w-16 h-24 overflow-hidden rounded-sm shadow-lg shadow-black/40 ring-1 ring-white/15 bg-black/30 flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+          <div className="relative flex h-24 w-16 items-center justify-center overflow-hidden rounded-rc-sm border border-rc-line/18 bg-black/30 shadow-rc-md">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-rc-accent border-t-transparent" />
           </div>
         </div>
       );
@@ -242,7 +212,7 @@ export default function DeckItem({
     if (slug) {
       return (
         <div className="flex-shrink-0 pointer-events-none">
-          <div className="relative w-16 h-24 overflow-hidden rounded-sm shadow-lg shadow-black/40 ring-1 ring-white/15 bg-black/30">
+          <div className="relative h-24 w-16 overflow-hidden rounded-rc-sm border border-rc-line/18 bg-black/30 shadow-rc-md">
             <Image
               src={`/api/images/${slug}`}
               alt={name ? `${name} avatar` : "Avatar card"}
@@ -259,7 +229,7 @@ export default function DeckItem({
     if (name) {
       return (
         <div className="flex-shrink-0 pointer-events-none">
-          <div className="px-2 py-1 rounded bg-purple-500/15 border border-purple-400/20 text-xs text-purple-200 text-center max-w-[5rem]">
+          <div className="max-w-[5rem] rounded-rc-md border border-rc-line/18 bg-black/30 px-2 py-1 text-center font-rc-mono text-[11px] text-rc-fg-muted">
             {name}
           </div>
         </div>
@@ -273,11 +243,11 @@ export default function DeckItem({
     return (
       <Link
         href={`/decks/editor-3d?id=${encodeURIComponent(deck.id)}`}
-        className="border rounded px-3 py-2 hover:bg-muted/60 relative group flex items-center gap-3"
+        className="group relative flex items-center gap-3 rounded-rc-md border border-rc-line/12 bg-black/30 px-3 py-2 transition-colors hover:border-rc-accent/30 hover:bg-rc-accent/6"
       >
         {copiedMsg && (
           <div
-            className="absolute top-1 left-1/2 -translate-x-1/2 rounded bg-black/90 text-white text-xs px-2 py-1 ring-1 ring-white/20 z-20"
+            className="absolute top-1 left-1/2 z-20 -translate-x-1/2 rounded-rc-sm border border-rc-line/22 bg-black/90 px-2 py-1 font-rc-mono text-[11px] text-rc-fg-strong"
             aria-live="polite"
           >
             {copiedMsg}
@@ -286,7 +256,7 @@ export default function DeckItem({
 
         {/* Small avatar thumbnail */}
         {deck.avatarState === "single" && deck.avatarCard?.slug && (
-          <div className="flex-shrink-0 w-8 h-12 relative overflow-hidden rounded-sm ring-1 ring-white/10">
+          <div className="relative h-12 w-8 flex-shrink-0 overflow-hidden rounded-rc-sm border border-rc-line/14">
             <Image
               src={`/api/images/${deck.avatarCard.slug}`}
               alt={deck.avatarCard.name || "Avatar"}
@@ -298,51 +268,53 @@ export default function DeckItem({
           </div>
         )}
         {deck.isPending && (
-          <div className="flex-shrink-0 w-8 h-12 flex items-center justify-center bg-black/30 rounded-sm ring-1 ring-white/10">
-            <div className="w-4 h-4 border border-blue-400 border-t-transparent rounded-full animate-spin" />
+          <div className="flex h-12 w-8 flex-shrink-0 items-center justify-center rounded-rc-sm border border-rc-line/14 bg-black/30">
+            <div className="h-4 w-4 animate-spin rounded-full border border-rc-accent border-t-transparent" />
           </div>
         )}
 
         {/* Name - allow more space */}
-        <span className="font-medium truncate min-w-[120px] flex-1">
+        <span className="min-w-[120px] flex-1 truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
           {deck.name}
         </span>
 
         {/* Tags */}
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {formatLabel && <Tag tone="default">{formatLabel}</Tag>}
+        <div className="flex flex-shrink-0 items-center gap-1">
+          {formatLabel && <Badge>{formatLabel}</Badge>}
           {(isOwner || typeof deck.isPublic === "boolean") && (
-            <Tag tone={effectiveIsPublic ? "public" : "private"}>
+            <Badge tone={effectiveIsPublic ? "ok" : "default"}>
               {effectiveIsPublic ? "Public" : "Private"}
-            </Tag>
+            </Badge>
           )}
-          {deck.imported && <Tag tone="info">Imported</Tag>}
-          {deck.avatarState === "multiple" && <Tag tone="warning">WIP</Tag>}
+          {deck.imported && <Badge tone="gold">Imported</Badge>}
+          {deck.avatarState === "multiple" && <Badge tone="warn">WIP</Badge>}
           {deck.avatarState === "none" && !deck.isPending && (
-            <Tag tone="error">No Avatar</Tag>
+            <Badge tone="danger">No Avatar</Badge>
           )}
         </div>
 
         {/* Date */}
-        <div className="flex-shrink-0 text-xs text-slate-400 hidden sm:block w-28 text-right">
-          {deck.userName && <span>{deck.userName} • </span>}
+        <div className="rc-hint hidden w-28 flex-shrink-0 text-right sm:block">
+          {deck.userName && <span>{deck.userName} · </span>}
           {new Date(deck.updatedAt).toLocaleDateString()}
         </div>
 
         {/* Mobile: always-visible more button + actions */}
-        <div ref={variant === "list" ? mobileActionsRef : undefined} className="flex-shrink-0 flex items-center gap-1">
-          <button
+        <div ref={variant === "list" ? mobileActionsRef : undefined} className="flex flex-shrink-0 items-center gap-1">
+          <RcButton
+            variant="ghost"
+            size="icon"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               setMobileActionsOpen((prev) => !prev);
             }}
-            className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700/60 md:hidden"
+            className="h-7 w-7 text-rc-fg-muted hover:text-rc-accent-ring md:hidden"
             aria-label="More actions"
             title="More actions"
           >
             <MoreVertical className="h-4 w-4" />
-          </button>
+          </RcButton>
 
           {/* Actions: visible on desktop hover OR mobile toggle */}
           <div className={clsx(
@@ -352,21 +324,25 @@ export default function DeckItem({
               : "opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
           )}>
           {/* Edit */}
-          <button
+          <RcButton
+            size="icon"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               router.push(`/decks/editor-3d?id=${encodeURIComponent(deck.id)}`);
             }}
-            className="p-1.5 rounded bg-amber-600/80 hover:bg-amber-500 text-white"
+            className="h-7 w-7"
             aria-label="Edit"
             title="Edit Deck"
           >
             <Pencil className="h-3.5 w-3.5" />
-          </button>
+          </RcButton>
 
           {/* TTS Export */}
-          <button
+          <RcButton
+            variant="outline"
+            size="icon"
+            className={ROW_ACTION}
             aria-label="TTS Export"
             title="Download TTS JSON"
             onClick={async (e: MouseEvent) => {
@@ -402,13 +378,17 @@ export default function DeckItem({
                 );
               }
             }}
-            className="p-1.5 rounded bg-zinc-700/80 ring-1 ring-purple-500/50 hover:bg-purple-600/70 text-purple-300 hover:text-white"
           >
-            <span className="text-[10px] font-bold leading-none">TTS</span>
-          </button>
+            <span className="font-rc-mono text-[10px] leading-none tracking-[0.08em]">
+              TTS
+            </span>
+          </RcButton>
 
           {/* Quick Export (simple list) */}
-          <button
+          <RcButton
+            variant="outline"
+            size="icon"
+            className={ROW_ACTION}
             aria-label="Quick Export"
             title="Copy card list"
             onClick={async (e: MouseEvent) => {
@@ -457,13 +437,15 @@ export default function DeckItem({
               }
             }}
             disabled={exportingText}
-            className="p-1.5 rounded bg-zinc-700/80 ring-1 ring-zinc-500/50 hover:bg-zinc-600/80 text-zinc-300 hover:text-white"
           >
             <List className="h-3.5 w-3.5" />
-          </button>
+          </RcButton>
 
           {/* Full Export */}
-          <button
+          <RcButton
+            variant="outline"
+            size="icon"
+            className={ROW_ACTION}
             aria-label="Export Deck"
             title="Copy formatted deck"
             onClick={async (e: MouseEvent) => {
@@ -565,14 +547,20 @@ export default function DeckItem({
               }
             }}
             disabled={exportingText}
-            className="p-1.5 rounded bg-zinc-700/80 ring-1 ring-zinc-500/50 hover:bg-zinc-600/80 text-zinc-300 hover:text-white"
           >
             <FileText className="h-3.5 w-3.5" />
-          </button>
+          </RcButton>
 
           {/* Toggle Public/Private */}
           {isOwner && (
-            <button
+            <RcButton
+              variant="outline"
+              size="icon"
+              className={clsx(
+                ROW_ACTION,
+                effectiveIsPublic &&
+                  "border-rc-success/40 bg-rc-success/15 text-[#c5d6a8]"
+              )}
               aria-label="Toggle public/private"
               title={effectiveIsPublic ? "Make private" : "Make public"}
               onClick={async (e) => {
@@ -602,44 +590,43 @@ export default function DeckItem({
                 }
               }}
               disabled={updatingPublic}
-              className={`p-1.5 rounded ring-1 transition-colors ${
-                effectiveIsPublic
-                  ? "bg-green-700/60 text-green-300 ring-green-500/50 hover:bg-green-600/80 hover:text-white"
-                  : "bg-zinc-700/80 text-zinc-400 ring-zinc-500/50 hover:bg-zinc-600/80 hover:text-white"
-              }`}
             >
               {effectiveIsPublic ? (
                 <Globe className="h-3.5 w-3.5" />
               ) : (
                 <Lock className="h-3.5 w-3.5" />
               )}
-            </button>
+            </RcButton>
           )}
 
           {/* Sync from Curiosa */}
           {isOwner && deck.curiosaSourceId && (
-            <button
+            <RcButton
+              variant="outline"
+              size="icon"
+              className={ROW_ACTION}
               onClick={handleSync}
               disabled={syncing}
-              className="p-1.5 rounded bg-zinc-700/80 ring-1 ring-cyan-500/50 hover:bg-cyan-600/70 text-cyan-400 hover:text-white"
               aria-label="Sync from Sorcerytcg"
               title="Reload deck from Sorcerytcg"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
-            </button>
+            </RcButton>
           )}
 
           {/* Delete */}
           {isOwner && (
-            <button
+            <RcButton
+              variant="destructive"
+              size="icon"
+              className="h-7 w-7"
               onClick={handleDelete}
               disabled={deleting}
-              className="p-1.5 rounded bg-zinc-700/80 ring-1 ring-red-500/50 hover:bg-red-600/70 text-red-400 hover:text-white"
               aria-label="Delete"
               title="Delete deck"
             >
               <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            </RcButton>
           )}
           </div>
         </div>
@@ -651,16 +638,18 @@ export default function DeckItem({
   return (
     <Link
       href={`/decks/editor-3d?id=${encodeURIComponent(deck.id)}`}
-      className="border rounded p-3 hover:bg-muted/60 relative group block"
+      className="group relative block rounded-rc-md border border-rc-line/12 bg-black/30 p-3 transition-colors hover:border-rc-accent/30 hover:bg-rc-accent/6"
     >
       <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="font-medium line-clamp-1 pr-8">{deck.name}</div>
+        <div className="min-w-0 flex-1">
+          <div className="line-clamp-1 pr-8 font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+            {deck.name}
+          </div>
           {tags.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">{tags}</div>
           )}
-          <div className="opacity-70 text-xs mt-2">
-            {deck.userName && <span>by {deck.userName} • </span>}
+          <div className="rc-hint mt-2">
+            {deck.userName && <span>by {deck.userName} · </span>}
             Updated {updatedStr}
           </div>
         </div>
@@ -668,31 +657,33 @@ export default function DeckItem({
       </div>
 
       {/* Mobile: always-visible more button for grid */}
-      <button
+      <RcButton
+        variant="ghost"
+        size="icon"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
           setMobileActionsOpen((prev) => !prev);
         }}
-        className="absolute top-2 right-2 z-20 p-1.5 rounded-md bg-black/50 text-slate-300 hover:text-white hover:bg-black/70 md:hidden"
+        className="absolute top-2 right-2 z-20 h-8 w-8 bg-black/50 text-rc-fg-muted hover:text-rc-accent-ring md:hidden"
         aria-label="More actions"
         title="More actions"
       >
         <MoreVertical className="h-4 w-4" />
-      </button>
+      </RcButton>
 
       {/* Full card overlay with action buttons */}
       <div
         ref={variant === "grid" ? mobileActionsRef : undefined}
         className={clsx(
-          "absolute inset-0 z-10 flex items-center justify-center gap-3 rounded-lg bg-black/70 transition-opacity",
+          "absolute inset-0 z-10 flex flex-wrap items-center justify-center gap-3 rounded-rc-md bg-[rgba(6,10,20,0.86)] transition-opacity",
           mobileActionsOpen
             ? "opacity-100"
             : "opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
         )}>
         {copiedMsg && (
           <div
-            className="absolute top-2 left-2 rounded bg-black/90 text-white text-xs px-2 py-1 ring-1 ring-white/20"
+            className="absolute top-2 left-2 rounded-rc-sm border border-rc-line/22 bg-black/90 px-2 py-1 font-rc-mono text-[11px] text-rc-fg-strong"
             aria-live="polite"
           >
             {copiedMsg}
@@ -700,22 +691,24 @@ export default function DeckItem({
         )}
 
         {/* Edit Deck - prominent button */}
-        <button
+        <RcButton
           aria-label="Edit Deck"
           data-tooltip="Edit Deck"
-          onClick={(e: MouseEvent) => {
+          onClick={(e: MouseEvent<HTMLButtonElement>) => {
             e.preventDefault();
             e.stopPropagation();
             router.push(`/decks/editor-3d?id=${encodeURIComponent(deck.id)}`);
           }}
-          className="inline-flex items-center justify-center h-10 px-3 gap-1.5 rounded-lg bg-gradient-to-r from-amber-600 to-amber-500 ring-1 ring-amber-400/60 hover:from-amber-500 hover:to-amber-400 text-white font-medium shadow-md shadow-amber-500/20 transition-all hover:scale-105"
         >
           <Pencil className="h-4 w-4" />
-          <span className="text-sm">Edit</span>
-        </button>
+          <span>Edit</span>
+        </RcButton>
 
         {/* TTS Export (for Tabletop Simulator) - downloads JSON file */}
-        <button
+        <RcButton
+          variant="outline"
+          size="icon"
+          className="bg-black/35"
           aria-label="TTS Export"
           data-tooltip="Download TTS JSON"
           onClick={async (e: MouseEvent) => {
@@ -753,13 +746,15 @@ export default function DeckItem({
               );
             }
           }}
-          className="inline-flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-700/80 ring-1 ring-purple-500/50 hover:bg-purple-600/70 text-purple-300 hover:text-white transition-colors"
         >
-          <span className="text-xs font-bold">TTS</span>
-        </button>
+          <span className="font-rc-mono text-xs tracking-[0.08em]">TTS</span>
+        </RcButton>
 
         {/* Quick Export (simple list) */}
-        <button
+        <RcButton
+          variant="outline"
+          size="icon"
+          className="bg-black/35"
           aria-label="Quick Export"
           data-tooltip="Quick export"
           onClick={async (e: MouseEvent) => {
@@ -824,13 +819,15 @@ export default function DeckItem({
             }
           }}
           disabled={exportingText}
-          className="inline-flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-700/80 ring-1 ring-zinc-500/50 hover:bg-zinc-600/80 text-zinc-300 hover:text-white transition-colors"
         >
           <List className="h-5 w-5" />
-        </button>
+        </RcButton>
 
         {/* Export Deck (Sorcery text format) */}
-        <button
+        <RcButton
+          variant="outline"
+          size="icon"
+          className="bg-black/35"
           aria-label="Export Deck"
           data-tooltip="Export deck"
           onClick={async (e: MouseEvent) => {
@@ -955,13 +952,19 @@ export default function DeckItem({
             }
           }}
           disabled={exportingText}
-          className="inline-flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-700/80 ring-1 ring-zinc-500/50 hover:bg-zinc-600/80 text-zinc-300 hover:text-white transition-colors"
         >
           <FileText className="h-5 w-5" />
-        </button>
+        </RcButton>
 
         {isOwner && (
-          <button
+          <RcButton
+            variant="outline"
+            size="icon"
+            className={clsx(
+              "bg-black/35",
+              effectiveIsPublic &&
+                "border-rc-success/40 bg-rc-success/15 text-[#c5d6a8]"
+            )}
             aria-label="Toggle public/private"
             data-tooltip={effectiveIsPublic ? "Make private" : "Make public"}
             onClick={async (e) => {
@@ -1000,43 +1003,41 @@ export default function DeckItem({
               }
             }}
             disabled={updatingPublic}
-            className={`inline-flex items-center justify-center h-10 w-10 rounded-lg ring-1 transition-colors ${
-              effectiveIsPublic
-                ? "bg-green-700/60 text-green-300 ring-green-500/50 hover:bg-green-600/80 hover:text-white"
-                : "bg-zinc-700/80 text-zinc-400 ring-zinc-500/50 hover:bg-zinc-600/80 hover:text-white"
-            }`}
           >
             {effectiveIsPublic ? (
               <Globe className="h-5 w-5" />
             ) : (
               <Lock className="h-5 w-5" />
             )}
-          </button>
+          </RcButton>
         )}
 
         {/* Sync from Curiosa */}
         {isOwner && deck.curiosaSourceId && (
-          <button
+          <RcButton
+            variant="outline"
+            size="icon"
+            className="bg-black/35"
             aria-label="Sync from Sorcerytcg"
             data-tooltip="Reload from Sorcerytcg"
             onClick={handleSync}
             disabled={syncing}
-            className="inline-flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-700/80 ring-1 ring-cyan-500/50 hover:bg-cyan-600/70 text-cyan-400 hover:text-white transition-colors"
           >
             <RefreshCw className={`h-5 w-5 ${syncing ? "animate-spin" : ""}`} />
-          </button>
+          </RcButton>
         )}
 
         {isOwner && (
-          <button
+          <RcButton
+            variant="destructive"
+            size="icon"
             aria-label="Delete deck"
             data-tooltip="Delete"
             onClick={handleDelete}
             disabled={deleting}
-            className="inline-flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-700/80 ring-1 ring-red-500/50 hover:bg-red-600/70 text-red-400 hover:text-white transition-colors"
           >
             <Trash2 className="h-5 w-5" />
-          </button>
+          </RcButton>
         )}
       </div>
     </Link>

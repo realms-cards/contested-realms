@@ -5,6 +5,12 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import GuestGate from "@/components/auth/GuestGate";
 import { OpenTournamentCreateForm } from "@/components/open-tournament/OpenTournamentCreateForm";
+import AppShell from "@/components/ui/AppShell";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
+import { RcDialog } from "@/components/ui/rc-dialog";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import { useViewer } from "@/lib/guest/useViewer";
 
 interface OpenTournament {
@@ -30,6 +36,22 @@ interface OpenTournament {
   rounds?: Array<{ id: string; roundNumber: number; status: string }>;
 }
 
+/** Status square + label colour, mirroring the lobby games table. */
+function statusTone(status: string): string {
+  switch (status) {
+    case "registering":
+      return "text-rc-success";
+    case "preparing":
+      return "text-rc-warning";
+    case "active":
+    case "playing":
+    case "cancelled":
+      return "text-rc-danger";
+    default:
+      return "text-rc-fg-dim";
+  }
+}
+
 export default function OpenTournamentsPage() {
   const viewer = useViewer();
   const searchParams = useSearchParams();
@@ -42,7 +64,9 @@ export default function OpenTournamentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<"active" | "completed" | "all">("active");
+  const [statusFilter, setStatusFilter] = useState<
+    "active" | "completed" | "all"
+  >("active");
 
   const fetchTournaments = useCallback(async () => {
     setLoading(true);
@@ -75,204 +99,167 @@ export default function OpenTournamentsPage() {
 
   if (viewer.status === "loading") {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
-      </div>
+      <AppShell>
+        <div className="rc-hint py-6 text-center">loading…</div>
+      </AppShell>
     );
   }
 
   if (viewer.isAnonymous) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white">
-        <div className="container mx-auto px-4 py-8 max-w-2xl">
-          <GuestGate
-            title="Open tournaments"
-            description="Sign in to run a host-managed event, or continue as a guest to join one through an invite link."
-            returnTo={currentHref}
-          />
-        </div>
-      </div>
+      <AppShell width="narrow">
+        <GuestGate
+          variant="realms"
+          title="Open tournaments"
+          description="Sign in to run a host-managed event, or continue as a guest to join one through an invite link."
+          returnTo={currentHref}
+        />
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <div className="flex items-center gap-3">
-              <Link
-                href="/tournaments"
-                className="text-slate-400 hover:text-white text-sm"
-              >
-                Tournaments
-              </Link>
-              <span className="text-slate-600">/</span>
-              <h1 className="text-3xl font-fantaisie text-white">Open Events</h1>
-            </div>
-            <p className="text-slate-400 mt-1">
-              Play anywhere — on realms.cards, Tabletop Simulator, or in paper.
-              Players report scores here, with optional host approval.
-            </p>
-            <p className="text-sm text-slate-500 mt-1">
-              Looking for fully automated events played on realms.cards?{" "}
-              <Link
-                href="/tournaments"
-                className="text-blue-400 hover:text-blue-300"
-              >
-                Platform Tournaments →
-              </Link>
-            </p>
-          </div>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-          >
+    <AppShell>
+      <PageHeader
+        eyebrow={
+          <Link href="/tournaments" className="rc-link">
+            Tournaments
+          </Link>
+        }
+        title="Open Events"
+        description="Play anywhere — on realms.cards, Tabletop Simulator, or in paper. Players report scores here, with optional host approval."
+        actions={
+          <RcButton onClick={() => setShowCreate(true)}>
             Create Open Event
+          </RcButton>
+        }
+      />
+
+      <p className="rc-hint -mt-3">
+        Looking for fully automated events played on realms.cards?{" "}
+        <Link href="/tournaments" className="rc-link">
+          Platform Tournaments
+        </Link>
+      </p>
+
+      {/* Filters */}
+      <div className="rc-segment self-start">
+        {(["active", "completed", "all"] as const).map((f) => (
+          <button
+            key={f}
+            type="button"
+            aria-pressed={statusFilter === f}
+            onClick={() => setStatusFilter(f)}
+          >
+            {f}
           </button>
-        </div>
-
-        {/* Filters */}
-        <div className="flex items-center gap-2 mb-6">
-          {(["active", "completed", "all"] as const).map((f) => (
-            <button
-              key={f}
-              className={`px-3 py-1.5 rounded-md text-sm border capitalize ${
-                statusFilter === f
-                  ? "bg-blue-600 text-white border-blue-500"
-                  : "bg-slate-800 text-slate-200 border-slate-600 hover:bg-slate-700"
-              }`}
-              onClick={() => setStatusFilter(f)}
-            >
-              {f}
-            </button>
-          ))}
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-6">
-            {error}
-          </div>
-        )}
-
-        {/* Loading */}
-        {loading ? (
-          <div className="text-center py-12 text-slate-400">
-            Loading tournaments...
-          </div>
-        ) : tournaments.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">📋</div>
-            <h2 className="text-2xl font-semibold text-slate-300 mb-2">
-              No open events found
-            </h2>
-            <p className="text-slate-500 mb-4">
-              Create an open event to get started.
-            </p>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-            >
-              Create Open Event
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {tournaments.map((t) => {
-              const activePlayerCount =
-                t.registrations?.filter((r) => r.seatStatus === "active").length ?? 0;
-              const currentRound = t.rounds?.[0];
-              const playNetworkUrl = t.settings?.playNetworkUrl as string | undefined;
-
-              return (
-                <div
-                  key={t.id}
-                  className="bg-slate-800 border border-slate-700 rounded-lg p-6 hover:bg-slate-750 transition-colors"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">📋</span>
-                        <h3 className="font-fantaisie text-lg text-white truncate">
-                          {t.name}
-                        </h3>
-                      </div>
-                      <p className="text-slate-400 text-sm mt-1">
-                        Open Event · player-reported scores
-                      </p>
-                    </div>
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-medium border capitalize ${
-                        t.status === "active"
-                          ? "bg-green-900/50 text-green-300 border-green-700"
-                          : t.status === "completed"
-                            ? "bg-slate-700 text-slate-300 border-slate-600"
-                            : "bg-red-900/50 text-red-300 border-red-700"
-                      }`}
-                    >
-                      {t.status}
-                    </span>
-                  </div>
-
-                  <div className="space-y-2 mb-4">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Players:</span>
-                      <span className="text-white">{activePlayerCount}</span>
-                    </div>
-                    {currentRound && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-400">Round:</span>
-                        <span className="text-white">
-                          {currentRound.roundNumber}
-                        </span>
-                      </div>
-                    )}
-                    {playNetworkUrl && (
-                      <div className="flex items-center gap-1 text-xs text-blue-400">
-                        <span>Play Network linked</span>
-                      </div>
-                    )}
-                    {t.isPrivate && (
-                      <span className="text-xs px-1.5 py-0.5 bg-purple-600/20 text-purple-300 border border-purple-500/30 rounded inline-block">
-                        Private
-                      </span>
-                    )}
-                  </div>
-
-                  <Link
-                    href={`/open-tournaments/${t.id}`}
-                    className="block w-full bg-slate-700 hover:bg-slate-600 text-white text-center px-4 py-2 rounded text-sm font-medium transition-colors"
-                  >
-                    View Dashboard
-                  </Link>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Create Modal */}
-        {showCreate && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-white">
-                  Create Open Event
-                </h2>
-                <button
-                  onClick={() => setShowCreate(false)}
-                  className="text-slate-400 hover:text-white"
-                >
-                  ✕
-                </button>
-              </div>
-              <OpenTournamentCreateForm onCreated={handleCreated} />
-            </div>
-          </div>
-        )}
+        ))}
       </div>
-    </div>
+
+      {/* Error */}
+      {error && (
+        <div className="rc-alert" data-tone="danger">
+          {error}
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading ? (
+        <div className="rc-hint py-6 text-center">loading tournaments…</div>
+      ) : tournaments.length === 0 ? (
+        <RcEmpty
+          title="No open events found."
+          action={
+            <RcButton onClick={() => setShowCreate(true)}>
+              Create Open Event
+            </RcButton>
+          }
+        >
+          create an open event to get started
+        </RcEmpty>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {tournaments.map((t) => {
+            const activePlayerCount =
+              t.registrations?.filter((r) => r.seatStatus === "active")
+                .length ?? 0;
+            const currentRound = t.rounds?.[0];
+            const playNetworkUrl = t.settings?.playNetworkUrl as
+              string | undefined;
+            const fillPercent = Math.min(
+              (activePlayerCount / Math.max(1, t.maxPlayers)) * 100,
+              100,
+            );
+
+            return (
+              <div key={t.id} className="rc-panel flex flex-col p-[18px]">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3
+                      className="m-0 truncate font-rc-display text-[22px] leading-[1.1] text-rc-fg-strong"
+                      title={t.name}
+                    >
+                      {t.name}
+                    </h3>
+                    <p className="rc-hint mt-1">
+                      Open Event · player-reported scores
+                    </p>
+                  </div>
+                  <div
+                    className={`flex shrink-0 items-center gap-2 font-rc-mono text-[11px] uppercase tracking-[0.14em] ${statusTone(
+                      t.status,
+                    )}`}
+                  >
+                    <span className="rc-dot" />
+                    <span>{t.status}</span>
+                  </div>
+                </div>
+
+                <div className="mb-4 space-y-2">
+                  <div className="flex items-center justify-between font-rc-mono text-xs tracking-[0.1em]">
+                    <span className="text-rc-fg-subtle">Players</span>
+                    <span className="rc-stat">{activePlayerCount}</span>
+                  </div>
+                  <div className="rc-progress">
+                    <span style={{ width: `${fillPercent}%` }} />
+                  </div>
+                  {currentRound && (
+                    <div className="flex items-center justify-between font-rc-mono text-xs tracking-[0.1em]">
+                      <span className="text-rc-fg-subtle">Round</span>
+                      <span className="rc-stat">
+                        {currentRound.roundNumber}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {playNetworkUrl && <Badge>Play Network linked</Badge>}
+                    {t.isPrivate && <Badge tone="warn">Private</Badge>}
+                  </div>
+                </div>
+
+                <RcLinkButton
+                  variant="outline"
+                  href={`/open-tournaments/${t.id}`}
+                  className="mt-auto w-full"
+                >
+                  View Dashboard
+                </RcLinkButton>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Create Modal */}
+      {showCreate && (
+        <RcDialog
+          title="Create Open Event"
+          onClose={() => setShowCreate(false)}
+          size="md"
+        >
+          <OpenTournamentCreateForm onCreated={handleCreated} />
+        </RcDialog>
+      )}
+    </AppShell>
   );
 }

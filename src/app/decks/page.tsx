@@ -1,12 +1,14 @@
 "use client";
 
 import { Grid3X3, List, RefreshCw } from "lucide-react";
-import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AuthButton from "@/components/auth/AuthButton";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import DeckImportCuriosa from "./DeckImportCuriosa";
 import DeckImportText from "./DeckImportText";
 import DeckItem from "./DeckItem";
@@ -370,276 +372,247 @@ export default function DecksPage() {
   if (!session) {
     return (
       <OnlinePageShell>
-        <div className="pt-2">
-          <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-6 text-center space-y-4">
-            <div className="text-sm text-slate-200">
-              Please sign in to view your decks.
-            </div>
-            <div className="flex justify-center">
-              <AuthButton />
-            </div>
+        <PageHeader
+          eyebrow="library"
+          title="Your Decks"
+          description="Manage your collections, import decklists, and create new builds."
+        />
+        <section className="rc-panel px-[18px] py-8 text-center">
+          <div className="font-rc-sans text-sm text-rc-fg-muted">
+            Please sign in to view your decks.
           </div>
-        </div>
+          <div className="mt-4 flex justify-center">
+            <AuthButton />
+          </div>
+        </section>
       </OnlinePageShell>
     );
   }
 
+  const listClassName =
+    viewMode === "grid"
+      ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+      : "flex flex-col gap-2";
+
   return (
     <OnlinePageShell>
-      <div className="space-y-6 pt-2">
-        <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold font-fantaisie text-slate-50">
-                Your Decks
-              </h1>
-              <p className="text-sm text-slate-300/90">
-                Manage your collections, import decklists, and create new
-                builds.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setShowImport((prev) => !prev)}
-                className="rounded-lg bg-slate-800/80 hover:bg-slate-700/80 px-4 py-2 text-sm font-medium text-slate-200 transition-colors"
-              >
-                {showImport ? "Hide Importers" : "Import New Deck"}
-              </button>
-              <Link
-                href="/decks/editor-3d"
-                className="rounded-lg bg-blue-600/80 hover:bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors"
-              >
-                Construct New Deck
-              </Link>
-            </div>
-          </div>
+      <PageHeader
+        eyebrow="library"
+        title="Your Decks"
+        description="Manage your collections, import decklists, and create new builds."
+        actions={
+          <>
+            <RcButton
+              variant="outline"
+              onClick={() => setShowImport((prev) => !prev)}
+            >
+              {showImport ? "Hide Importers" : "Import New Deck"}
+            </RcButton>
+            <RcLinkButton href="/decks/editor-3d">
+              Construct New Deck
+            </RcLinkButton>
+          </>
+        }
+      />
+
+      {showImport && (
+        <section className="rc-panel space-y-4 p-[18px]">
+          <DeckImportCuriosa />
+          <DeckImportText />
+        </section>
+      )}
+
+      {loading ? (
+        <div className="rc-hint py-6 text-center">loading decks…</div>
+      ) : error ? (
+        <div className="rc-alert" data-tone="danger">
+          Error: {error}
         </div>
-
-        {showImport && (
-          <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5 space-y-4">
-            <DeckImportCuriosa />
-            <DeckImportText />
-          </div>
-        )}
-
-        {loading ? (
-          <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5 text-sm text-slate-300">
-            Loading decks...
-          </div>
-        ) : error ? (
-          <div className="rounded-xl bg-red-900/20 ring-1 ring-red-600/40 p-5 text-sm text-red-200">
-            Error: {error}
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {myDecks.length === 0 ? (
-              <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-6 text-sm text-slate-300 space-y-2">
-                <div>
-                  No decks yet. Create one from the editor, import an existing
-                  list, or save from Draft.
-                </div>
-                <div className="flex flex-wrap gap-3 text-xs text-slate-400">
-                  <Link
+      ) : (
+        <div className="flex flex-col gap-7">
+          {myDecks.length === 0 ? (
+            <RcEmpty
+              title="No decks yet."
+              action={
+                <>
+                  <RcLinkButton
                     href="/decks/editor-3d"
-                    className="underline text-slate-200 hover:text-slate-100"
+                    variant="outline"
+                    size="sm"
                   >
                     Open Deck Editor
-                  </Link>
-                  <button
+                  </RcLinkButton>
+                  <RcButton
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setShowImport(true)}
-                    className="underline text-slate-200 hover:text-slate-100"
                   >
                     Show Import Tools
+                  </RcButton>
+                </>
+              }
+            >
+              create one from the editor, import an existing list, or save from
+              draft
+            </RcEmpty>
+          ) : (
+            <section className="rc-panel">
+              <PanelHeader
+                title="Your Decks"
+                meta={`${sortedMyDecks.length}${
+                  hasActiveFilters ? ` of ${myDecks.length}` : ""
+                } decks`}
+              >
+                {/* Refresh */}
+                <RcButton
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => void fetchDecks(true)}
+                  disabled={loading}
+                  className="h-8 w-8 text-rc-fg-muted hover:text-rc-accent-ring"
+                  aria-label="Refresh decks"
+                  title="Refresh decks"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+                  />
+                </RcButton>
+
+                {/* View mode toggle */}
+                <div className="rc-segment">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("grid")}
+                    aria-pressed={viewMode === "grid"}
+                    aria-label="Grid view"
+                    title="Grid view"
+                  >
+                    <Grid3X3 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("list")}
+                    aria-pressed={viewMode === "list"}
+                    aria-label="List view"
+                    title="List view"
+                  >
+                    <List className="h-4 w-4" />
                   </button>
                 </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
-                      Your Decks
-                      <span className="ml-2 text-sm font-normal text-slate-400">
-                        ({sortedMyDecks.length}
-                        {hasActiveFilters ? ` of ${myDecks.length}` : ""})
-                      </span>
-                    </h2>
-                    <div className="flex items-center gap-3">
-                      {/* Refresh */}
-                      <button
-                        onClick={() => void fetchDecks(true)}
-                        disabled={loading}
-                        className="p-1.5 rounded-md text-slate-400 hover:text-slate-100 hover:bg-slate-700/60 transition-colors disabled:opacity-40"
-                        aria-label="Refresh decks"
-                        title="Refresh decks"
-                      >
-                        <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                      </button>
 
-                      {/* View mode toggle */}
-                      <div className="flex items-center rounded-md bg-slate-800/60 p-0.5">
-                        <button
-                          onClick={() => setViewMode("grid")}
-                          className={`p-1.5 rounded transition-colors ${
-                            viewMode === "grid"
-                              ? "bg-slate-700 text-slate-100"
-                              : "text-slate-400 hover:text-slate-200"
-                          }`}
-                          aria-label="Grid view"
-                          title="Grid view"
-                        >
-                          <Grid3X3 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => setViewMode("list")}
-                          className={`p-1.5 rounded transition-colors ${
-                            viewMode === "list"
-                              ? "bg-slate-700 text-slate-100"
-                              : "text-slate-400 hover:text-slate-200"
-                          }`}
-                          aria-label="List view"
-                          title="List view"
-                        >
-                          <List className="h-4 w-4" />
-                        </button>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <label
-                          htmlFor="sort-decks"
-                          className="text-xs text-slate-400"
-                        >
-                          Sort:
-                        </label>
-                        <CustomSelect
-                          value={sortBy}
-                          onChange={(v) => setSortBy(v as typeof sortBy)}
-                          options={[
-                            { value: "date-desc", label: "Newest" },
-                            { value: "date-asc", label: "Oldest" },
-                            { value: "name-asc", label: "A-Z" },
-                            { value: "name-desc", label: "Z-A" },
-                            { value: "format", label: "Format" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Filter bar */}
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="text-slate-400">Filter:</span>
-
-                    <CustomSelect
-                      value={filterFormat}
-                      onChange={(v) => setFilterFormat(v)}
-                      placeholder="All Formats"
-                      options={uniqueFormats.map((f) => ({
-                        value: f,
-                        label: f,
-                      }))}
-                    />
-
-                    <CustomSelect
-                      value={filterAvatar}
-                      onChange={(v) => setFilterAvatar(v)}
-                      className="max-w-[140px]"
-                      placeholder="All Avatars"
-                      options={uniqueAvatars.map((a) => ({
-                        value: a,
-                        label: a,
-                      }))}
-                    />
-
-                    <CustomSelect
-                      value={filterSource}
-                      onChange={(v) =>
-                        setFilterSource(v as typeof filterSource)
-                      }
-                      options={[
-                        { value: "all", label: "All Sources" },
-                        { value: "imported", label: "Imported" },
-                        { value: "created", label: "Created" },
-                      ]}
-                    />
-
-                    {hasActiveFilters && (
-                      <button
-                        onClick={clearFilters}
-                        className="text-slate-400 hover:text-slate-200 underline"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
+                <div className="flex items-center gap-2">
+                  <span className="rc-hint uppercase">sort</span>
+                  <CustomSelect
+                    value={sortBy}
+                    onChange={(v) => setSortBy(v as typeof sortBy)}
+                    options={[
+                      { value: "date-desc", label: "Newest" },
+                      { value: "date-asc", label: "Oldest" },
+                      { value: "name-asc", label: "A-Z" },
+                      { value: "name-desc", label: "Z-A" },
+                      { value: "format", label: "Format" },
+                    ]}
+                  />
                 </div>
-                <div
-                  className={
-                    viewMode === "grid"
-                      ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm"
-                      : "flex flex-col gap-2 text-sm"
-                  }
-                >
-                  {sortedMyDecks.map((d) => (
-                    <DeckItem
-                      key={d.id}
-                      deck={{
-                        id: d.id,
-                        name: d.name,
-                        format: d.format,
-                        isPublic: d.isPublic,
-                        imported: d.imported,
-                        curiosaSourceId: d.curiosaSourceId,
-                        avatarState: d.avatarState,
-                        avatarCard: d.avatarCard,
-                        updatedAt: d.updatedAt,
-                        isOwner: true,
-                        isPending: d.isPending,
-                      }}
-                      onDelete={handleDeleteDeck}
-                      variant={viewMode}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+              </PanelHeader>
 
-            {publicDecks.length > 0 && (
-              <div className="space-y-3">
-                <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
-                  Public Decks
-                </h2>
-                <div
-                  className={
-                    viewMode === "grid"
-                      ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm"
-                      : "flex flex-col gap-2 text-sm"
-                  }
-                >
-                  {sortedPublicDecks.map((d) => (
-                    <DeckItem
-                      key={d.id}
-                      deck={{
-                        id: d.id,
-                        name: d.name,
-                        format: d.format,
-                        imported: d.imported,
-                        userName: d.userName,
-                        avatarState: d.avatarState,
-                        avatarCard: d.avatarCard,
-                        updatedAt: d.updatedAt,
-                        isPublic: Boolean(d.isPublic),
-                        isOwner: false,
-                      }}
-                      variant={viewMode}
-                    />
-                  ))}
-                </div>
+              {/* Filter bar */}
+              <div className="flex flex-wrap items-center gap-2 border-b border-rc-line/8 px-[18px] py-3">
+                <span className="rc-hint uppercase">filter</span>
+
+                <CustomSelect
+                  value={filterFormat}
+                  onChange={(v) => setFilterFormat(v)}
+                  placeholder="All Formats"
+                  options={uniqueFormats.map((f) => ({
+                    value: f,
+                    label: f,
+                  }))}
+                />
+
+                <CustomSelect
+                  value={filterAvatar}
+                  onChange={(v) => setFilterAvatar(v)}
+                  className="max-w-[140px]"
+                  placeholder="All Avatars"
+                  options={uniqueAvatars.map((a) => ({
+                    value: a,
+                    label: a,
+                  }))}
+                />
+
+                <CustomSelect
+                  value={filterSource}
+                  onChange={(v) => setFilterSource(v as typeof filterSource)}
+                  options={[
+                    { value: "all", label: "All Sources" },
+                    { value: "imported", label: "Imported" },
+                    { value: "created", label: "Created" },
+                  ]}
+                />
+
+                {hasActiveFilters && (
+                  <RcButton variant="link" size="sm" onClick={clearFilters}>
+                    Clear
+                  </RcButton>
+                )}
               </div>
-            )}
-          </div>
-        )}
-      </div>
+
+              <div className={`px-[18px] py-3.5 ${listClassName}`}>
+                {sortedMyDecks.map((d) => (
+                  <DeckItem
+                    key={d.id}
+                    deck={{
+                      id: d.id,
+                      name: d.name,
+                      format: d.format,
+                      isPublic: d.isPublic,
+                      imported: d.imported,
+                      curiosaSourceId: d.curiosaSourceId,
+                      avatarState: d.avatarState,
+                      avatarCard: d.avatarCard,
+                      updatedAt: d.updatedAt,
+                      isOwner: true,
+                      isPending: d.isPending,
+                    }}
+                    onDelete={handleDeleteDeck}
+                    variant={viewMode}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {publicDecks.length > 0 && (
+            <section className="rc-panel">
+              <PanelHeader
+                title="Public Decks"
+                meta={`${sortedPublicDecks.length} decks`}
+              />
+              <div className={`px-[18px] py-3.5 ${listClassName}`}>
+                {sortedPublicDecks.map((d) => (
+                  <DeckItem
+                    key={d.id}
+                    deck={{
+                      id: d.id,
+                      name: d.name,
+                      format: d.format,
+                      imported: d.imported,
+                      userName: d.userName,
+                      avatarState: d.avatarState,
+                      avatarCard: d.avatarCard,
+                      updatedAt: d.updatedAt,
+                      isPublic: Boolean(d.isPublic),
+                      isOwner: false,
+                    }}
+                    variant={viewMode}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
     </OnlinePageShell>
   );
 }

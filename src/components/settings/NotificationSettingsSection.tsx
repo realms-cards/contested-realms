@@ -1,7 +1,8 @@
 "use client";
 
-import { Bell, BellOff, BellRing } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { RcButton } from "@/components/ui/rc-button";
 import {
   getNotificationPermission,
   isNotificationSupported,
@@ -35,53 +36,44 @@ export default function NotificationSettingsSection() {
   }, []);
 
   if (!supported) {
-    return (
-      <div className="flex items-center gap-3 text-sm text-slate-400">
-        <BellOff className="h-4 w-4" />
-        <span>Browser notifications not supported</span>
-      </div>
-    );
+    return <div className="rc-hint">browser notifications not supported</div>;
   }
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <Bell className="h-4 w-4" />
-        <span>Browser Notifications</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rc-eyebrow">Browser notifications</span>
+        {permission === "granted" && <Badge tone="ok">enabled</Badge>}
+        {permission === "denied" && <Badge tone="warn">blocked</Badge>}
       </div>
 
       {permission === "granted" && (
-        <div className="flex items-center gap-2 text-sm text-emerald-400">
-          <BellRing className="h-4 w-4" />
-          <span>
-            Enabled — you&apos;ll receive notifications for invites and lobby
-            joins
-          </span>
-        </div>
+        <p className="m-0 font-rc-sans text-xs leading-relaxed text-rc-fg-muted">
+          You&apos;ll receive notifications for invites and lobby joins
+        </p>
       )}
 
       {permission === "denied" && (
-        <div className="flex items-center gap-2 text-sm text-amber-400">
-          <BellOff className="h-4 w-4" />
-          <span>
-            Blocked — enable in browser settings to receive notifications
-          </span>
-        </div>
+        <p className="m-0 font-rc-sans text-xs leading-relaxed text-rc-fg-muted">
+          Enable in browser settings to receive notifications
+        </p>
       )}
 
       {permission === "default" && (
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-400">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="min-w-0 flex-1 font-rc-sans text-xs leading-relaxed text-rc-fg-muted">
             Get notified when you receive match invites or players join your
             lobby
           </span>
-          <button
+          <RcButton
+            variant="outline"
+            size="sm"
+            className="shrink-0"
             onClick={handleRequestPermission}
             disabled={requesting}
-            className="shrink-0 rounded bg-indigo-600/80 hover:bg-indigo-600 px-3 py-1.5 text-xs font-medium disabled:opacity-50"
           >
             {requesting ? "Requesting..." : "Enable"}
-          </button>
+          </RcButton>
         </div>
       )}
     </div>

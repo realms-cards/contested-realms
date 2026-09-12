@@ -1,18 +1,14 @@
 "use client";
 
-import { Trophy } from "lucide-react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import type {
-  BracketMatchData,
-  BracketPlayer,
-  BracketRound,
+  roundStatusTone,
+  type BracketMatchData,
+  type BracketPlayer,
+  type BracketRound,
 } from "@/components/tournament/TournamentBracket";
+import { Badge } from "@/components/ui/badge";
+import { RcEmpty } from "@/components/ui/rc-empty";
 
 type EdgeOutcome = "win" | "loss" | "draw" | "open";
 
@@ -27,10 +23,10 @@ interface FlowEdge {
 }
 
 const EDGE_COLORS: Record<EdgeOutcome, string> = {
-  win: "#10b981", // emerald-500
-  loss: "#f43f5e", // rose-500
-  draw: "#f59e0b", // amber-500
-  open: "#64748b", // slate-500
+  win: "#7a9d52", // rc-success
+  loss: "#b9543d", // rc-danger
+  draw: "#d99b2c", // rc-warning
+  open: "#5f5c50", // rc-fg-dim
 };
 
 interface TournamentFlowchartProps {
@@ -138,10 +134,10 @@ export function TournamentFlowchart({
 
   if (sortedRounds.length === 0) {
     return (
-      <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-        <div className="text-center py-8 text-slate-400">
-          No rounds started yet.
-        </div>
+      <div className="rc-panel p-4">
+        <RcEmpty title="No rounds started yet.">
+          pairings appear once the first round begins
+        </RcEmpty>
       </div>
     );
   }
@@ -154,9 +150,17 @@ export function TournamentFlowchart({
   const edgeStyle = (edge: FlowEdge) => {
     if (hoveredPlayerId) {
       if (edge.playerId === hoveredPlayerId) {
-        return { stroke: EDGE_COLORS[edge.outcome], strokeWidth: 3, opacity: 1 };
+        return {
+          stroke: EDGE_COLORS[edge.outcome],
+          strokeWidth: 3,
+          opacity: 1,
+        };
       }
-      return { stroke: EDGE_COLORS[edge.outcome], strokeWidth: 1.5, opacity: 0.12 };
+      return {
+        stroke: EDGE_COLORS[edge.outcome],
+        strokeWidth: 1.5,
+        opacity: 0.12,
+      };
     }
     const isOwn = edge.playerId === currentUserId;
     return {
@@ -167,7 +171,7 @@ export function TournamentFlowchart({
   };
 
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+    <div className="rc-panel p-4">
       <div className="overflow-x-auto">
         <div ref={canvasRef} className="relative min-w-max pb-2">
           <svg
@@ -187,21 +191,11 @@ export function TournamentFlowchart({
           <div className="flex gap-16">
             {sortedRounds.map((round) => (
               <div key={round.id} className="flex flex-col min-w-[240px]">
-                <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-600">
-                  <h3 className="text-sm font-semibold text-slate-300">
-                    Round {round.roundNumber}
-                  </h3>
-                  <span
-                    className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      round.status === "completed"
-                        ? "bg-slate-600 text-slate-200"
-                        : round.status === "active"
-                          ? "bg-blue-600 text-white"
-                          : "bg-amber-600/60 text-amber-100"
-                    }`}
-                  >
+                <div className="mb-3 flex items-center justify-between gap-3 border-b border-rc-line/22 pb-2">
+                  <h3 className="rc-eyebrow m-0">Round {round.roundNumber}</h3>
+                  <Badge tone={roundStatusTone(round.status)}>
                     {round.status}
-                  </span>
+                  </Badge>
                 </div>
 
                 <div className="flex flex-col gap-4">
@@ -223,7 +217,7 @@ export function TournamentFlowchart({
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-4 mt-4 pt-3 border-t border-slate-700 text-xs text-slate-400">
+      <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-rc-line/18 pt-3 font-rc-mono text-[11px] tracking-[0.1em] text-rc-fg-subtle">
         {(
           [
             ["win", "Won previous match"],
@@ -234,13 +228,13 @@ export function TournamentFlowchart({
         ).map(([outcome, label]) => (
           <span key={outcome} className="inline-flex items-center gap-1.5">
             <span
-              className="inline-block w-5 h-0.5 rounded"
+              className="inline-block h-0.5 w-5 rounded"
               style={{ backgroundColor: EDGE_COLORS[outcome] }}
             />
             {label}
           </span>
         ))}
-        <span className="ml-auto text-slate-500">
+        <span className="ml-auto text-rc-fg-dim">
           Hover a player to trace their path
         </span>
       </div>
@@ -268,17 +262,17 @@ function FlowchartMatchNode({
   const isBye = match.bye || !player2;
 
   const rowClass = (player: BracketPlayer | undefined, isWinner: boolean) => {
-    if (!player) return "bg-slate-700/50 text-slate-500";
+    if (!player) return "text-rc-fg-dim";
     if (player.id === hoveredPlayerId)
-      return "bg-amber-600/30 text-amber-100 ring-1 ring-amber-400/50";
-    if (isWinner) return "bg-orange-600 text-white";
+      return "bg-rc-accent/16 text-rc-spark";
+    if (isWinner) return "bg-rc-accent/10 text-rc-accent-link font-semibold";
     if (match.status === "completed" && match.winnerId) {
-      return "bg-slate-700 text-slate-400";
+      return "text-rc-fg-subtle";
     }
     if (player.id === currentUserId) {
-      return "bg-emerald-900/40 text-emerald-200 ring-1 ring-emerald-500/30";
+      return "bg-rc-accent/6 text-rc-fg-strong";
     }
-    return "bg-slate-700 text-slate-200";
+    return "text-rc-fg";
   };
 
   const renderRow = (
@@ -288,30 +282,25 @@ function FlowchartMatchNode({
     withBorder: boolean,
   ) => (
     <div
-      className={`flex items-center justify-between px-3 py-1.5 ${
-        withBorder ? "border-b border-slate-600" : ""
+      className={`flex items-center justify-between gap-2 px-3 py-1.5 font-rc-mono text-[13px] ${
+        withBorder ? "border-b border-rc-line/22" : ""
       } ${rowClass(player, isWinner)}`}
       onMouseEnter={() => player && onHoverPlayer(player.id)}
       onMouseLeave={() => onHoverPlayer(null)}
     >
-      <span className="text-sm font-medium truncate max-w-[180px]">
-        {player?.name || fallback}
-      </span>
-      {isWinner && (
-        <Trophy className="w-3.5 h-3.5 text-yellow-300 flex-shrink-0" />
-      )}
+      <span className="max-w-[180px] truncate">{player?.name || fallback}</span>
     </div>
   );
 
   return (
     <div
       ref={nodeRef}
-      className={`border rounded overflow-hidden ${
+      className={`overflow-hidden rounded-rc-md border bg-rc-panel ${
         match.status === "active"
-          ? "border-blue-500/60"
+          ? "border-rc-info/60"
           : match.invalid
-            ? "border-red-500/50"
-            : "border-slate-600"
+            ? "border-rc-danger/50"
+            : "border-rc-line/18"
       }`}
     >
       {renderRow(player1, "TBD", match.winnerId === player1?.id, true)}

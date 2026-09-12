@@ -4,6 +4,14 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import {
+  RcButton,
+  RcLinkButton,
+  rcButtonVariants,
+} from "@/components/ui/rc-button";
+import { RcEmpty } from "@/components/ui/rc-empty";
 
 const LOCAL_REPLAY_STORAGE_KEY = "sorcery:localReplay";
 let replayViewerPreloadPromise: Promise<void> | null = null;
@@ -47,21 +55,39 @@ function ShareButton({ matchId }: { matchId: string }) {
 
   return (
     <button
+      type="button"
       onClick={handleShare}
-      className="w-9 grid place-items-center text-slate-500 hover:text-slate-200 hover:bg-slate-700/40 transition-colors"
+      className="grid h-8 w-8 place-items-center rounded-rc-md border border-rc-line/22 text-rc-fg-muted transition-colors hover:border-rc-accent hover:text-rc-accent-ring focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring"
       title={copied ? "Copied!" : "Copy share link"}
     >
       {copied ? (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-emerald-400">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          className="h-3.5 w-3.5 text-rc-success"
+        >
           <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
         </svg>
       ) : (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          className="h-3.5 w-3.5"
+        >
           <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z" />
         </svg>
       )}
     </button>
   );
+}
+
+/** Tone for the format chip on a replay row. */
+function matchTypeTone(recording: MatchRecordingSummary): BadgeTone {
+  if (recording.isCpuMatch) return "warn";
+  if (recording.matchType === "sealed") return "default";
+  return "ok";
 }
 
 export default function ReplayListPage() {
@@ -208,7 +234,7 @@ export default function ReplayListPage() {
   const renderReplayCard = (recording: MatchRecordingSummary) => (
     <div
       key={recording.matchId}
-      className="bg-slate-900/60 border border-slate-800/70 rounded-xl px-4 py-4 hover:bg-slate-900/80 transition-colors cursor-pointer"
+      className="flex cursor-pointer flex-wrap items-center gap-4 border-b border-rc-line/8 px-[18px] py-3 transition-colors hover:bg-rc-accent/6"
       onMouseEnter={() => {
         router.prefetch(`/replay/${recording.matchId}`);
         void preloadReplayViewerModules();
@@ -221,47 +247,33 @@ export default function ReplayListPage() {
         void openReplay(recording.matchId);
       }}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-2 min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <h3 className="text-sm font-semibold text-slate-100">
-              {recording.playerNames.join(" vs ")}
-            </h3>
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
-                recording.isCpuMatch
-                  ? "bg-amber-500/60 text-amber-50"
-                  : recording.matchType === "sealed"
-                    ? "bg-blue-500/60 text-blue-50"
-                    : "bg-emerald-500/60 text-emerald-50"
-              }`}
-            >
-              {recording.isCpuMatch ? "vs CPU" : recording.matchType}
-            </span>
-          </div>
-          <div className="text-xs text-slate-400">
-            {formatDate(recording.startTime)}
-          </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-3">
+          <h3 className="m-0 truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+            {recording.playerNames.join(" vs ")}
+          </h3>
+          <Badge tone={matchTypeTone(recording)}>
+            {recording.isCpuMatch ? "vs CPU" : recording.matchType}
+          </Badge>
         </div>
-        <div
-          className="flex items-stretch flex-shrink-0 rounded-lg overflow-hidden border border-slate-700/50 bg-slate-800/40"
-          onClick={(e) => e.stopPropagation()}
+        <div className="rc-hint mt-1">
+          {formatDate(recording.startTime)} ·{" "}
+          {recording.duration ? formatDuration(recording.duration) : "—"} ·{" "}
+          {recording.actionCount} actions
+        </div>
+      </div>
+      <div
+        className="flex flex-shrink-0 items-center gap-2"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <ShareButton matchId={recording.matchId} />
+        <RcLinkButton
+          variant="outline"
+          size="sm"
+          href={`/replay/${recording.matchId}`}
         >
-          <div className="px-3 py-2 text-right text-xs text-slate-400 space-y-0.5 pointer-events-none select-none">
-            <div>
-              <span className="uppercase tracking-wide text-slate-500 text-[10px]">Duration</span>{" "}
-              {recording.duration
-                ? formatDuration(recording.duration)
-                : "—"}
-            </div>
-            <div>
-              <span className="uppercase tracking-wide text-slate-500 text-[10px]">Actions</span>{" "}
-              {recording.actionCount}
-            </div>
-          </div>
-          <div className="w-px bg-slate-700/50 self-stretch" />
-          <ShareButton matchId={recording.matchId} />
-        </div>
+          Open
+        </RcLinkButton>
       </div>
     </div>
   );
@@ -278,171 +290,122 @@ export default function ReplayListPage() {
     (recording) => !recording.playerIds?.includes(currentPlayerId || "")
   );
 
+  const loadMoreButton = (
+    <RcButton
+      variant="outline"
+      onClick={loadMore}
+      disabled={loadingMore}
+      className="w-full"
+    >
+      {loadingMore ? "Loading..." : "Load More"}
+    </RcButton>
+  );
+
   return (
     <OnlinePageShell>
-      <div className="space-y-6 pt-2">
-        {/* Upload Replay Section */}
-        <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
-                Load Local Replay
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">
-                Upload a previously downloaded replay file to watch it locally
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".json"
-                onChange={handleFileUpload}
-                className="hidden"
-                id="replay-upload"
-              />
-              <label
-                htmlFor="replay-upload"
-                className="h-9 w-9 grid place-items-center bg-emerald-600 hover:bg-emerald-700 rounded-lg text-white transition-colors cursor-pointer"
-                title="Upload Replay"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path d="M12 8l6 6h-4v6h-4v-6H6l6-6zM4 4h16v2H4V4z" />
-                </svg>
-              </label>
-            </div>
-          </div>
-          {uploadError && (
-            <div className="mt-3 px-3 py-2 bg-red-500/20 border border-red-500/40 rounded-lg text-sm text-red-300">
-              {uploadError}
-            </div>
-          )}
-        </div>
+      <PageHeader
+        eyebrow="archive"
+        title="Replays"
+        description="Watch recorded matches, or upload a previously downloaded replay file to watch it locally."
+        actions={
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={handleFileUpload}
+              className="hidden"
+              id="replay-upload"
+            />
+            <label
+              htmlFor="replay-upload"
+              className={rcButtonVariants({ variant: "outline", size: "sm" })}
+              title="Upload Replay"
+            >
+              Load Local Replay
+            </label>
+          </>
+        }
+      />
 
-        {/* Filter Section */}
-        {currentPlayerId && (
-          <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-4">
-            <label className="flex items-center gap-3 cursor-pointer">
+      {uploadError && (
+        <div className="rc-alert" data-tone="danger">
+          {uploadError}
+        </div>
+      )}
+
+      {/* Filter Section */}
+      {currentPlayerId && (
+        <section className="rc-panel">
+          <div className="px-[18px] py-3.5">
+            <label className="rc-check">
               <input
                 type="checkbox"
                 checked={showOwnOnly}
                 onChange={(e) => {
                   setShowOwnOnly(e.target.checked);
                 }}
-                className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-emerald-600 focus:ring-emerald-500 focus:ring-offset-slate-950"
               />
-              <span className="text-sm text-slate-300">
-                Show only my matches
-              </span>
+              Show only my matches
             </label>
           </div>
-        )}
+        </section>
+      )}
 
-        {loading ? (
-          <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-5 text-center text-sm text-slate-300">
-            Loading recordings…
-          </div>
-        ) : recordings.length === 0 ? (
-          <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-8 text-center space-y-2">
-            <div className="text-base font-semibold text-slate-100">
-              No match recordings found.
-            </div>
-            <div className="text-sm text-slate-400">
-              Play some online matches to generate replays!
-            </div>
-          </div>
-        ) : showOwnOnly ? (
-          <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
-                Your Matches
-              </h2>
-              <span className="text-xs text-slate-400">
-                {recordings.length} replays
-              </span>
-            </div>
-            <div className="grid gap-3">
-              {recordings.map(renderReplayCard)}
-            </div>
-            {hasMore && (
-              <button
-                onClick={loadMore}
-                disabled={loadingMore}
-                className="w-full py-3 px-4 bg-slate-800/60 hover:bg-slate-800 disabled:bg-slate-800/40 border border-slate-700 rounded-lg text-sm text-slate-200 disabled:text-slate-500 transition-colors"
-              >
-                {loadingMore ? "Loading..." : "Load More"}
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {ownRecordings.length > 0 && (
-              <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
-                    Your Matches
-                  </h2>
-                  <span className="text-xs text-slate-400">
-                    {ownRecordings.length} replays
-                  </span>
-                </div>
-                <div className="grid gap-3">
-                  {ownRecordings.map(renderReplayCard)}
-                </div>
-              </div>
-            )}
+      {loading ? (
+        <div className="rc-hint py-6 text-center">loading recordings…</div>
+      ) : recordings.length === 0 ? (
+        <RcEmpty title="No match recordings found.">
+          play some online matches to generate replays
+        </RcEmpty>
+      ) : showOwnOnly ? (
+        <section className="rc-panel">
+          <PanelHeader
+            title="Your Matches"
+            meta={`${recordings.length} replays`}
+          />
+          <div>{recordings.map(renderReplayCard)}</div>
+          {hasMore && <div className="px-[18px] py-3.5">{loadMoreButton}</div>}
+        </section>
+      ) : (
+        <>
+          {ownRecordings.length > 0 && (
+            <section className="rc-panel">
+              <PanelHeader
+                title="Your Matches"
+                meta={`${ownRecordings.length} replays`}
+              />
+              <div>{ownRecordings.map(renderReplayCard)}</div>
+            </section>
+          )}
 
-            {otherRecordings.length > 0 && (
-              <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold uppercase tracking-wide text-slate-200">
-                    Other Matches
-                  </h2>
-                  <span className="text-xs text-slate-400">
-                    {otherRecordings.length} replays
-                  </span>
-                </div>
-                <div className="grid gap-3">
-                  {otherRecordings.map(renderReplayCard)}
-                </div>
-              </div>
-            )}
+          {otherRecordings.length > 0 && (
+            <section className="rc-panel">
+              <PanelHeader
+                title="Other Matches"
+                meta={`${otherRecordings.length} replays`}
+              />
+              <div>{otherRecordings.map(renderReplayCard)}</div>
+            </section>
+          )}
 
-            {cpuRecordings.length > 0 && (
-              <div className="rounded-xl bg-slate-950/60 ring-1 ring-amber-900/40 p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold uppercase tracking-wide text-amber-200">
-                    vs CPU
-                  </h2>
-                  <span className="text-xs text-slate-400">
-                    {cpuRecordings.length} replays
-                  </span>
-                </div>
-                <div className="grid gap-3">
-                  {cpuRecordings.map(renderReplayCard)}
-                </div>
-              </div>
-            )}
+          {cpuRecordings.length > 0 && (
+            <section className="rc-panel">
+              <PanelHeader
+                title="vs CPU"
+                meta={`${cpuRecordings.length} replays`}
+              />
+              <div>{cpuRecordings.map(renderReplayCard)}</div>
+            </section>
+          )}
 
-            {hasMore && (
-              <div className="rounded-xl bg-slate-950/60 ring-1 ring-slate-900/70 p-4">
-                <button
-                  onClick={loadMore}
-                  disabled={loadingMore}
-                  className="w-full py-3 px-4 bg-slate-800/60 hover:bg-slate-800 disabled:bg-slate-800/40 border border-slate-700 rounded-lg text-sm text-slate-200 disabled:text-slate-500 transition-colors"
-                >
-                  {loadingMore ? "Loading..." : "Load More"}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+          {hasMore && (
+            <section className="rc-panel">
+              <div className="px-[18px] py-3.5">{loadMoreButton}</div>
+            </section>
+          )}
+        </>
+      )}
     </OnlinePageShell>
   );
 }

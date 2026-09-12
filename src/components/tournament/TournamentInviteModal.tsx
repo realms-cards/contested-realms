@@ -4,7 +4,9 @@ import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { useState, useEffect, useRef } from "react";
 import { useOnline } from "@/app/online/online-context";
-import { Modal } from "@/components/ui/Modal";
+import { Badge } from "@/components/ui/badge";
+import { RcButton } from "@/components/ui/rc-button";
+import { RcDialog } from "@/components/ui/rc-dialog";
 
 interface Player {
   id: string;
@@ -194,24 +196,19 @@ export default function TournamentInviteModal({
   if (!isOpen) return null;
 
   return (
-    <Modal onClose={onClose}>
-      <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-white">Invite Players</h2>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-white text-2xl leading-none"
-          >
-            ×
-          </button>
-        </div>
-
-        <p className="text-slate-400 text-sm mb-4">
+    <RcDialog
+      title="Invite Players"
+      eyebrow="tournament"
+      onClose={onClose}
+      size="sm"
+    >
+      <div className="flex max-h-[70vh] flex-col">
+        <p className="m-0 text-sm text-rc-fg-muted">
           Invite players to {tournamentName}
         </p>
 
         {/* Search */}
-        <div className="mb-4 relative">
+        <div className="relative mt-4">
           <input
             type="search"
             name="q"
@@ -227,10 +224,10 @@ export default function TournamentInviteModal({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search all players by name…"
-            className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-8"
+            className="rc-input h-10 w-full pr-8"
           />
           {loadingSearch && (
-            <span className="absolute right-3 top-2.5 text-slate-400 text-xs">
+            <span className="absolute right-3 top-3 font-rc-mono text-xs text-rc-fg-dim">
               …
             </span>
           )}
@@ -238,38 +235,34 @@ export default function TournamentInviteModal({
 
         {/* Error/Success Messages */}
         {error && (
-          <div className="bg-red-900/50 border border-red-700 text-red-300 px-3 py-2 rounded text-sm mb-4">
+          <div className="rc-alert mt-4" data-tone="danger">
             {error}
           </div>
         )}
         {success && (
-          <div className="bg-green-900/50 border border-green-700 text-green-300 px-3 py-2 rounded text-sm mb-4">
+          <div className="rc-alert mt-4" data-tone="success">
             {success}
           </div>
         )}
 
         {/* Player List */}
-        <div className="flex-1 overflow-y-auto mb-4 space-y-1">
+        <div className="thin-scrollbar mt-4 flex-1 space-y-1 overflow-y-auto">
           {/* Friends section — always visible */}
           {!searchQuery && (
             <>
-              <div className="flex items-center gap-2 mb-1 px-1">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                  Friends
-                </span>
+              <div className="mb-1.5 flex items-center gap-2 px-1">
+                <span className="rc-eyebrow">Friends</span>
                 {selectedPlayers.size > 0 && (
-                  <span className="ml-auto text-xs text-blue-400">
+                  <span className="ml-auto font-rc-mono text-[11px] tracking-[0.1em] text-rc-accent-link">
                     {selectedPlayers.size} selected
                   </span>
                 )}
               </div>
               {loadingFriends ? (
-                <div className="text-center text-slate-400 py-4 text-sm">
-                  Loading friends…
-                </div>
+                <div className="rc-hint py-4 text-center">loading friends…</div>
               ) : friends.length === 0 ? (
-                <div className="text-center text-slate-500 py-4 text-sm">
-                  No friends yet — use search to find players
+                <div className="rc-hint py-4 text-center">
+                  no friends yet — use search to find players
                 </div>
               ) : (
                 friends.map((player) => (
@@ -288,12 +281,10 @@ export default function TournamentInviteModal({
           {/* Search results */}
           {searchQuery && (
             <>
-              <div className="flex items-center gap-2 mb-1 px-1">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                  Search results
-                </span>
+              <div className="mb-1.5 flex items-center gap-2 px-1">
+                <span className="rc-eyebrow">Search results</span>
                 {selectedPlayers.size > 0 && (
-                  <span className="ml-auto text-xs text-blue-400">
+                  <span className="ml-auto font-rc-mono text-[11px] tracking-[0.1em] text-rc-accent-link">
                     {selectedPlayers.size} selected
                   </span>
                 )}
@@ -301,9 +292,8 @@ export default function TournamentInviteModal({
 
               {/* Friends matching search first */}
               {friends
-                .filter(
-                  (f) =>
-                    f.name?.toLowerCase().includes(searchQuery.toLowerCase())
+                .filter((f) =>
+                  f.name?.toLowerCase().includes(searchQuery.toLowerCase()),
                 )
                 .map((player) => (
                   <PlayerRow
@@ -316,16 +306,13 @@ export default function TournamentInviteModal({
                 ))}
 
               {loadingSearch ? (
-                <div className="text-center text-slate-400 py-4 text-sm">
-                  Searching…
-                </div>
+                <div className="rc-hint py-4 text-center">searching…</div>
               ) : filteredSearchResults.length === 0 &&
-                friends.filter(
-                  (f) =>
-                    f.name?.toLowerCase().includes(searchQuery.toLowerCase())
+                friends.filter((f) =>
+                  f.name?.toLowerCase().includes(searchQuery.toLowerCase()),
                 ).length === 0 ? (
-                <div className="text-center text-slate-400 py-4 text-sm">
-                  No players found for &ldquo;{searchQuery}&rdquo;
+                <div className="rc-hint py-4 text-center">
+                  no players found for &ldquo;{searchQuery}&rdquo;
                 </div>
               ) : (
                 filteredSearchResults.map((player) => (
@@ -342,26 +329,27 @@ export default function TournamentInviteModal({
         </div>
 
         {/* Actions */}
-        <div className="flex space-x-3 pt-4 border-t border-slate-700">
-          <button
+        <div className="mt-5 flex gap-2 border-t border-rc-line/12 pt-4">
+          <RcButton
+            variant="outline"
+            className="flex-1"
             onClick={onClose}
-            className="flex-1 bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded font-medium transition-colors"
             disabled={sending}
           >
             Cancel
-          </button>
-          <button
+          </RcButton>
+          <RcButton
+            className="flex-1"
             onClick={handleSendInvites}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={sending || selectedPlayers.size === 0}
           >
             {sending
               ? "Sending…"
               : `Invite${selectedPlayers.size > 0 ? ` (${selectedPlayers.size})` : ""}`}
-          </button>
+          </RcButton>
         </div>
       </div>
-    </Modal>
+    </RcDialog>
   );
 }
 
@@ -378,42 +366,42 @@ function PlayerRow({
 }) {
   return (
     <label
-      className={`flex items-center gap-3 p-3 rounded cursor-pointer transition-colors ${
+      className={`flex cursor-pointer items-center gap-3 rounded-rc-md border px-3 py-2 transition-colors ${
         selected
-          ? "bg-blue-900/40 border border-blue-600/50"
-          : "bg-slate-700 hover:bg-slate-650 border border-transparent"
+          ? "border-rc-accent/45 bg-rc-accent/10"
+          : "border-rc-line/14 bg-black/30 hover:bg-rc-accent/6"
       }`}
     >
       <input
         type="checkbox"
         checked={selected}
         onChange={() => onToggle(player.id)}
-        className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-2 focus:ring-blue-500"
+        className="h-4 w-4 accent-rc-accent"
       />
-      <div className="flex items-center gap-2 flex-1 min-w-0">
+      <div className="flex min-w-0 flex-1 items-center gap-2.5">
         {player.image ? (
           <Image
             src={player.image}
             alt={player.name || "User"}
             width={32}
             height={32}
-            className="w-8 h-8 rounded-full shrink-0"
+            className="h-8 w-8 shrink-0 rounded-rc-md border border-rc-line/18 object-cover"
             unoptimized
           />
         ) : (
-          <div className="w-8 h-8 rounded-full bg-slate-600 shrink-0 flex items-center justify-center text-slate-300 text-sm font-medium">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-rc-md border border-rc-line/18 bg-black/30 font-rc-mono text-[13px] text-rc-fg-muted">
             {player.name?.[0]?.toUpperCase() ?? "?"}
           </div>
         )}
-        <div className="flex flex-col min-w-0">
+        <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-1.5">
-            <span className="text-white text-sm truncate">
+            <span className="truncate font-rc-mono text-sm text-rc-fg-strong">
               {player.name || "Unknown User"}
             </span>
             {badge === "friend" && (
-              <span className="shrink-0 text-xs px-1.5 py-0.5 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded">
+              <Badge tone="ok" className="shrink-0">
                 friend
-              </span>
+              </Badge>
             )}
           </div>
         </div>

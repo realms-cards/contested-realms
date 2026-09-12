@@ -3,7 +3,9 @@
 import type { Finish } from "@prisma/client";
 import Image from "next/image";
 import { useState } from "react";
-import { Modal } from "@/components/ui/Modal";
+import { Badge } from "@/components/ui/badge";
+import { RcButton } from "@/components/ui/rc-button";
+import { RcDialog } from "@/components/ui/rc-dialog";
 import { getImageSlug } from "@/lib/utils/cardSlug";
 import CardPriceTag from "./CardPriceTag";
 
@@ -79,151 +81,143 @@ export default function AddCardModal({
   };
 
   return (
-    <Modal onClose={onClose}>
-      <div className="bg-gray-900 rounded-xl max-w-md w-full overflow-hidden">
-        {/* Header */}
-        <div className="p-4 border-b border-gray-800 flex items-center justify-between">
-          <h3 className="text-lg font-bold">Add to Collection</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
-            ✕
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="p-4 space-y-4">
-          {/* Card Preview */}
-          <div className="flex gap-4">
-            {(() => {
-              const isSite = card.meta?.type?.toLowerCase().includes("site");
-              return (
-                <div
-                  className={`relative rounded overflow-hidden flex-shrink-0 ${
-                    isSite ? "w-32 aspect-[3.5/2.5]" : "w-24 aspect-[2.5/3.5]"
-                  }`}
-                >
-                  <Image
-                    src={`/api/images/${imageSlug}`}
-                    alt={card.name}
-                    fill
-                    className={
-                      isSite ? "object-contain rotate-90" : "object-cover"
-                    }
-                    unoptimized
-                  />
-                </div>
-              );
-            })()}
-            <div>
-              <div className="font-bold text-lg">{card.name}</div>
-              <div className="text-gray-400 text-sm">
-                {card.variant?.setName || "Unknown Set"}
-              </div>
-              <div className="flex gap-3 mt-1">
-                <div className="flex items-center gap-1 text-xs text-gray-500">
-                  <span>Std:</span>
-                  <CardPriceTag
-                    cardId={card.id}
-                    cardName={card.name}
-                    variantId={card.variant?.id ?? null}
-                    finish="Standard"
-                  />
-                </div>
-                <div className="flex items-center gap-1 text-xs text-gray-500">
-                  <span>Foil:</span>
-                  <CardPriceTag
-                    cardId={card.id}
-                    cardName={card.name}
-                    variantId={card.variant?.id ?? null}
-                    finish="Foil"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Quantity */}
-          <div>
-            <label className="block text-sm text-gray-400 mb-2">Quantity</label>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                disabled={quantity <= 1}
-                className="w-10 h-10 bg-gray-800 hover:bg-gray-700 rounded-lg font-bold text-xl disabled:opacity-50"
-              >
-                −
-              </button>
-              <input
-                type="number"
-                min={1}
-                max={99}
-                value={quantity}
-                onChange={(e) =>
-                  setQuantity(
-                    Math.min(99, Math.max(1, parseInt(e.target.value) || 1))
-                  )
-                }
-                className="w-20 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-center"
-              />
-              <button
-                onClick={() => setQuantity((q) => Math.min(99, q + 1))}
-                disabled={quantity >= 99}
-                className="w-10 h-10 bg-gray-800 hover:bg-gray-700 rounded-lg font-bold text-xl disabled:opacity-50"
-              >
-                +
-              </button>
-            </div>
-          </div>
-
-          {/* Finish */}
-          <div>
-            <label className="block text-sm text-gray-400 mb-2">Finish</label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setFinish("Standard")}
-                className={`flex-1 py-2 rounded-lg border transition-colors ${
-                  finish === "Standard"
-                    ? "bg-blue-600 border-blue-500"
-                    : "bg-gray-800 border-gray-700 hover:border-gray-600"
-                }`}
-              >
-                Standard
-              </button>
-              <button
-                onClick={() => setFinish("Foil")}
-                className={`flex-1 py-2 rounded-lg border transition-colors ${
-                  finish === "Foil"
-                    ? "bg-yellow-600 border-yellow-500"
-                    : "bg-gray-800 border-gray-700 hover:border-gray-600"
-                }`}
-              >
-                ✨ Foil
-              </button>
-            </div>
-          </div>
-
-          {/* Error */}
-          {error && <div className="text-red-400 text-sm">{error}</div>}
-        </div>
-
-        {/* Footer */}
-        <div className="p-4 border-t border-gray-800 flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
-          >
+    <RcDialog
+      title="Add to Collection"
+      eyebrow="collection"
+      onClose={onClose}
+      size="sm"
+      actions={
+        <>
+          <RcButton variant="outline" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            onClick={handleAdd}
-            disabled={saving}
-            className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors disabled:opacity-50"
-          >
+          </RcButton>
+          <RcButton onClick={handleAdd} disabled={saving}>
             {saving
               ? "Adding..."
               : `Add ${quantity} Card${quantity > 1 ? "s" : ""}`}
-          </button>
+          </RcButton>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {/* Card Preview */}
+        <div className="flex gap-4">
+          {(() => {
+            const isSite = card.meta?.type?.toLowerCase().includes("site");
+            return (
+              <div
+                className={`relative flex-shrink-0 overflow-hidden rounded-rc-sm ${
+                  isSite ? "w-32 aspect-[3.5/2.5]" : "w-24 aspect-[2.5/3.5]"
+                }`}
+              >
+                <Image
+                  src={`/api/images/${imageSlug}`}
+                  alt={card.name}
+                  fill
+                  className={
+                    isSite ? "object-contain rotate-90" : "object-cover"
+                  }
+                  unoptimized
+                />
+              </div>
+            );
+          })()}
+          <div className="min-w-0">
+            <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+              {card.name}
+            </div>
+            <div className="mt-1.5">
+              <Badge>{card.variant?.setName || "Unknown Set"}</Badge>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-3">
+              <div className="flex items-center gap-1 font-rc-mono text-[11px] tracking-[0.1em] text-rc-fg-subtle">
+                <span>Std:</span>
+                <CardPriceTag
+                  cardId={card.id}
+                  cardName={card.name}
+                  variantId={card.variant?.id ?? null}
+                  finish="Standard"
+                />
+              </div>
+              <div className="flex items-center gap-1 font-rc-mono text-[11px] tracking-[0.1em] text-rc-fg-subtle">
+                <span>Foil:</span>
+                <CardPriceTag
+                  cardId={card.id}
+                  cardName={card.name}
+                  variantId={card.variant?.id ?? null}
+                  finish="Foil"
+                />
+              </div>
+            </div>
+          </div>
         </div>
+
+        {/* Quantity */}
+        <div>
+          <div className="rc-eyebrow mb-2">Quantity</div>
+          <div className="flex items-center gap-3">
+            <RcButton
+              variant="outline"
+              size="icon"
+              aria-label="Decrease quantity"
+              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+              disabled={quantity <= 1}
+            >
+              −
+            </RcButton>
+            <input
+              type="number"
+              min={1}
+              max={99}
+              value={quantity}
+              onChange={(e) =>
+                setQuantity(
+                  Math.min(99, Math.max(1, parseInt(e.target.value) || 1))
+                )
+              }
+              aria-label="Quantity"
+              className="rc-input h-[38px] w-20 text-center"
+            />
+            <RcButton
+              variant="outline"
+              size="icon"
+              aria-label="Increase quantity"
+              onClick={() => setQuantity((q) => Math.min(99, q + 1))}
+              disabled={quantity >= 99}
+            >
+              +
+            </RcButton>
+          </div>
+        </div>
+
+        {/* Finish */}
+        <div>
+          <div className="rc-eyebrow mb-2">Finish</div>
+          <div className="rc-segment">
+            <button
+              type="button"
+              aria-pressed={finish === "Standard"}
+              onClick={() => setFinish("Standard")}
+            >
+              Standard
+            </button>
+            <button
+              type="button"
+              aria-pressed={finish === "Foil"}
+              onClick={() => setFinish("Foil")}
+            >
+              Foil
+            </button>
+          </div>
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="rc-alert" data-tone="danger">
+            {error}
+          </div>
+        )}
       </div>
-    </Modal>
+    </RcDialog>
   );
 }

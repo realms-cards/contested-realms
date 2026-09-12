@@ -68,7 +68,7 @@ export default function ManualOverlay({
         elements.push(
           <ul
             key={`list-${elements.length}`}
-            className="list-disc list-inside mb-3 space-y-1"
+            className="mb-3 list-outside list-disc space-y-1 pl-5 marker:text-rc-accent"
           >
             {listItems}
           </ul>
@@ -93,7 +93,7 @@ export default function ManualOverlay({
             href={match[2]}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline text-blue-400 hover:text-blue-300"
+            className="rc-link underline"
           >
             {match[1]}
           </a>
@@ -115,7 +115,7 @@ export default function ManualOverlay({
             return (
               <code
                 key={i}
-                className="bg-slate-700/60 px-1.5 py-0.5 rounded text-amber-300 font-mono text-xs"
+                className="rounded-rc-sm border border-rc-line/7 bg-rc-line/6 px-1.5 py-0.5 font-rc-mono text-xs text-rc-accent-link"
               >
                 {part.slice(1, -1)}
               </code>
@@ -140,7 +140,7 @@ export default function ManualOverlay({
       // Horizontal rule
       if (/^---+$/.test(trimmed)) {
         flushList();
-        elements.push(<hr key={idx} className="my-4 border-slate-600" />);
+        elements.push(<hr key={idx} className="my-5 border-0 border-t border-rc-line/14" />);
         return;
       }
 
@@ -148,7 +148,7 @@ export default function ManualOverlay({
       if (trimmed.startsWith("# ")) {
         flushList();
         elements.push(
-          <h1 key={idx} className="text-2xl font-bold mt-4 mb-2">
+          <h1 key={idx} className="mb-2 mt-6 font-rc-display text-[30px] leading-tight text-rc-fg-strong">
             {parseInline(trimmed.slice(2))}
           </h1>
         );
@@ -157,7 +157,7 @@ export default function ManualOverlay({
       if (trimmed.startsWith("## ")) {
         flushList();
         elements.push(
-          <h2 key={idx} className="text-xl font-semibold mt-4 mb-2">
+          <h2 key={idx} className="mb-2 mt-6 font-rc-display text-[24px] leading-tight text-rc-fg-strong">
             {parseInline(trimmed.slice(3))}
           </h2>
         );
@@ -166,7 +166,7 @@ export default function ManualOverlay({
       if (trimmed.startsWith("### ")) {
         flushList();
         elements.push(
-          <h3 key={idx} className="text-lg font-semibold mt-3 mb-1">
+          <h3 key={idx} className="mb-1 mt-4 font-rc-display text-[20px] leading-tight text-rc-fg-strong">
             {parseInline(trimmed.slice(4))}
           </h3>
         );
@@ -255,43 +255,43 @@ export default function ManualOverlay({
         createPortal(
           <div
             id={overlayId}
-            className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm grid justify-items-center p-4 min-h-[100svh]"
+            className="fixed inset-0 z-[9999] grid min-h-[100svh] justify-items-center bg-[rgba(6,10,20,0.82)] p-4 backdrop-blur-[4px]"
             onMouseDown={() => setOpen(false)}
           >
             <div
               role="dialog"
               aria-modal="true"
               aria-labelledby={labelId}
-              className="relative place-self-center w-full max-w-2xl bg-slate-900/95 text-white rounded-xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col"
+              className="rc-panel relative flex w-full max-w-2xl flex-col overflow-hidden place-self-center shadow-[0_18px_40px_rgba(0,0,0,0.55),0_0_18px_rgba(243,207,106,0.2)]"
               onMouseDown={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60">
-                <h2 id={labelId} className="text-lg md:text-xl font-semibold">
+              <div className="flex items-center justify-between border-b border-rc-line/14 px-5 py-4">
+                <h2 id={labelId} className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
                   Simulator Manual
                 </h2>
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="ml-3 text-slate-300 hover:text-white rounded-md px-2 py-1 border border-transparent hover:border-slate-600"
+                  className="ml-3 cursor-pointer rounded-rc-md px-2 py-1 text-xl leading-none text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
                   aria-label="Close"
                 >
-                  ✕
+                  ×
                 </button>
               </div>
 
               {/* Body */}
-              <div className="px-5 py-4 max-h-[70svh] overflow-auto text-sm text-slate-200 prose-font">
-                {loading && <p className="text-slate-400">Loading...</p>}
+              <div className="px-5 py-4 max-h-[70svh] overflow-auto font-rc-sans text-[15px] leading-[1.65] text-rc-fg">
+                {loading && <p className="rc-hint">loading…</p>}
                 {!loading && content && renderMarkdown(content)}
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-700/60">
+              <div className="flex items-center justify-end gap-2 border-t border-rc-line/14 px-5 py-3">
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-200 hover:bg-slate-700/70"
+                  className="inline-flex h-9 cursor-pointer items-center rounded-rc-md border border-rc-line/28 px-3 font-rc-sans text-sm text-rc-fg transition-colors hover:border-rc-accent hover:bg-rc-accent/8"
                 >
                   Close
                 </button>

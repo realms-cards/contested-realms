@@ -88,7 +88,7 @@ export default function PatreonMarquee() {
   grandmasters.forEach((patron, i) => {
     if (patronElements.length > 0) {
       patronElements.push(
-        <span key={`sep-gm-${i}`} className="text-slate-500">
+        <span key={`sep-gm-${i}`} className="text-rc-fg-dim">
           {" "}
           ·{" "}
         </span>
@@ -108,7 +108,7 @@ export default function PatreonMarquee() {
   apprentices.forEach((patron, i) => {
     if (patronElements.length > 0) {
       patronElements.push(
-        <span key={`sep-ap-${i}`} className="text-slate-500">
+        <span key={`sep-ap-${i}`} className="text-rc-fg-dim">
           {" "}
           ·{" "}
         </span>
@@ -127,7 +127,7 @@ export default function PatreonMarquee() {
 
   return (
     <div
-      className="h-7 overflow-x-hidden overflow-y-visible border-t border-blue-500/30"
+      className="h-7 overflow-x-hidden overflow-y-visible border-t border-rc-line/14"
       style={{ width: "100vw", marginLeft: "calc(-50vw + 50%)" }}
     >
       {phase === "thank-you" ? (
@@ -136,7 +136,7 @@ export default function PatreonMarquee() {
           className="h-7 flex items-center justify-center animate-thank-you-flash"
         >
           <span
-            className="text-sm font-medium text-blue-400"
+            className="font-rc-mono text-xs uppercase tracking-[0.18em] text-rc-accent-link"
             style={{ textShadow: PATRON_COLORS.apprentice.textShadow }}
           >
             Thank you to our Patrons
@@ -148,7 +148,7 @@ export default function PatreonMarquee() {
           className="h-7 flex items-center whitespace-nowrap animate-marquee"
           style={{ animationDuration: `${MARQUEE_DURATION / 1000}s` }}
         >
-          <span className="text-sm font-medium">{patronElements}</span>
+          <span className="font-rc-mono text-[13px]">{patronElements}</span>
         </div>
       )}
     </div>

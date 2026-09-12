@@ -15,7 +15,7 @@ import { SoatcLeagueCheckbox } from "@/components/online/SoatcLeagueBadge";
 import LobbyActionStrip from "@/components/online/lobby/LobbyActionStrip";
 import LobbyHero from "@/components/online/lobby/LobbyHero";
 import LobbyPageFooter from "@/components/online/lobby/LobbyPageFooter";
-import LobbyShell from "@/components/online/lobby/LobbyShell";
+import AppShell from "@/components/ui/AppShell";
 import CustomSelect from "@/components/ui/CustomSelect";
 import Modal from "@/components/ui/Modal";
 import { RcButton } from "@/components/ui/rc-button";
@@ -1453,7 +1453,7 @@ function LobbyPageContent({
   // removed startSealedMatch helper; start is confirmed via modal action
 
   return (
-    <LobbyShell onlineCount={players.length}>
+    <AppShell width="full" onlineCount={players.length}>
       <LobbyHero
         queueSize={matchmaking.queueSize ?? 0}
         estimatedWait={
@@ -3215,7 +3215,7 @@ function LobbyPageContent({
           </div>
         </div>
       )}
-    </LobbyShell>
+    </AppShell>
   );
 }
 

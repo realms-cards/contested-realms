@@ -174,12 +174,10 @@ export function CustomSelect({
       <button
         type="button"
         className={`
-          w-full flex items-center justify-between gap-1
-          bg-white/10 hover:bg-white/15
-          rounded px-2 py-2 sm:py-1 text-sm text-left
-          transition-colors duration-150
+          rc-select flex h-9 w-full items-center justify-between gap-2 text-left
+          hover:border-rc-line/40
           ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
-          ${isOpen ? "ring-1 ring-white/30" : ""}
+          ${isOpen ? "border-rc-accent-ring shadow-[0_0_0_1px_#f3cf6a]" : ""}
         `}
         onClick={() => !disabled && setIsOpen((prev) => !prev)}
         disabled={disabled}
@@ -188,7 +186,7 @@ export function CustomSelect({
       >
         <span className="truncate">{displayLabel}</span>
         <ChevronDown
-          className={`w-3.5 h-3.5 flex-shrink-0 transition-transform duration-150 ${
+          className={`h-3.5 w-3.5 flex-shrink-0 text-rc-fg-subtle transition-transform duration-150 ${
             isOpen ? "rotate-180" : ""
           }`}
         />
@@ -201,11 +199,9 @@ export function CustomSelect({
           <div
             ref={listRef}
             className="
-              fixed z-[9999]
-              bg-zinc-900 border border-white/20
-              rounded-md shadow-lg
-              max-h-48 overflow-y-auto
-              py-1
+              thin-scrollbar fixed z-[9999] max-h-48 overflow-y-auto
+              rounded-rc-md border border-rc-line/22 bg-[#111a2e] py-1
+              shadow-rc-md
             "
             style={{
               top: dropdownPos.top,
@@ -218,11 +214,11 @@ export function CustomSelect({
               <div
                 key={option.value || "__none__"}
                 className={`
-                  px-2 py-1.5 text-sm cursor-pointer
+                  cursor-pointer px-3 py-1.5 font-rc-mono text-[13px]
                   transition-colors duration-100
-                  ${option.value === value ? "bg-white/20 text-white" : "text-white/90"}
-                  ${highlightedIndex === index ? "bg-white/15" : ""}
-                  hover:bg-white/15
+                  ${option.value === value ? "text-rc-accent-link" : "text-rc-fg"}
+                  ${highlightedIndex === index ? "bg-rc-accent/12 text-rc-fg-strong" : ""}
+                  hover:bg-rc-accent/12
                 `}
                 onClick={() => handleOptionClick(option.value)}
                 onMouseEnter={() => setHighlightedIndex(index)}

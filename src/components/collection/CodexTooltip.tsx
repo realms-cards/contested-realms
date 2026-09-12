@@ -46,8 +46,8 @@ function CodexTooltipInner({ cardName, className = "" }: CodexTooltipProps) {
 
   if (loading) {
     return (
-      <div className={`text-xs text-gray-500 ${className}`}>
-        <span className="animate-pulse">📜...</span>
+      <div className={`rc-hint ${className}`}>
+        <span className="animate-pulse">codex…</span>
       </div>
     );
   }
@@ -67,7 +67,7 @@ function CodexTooltipInner({ cardName, className = "" }: CodexTooltipProps) {
       .replace(/'/g, "&#039;");
     return escaped.replace(
       /\[\[([^\]]+)\]\]/g,
-      '<span class="text-amber-300 font-medium">$1</span>',
+      '<span class="text-rc-accent-link font-medium">$1</span>',
     );
   };
 
@@ -75,13 +75,11 @@ function CodexTooltipInner({ cardName, className = "" }: CodexTooltipProps) {
     <div className={`${className}`}>
       {/* Clickable Badge */}
       <button
+        type="button"
         onClick={() => setIsOpen(true)}
-        className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+        className="inline-flex cursor-pointer items-center gap-1 font-rc-mono text-[11px] tracking-[0.1em] text-rc-accent-link underline underline-offset-[3px] transition-colors hover:text-rc-accent-hover"
       >
-        <span>📜</span>
-        <span className="underline">
-          {entries.length} {entries.length === 1 ? "entry" : "entries"}
-        </span>
+        {entries.length} {entries.length === 1 ? "entry" : "entries"}
       </button>
 
       {/* Full overlay modal */}
@@ -89,38 +87,44 @@ function CodexTooltipInner({ cardName, className = "" }: CodexTooltipProps) {
         typeof document !== "undefined" &&
         createPortal(
           <div
-            className="fixed inset-0 bg-black/90 flex items-center justify-center z-[9999] p-4"
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-[rgba(6,10,20,0.82)] p-4 backdrop-blur-[4px]"
             onClick={() => setIsOpen(false)}
           >
             <div
-              className="bg-gray-900 rounded-xl max-w-2xl w-full max-h-[85vh] overflow-hidden shadow-2xl border border-amber-600/30 flex flex-col"
+              className="rc-panel flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="p-4 border-b border-gray-800 flex items-center justify-between flex-shrink-0">
-                <h3 className="text-lg font-bold text-amber-400">
-                  📜 Codex: {cardName}
-                </h3>
+              <div className="rc-panel-head flex-shrink-0">
+                <div className="min-w-0">
+                  <div className="rc-eyebrow mb-1">codex</div>
+                  <h3 className="m-0 truncate font-rc-display text-[26px] leading-none text-rc-fg-strong">
+                    {cardName}
+                  </h3>
+                </div>
+                <div className="flex-1" />
                 <button
+                  type="button"
                   onClick={() => setIsOpen(false)}
-                  className="text-gray-400 hover:text-white text-xl"
+                  aria-label="Close"
+                  className="cursor-pointer rounded-rc-md px-2 py-0.5 text-xl leading-none text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
                 >
-                  ✕
+                  ×
                 </button>
               </div>
 
               {/* Content - scrollable */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              <div className="thin-scrollbar flex-1 space-y-4 overflow-y-auto px-[18px] py-3.5">
                 {entries.map((entry) => (
                   <div
                     key={entry.id}
-                    className="bg-gray-800/50 rounded-lg p-4 border border-gray-700"
+                    className="rounded-rc-md border border-rc-line/12 bg-black/30 p-4"
                   >
-                    <h4 className="font-bold text-amber-300 text-lg mb-3 border-b border-amber-800/30 pb-2">
+                    <h4 className="mb-3 border-b border-rc-line/12 pb-2 font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
                       {entry.title}
                     </h4>
                     <div
-                      className="text-gray-200 text-sm whitespace-pre-wrap leading-relaxed"
+                      className="whitespace-pre-wrap font-rc-sans text-sm leading-relaxed text-rc-fg"
                       dangerouslySetInnerHTML={{
                         __html: formatContent(entry.content),
                       }}
@@ -130,9 +134,9 @@ function CodexTooltipInner({ cardName, className = "" }: CodexTooltipProps) {
               </div>
 
               {/* Footer */}
-              <div className="p-3 border-t border-gray-800 flex-shrink-0 text-center">
-                <span className="text-xs text-gray-500">
-                  Click outside or press ✕ to close
+              <div className="flex-shrink-0 border-t border-rc-line/12 px-[18px] py-3 text-center">
+                <span className="rc-hint">
+                  click outside or press × to close
                 </span>
               </div>
             </div>

@@ -101,19 +101,19 @@ export default function LockPage() {
       </section>
 
       <style jsx>{`
-        .lock-root { min-height: 100svh; display: grid; place-items: center; position: relative; overflow: hidden; background: #0b0f1d; color: #e9ecf1; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-        .ascii { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 95vw; max-height: 95vh; overflow: hidden; z-index: 0; opacity: 0.08; pointer-events: none; user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; white-space: pre; line-height: 0.9; }
-        .card { position: relative; z-index: 1; width: 92vw; max-width: 420px; padding: 20px; border-radius: 10px; background: rgba(255,255,255,0.06); backdrop-filter: blur(6px) saturate(110%); box-shadow: 0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08); }
+        .lock-root { min-height: 100svh; display: grid; place-items: center; position: relative; overflow: hidden; background: radial-gradient(ellipse 70% 40% at 50% -5%, rgba(212,169,74,0.14), transparent 60%), linear-gradient(180deg, #0c1222 0%, #070a14 100%); color: #ece7d7; font-family: var(--font-rc-mono); }
+        .ascii { color: #5f5c50; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 95vw; max-height: 95vh; overflow: hidden; z-index: 0; opacity: 0.08; pointer-events: none; user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; white-space: pre; line-height: 0.9; }
+        .card { position: relative; z-index: 1; width: 92vw; max-width: 420px; padding: 20px; border-radius: 10px; border: 1px solid rgba(236,231,215,0.18); background: rgba(9,13,25,0.82); backdrop-filter: blur(6px); box-shadow: 0 6px 14px rgba(0,0,0,0.40), inset 0 1px 0 rgba(251,246,232,0.04), inset 0 -1px 0 rgba(0,0,0,0.35); }
 
         .form { display: grid; gap: 10px; }
         .field { display: grid; }
-        .field input { width: 100%; padding: 12px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.18); background: rgba(18,18,18,0.5); color: #e9ecf1; outline: none; font-family: inherit; }
-        .field input::placeholder { color: rgba(233,236,241,0.45); }
-        .field input:focus { border-color: rgba(255,255,255,0.35); box-shadow: 0 0 0 3px rgba(255,255,255,0.12); }
+        .field input { width: 100%; padding: 12px 14px; border-radius: 6px; border: 1px solid rgba(236,231,215,0.22); background: rgba(0,0,0,0.45); color: #ece7d7; outline: none; font-family: inherit; font-size: 13px; }
+        .field input::placeholder { color: #5f5c50; }
+        .field input:focus { border-color: #f3cf6a; box-shadow: 0 0 0 1px #f3cf6a; }
 
-        .btn { margin-top: 6px; width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.18); background: #d9d9d9; color: #111; font-weight: 700; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,0.25); font-family: inherit; }
+        .btn { margin-top: 6px; width: 100%; padding: 12px 16px; border-radius: 6px; border: 1px solid #b8913b; background: linear-gradient(180deg, #e8bf5c, #d4a94a); color: #1a1407; font-weight: 600; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 1px 2px rgba(0,0,0,0.45); font-family: var(--font-rc-sans); }
         .btn:disabled { opacity: 0.6; cursor: default; }
-        .err { margin: 4px 2px 0; color: #bdbdbd; font-size: 12px; }
+        .err { margin: 4px 2px 0; color: #b9543d; font-size: 12px; }
       `}</style>
     </main>
   );

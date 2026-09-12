@@ -78,13 +78,13 @@ export default function OfflineMulliganScreen({
   };
 
   return (
-    <div className="w-full max-w-4xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-6">
+    <div className="w-full max-w-4xl rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-rc-fg shadow-rc-panel">
       <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="text-center sm:text-left">
-          <div className="text-lg font-semibold mb-1">Mulligan Phase</div>
-          <div className="text-sm opacity-80">
+          <div className="mb-1 font-rc-display text-[28px] leading-none text-rc-fg-strong">Mulligan Phase</div>
+          <div className="font-rc-sans text-sm text-rc-fg-muted">
             Playing as:{" "}
-            <span className="font-medium text-blue-400">
+            <span className="font-rc-mono font-medium text-rc-info">
               {playerNames[myPlayerKey]}
             </span>
           </div>
@@ -93,11 +93,11 @@ export default function OfflineMulliganScreen({
           <div className="flex-shrink-0 flex flex-row gap-4 items-center sm:items-end">
             {myAvatar?.slug && (
               <div className="flex flex-col items-center sm:items-end">
-                <div className="text-[10px] uppercase tracking-wide opacity-70 mb-1">
+                <div className="mb-1 font-rc-mono text-[10px] uppercase tracking-[0.18em] text-rc-accent-link">
                   Your Avatar
                 </div>
                 <div
-                  className="relative aspect-[3/4] w-16 sm:w-20 md:w-24 rounded-lg overflow-hidden ring-1 ring-white/30 shadow-lg"
+                  className="relative aspect-[3/4] w-16 overflow-hidden rounded-rc-md shadow-rc-md ring-1 ring-rc-line/25 sm:w-20 md:w-24"
                   onMouseEnter={() => setPreviewCard(myAvatar)}
                   onMouseLeave={() => setPreviewCard(null)}
                 >
@@ -112,7 +112,7 @@ export default function OfflineMulliganScreen({
                 </div>
                 {myChampion &&
                   myAvatar.name?.toLowerCase() === "dragonlord" && (
-                    <div className="mt-1 px-2 py-0.5 bg-amber-900/40 rounded text-[10px] text-amber-200 ring-1 ring-amber-500/30">
+                    <div className="rc-alert mt-1 px-2 py-0.5 text-[10px]" data-tone="warning">
                       ⚔ {myChampion.name}
                     </div>
                   )}
@@ -120,11 +120,11 @@ export default function OfflineMulliganScreen({
             )}
             {opponentAvatar?.slug && (
               <div className="flex flex-col items-center sm:items-end">
-                <div className="text-[10px] uppercase tracking-wide opacity-70 mb-1">
+                <div className="mb-1 font-rc-mono text-[10px] uppercase tracking-[0.18em] text-rc-accent-link">
                   Opponent Avatar
                 </div>
                 <div
-                  className="relative aspect-[3/4] w-16 sm:w-20 md:w-24 rounded-lg overflow-hidden ring-1 ring-white/30 shadow-lg"
+                  className="relative aspect-[3/4] w-16 overflow-hidden rounded-rc-md shadow-rc-md ring-1 ring-rc-line/25 sm:w-20 md:w-24"
                   onMouseEnter={() => setPreviewCard(opponentAvatar)}
                   onMouseLeave={() => setPreviewCard(null)}
                 >
@@ -139,7 +139,7 @@ export default function OfflineMulliganScreen({
                 </div>
                 {opponentChampion &&
                   opponentAvatar.name?.toLowerCase() === "dragonlord" && (
-                    <div className="mt-1 px-2 py-0.5 bg-amber-900/40 rounded text-[10px] text-amber-200 ring-1 ring-amber-500/30">
+                    <div className="rc-alert mt-1 px-2 py-0.5 text-[10px]" data-tone="warning">
                       ⚔ {opponentChampion.name}
                     </div>
                   )}
@@ -148,21 +148,21 @@ export default function OfflineMulliganScreen({
           </div>
         )}
 
-        <div className="text-xs opacity-60 mt-1">
+        <div className="rc-hint mt-1">
           Select up to 3 cards to put back. You&apos;ll draw the same number
           from the appropriate pile.
         </div>
       </div>
 
-      <div className="bg-black/30 rounded-xl p-4 ring-1 ring-white/10">
+      <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-4">
         <div className="flex items-center justify-between mb-2">
-          <div className="font-semibold">Your Hand</div>
-          <div className="text-xs opacity-80">
+          <div className="font-rc-display text-[22px] leading-none text-rc-fg-strong">Your Hand</div>
+          <div className="font-rc-mono text-xs tabular-nums text-rc-fg-muted">
             Mulligans remaining: {myMulligans}
           </div>
         </div>
 
-        <div className="text-xs opacity-80 mb-3">
+        <div className="mb-3 font-rc-sans text-xs text-rc-fg-muted">
           {!done && myMulligans > 0
             ? "Click cards to select for mulligan (max 3)."
             : myMulligans === 0
@@ -185,7 +185,7 @@ export default function OfflineMulliganScreen({
                     !done && myMulligans > 0
                       ? "hover:scale-105 hover:-translate-y-4"
                       : ""
-                  } ${isSelected ? "ring-2 ring-red-400 -translate-y-2" : ""} ${
+                  } ${isSelected ? "ring-2 ring-rc-danger -translate-y-2" : ""} ${
                     done || myMulligans === 0
                       ? "cursor-default"
                       : "cursor-pointer"
@@ -197,7 +197,7 @@ export default function OfflineMulliganScreen({
                   <div
                     className={`relative ${
                       isSite ? "aspect-[4/3] w-32" : "aspect-[3/4] w-24"
-                    } rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
+                    } rounded-rc-md overflow-hidden ring-1 ring-rc-line/18 shadow-rc-md ${
                       isSelected ? "opacity-70" : ""
                     } ${done || myMulligans === 0 ? "opacity-60" : ""}`}
                   >
@@ -210,8 +210,8 @@ export default function OfflineMulliganScreen({
                       unoptimized
                     />
                     {isSelected && (
-                      <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center">
-                        <div className="text-white text-xs font-bold bg-red-600 rounded px-2 py-1">
+                      <div className="absolute inset-0 flex items-center justify-center bg-rc-danger/30">
+                        <div className="rounded-rc-sm bg-rc-danger px-2 py-1 font-rc-mono text-[10px] font-semibold tracking-[0.14em] text-rc-fg-strong">
                           MULLIGAN
                         </div>
                       </div>
@@ -222,11 +222,11 @@ export default function OfflineMulliganScreen({
             })}
           </div>
         ) : (
-          <div className="text-center py-8 text-gray-400">No cards in hand</div>
+          <div className="rc-hint py-8 text-center">No cards in hand</div>
         )}
 
         <div className="flex justify-between items-center mt-4">
-          <div className="text-xs opacity-70">
+          <div className="rc-hint">
             {selected.length > 0 &&
               `${selected.length} card(s) selected for mulligan`}
           </div>
@@ -234,7 +234,7 @@ export default function OfflineMulliganScreen({
           <div className="flex gap-2">
             {!done && myMulligans > 0 && (
               <button
-                className="bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed rounded px-4 py-2 text-sm font-medium transition-colors"
+                className="cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent px-4 py-2 font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px disabled:pointer-events-none disabled:opacity-50"
                 onClick={handleMulligan}
               >
                 {selected.length === 0
@@ -245,11 +245,11 @@ export default function OfflineMulliganScreen({
 
             {(done || myMulligans === 0) && (
               <button
-                className={`rounded px-4 py-2 text-sm font-medium transition-colors ${
+                className={
                   submitted
-                    ? "bg-green-700/60 cursor-not-allowed"
-                    : "bg-green-600 hover:bg-green-700"
-                }`}
+                    ? "cursor-not-allowed rounded-rc-md border border-rc-line/22 bg-black/35 px-4 py-2 font-rc-mono text-xs tracking-[0.08em] text-rc-fg-muted"
+                    : "cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent px-4 py-2 font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px disabled:pointer-events-none disabled:opacity-50"
+                }
                 onClick={handleFinalize}
                 disabled={submitted}
                 title={
@@ -265,7 +265,7 @@ export default function OfflineMulliganScreen({
         </div>
       </div>
 
-      <div className="mt-4 text-xs opacity-60 text-center">
+      <div className="rc-hint mt-4 text-center">
         {submitted
           ? "You are ready. Waiting for other players to finish mulligans…"
           : "Other players are making their mulligan decisions..."}

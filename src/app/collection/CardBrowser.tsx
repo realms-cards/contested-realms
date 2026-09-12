@@ -3,6 +3,9 @@
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { Badge } from "@/components/ui/badge";
+import { RcButton } from "@/components/ui/rc-button";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import { getImageSlug } from "@/lib/utils/cardSlug";
 import AddCardModal from "./AddCardModal";
 
@@ -98,6 +101,9 @@ const SETS = [
   "Gothic",
   "Promotional",
 ] as const;
+
+const SET_PILL_BASE =
+  "cursor-pointer rounded-full border px-3 py-[5px] font-rc-mono text-[11px] uppercase tracking-[0.14em] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring";
 
 interface CardBrowserProps {
   onCardAdded?: () => void;
@@ -273,44 +279,45 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
     onCardAdded?.();
   };
 
+  const hasActiveFilters =
+    selectedSet !== "All Sets" ||
+    selectedType !== "All Types" ||
+    selectedSubtype !== "All Subtypes";
+
   return (
     <div className="space-y-4">
       {/* Search Input */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <input
           type="text"
           placeholder="Search cards by name..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
+          className="rc-input h-11 min-w-[240px] flex-1 text-sm"
           autoFocus
         />
-        <button
+        <RcButton
+          variant="outline"
+          size="lg"
+          aria-pressed={showFilters}
           onClick={() => setShowFilters(!showFilters)}
-          className={`px-4 py-2 rounded-lg border transition-colors ${
-            showFilters ||
-            selectedSet !== "All Sets" ||
-            selectedType !== "All Types" ||
-            selectedSubtype !== "All Subtypes"
-              ? "bg-blue-600 border-blue-500 text-white"
-              : "bg-gray-800 border-gray-700 hover:bg-gray-700"
-          }`}
         >
           Filters
-          {(selectedSet !== "All Sets" ||
-            selectedType !== "All Types" ||
-            selectedSubtype !== "All Subtypes") && (
-            <span className="ml-1 text-xs">●</span>
+          {hasActiveFilters && (
+            <span
+              aria-hidden="true"
+              className="h-1.5 w-1.5 rounded-full bg-rc-accent"
+            />
           )}
-        </button>
+        </RcButton>
       </div>
 
       {/* Filter Controls */}
       {showFilters && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+        <div className="grid grid-cols-1 gap-3 rounded-rc-md border border-rc-line/18 bg-black/30 p-4 sm:grid-cols-3">
           {/* Set Filter */}
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Set</label>
+            <div className="rc-eyebrow mb-1.5">Set</div>
             <CustomSelect
               value={selectedSet}
               onChange={(v) => setSelectedSet(v)}
@@ -324,7 +331,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
 
           {/* Type Filter */}
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Type</label>
+            <div className="rc-eyebrow mb-1.5">Type</div>
             <CustomSelect
               value={selectedType}
               onChange={(v) => setSelectedType(v)}
@@ -338,9 +345,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
 
           {/* Subtype Filter */}
           <div>
-            <label className="block text-sm text-gray-400 mb-1">
-              Subtype/Keyword
-            </label>
+            <div className="rc-eyebrow mb-1.5">Subtype/Keyword</div>
             <CustomSelect
               value={selectedSubtype}
               onChange={(v) => setSelectedSubtype(v)}
@@ -353,65 +358,70 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
           </div>
 
           {/* Clear Filters */}
-          {(selectedSet !== "All Sets" ||
-            selectedType !== "All Types" ||
-            selectedSubtype !== "All Subtypes") && (
-            <button
-              onClick={() => {
-                setSelectedSet("All Sets");
-                setSelectedType("All Types");
-                setSelectedSubtype("All Subtypes");
-              }}
-              className="sm:col-span-3 text-sm text-blue-400 hover:text-blue-300 underline"
-            >
-              Clear all filters
-            </button>
+          {hasActiveFilters && (
+            <div className="sm:col-span-3">
+              <RcButton
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectedSet("All Sets");
+                  setSelectedType("All Types");
+                  setSelectedSubtype("All Subtypes");
+                }}
+              >
+                Clear all filters
+              </RcButton>
+            </div>
           )}
         </div>
       )}
 
       {/* Quick Set Buttons + Zoom Slider */}
       <div className="flex flex-wrap items-center gap-4">
-        <div className="flex flex-wrap gap-2 flex-1">
-          <span className="text-sm text-gray-400 py-1">Browse set:</span>
-          {SETS.slice(1).map((set) => (
-            <button
-              key={set}
-              onClick={() => {
-                setSelectedSet(set);
-                setShowFilters(true);
-              }}
-              className={`px-3 py-1 text-sm rounded-full border transition-colors ${
-                selectedSet === set
-                  ? "bg-blue-600 border-blue-500 text-white"
-                  : "bg-gray-800 border-gray-600 hover:bg-gray-700"
-              }`}
-            >
-              {set}
-            </button>
-          ))}
+        <div className="flex flex-1 flex-wrap items-center gap-2">
+          <span className="rc-hint">Browse set</span>
+          {SETS.slice(1).map((set) => {
+            const active = selectedSet === set;
+            return (
+              <button
+                key={set}
+                type="button"
+                aria-pressed={active}
+                onClick={() => {
+                  setSelectedSet(set);
+                  setShowFilters(true);
+                }}
+                className={`${SET_PILL_BASE} ${
+                  active
+                    ? "border-rc-accent-press bg-rc-accent text-rc-accent-fg"
+                    : "border-rc-line/22 bg-transparent text-rc-fg-muted hover:border-rc-accent hover:text-rc-accent-ring"
+                }`}
+              >
+                {set}
+              </button>
+            );
+          })}
         </div>
 
         {/* Zoom Slider */}
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-400">Size:</span>
+          <span className="rc-hint">Size</span>
           <input
             type="range"
             min="4"
             max="10"
             value={zoomLevel}
             onChange={(e) => setZoomLevel(Number(e.target.value))}
-            className="w-24 accent-blue-500"
+            aria-label="Card size"
+            className="h-1.5 w-24 cursor-pointer appearance-none rounded-full bg-black/45 accent-rc-accent"
           />
-          <span className="text-xs text-gray-500 w-4">{zoomLevel}</span>
+          <span className="rc-hint w-4 tabular-nums">{zoomLevel}</span>
         </div>
       </div>
 
       {/* Results */}
       {loading ? (
-        <div className="flex justify-center py-8">
-          <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full" />
-        </div>
+        <div className="rc-hint py-6 text-center">loading…</div>
       ) : results.length > 0 ? (
         <>
           <div
@@ -436,7 +446,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
               return (
                 <div
                   key={`${card.id}-${card.variant?.id || "base"}`}
-                  className={`relative group rounded-lg overflow-hidden bg-gray-800 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all ${
+                  className={`group relative cursor-pointer overflow-hidden rounded-rc-md border border-rc-line/18 bg-black/30 transition-colors hover:border-rc-accent ${
                     isSite ? "col-span-2" : ""
                   }`}
                   onClick={() => setSelectedCard(card)}
@@ -466,27 +476,30 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
 
                     {/* Owned Badge */}
                     {ownedQty > 0 && (
-                      <div className="absolute top-2 left-2 bg-green-600 text-white text-xs px-2 py-0.5 rounded z-10">
-                        Owned: {ownedQty}
-                      </div>
+                      <Badge tone="ok" className="absolute left-2 top-2 z-10">
+                        Owned {ownedQty}
+                      </Badge>
                     )}
                   </div>
 
                   {/* Card Info */}
-                  <div className="p-2">
-                    <div className="text-sm font-medium truncate">
+                  <div className="space-y-1.5 p-2">
+                    <div className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
                       {card.name || "Unknown Card"}
                     </div>
-                    <div className="text-xs text-gray-400">
-                      {card.variant?.setName || "Unknown Set"}
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge>{card.variant?.setName || "Unknown Set"}</Badge>
+                      {card.meta?.rarity && (
+                        <Badge tone="gold">{card.meta.rarity}</Badge>
+                      )}
                     </div>
                   </div>
 
                   {/* Hover Overlay */}
-                  <div className="absolute inset-0 bg-blue-600/0 group-hover:bg-blue-600/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                    <span className="bg-blue-600 px-3 py-1 rounded text-sm font-medium">
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-opacity group-hover:bg-black/55 group-hover:opacity-100">
+                    <RcButton size="sm" tabIndex={-1}>
                       + Add to Collection
-                    </span>
+                    </RcButton>
                   </div>
                 </div>
               );
@@ -495,30 +508,24 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
 
           {/* Show More Button */}
           {results.length > displayLimit && (
-            <div className="flex justify-center mt-6">
-              <button
+            <div className="mt-6 flex justify-center">
+              <RcButton
+                variant="outline"
                 onClick={() => setDisplayLimit((prev) => prev + 60)}
-                className="px-6 py-3 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-lg text-sm font-medium transition-colors"
               >
                 Show More ({results.length - displayLimit} remaining)
-              </button>
+              </RcButton>
             </div>
           )}
         </>
-      ) : query.trim() ||
-        selectedSet !== "All Sets" ||
-        selectedType !== "All Types" ||
-        selectedSubtype !== "All Subtypes" ? (
-        <div className="text-center py-8 text-gray-400">
-          No cards found matching your criteria
-        </div>
+      ) : query.trim() || hasActiveFilters ? (
+        <RcEmpty title="No cards found">
+          nothing matches your current criteria
+        </RcEmpty>
       ) : (
-        <div className="text-center py-8 text-gray-400">
-          <p>Start typing to search, or select a set/filter above to browse</p>
-          <p className="text-sm mt-2">
-            Tip: Select a set to browse all cards from that expansion
-          </p>
-        </div>
+        <RcEmpty title="Start typing to search">
+          or select a set/filter above to browse an expansion
+        </RcEmpty>
       )}
 
       {/* Add Card Modal */}

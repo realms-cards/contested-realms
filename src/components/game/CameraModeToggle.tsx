@@ -14,10 +14,10 @@ export default function CameraModeToggle({ disabled, className }: Props) {
   return (
     <button
       className={clsx(
-        "rounded-full px-3 py-1 disabled:opacity-40",
+        "cursor-pointer rounded-full px-3 py-1 font-rc-mono text-xs uppercase tracking-[0.14em] transition-colors disabled:opacity-50",
         cameraMode === "topdown"
-          ? "bg-indigo-500 text-white"
-          : "bg-white/15 hover:bg-white/25",
+          ? "bg-rc-accent text-rc-accent-fg"
+          : "border border-rc-line/22 bg-black/35 text-rc-fg-muted hover:border-rc-accent hover:text-rc-accent-ring",
         className
       )}
       onClick={() => toggleCameraMode()}

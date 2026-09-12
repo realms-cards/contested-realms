@@ -14,12 +14,15 @@ export default function AsciiBottomArt({
   className = "",
   maxVh = null,
   opacityClass = "text-white/10",
+  tint = true,
 }: {
   className?: string;
   /** Max height as percentage of viewport height */
   maxVh?: number | null;
   /** Tailwind color utility for the ASCII characters */
   opacityClass?: string;
+  /** Warm the cool ASCII white toward parchment/gold (design system v2) */
+  tint?: boolean;
 }) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
@@ -33,6 +36,9 @@ export default function AsciiBottomArt({
   const imgStyle: React.CSSProperties = {
     width: "100%",
     height: "auto",
+    filter: tint
+      ? "sepia(0.45) saturate(0.7) brightness(1.05) hue-rotate(-8deg)"
+      : undefined,
   };
 
   if (typeof maxVh === "number" && maxVh > 0) {

@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useOnline, type AvailablePlayer } from "@/app/online/online-context";
+import { PanelHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
+import { RcEmpty } from "@/components/ui/rc-empty";
 
 interface Registration {
   playerId: string;
@@ -50,7 +53,9 @@ export function OpenTournamentPlayerManager({
 
   const standingsMap = new Map(standings.map((s) => [s.playerId, s]));
   const activePlayers = registrations.filter((r) => r.seatStatus === "active");
-  const eliminatedPlayers = registrations.filter((r) => r.seatStatus === "vacant");
+  const eliminatedPlayers = registrations.filter(
+    (r) => r.seatStatus === "vacant",
+  );
   const registeredIds = new Set(registrations.map((r) => r.playerId));
 
   // Load online players when the panel is opened
@@ -117,145 +122,152 @@ export function OpenTournamentPlayerManager({
   };
 
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-slate-300">
-          Players ({activePlayers.length})
-        </h3>
+    <section className="rc-panel">
+      <PanelHeader
+        title="Players"
+        meta={`${activePlayers.length} ${
+          activePlayers.length === 1 ? "player" : "players"
+        }`}
+      >
         {isHost && isActive && (
-          <button
-            onClick={handleShowOnline}
-            className="text-xs text-blue-400 hover:text-blue-300"
-          >
+          <RcButton variant="outline" size="sm" onClick={handleShowOnline}>
             {showOnlinePlayers ? "Refresh" : "Show Online Players"}
-          </button>
+          </RcButton>
         )}
-      </div>
+      </PanelHeader>
 
-      {error && (
-        <div className="bg-red-900/50 border border-red-700 text-red-300 px-3 py-2 rounded text-xs mb-3">
-          {error}
-        </div>
-      )}
-
-      {/* Online Players List (host only) */}
-      {isHost && isActive && showOnlinePlayers && (
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-xs font-medium text-slate-400">
-              Online Players
-              {availablePlayersLoading && (
-                <span className="ml-1 text-slate-500">(loading...)</span>
-              )}
-            </h4>
-            <button
-              onClick={() => requestPlayers({ reset: true, sort: "alphabetical" })}
-              disabled={availablePlayersLoading}
-              className="text-xs text-slate-500 hover:text-slate-300 disabled:opacity-50"
-            >
-              Refresh
-            </button>
+      <div className="px-[18px] py-3.5">
+        {error && (
+          <div className="rc-alert mb-3" data-tone="danger">
+            {error}
           </div>
-          <div className="bg-slate-700 border border-slate-600 rounded max-h-48 overflow-y-auto">
-            {availablePlayers.length === 0 && !availablePlayersLoading && (
-              <div className="px-3 py-2 text-xs text-slate-500">
-                No online players found
-              </div>
-            )}
-            {availablePlayers.map((player) => (
-              <div
-                key={player.userId}
-                className="flex items-center justify-between px-3 py-2 hover:bg-slate-600 border-b border-slate-600 last:border-b-0"
+        )}
+
+        {/* Online Players List (host only) */}
+        {isHost && isActive && showOnlinePlayers && (
+          <div className="mb-4">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h4 className="rc-eyebrow m-0">
+                Online Players
+                {availablePlayersLoading && (
+                  <span className="ml-1 text-rc-fg-dim">(loading...)</span>
+                )}
+              </h4>
+              <RcButton
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  requestPlayers({ reset: true, sort: "alphabetical" })
+                }
+                disabled={availablePlayersLoading}
               >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      player.presence.inMatch
-                        ? "bg-amber-400"
-                        : "bg-green-400"
-                    }`}
-                  />
-                  <span className="text-sm text-white">
-                    {player.displayName}
-                  </span>
-                  {player.presence.inMatch && (
-                    <span className="text-xs text-amber-400">in match</span>
+                Refresh
+              </RcButton>
+            </div>
+            <div className="max-h-48 overflow-y-auto rounded-rc-md border border-rc-line/18 bg-black/30">
+              {availablePlayers.length === 0 && !availablePlayersLoading && (
+                <div className="rc-hint px-3 py-2.5">
+                  No online players found
+                </div>
+              )}
+              {availablePlayers.map((player) => (
+                <div
+                  key={player.userId}
+                  className="flex items-center justify-between gap-3 border-b border-rc-line/8 px-3 py-2 transition-colors last:border-b-0 hover:bg-rc-accent/6"
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={`rc-dot ${
+                        player.presence.inMatch
+                          ? "text-rc-warning"
+                          : "text-rc-success"
+                      }`}
+                    />
+                    <span className="truncate font-rc-mono text-[13px] text-rc-fg-strong">
+                      {player.displayName}
+                    </span>
+                    {player.presence.inMatch && (
+                      <span className="font-rc-mono text-[11px] uppercase tracking-[0.14em] text-rc-warning">
+                        in match
+                      </span>
+                    )}
+                  </div>
+                  {registeredIds.has(player.userId) ? (
+                    <span className="font-rc-mono text-[11px] uppercase tracking-[0.14em] text-rc-fg-subtle">
+                      Joined
+                    </span>
+                  ) : (
+                    <RcButton
+                      size="sm"
+                      onClick={() => handleInvitePlayer(player)}
+                      disabled={adding === player.userId}
+                    >
+                      {adding === player.userId ? "..." : "Invite"}
+                    </RcButton>
                   )}
                 </div>
-                {registeredIds.has(player.userId) ? (
-                  <span className="text-xs text-slate-400">Joined</span>
-                ) : (
-                  <button
-                    onClick={() => handleInvitePlayer(player)}
-                    disabled={adding === player.userId}
-                    className="text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-2 py-1 rounded"
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Active Players */}
+        <div className="space-y-1">
+          {activePlayers.map((reg) => {
+            const standing = standingsMap.get(reg.playerId);
+            return (
+              <div
+                key={reg.playerId}
+                className="flex items-center justify-between gap-3 rounded-rc-md bg-black/30 px-3 py-2 transition-colors hover:bg-rc-accent/6"
+              >
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                    {reg.player.name ?? "Unknown"}
+                  </span>
+                  {standing && (
+                    <span className="font-rc-mono text-[11px] tracking-[0.1em] tabular-nums text-rc-fg-subtle">
+                      {standing.wins}W-{standing.losses}L-{standing.draws}D
+                      <span className="ml-1 text-rc-fg-dim">
+                        ({standing.matchPoints} pts)
+                      </span>
+                    </span>
+                  )}
+                </div>
+                {isHost && isActive && (
+                  <RcButton
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleRemovePlayer(reg.playerId)}
+                    title="Remove player"
                   >
-                    {adding === player.userId ? "..." : "Invite"}
-                  </button>
+                    Remove
+                  </RcButton>
                 )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Eliminated/Removed Players */}
+        {eliminatedPlayers.length > 0 && (
+          <div className="mt-3 border-t border-rc-line/12 pt-3">
+            <h4 className="mb-1.5 font-rc-mono text-[11px] uppercase tracking-[0.24em] text-rc-fg-dim">
+              Removed
+            </h4>
+            {eliminatedPlayers.map((reg) => (
+              <div key={reg.playerId} className="rc-hint px-3 py-1">
+                {reg.player.name ?? "Unknown"}
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Active Players */}
-      <div className="space-y-1">
-        {activePlayers.map((reg) => {
-          const standing = standingsMap.get(reg.playerId);
-          return (
-            <div
-              key={reg.playerId}
-              className="flex items-center justify-between px-3 py-2 bg-slate-700/50 rounded"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-white">
-                  {reg.player.name ?? "Unknown"}
-                </span>
-                {standing && (
-                  <span className="text-xs text-slate-400">
-                    {standing.wins}W-{standing.losses}L-{standing.draws}D
-                    <span className="ml-1 text-slate-500">
-                      ({standing.matchPoints} pts)
-                    </span>
-                  </span>
-                )}
-              </div>
-              {isHost && isActive && (
-                <button
-                  onClick={() => handleRemovePlayer(reg.playerId)}
-                  className="text-xs text-red-400 hover:text-red-300"
-                  title="Remove player"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-          );
-        })}
+        {activePlayers.length === 0 && !showOnlinePlayers && (
+          <RcEmpty title="No players yet.">
+            {isHost ? 'use "Show Online Players" to invite players' : ""}
+          </RcEmpty>
+        )}
       </div>
-
-      {/* Eliminated/Removed Players */}
-      {eliminatedPlayers.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-slate-700">
-          <h4 className="text-xs font-medium text-slate-500 mb-1">Removed</h4>
-          {eliminatedPlayers.map((reg) => (
-            <div
-              key={reg.playerId}
-              className="text-xs text-slate-500 px-3 py-1"
-            >
-              {reg.player.name ?? "Unknown"}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {activePlayers.length === 0 && !showOnlinePlayers && (
-        <div className="text-center py-4 text-slate-500 text-sm">
-          No players yet.{" "}
-          {isHost ? "Click \"Show Online Players\" to invite players." : ""}
-        </div>
-      )}
-    </div>
+    </section>
   );
 }

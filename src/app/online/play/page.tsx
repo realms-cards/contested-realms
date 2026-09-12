@@ -1,9 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useOnline } from "@/app/online/online-context";
+import AppShell from "@/components/ui/AppShell";
+import { PageHeader } from "@/components/ui/page-header";
+import { RcLinkButton } from "@/components/ui/rc-button";
 
 export default function OnlinePlayPage() {
   const router = useRouter();
@@ -15,19 +17,17 @@ export default function OnlinePlayPage() {
   }, [match?.id, router]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-slate-100">
-      <div className="max-w-5xl mx-auto p-6 space-y-4">
-        <h2 className="text-lg font-semibold">Online Play</h2>
-        <p className="text-sm opacity-70">
-          No active match. Use the Lobby to join or create one.
-        </p>
-        <Link
-          className="text-sm underline text-slate-300/80 hover:text-slate-200"
-          href="/online/lobby"
-        >
-          Go to Lobby
-        </Link>
-      </div>
-    </div>
+    <AppShell width="narrow">
+      <PageHeader
+        eyebrow="online"
+        title="Online Play"
+        description="No active match. Use the Lobby to join or create one."
+        actions={
+          <RcLinkButton variant="outline" href="/online/lobby">
+            Go to Lobby
+          </RcLinkButton>
+        }
+      />
+    </AppShell>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { Link2 } from "lucide-react";
 import { useState } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import {
   buildTournamentInviteUrl,
   type TournamentKind,
@@ -52,7 +52,12 @@ export default function TournamentInviteLinkButton({
         onTokenChange?.(token);
       }
       await navigator.clipboard.writeText(
-        buildTournamentInviteUrl(window.location.origin, kind, tournamentId, token),
+        buildTournamentInviteUrl(
+          window.location.origin,
+          kind,
+          tournamentId,
+          token,
+        ),
       );
       setState("copied");
     } catch {
@@ -64,19 +69,19 @@ export default function TournamentInviteLinkButton({
   };
 
   return (
-    <button
-      type="button"
+    <RcButton
+      variant="outline"
+      size="sm"
       onClick={() => void copy()}
       disabled={busy}
-      className={`inline-flex items-center gap-2 bg-sky-600/90 hover:bg-sky-600 disabled:opacity-50 text-white px-3 py-2 rounded-md text-sm ${className}`}
+      className={className}
       title="Copy a link anyone can use to join - no account needed"
     >
-      <Link2 className="w-4 h-4" />
       {state === "copied"
         ? "Link copied!"
         : state === "error"
           ? "Copy failed"
           : "Copy invite link"}
-    </button>
+    </RcButton>
   );
 }

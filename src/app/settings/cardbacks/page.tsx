@@ -1,8 +1,16 @@
 "use client";
 
-import Link from "next/link";
+import { ChevronDown, ChevronUp, Minus, Plus } from "lucide-react";
 import { redirect } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import {
+  RcButton,
+  RcLinkButton,
+  rcButtonVariants,
+} from "@/components/ui/rc-button";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import { cardbackAtlasUrl, cardbackSpellbookUrl } from "@/lib/assets";
 import { FEATURE_CARD_SLEEVES } from "@/lib/config/features";
 import { SLEEVE_PRESETS } from "@/lib/game/sleevePresets";
@@ -106,6 +114,107 @@ function blobToBase64(blob: Blob): Promise<string> {
     };
     reader.readAsDataURL(blob);
   });
+}
+
+type SleevePickerProps = {
+  title: string;
+  description: string;
+  type: "spellbook" | "atlas";
+  cardbacks: CardbackSummary[];
+  selectedRef: string | null;
+  selectedCustomId: string | null;
+  defaultRef: string;
+  defaultSelected: boolean;
+  selecting: boolean;
+  onSelect: (ref: string) => void;
+};
+
+function sleeveTileClass(selected: boolean, selecting: boolean): string {
+  return [
+    "w-full rounded-rc-md border bg-black/30 px-3 py-2 text-left transition-colors",
+    selected
+      ? "border-rc-accent shadow-[0_0_18px_rgba(243,207,106,0.28)]"
+      : "border-rc-line/12 hover:border-rc-accent/40",
+    selecting ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+  ].join(" ");
+}
+
+/** One sleeve slot (spellbook or atlas): default, uploads and colour presets. */
+function SleevePicker({
+  title,
+  description,
+  type,
+  cardbacks,
+  selectedRef,
+  selectedCustomId,
+  defaultRef,
+  defaultSelected,
+  selecting,
+  onSelect,
+}: SleevePickerProps) {
+  return (
+    <section className="rc-panel">
+      <PanelHeader title={title} />
+      <div className="px-[18px] py-3.5">
+        <p className="m-0 font-rc-sans text-xs leading-relaxed text-rc-fg-muted">
+          {description}
+        </p>
+
+        <div className="mt-3 space-y-2">
+          <button
+            type="button"
+            disabled={selecting}
+            onClick={() => onSelect(defaultRef)}
+            className={sleeveTileClass(defaultSelected, selecting)}
+          >
+            <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+              Default
+            </div>
+          </button>
+
+          {cardbacks.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              disabled={selecting}
+              onClick={() => onSelect(`custom:${c.id}`)}
+              className={sleeveTileClass(selectedCustomId === c.id, selecting)}
+            >
+              <div className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                {c.name}
+              </div>
+              <div className="rc-hint mt-0.5">
+                {(
+                  (type === "spellbook" ? c.spellbookSize : c.atlasSize) / 1024
+                ).toFixed(0)}{" "}
+                KB
+              </div>
+            </button>
+          ))}
+
+          {SLEEVE_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              disabled={selecting}
+              onClick={() => onSelect(preset.id)}
+              className={sleeveTileClass(selectedRef === preset.id, selecting)}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className="h-4 w-4 rounded-rc-sm ring-1 ring-rc-line/22"
+                  style={{ backgroundColor: preset.color }}
+                />
+                <span className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                  {preset.label}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export default function CardbackSettingsPage() {
@@ -285,7 +394,7 @@ export default function CardbackSettingsPage() {
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#1e293b";
+    ctx.fillStyle = "#090d19";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     if (spellbookEditor.img) {
@@ -296,7 +405,7 @@ export default function CardbackSettingsPage() {
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(img, offset.x, offset.y, w, h);
     } else {
-      ctx.fillStyle = "#64748b";
+      ctx.fillStyle = "#5f5c50";
       ctx.font = "12px sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(
@@ -326,7 +435,7 @@ export default function CardbackSettingsPage() {
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#1e293b";
+    ctx.fillStyle = "#090d19";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     if (atlasEditor.img) {
@@ -337,7 +446,7 @@ export default function CardbackSettingsPage() {
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(img, offset.x, offset.y, w, h);
     } else {
-      ctx.fillStyle = "#64748b";
+      ctx.fillStyle = "#5f5c50";
       ctx.font = "12px sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(
@@ -387,9 +496,9 @@ export default function CardbackSettingsPage() {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       };
       img.onerror = () => {
-        ctx.fillStyle = "#1e293b";
+        ctx.fillStyle = "#090d19";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#64748b";
+        ctx.fillStyle = "#5f5c50";
         ctx.font = "12px sans-serif";
         ctx.textAlign = "center";
         ctx.fillText("Failed to load", canvas.width / 2, canvas.height / 2);
@@ -419,9 +528,9 @@ export default function CardbackSettingsPage() {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       };
       img.onerror = () => {
-        ctx.fillStyle = "#1e293b";
+        ctx.fillStyle = "#090d19";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#64748b";
+        ctx.fillStyle = "#5f5c50";
         ctx.font = "12px sans-serif";
         ctx.textAlign = "center";
         ctx.fillText("Failed to load", canvas.width / 2, canvas.height / 2);
@@ -909,225 +1018,115 @@ export default function CardbackSettingsPage() {
       : null;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto max-w-4xl px-4 py-8">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold">Card Sleeve Settings</h1>
-            <p className="mt-1 text-sm text-slate-400">
-              Upload custom sleeves for your Spellbook and Atlas.
-              <br />
-              <span className="text-amber-400">
-                Other players will see your custom sleeves in online matches!
-              </span>
-            </p>
-          </div>
-          <Link href="/" className="text-sm text-slate-300 hover:text-white">
-            Home
-          </Link>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="settings"
+        title="Card Sleeves"
+        description="Upload custom sleeves for your Spellbook and Atlas. Other players will see your custom sleeves in online matches."
+        actions={
+          <>
+            <Badge tone="gold">patrons</Badge>
+            <RcLinkButton href="/" variant="outline" size="sm">
+              Home
+            </RcLinkButton>
+          </>
+        }
+      />
+
+      {loading ? (
+        <div className="rc-hint py-6 text-center">loading…</div>
+      ) : error ? (
+        <div className="rc-alert" data-tone="danger">
+          {error}
         </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Selection panel - Spellbook */}
+          <SleevePicker
+            title="Spellbook sleeve"
+            description="Used for portrait cards (spells, minions, etc.)"
+            type="spellbook"
+            cardbacks={cardbacks}
+            selectedRef={selectedSpellbookRef}
+            selectedCustomId={selectedSpellbookId}
+            defaultRef={defaultRef}
+            selecting={selecting}
+            defaultSelected={
+              selectedSpellbookRef === defaultRef || selectedSpellbookRef == null
+            }
+            onSelect={(ref) => void setSelectedSleeve("spellbook", ref)}
+          />
 
-        {loading ? (
-          <div className="mt-6 text-sm text-slate-400">Loading…</div>
-        ) : error ? (
-          <div className="mt-6 rounded-lg bg-slate-900 ring-1 ring-slate-800 p-4">
-            <div className="text-sm text-rose-200">{error}</div>
-          </div>
-        ) : (
-          <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Selection panel - Spellbook */}
-            <div className="rounded-lg bg-slate-900 ring-1 ring-slate-800 p-4">
-              <h2 className="text-base font-semibold">Spellbook Sleeve</h2>
-              <p className="mt-1 text-xs text-slate-400">
-                Used for portrait cards (spells, minions, etc.)
-              </p>
+          {/* Selection panel - Atlas */}
+          <SleevePicker
+            title="Atlas sleeve"
+            description="Used for landscape cards (sites)"
+            type="atlas"
+            cardbacks={cardbacks}
+            selectedRef={selectedAtlasRef}
+            selectedCustomId={selectedAtlasId}
+            defaultRef={defaultRef}
+            selecting={selecting}
+            defaultSelected={
+              selectedAtlasRef === defaultRef || selectedAtlasRef == null
+            }
+            onSelect={(ref) => void setSelectedSleeve("atlas", ref)}
+          />
 
-              <div className="mt-3 space-y-2">
-                <button
-                  type="button"
-                  disabled={selecting}
-                  onClick={() =>
-                    void setSelectedSleeve("spellbook", defaultRef)
-                  }
-                  className={`w-full text-left px-3 py-2 rounded ring-1 transition-colors ${
-                    selectedSpellbookRef === defaultRef ||
-                    selectedSpellbookRef == null
-                      ? "bg-emerald-500/10 ring-emerald-500/30"
-                      : "bg-white/5 ring-white/10 hover:bg-white/10"
-                  }`}
-                >
-                  <div className="text-sm font-medium">Default</div>
-                </button>
-
-                {cardbacks.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    disabled={selecting}
-                    onClick={() =>
-                      void setSelectedSleeve("spellbook", `custom:${c.id}`)
-                    }
-                    className={`w-full text-left px-3 py-2 rounded ring-1 transition-colors ${
-                      selectedSpellbookId === c.id
-                        ? "bg-emerald-500/10 ring-emerald-500/30"
-                        : "bg-white/5 ring-white/10 hover:bg-white/10"
-                    } ${
-                      selecting
-                        ? "opacity-50 cursor-not-allowed"
-                        : "cursor-pointer"
-                    }`}
-                  >
-                    <div className="text-sm font-medium truncate">{c.name}</div>
-                    <div className="text-[11px] text-slate-400">
-                      {(c.spellbookSize / 1024).toFixed(0)} KB
-                    </div>
-                  </button>
-                ))}
-
-                {SLEEVE_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    disabled={selecting}
-                    onClick={() =>
-                      void setSelectedSleeve("spellbook", preset.id)
-                    }
-                    className={`w-full text-left px-3 py-2 rounded ring-1 transition-colors ${
-                      selectedSpellbookRef === preset.id
-                        ? "bg-emerald-500/10 ring-emerald-500/30"
-                        : "bg-white/5 ring-white/10 hover:bg-white/10"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="w-4 h-4 rounded-sm ring-1 ring-white/20"
-                        style={{ backgroundColor: preset.color }}
-                      />
-                      <span className="text-sm font-medium">
-                        {preset.label}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Selection panel - Atlas */}
-            <div className="rounded-lg bg-slate-900 ring-1 ring-slate-800 p-4">
-              <h2 className="text-base font-semibold">Atlas Sleeve</h2>
-              <p className="mt-1 text-xs text-slate-400">
-                Used for landscape cards (sites)
-              </p>
-
-              <div className="mt-3 space-y-2">
-                <button
-                  type="button"
-                  disabled={selecting}
-                  onClick={() => void setSelectedSleeve("atlas", defaultRef)}
-                  className={`w-full text-left px-3 py-2 rounded ring-1 transition-colors ${
-                    selectedAtlasRef === defaultRef || selectedAtlasRef == null
-                      ? "bg-emerald-500/10 ring-emerald-500/30"
-                      : "bg-white/5 ring-white/10 hover:bg-white/10"
-                  }`}
-                >
-                  <div className="text-sm font-medium">Default</div>
-                </button>
-
-                {cardbacks.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    disabled={selecting}
-                    onClick={() =>
-                      void setSelectedSleeve("atlas", `custom:${c.id}`)
-                    }
-                    className={`w-full text-left px-3 py-2 rounded ring-1 transition-colors ${
-                      selectedAtlasId === c.id
-                        ? "bg-emerald-500/10 ring-emerald-500/30"
-                        : "bg-white/5 ring-white/10 hover:bg-white/10"
-                    } ${
-                      selecting
-                        ? "opacity-50 cursor-not-allowed"
-                        : "cursor-pointer"
-                    }`}
-                  >
-                    <div className="text-sm font-medium truncate">{c.name}</div>
-                    <div className="text-[11px] text-slate-400">
-                      {(c.atlasSize / 1024).toFixed(0)} KB
-                    </div>
-                  </button>
-                ))}
-
-                {SLEEVE_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    disabled={selecting}
-                    onClick={() => void setSelectedSleeve("atlas", preset.id)}
-                    className={`w-full text-left px-3 py-2 rounded ring-1 transition-colors ${
-                      selectedAtlasRef === preset.id
-                        ? "bg-emerald-500/10 ring-emerald-500/30"
-                        : "bg-white/5 ring-white/10 hover:bg-white/10"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="w-4 h-4 rounded-sm ring-1 ring-white/20"
-                        style={{ backgroundColor: preset.color }}
-                      />
-                      <span className="text-sm font-medium">
-                        {preset.label}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Manage uploads */}
-            <div className="rounded-lg bg-slate-900 ring-1 ring-slate-800 p-4">
-              <h2 className="text-base font-semibold">Manage Uploads</h2>
-              <p className="mt-1 text-xs text-slate-400">
+          {/* Manage uploads */}
+          <section className="rc-panel">
+            <PanelHeader
+              title="Manage uploads"
+              meta={`${cardbacks.length} custom`}
+            />
+            <div className="px-[18px] py-3.5">
+              <p className="m-0 font-rc-sans text-xs leading-relaxed text-rc-fg-muted">
                 Delete custom sleeves you no longer need
               </p>
 
               {cardbacks.length === 0 ? (
-                <div className="mt-3 text-sm text-slate-500">
-                  No custom sleeves uploaded yet.
-                </div>
+                <RcEmpty className="mt-3" title="No custom sleeves yet.">
+                  upload a pair below
+                </RcEmpty>
               ) : (
                 <div className="mt-3 space-y-2">
                   {cardbacks.map((c) => (
                     <div
                       key={c.id}
-                      className="flex items-center gap-2 px-3 py-2 rounded bg-white/5 ring-1 ring-white/10"
+                      className="flex items-center gap-2 rounded-rc-md border border-rc-line/12 bg-black/30 px-3 py-2"
                     >
-                      <div className="flex-1 text-sm truncate">{c.name}</div>
-                      <button
-                        type="button"
+                      <div className="flex-1 truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                        {c.name}
+                      </div>
+                      <RcButton
+                        variant="destructive"
+                        size="sm"
                         onClick={() => void deleteCardback(c.id)}
-                        className="px-3 py-1 rounded bg-rose-500/15 text-rose-200 hover:bg-rose-500/25 ring-1 ring-rose-500/20 text-xs"
                       >
                         Delete
-                      </button>
+                      </RcButton>
                     </div>
                   ))}
                 </div>
               )}
 
               {uploadError && (
-                <div className="mt-3 text-sm text-rose-300">{uploadError}</div>
+                <div className="rc-alert mt-3" data-tone="danger">
+                  {uploadError}
+                </div>
               )}
             </div>
+          </section>
 
-            {/* Current Selection Preview */}
-            <div className="rounded-lg bg-slate-900 ring-1 ring-slate-800 p-4">
-              <h2 className="text-base font-semibold">Current Selection</h2>
-              <p className="mt-1 text-xs text-slate-400">
+          {/* Current Selection Preview */}
+          <section className="rc-panel">
+            <PanelHeader title="Current selection" />
+            <div className="px-[18px] py-3.5">
+              <p className="m-0 font-rc-sans text-xs leading-relaxed text-rc-fg-muted">
                 Preview of your active sleeves
               </p>
 
-              <div className="mt-4 flex gap-4 justify-center">
+              <div className="mt-4 flex flex-wrap justify-center gap-4">
                 {/* Current Spellbook */}
                 <div className="flex flex-col items-center">
                   <div
@@ -1145,10 +1144,12 @@ export default function CardbackSettingsPage() {
                         width: SPELLBOOK_PREVIEW_W,
                         height: SPELLBOOK_PREVIEW_H,
                       }}
-                      className="block rounded ring-1 ring-emerald-500/30"
+                      className="block rounded-rc-md ring-1 ring-rc-accent/35"
                     />
                   </div>
-                  <div className="mt-2 text-xs text-slate-300">Spellbook</div>
+                  <div className="mt-2 font-rc-mono text-[11px] uppercase tracking-[0.16em] text-rc-fg-subtle">
+                    Spellbook
+                  </div>
                 </div>
 
                 {/* Current Atlas */}
@@ -1168,35 +1169,38 @@ export default function CardbackSettingsPage() {
                         width: ATLAS_PREVIEW_W,
                         height: ATLAS_PREVIEW_H,
                       }}
-                      className="block rounded ring-1 ring-emerald-500/30"
+                      className="block rounded-rc-md ring-1 ring-rc-accent/35"
                     />
                   </div>
-                  <div className="mt-2 text-xs text-slate-300">Atlas</div>
+                  <div className="mt-2 font-rc-mono text-[11px] uppercase tracking-[0.16em] text-rc-fg-subtle">
+                    Atlas
+                  </div>
                 </div>
               </div>
 
               {/* Upload New Sleeves - Collapsible */}
-              <button
-                type="button"
+              <RcButton
+                variant="outline"
+                className="mt-6 w-full justify-between"
                 onClick={() => setUploadExpanded((v) => !v)}
-                className="mt-6 w-full flex items-center justify-between px-3 py-2 rounded bg-white/5 ring-1 ring-white/10 hover:bg-white/10 transition-colors"
+                aria-expanded={uploadExpanded}
               >
-                <span className="text-sm font-semibold">
-                  Upload New Sleeves
-                </span>
-                <span className="text-slate-400 text-lg">
-                  {uploadExpanded ? "−" : "+"}
-                </span>
-              </button>
+                <span>Upload new sleeves</span>
+                {uploadExpanded ? (
+                  <ChevronUp className="h-4 w-4 text-rc-fg-muted" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-rc-fg-muted" />
+                )}
+              </RcButton>
 
               {uploadExpanded && (
-                <div className="mt-3 p-3 rounded bg-slate-800/50 ring-1 ring-slate-700">
-                  <p className="text-xs text-slate-400">
+                <div className="mt-3 rounded-rc-md border border-rc-line/12 bg-black/30 p-3">
+                  <p className="m-0 font-rc-sans text-xs leading-relaxed text-rc-fg-muted">
                     Select any image and position it within the frame. Drag to
                     pan, scroll to zoom.
                   </p>
 
-                  <div className="mt-4 flex gap-4 justify-center flex-wrap">
+                  <div className="mt-4 flex flex-wrap justify-center gap-4">
                     {/* Spellbook editor */}
                     <div className="flex flex-col items-center">
                       <div
@@ -1219,7 +1223,7 @@ export default function CardbackSettingsPage() {
                             minHeight: `${SPELLBOOK_PREVIEW_H}px`,
                             maxWidth: "none",
                           }}
-                          className="block rounded ring-1 ring-slate-700 cursor-move touch-none"
+                          className="block cursor-move touch-none rounded-rc-md ring-1 ring-rc-line/22"
                           onPointerDown={onSpellbookPointerDown}
                           onPointerMove={onSpellbookPointerMove}
                           onPointerUp={onSpellbookPointerUp}
@@ -1227,16 +1231,24 @@ export default function CardbackSettingsPage() {
                           onWheel={onSpellbookWheel}
                         />
                       </div>
-                      <div className="mt-2 flex items-center gap-1">
-                        <button
-                          type="button"
+                      <div className="mt-2 flex items-center gap-1.5">
+                        <RcButton
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label="Zoom out spellbook"
                           onClick={() => zoomSpellbook("out")}
                           disabled={!spellbookEditor.img}
-                          className="w-7 h-7 rounded bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-sm font-bold"
                         >
-                          −
-                        </button>
-                        <label className="cursor-pointer text-xs text-blue-300 hover:text-blue-200 px-2">
+                          <Minus className="h-4 w-4" />
+                        </RcButton>
+                        <label
+                          className={rcButtonVariants({
+                            variant: "outline",
+                            size: "sm",
+                            className: "cursor-pointer",
+                          })}
+                        >
                           <input
                             type="file"
                             accept="image/*"
@@ -1249,18 +1261,18 @@ export default function CardbackSettingsPage() {
                           />
                           {spellbookEditor.img ? "Change" : "Select"}
                         </label>
-                        <button
-                          type="button"
+                        <RcButton
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label="Zoom in spellbook"
                           onClick={() => zoomSpellbook("in")}
                           disabled={!spellbookEditor.img}
-                          className="w-7 h-7 rounded bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-sm font-bold"
                         >
-                          +
-                        </button>
+                          <Plus className="h-4 w-4" />
+                        </RcButton>
                       </div>
-                      <div className="text-[10px] text-slate-500 mt-1">
-                        Spellbook
-                      </div>
+                      <div className="rc-hint mt-1">Spellbook</div>
                     </div>
 
                     {/* Atlas editor */}
@@ -1285,7 +1297,7 @@ export default function CardbackSettingsPage() {
                             minHeight: `${ATLAS_PREVIEW_H}px`,
                             maxWidth: "none",
                           }}
-                          className="block rounded ring-1 ring-slate-700 cursor-move touch-none"
+                          className="block cursor-move touch-none rounded-rc-md ring-1 ring-rc-line/22"
                           onPointerDown={onAtlasPointerDown}
                           onPointerMove={onAtlasPointerMove}
                           onPointerUp={onAtlasPointerUp}
@@ -1293,16 +1305,24 @@ export default function CardbackSettingsPage() {
                           onWheel={onAtlasWheel}
                         />
                       </div>
-                      <div className="mt-2 flex items-center gap-1">
-                        <button
-                          type="button"
+                      <div className="mt-2 flex items-center gap-1.5">
+                        <RcButton
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label="Zoom out atlas"
                           onClick={() => zoomAtlas("out")}
                           disabled={!atlasEditor.img}
-                          className="w-7 h-7 rounded bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-sm font-bold"
                         >
-                          −
-                        </button>
-                        <label className="cursor-pointer text-xs text-blue-300 hover:text-blue-200 px-2">
+                          <Minus className="h-4 w-4" />
+                        </RcButton>
+                        <label
+                          className={rcButtonVariants({
+                            variant: "outline",
+                            size: "sm",
+                            className: "cursor-pointer",
+                          })}
+                        >
                           <input
                             type="file"
                             accept="image/*"
@@ -1315,56 +1335,56 @@ export default function CardbackSettingsPage() {
                           />
                           {atlasEditor.img ? "Change" : "Select"}
                         </label>
-                        <button
-                          type="button"
+                        <RcButton
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label="Zoom in atlas"
                           onClick={() => zoomAtlas("in")}
                           disabled={!atlasEditor.img}
-                          className="w-7 h-7 rounded bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-sm font-bold"
                         >
-                          +
-                        </button>
+                          <Plus className="h-4 w-4" />
+                        </RcButton>
                       </div>
-                      <div className="text-[10px] text-slate-500 mt-1">
-                        Atlas
-                      </div>
+                      <div className="rc-hint mt-1">Atlas</div>
                     </div>
                   </div>
 
                   <div className="mt-4">
-                    <label className="block text-xs text-slate-400 mb-1">
+                    <label htmlFor="sleeve-name" className="rc-eyebrow block">
                       Name
                     </label>
                     <input
+                      id="sleeve-name"
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full px-3 py-2 rounded bg-slate-800 ring-1 ring-slate-700 text-sm"
+                      className="rc-input mt-1.5 h-10 w-full"
                       placeholder="My Sleeves"
                     />
                   </div>
 
                   {uploadError && (
-                    <div className="mt-3 text-sm text-rose-300">
+                    <div className="rc-alert mt-3" data-tone="danger">
                       {uploadError}
                     </div>
                   )}
 
-                  <button
-                    type="button"
+                  <RcButton
+                    className="mt-4 w-full"
                     disabled={
                       uploading || !spellbookEditor.img || !atlasEditor.img
                     }
                     onClick={() => void uploadCardback()}
-                    className="mt-4 w-full px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                   >
-                    {uploading ? "Uploading…" : "Upload Sleeves"}
-                  </button>
+                    {uploading ? "Uploading…" : "Upload sleeves"}
+                  </RcButton>
                 </div>
               )}
             </div>
-          </div>
-        )}
-      </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

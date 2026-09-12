@@ -5,6 +5,9 @@ import Image from "next/image";
 import React, { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { PanelHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
+import { RcEmpty } from "@/components/ui/rc-empty";
 
 type CardStat = {
   cardId: number;
@@ -151,10 +154,10 @@ const ELEMENT_COLORS: Record<
 };
 
 const DEFAULT_ELEMENT_STYLE = {
-  bg: "bg-slate-900/60",
-  border: "border-slate-700",
-  text: "text-slate-300",
-  bar: "bg-slate-500",
+  bg: "bg-black/30",
+  border: "border-rc-line/18",
+  text: "text-rc-fg-muted",
+  bar: "bg-rc-fg-subtle",
 };
 
 const RARITY_STYLES: Record<
@@ -162,28 +165,28 @@ const RARITY_STYLES: Record<
   { bg: string; border: string; text: string; bar: string }
 > = {
   Unique: {
-    bg: "bg-yellow-950/40",
-    border: "border-yellow-600/60",
-    text: "text-yellow-300",
-    bar: "bg-yellow-500",
+    bg: "bg-rc-accent/10",
+    border: "border-rc-accent/35",
+    text: "text-rc-accent-link",
+    bar: "bg-rc-accent",
   },
   Elite: {
-    bg: "bg-violet-950/40",
-    border: "border-violet-600/60",
-    text: "text-violet-300",
-    bar: "bg-violet-500",
+    bg: "bg-rc-ember/12",
+    border: "border-rc-ember/40",
+    text: "text-rc-ember",
+    bar: "bg-rc-ember",
   },
   Exceptional: {
-    bg: "bg-sky-950/40",
-    border: "border-sky-600/60",
-    text: "text-sky-300",
-    bar: "bg-sky-500",
+    bg: "bg-rc-info/12",
+    border: "border-rc-info/40",
+    text: "text-rc-moonlight",
+    bar: "bg-rc-info",
   },
   Ordinary: {
-    bg: "bg-slate-900/60",
-    border: "border-slate-600",
-    text: "text-slate-300",
-    bar: "bg-slate-400",
+    bg: "bg-black/30",
+    border: "border-rc-line/18",
+    text: "text-rc-fg-muted",
+    bar: "bg-rc-fg-subtle",
   },
 };
 
@@ -247,7 +250,12 @@ function ElementIcon({ element, size = 14 }: { element: string; size?: number })
 function ElementIcons({ element, size = 16 }: { element: string; size?: number }) {
   const parts = parseElements(element);
   const known = parts.filter((p) => ["Fire", "Water", "Earth", "Air"].includes(p));
-  if (known.length === 0) return <span className="text-slate-400 text-xs">None</span>;
+  if (known.length === 0)
+    return (
+      <span className="font-rc-mono text-xs tracking-[0.1em] text-rc-fg-subtle">
+        None
+      </span>
+    );
   return (
     <span className="inline-flex items-center gap-1">
       {known.map((el) => (
@@ -286,7 +294,7 @@ function ElementDistributionBar({
 
   return (
     <div className="flex flex-col gap-1 mt-1.5" title={tooltipText}>
-      <div className="flex h-3 rounded-full overflow-hidden bg-slate-800">
+      <div className="flex h-3 rounded-full overflow-hidden border border-rc-line/12 bg-black/45">
         {barSegments.map((seg) => (
           <div
             key={seg.el}
@@ -300,13 +308,16 @@ function ElementDistributionBar({
       </div>
       <div className="flex gap-2 flex-wrap">
         {known.map(([el, pct]) => (
-          <span key={el} className="inline-flex items-center gap-0.5 text-[10px] tabular-nums">
+          <span
+            key={el}
+            className="inline-flex items-center gap-0.5 font-rc-mono text-[10px] tabular-nums"
+          >
             <ElementIcon element={el} size={10} />
             <span style={{ color: ELEMENT_BAR_COLORS[el] }}>{pct}%</span>
           </span>
         ))}
         {otherPct > 0 && (
-          <span className="text-[10px] tabular-nums text-slate-500">
+          <span className="font-rc-mono text-[10px] tabular-nums text-rc-fg-dim">
             Other {otherPct}%
           </span>
         )}
@@ -319,7 +330,7 @@ function ElementDistributionBar({
 function ElementLegend() {
   const elements = ["Fire", "Water", "Earth", "Air"];
   return (
-    <div className="flex gap-3 text-[10px] text-slate-400">
+    <div className="flex gap-3 font-rc-mono text-[10px] uppercase tracking-[0.14em] text-rc-fg-subtle">
       {elements.map((el) => (
         <span key={el} className="flex items-center gap-1">
           <ElementIcon element={el} size={12} />
@@ -350,16 +361,14 @@ function StatCard({
   sublabel?: string;
 }) {
   return (
-    <div className="rounded border border-slate-700 bg-slate-900/60 px-4 py-3">
-      <div className="text-xs uppercase tracking-wide text-slate-400">
-        {label}
-      </div>
-      <div className="mt-1 text-2xl font-semibold text-white">
+    <div className="rc-panel px-[18px] py-3.5">
+      <div className="rc-eyebrow">{label}</div>
+      <div className="rc-stat mt-2 text-[28px] leading-none">
         {typeof value === "number"
           ? new Intl.NumberFormat().format(value)
           : (value ?? "—")}
       </div>
-      {sublabel && <div className="text-xs text-slate-400">{sublabel}</div>}
+      {sublabel && <div className="rc-hint mt-1.5">{sublabel}</div>}
     </div>
   );
 }
@@ -369,18 +378,25 @@ function WinRateBar({
   barColor,
 }: {
   winRate: number;
-  barColor: string;
+  /** Element/rarity colourway for the fill; omit for the default gold meter */
+  barColor?: string;
 }) {
   const pct = Math.round(winRate * 100);
   return (
     <div className="flex items-center gap-2 mt-1.5">
-      <div className="flex-1 h-2 rounded-full bg-slate-800 overflow-hidden">
-        <div
-          className={`h-full rounded-full ${barColor} transition-all`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="text-xs font-medium text-white tabular-nums w-12 text-right">
+      {barColor ? (
+        <div className="flex-1 h-2 rounded-full border border-rc-line/12 bg-black/45 overflow-hidden">
+          <div
+            className={`h-full rounded-full ${barColor} transition-all`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      ) : (
+        <div className="rc-progress flex-1">
+          <span style={{ width: `${pct}%` }} />
+        </div>
+      )}
+      <span className="rc-stat w-12 text-right text-xs">
         {(winRate * 100).toFixed(1)}%
       </span>
     </div>
@@ -430,21 +446,19 @@ function CardStatsTable({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div className="relative flex-1 max-w-xs">
+        <div className="flex-1 md:max-w-xs">
           <input
             type="text"
             placeholder="Search cards..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded border border-slate-600 bg-slate-900 pl-8 pr-2 py-1 text-xs text-slate-200 placeholder:text-slate-500 focus:border-slate-400 focus:outline-none"
+            className="rc-input h-9 w-full"
+            aria-label="Search cards"
           />
-          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-          </svg>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <label className="flex items-center gap-1">
-            <span className="text-slate-300">Order</span>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <label className="flex items-center gap-2">
+            <span className="rc-eyebrow">Order</span>
             <CustomSelect
               value={order}
               onChange={(v) => setOrder(v as typeof order)}
@@ -455,8 +469,8 @@ function CardStatsTable({
               ]}
             />
           </label>
-          <label className="flex items-center gap-1">
-            <span className="text-slate-300">Limit</span>
+          <label className="flex items-center gap-2">
+            <span className="rc-eyebrow">Limit</span>
             <input
               type="number"
               min={1}
@@ -467,60 +481,60 @@ function CardStatsTable({
                   Math.max(1, Math.min(200, Number(e.target.value) || 50)),
                 )
               }
-              className="w-20 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-200"
+              className="rc-input h-9 w-20"
             />
           </label>
-          <button
+          <RcButton
+            variant="outline"
+            size="sm"
             onClick={onRefresh}
-            className="inline-flex items-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
             disabled={loading}
           >
             {loading ? "Refreshing…" : "Refresh"}
-          </button>
+          </RcButton>
         </div>
       </div>
       {error && (
-        <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+        <div className="rc-alert" data-tone="danger">
           {error}
         </div>
       )}
-      <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-        <table className="min-w-full text-left text-xs text-slate-200">
-          <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-            <tr>
-              <th className="px-3 py-2">Card</th>
-              {showType && <th className="px-3 py-2">Type</th>}
-              <th className="px-3 py-2">Plays</th>
-              <th className="px-3 py-2">Wins</th>
-              <th className="px-3 py-2">Losses</th>
-              <th className="px-3 py-2">Draws</th>
-              <th className="px-3 py-2" title="Share of matches where the card hit the board, out of matches it was brought in the maindeck">
-                Play Rate
-              </th>
-              <th className="px-3 py-2" title="Wins / (wins + losses) when played. The smaller figure is the 95% lower bound the win-rate ordering uses.">
-                Win Rate
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredStats.length === 0 ? (
+      {filteredStats.length === 0 ? (
+        <RcEmpty
+          title={search.trim() ? "No matches" : "Nothing here yet."}
+        >
+          {search.trim()
+            ? "no cards match your search"
+            : "play some matches or adjust filters"}
+        </RcEmpty>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="rc-table">
+            <thead>
               <tr>
-                <td
-                  className="px-3 py-2 text-slate-300"
-                  colSpan={colCount}
-                >
-                  {search.trim() ? "No cards match your search." : "No stats yet. Play some matches or adjust filters."}
-                </td>
+                <th>Card</th>
+                {showType && <th>Type</th>}
+                <th>Plays</th>
+                <th>Wins</th>
+                <th>Losses</th>
+                <th>Draws</th>
+                <th title="Share of matches where the card hit the board, out of matches it was brought in the maindeck">
+                  Play Rate
+                </th>
+                <th title="Wins / (wins + losses) when played. The smaller figure is the 95% lower bound the win-rate ordering uses.">
+                  Win Rate
+                </th>
               </tr>
-            ) : (
-              filteredStats.map((row) => {
+            </thead>
+            <tbody>
+              {filteredStats.map((row) => {
                 const isExpanded = expandedCard === row.name;
                 return (
                   <React.Fragment key={row.cardId}>
                     <tr
                       className={clsx(
-                        "border-t border-slate-800/60 hover:bg-slate-800/40 cursor-pointer",
-                        isExpanded && "bg-slate-800/50",
+                        "cursor-pointer",
+                        isExpanded && "bg-rc-accent/6",
                       )}
                       onClick={() => onRowClick?.(row.name)}
                       onMouseEnter={() =>
@@ -528,26 +542,28 @@ function CardStatsTable({
                       }
                       onMouseLeave={onLeaveCard}
                     >
-                      <td className="px-3 py-2">
-                        <span className="font-medium text-white">{row.name}</span>
+                      <td>
+                        <span className="font-rc-display text-[15px] text-rc-fg-strong">
+                          {row.name}
+                        </span>
                       </td>
                       {showType && (
-                        <td className="px-3 py-2 text-slate-400">{row.type}</td>
+                        <td className="text-rc-fg-subtle">{row.type}</td>
                       )}
-                      <td className="px-3 py-2">{row.plays}</td>
-                      <td className="px-3 py-2">{row.wins}</td>
-                      <td className="px-3 py-2">{row.losses}</td>
-                      <td className="px-3 py-2">{row.draws}</td>
-                      <td className="px-3 py-2 text-slate-300">
+                      <td className="tabular-nums">{row.plays}</td>
+                      <td className="tabular-nums">{row.wins}</td>
+                      <td className="tabular-nums">{row.losses}</td>
+                      <td className="tabular-nums">{row.draws}</td>
+                      <td className="tabular-nums text-rc-fg-muted">
                         {typeof row.playRate === "number"
                           ? `${(row.playRate * 100).toFixed(0)}%`
                           : "–"}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="tabular-nums text-rc-fg-strong">
                         {(row.winRate * 100).toFixed(1)}%
                         {typeof row.winRateLB === "number" && (
                           <span
-                            className="ml-1 text-[10px] text-slate-500"
+                            className="ml-1 text-[10px] text-rc-fg-dim"
                             title="95% Wilson lower bound"
                           >
                             ≥{(row.winRateLB * 100).toFixed(0)}%
@@ -557,27 +573,33 @@ function CardStatsTable({
                     </tr>
                     {isExpanded && (
                       <tr>
-                        <td colSpan={colCount} className="px-3 py-3 bg-slate-900/70">
+                        <td colSpan={colCount} className="bg-black/30">
                           {expandedCardLoading ? (
-                            <p className="text-xs text-slate-400">Loading card synergies...</p>
+                            <div className="rc-hint py-6 text-center">
+                              loading card synergies…
+                            </div>
                           ) : !expandedCardData ? (
-                            <p className="text-xs text-slate-400">No synergy data available.</p>
+                            <div className="rc-hint py-6 text-center">
+                              no synergy data available
+                            </div>
                           ) : (
                             <div className="grid gap-4 md:grid-cols-2">
                               <div>
-                                <h4 className="text-xs font-semibold text-emerald-300 mb-2">Best Partners</h4>
+                                <h4 className="rc-eyebrow mb-2 text-rc-success">
+                                  Best Partners
+                                </h4>
                                 {expandedCardData.synergies.length === 0 ? (
-                                  <p className="text-[11px] text-slate-500">No data</p>
+                                  <div className="rc-hint">no data</div>
                                 ) : (
                                   <div className="space-y-1">
                                     {expandedCardData.synergies.slice(0, 10).map((p) => {
                                       const partner = p.cardA === row.name ? p.cardB : p.cardA;
                                       return (
                                         <div key={partner} className="flex items-center justify-between text-[11px]">
-                                          <span className="text-slate-200 truncate mr-2">{partner}</span>
-                                          <span className="flex-shrink-0 text-slate-400">
+                                          <span className="mr-2 truncate text-rc-fg">{partner}</span>
+                                          <span className="flex-shrink-0 tabular-nums text-rc-fg-subtle">
                                             {p.coOccurrences}x &middot;{" "}
-                                            <span className="text-emerald-300 font-medium">
+                                            <span className="font-medium text-rc-success">
                                               {(p.winRate * 100).toFixed(1)}%
                                             </span>
                                           </span>
@@ -588,19 +610,21 @@ function CardStatsTable({
                                 )}
                               </div>
                               <div>
-                                <h4 className="text-xs font-semibold text-rose-300 mb-2">Worst Partners</h4>
+                                <h4 className="rc-eyebrow mb-2 text-rc-danger">
+                                  Worst Partners
+                                </h4>
                                 {expandedCardData.antiSynergies.length === 0 ? (
-                                  <p className="text-[11px] text-slate-500">No data</p>
+                                  <div className="rc-hint">no data</div>
                                 ) : (
                                   <div className="space-y-1">
                                     {expandedCardData.antiSynergies.slice(0, 10).map((p) => {
                                       const partner = p.cardA === row.name ? p.cardB : p.cardA;
                                       return (
                                         <div key={partner} className="flex items-center justify-between text-[11px]">
-                                          <span className="text-slate-200 truncate mr-2">{partner}</span>
-                                          <span className="flex-shrink-0 text-slate-400">
+                                          <span className="mr-2 truncate text-rc-fg">{partner}</span>
+                                          <span className="flex-shrink-0 tabular-nums text-rc-fg-subtle">
                                             {p.coOccurrences}x &middot;{" "}
-                                            <span className="text-rose-300 font-medium">
+                                            <span className="font-medium text-rc-danger">
                                               {(p.winRate * 100).toFixed(1)}%
                                             </span>
                                           </span>
@@ -617,11 +641,191 @@ function CardStatsTable({
                     )}
                   </React.Fragment>
                 );
-              })
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+/** Expanded drill-down under an avatar tile: element combos + most used sites/spells */
+function AvatarDetail({
+  loading,
+  sites,
+  spells,
+  elementCombos,
+  selectedCombo,
+  onSelectCombo,
+  displayedSites,
+  displayedSpells,
+  onHoverCard,
+  onLeaveCard,
+}: {
+  loading: boolean;
+  sites: AvatarSitePairing[];
+  spells: AvatarSpellEntry[];
+  elementCombos: AvatarElementComboEntry[];
+  selectedCombo: string | null;
+  onSelectCombo: (combo: string | null) => void;
+  displayedSites: AvatarSitePairing[];
+  displayedSpells: AvatarSpellEntry[];
+  onHoverCard: (card: { slug: string; type: string | null }) => void;
+  onLeaveCard: () => void;
+}) {
+  const chipClass = (active: boolean) =>
+    clsx(
+      "cursor-pointer rounded-rc-md border px-3 py-1.5 font-rc-mono text-[11px] tracking-[0.06em] transition-colors",
+      active
+        ? "border-rc-accent/60 bg-rc-accent/12 text-rc-fg-strong"
+        : "border-rc-line/14 bg-black/30 text-rc-fg-muted hover:border-rc-accent/40 hover:text-rc-fg",
+    );
+  return (
+    <div className="col-span-full rounded-rc-md border border-rc-line/12 bg-black/30 p-3">
+      {loading ? (
+        <div className="rc-hint py-6 text-center">loading deck details…</div>
+      ) : sites.length === 0 &&
+        spells.length === 0 &&
+        elementCombos.length === 0 ? (
+        <div className="rc-hint py-6 text-center">
+          no deck detail data yet — it appears after the server recomputes statistics
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {elementCombos.length > 0 && (
+            <div>
+              <h4 className="rc-eyebrow mb-2">Element Combinations</h4>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  aria-pressed={selectedCombo === null}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectCombo(null);
+                  }}
+                  className={chipClass(selectedCombo === null)}
+                >
+                  <span className="text-rc-fg-strong">All</span>
+                </button>
+                {elementCombos.map((ec) => (
+                  <button
+                    key={ec.combo}
+                    type="button"
+                    aria-pressed={selectedCombo === ec.combo}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectCombo(selectedCombo === ec.combo ? null : ec.combo);
+                    }}
+                    className={chipClass(selectedCombo === ec.combo)}
+                  >
+                    <span className="mr-2 inline-flex items-center gap-1">
+                      <ElementIcons element={ec.combo} size={12} />
+                    </span>
+                    <span className="tabular-nums">{ec.matches} decks</span>
+                    <span className="mx-1.5 text-rc-fg-dim">|</span>
+                    <span className="tabular-nums text-rc-fg-strong">
+                      {(ec.winRate * 100).toFixed(1)}%
+                    </span>
+                    <span className="ml-1.5 tabular-nums text-rc-fg-dim">
+                      {ec.wins}W/{ec.losses}L{ec.draws > 0 ? `/${ec.draws}D` : ""}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="grid gap-4 md:grid-cols-2">
+            {displayedSites.length > 0 && (
+              <div>
+                <h4 className="rc-eyebrow mb-2">
+                  Most Used Sites{selectedCombo ? ` (${selectedCombo})` : ""}
+                </h4>
+                <div className="overflow-x-auto">
+                  <table className="rc-table">
+                    <thead>
+                      <tr>
+                        <th>Site</th>
+                        <th>Avg#</th>
+                        <th>Decks</th>
+                        <th>W</th>
+                        <th>L</th>
+                        <th>D</th>
+                        <th>Win%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayedSites.slice(0, 45).map((s) => (
+                        <tr
+                          key={s.siteName}
+                          onMouseEnter={() =>
+                            s.siteSlug && onHoverCard({ slug: s.siteSlug, type: "Site" })
+                          }
+                          onMouseLeave={onLeaveCard}
+                        >
+                          <td className="font-rc-display text-[15px] text-rc-fg-strong">{s.siteName}</td>
+                          <td className="tabular-nums text-rc-fg-subtle">{s.avgCopies}</td>
+                          <td className="tabular-nums">{s.matches}</td>
+                          <td className="tabular-nums text-rc-success">{s.wins}</td>
+                          <td className="tabular-nums text-rc-danger">{s.losses}</td>
+                          <td className="tabular-nums text-rc-fg-subtle">{s.draws}</td>
+                          <td className="tabular-nums text-rc-fg-strong">
+                            {(s.winRate * 100).toFixed(1)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )}
-          </tbody>
-        </table>
-      </div>
+            {displayedSpells.length > 0 && (
+              <div>
+                <h4 className="rc-eyebrow mb-2">
+                  Most Used Spells{selectedCombo ? ` (${selectedCombo})` : ""}
+                </h4>
+                <div className="overflow-x-auto">
+                  <table className="rc-table">
+                    <thead>
+                      <tr>
+                        <th>Spell</th>
+                        <th>Avg#</th>
+                        <th>Decks</th>
+                        <th>W</th>
+                        <th>L</th>
+                        <th>D</th>
+                        <th>Win%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayedSpells.slice(0, 45).map((s) => (
+                        <tr
+                          key={s.spellName}
+                          onMouseEnter={() =>
+                            s.spellSlug && onHoverCard({ slug: s.spellSlug, type: null })
+                          }
+                          onMouseLeave={onLeaveCard}
+                        >
+                          <td className="font-rc-display text-[15px] text-rc-fg-strong">{s.spellName}</td>
+                          <td className="tabular-nums text-rc-fg-subtle">{s.avgCopies}</td>
+                          <td className="tabular-nums">{s.matches}</td>
+                          <td className="tabular-nums text-rc-success">{s.wins}</td>
+                          <td className="tabular-nums text-rc-danger">{s.losses}</td>
+                          <td className="tabular-nums text-rc-fg-subtle">{s.draws}</td>
+                          <td className="tabular-nums text-rc-fg-strong">
+                            {(s.winRate * 100).toFixed(1)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1069,108 +1273,112 @@ export default function PublicMetaDashboard() {
     : expandedAvatarSpells;
 
   return (
-    <div className="flex flex-col gap-10">
-        <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-sm text-slate-400">
-              All statistics from matches played on this simulator
-            </p>
-            {lastUpdated && (
-              <p className="text-xs text-slate-500 mt-0.5">
-                Last updated: {new Date(lastUpdated).toLocaleString()}
-              </p>
-            )}
+    <div className="flex flex-col gap-7">
+      {/* Filters and global actions */}
+      <section className="rc-panel">
+        <PanelHeader
+          title="Filters"
+          meta={
+            lastUpdated
+              ? `updated ${new Date(lastUpdated).toLocaleString()}`
+              : undefined
+          }
+        >
+          <RcButton size="sm" onClick={refreshAll}>
+            Refresh All
+          </RcButton>
+          <RcButton
+            variant="outline"
+            size="sm"
+            onClick={exportToCsv}
+            disabled={
+              avatarStats.length + siteStats.length + spellbookStats.length === 0
+            }
+          >
+            Export CSV
+          </RcButton>
+        </PanelHeader>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-[18px] py-3.5">
+          <div className="flex items-center gap-2.5">
+            <span className="rc-eyebrow">Format</span>
+            <div className="rc-segment">
+              {(["constructed", "sealed", "draft"] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  aria-pressed={format === f}
+                  onClick={() => setFormat(f)}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={refreshAll}
-              className="inline-flex items-center justify-center rounded border border-emerald-400 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20"
-            >
-              Refresh All
-            </button>
-            <button
-              onClick={exportToCsv}
-              className="inline-flex items-center rounded border border-amber-500/50 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200 hover:bg-amber-500/20"
-              disabled={
-                avatarStats.length +
-                  siteStats.length +
-                  spellbookStats.length ===
-                0
-              }
-            >
-              Export CSV
-            </button>
+          <div className="flex items-center gap-2.5">
+            <span className="rc-eyebrow">Period</span>
+            <div className="rc-segment">
+              {WINDOW_OPTIONS.map((w) => (
+                <button
+                  key={w.value}
+                  type="button"
+                  title={w.title}
+                  aria-pressed={metaWindow === w.value}
+                  onClick={() => setMetaWindow(w.value)}
+                >
+                  {w.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </header>
-
-        {/* Format selector */}
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-slate-300">Format:</span>
-          {(["constructed", "sealed", "draft"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFormat(f)}
-              className={clsx(
-                "rounded px-3 py-1.5 text-sm font-medium transition",
-                format === f
-                  ? "bg-emerald-500/20 text-emerald-200 border border-emerald-400"
-                  : "bg-slate-800 text-slate-300 border border-slate-600 hover:bg-slate-700",
-              )}
-            >
-              {f.charAt(0).toUpperCase() + f.slice(1)}
-            </button>
-          ))}
-          <span className="ml-4 text-sm text-slate-300">Period:</span>
-          {WINDOW_OPTIONS.map((w) => (
-            <button
-              key={w.value}
-              onClick={() => setMetaWindow(w.value)}
-              title={w.title}
-              className={clsx(
-                "rounded px-3 py-1.5 text-sm font-medium transition",
-                metaWindow === w.value
-                  ? "bg-sky-500/20 text-sky-200 border border-sky-400"
-                  : "bg-slate-800 text-slate-300 border border-slate-600 hover:bg-slate-700",
-              )}
-            >
-              {w.label}
-            </button>
-          ))}
         </div>
+      </section>
 
-        {/* Match Overview */}
-        <section>
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Match Overview
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {matchStats.map((stat) => (
-              <StatCard
-                key={stat.format}
-                label={`${stat.format} matches`}
-                value={stat.totalMatches}
-                sublabel={
-                  stat.avgDurationSec
-                    ? `Avg ${Math.round(stat.avgDurationSec / 60)} min`
-                    : undefined
-                }
-              />
-            ))}
-          </div>
-          {matchStatsLoading && (
-            <p className="text-xs text-slate-400 mt-2">Loading...</p>
+      {/* Match Overview */}
+      <section className="rc-panel">
+        <PanelHeader title="Match Overview" />
+        <div className="px-[18px] py-3.5">
+          {matchStatsLoading && matchStats.length === 0 ? (
+            <div className="rc-hint py-6 text-center">loading…</div>
+          ) : matchStats.length === 0 ? (
+            <RcEmpty title="Nothing recorded yet.">
+              match totals appear once games finish
+            </RcEmpty>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-3">
+              {matchStats.map((stat) => (
+                <StatCard
+                  key={stat.format}
+                  label={`${stat.format} matches`}
+                  value={stat.totalMatches}
+                  sublabel={
+                    stat.avgDurationSec
+                      ? `Avg ${Math.round(stat.avgDurationSec / 60)} min`
+                      : undefined
+                  }
+                />
+              ))}
+            </div>
           )}
-        </section>
+        </div>
+      </section>
 
-        {/* Avatar Win Rates */}
-        <section>
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Avatar Win Rates
-          </h2>
+      {/* Avatar Win Rates */}
+      <section className="rc-panel">
+        <PanelHeader
+          title="Avatar Win Rates"
+          meta={
+            avatarStats.length > 0
+              ? `${avatarStats.length} ${avatarStats.length === 1 ? "avatar" : "avatars"}`
+              : undefined
+          }
+        />
+        <div className="px-[18px] py-3.5">
           {avatarStatsLoading ? (
-            <p className="text-sm text-slate-400">Loading...</p>
+            <div className="rc-hint py-6 text-center">loading…</div>
           ) : avatarStats.length === 0 ? (
-            <p className="text-sm text-slate-400">No avatar data available.</p>
+            <RcEmpty title="No avatar data.">
+              nothing recorded for this format and period
+            </RcEmpty>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {avatarStats.map((a) => {
@@ -1179,13 +1387,13 @@ export default function PublicMetaDashboard() {
                   <React.Fragment key={a.cardId}>
                     <div
                       className={clsx(
-                        "flex gap-3 rounded border border-slate-700/40 bg-slate-900/20 p-3 hover:bg-slate-800/40 transition overflow-hidden cursor-pointer",
-                        isAvatarExpanded && "ring-1 ring-slate-500/50 bg-slate-800/40",
+                        "flex cursor-pointer gap-3 overflow-hidden rounded-rc-md border border-rc-line/12 bg-black/30 p-3 transition-colors hover:border-rc-accent/40 hover:bg-rc-accent/6",
+                        isAvatarExpanded && "border-rc-accent/50 bg-rc-accent/8",
                       )}
                       onClick={() => void handleAvatarClick(a.name)}
                     >
                       {a.slug && (
-                        <div className="relative w-16 h-[86px] flex-shrink-0 rounded-md overflow-hidden bg-black/40">
+                        <div className="relative w-16 h-[86px] flex-shrink-0 rounded-rc-sm overflow-hidden bg-black/45">
                           <Image
                             src={`/api/images/${a.slug}`}
                             alt={a.name}
@@ -1197,16 +1405,16 @@ export default function PublicMetaDashboard() {
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-white truncate">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
                             {a.name}
                           </span>
-                          <span className="text-sm font-semibold text-slate-300 ml-2 flex-shrink-0">
+                          <span className="rc-stat flex-shrink-0 text-sm">
                             {(a.winRate * 100).toFixed(1)}%
                           </span>
                         </div>
-                        <WinRateBar winRate={a.winRate} barColor="bg-slate-400" />
-                        <div className="flex items-center gap-3 text-xs text-slate-400 mt-1.5">
+                        <WinRateBar winRate={a.winRate} />
+                        <div className="mt-1.5 flex items-center gap-3 font-rc-mono text-[11px] tracking-[0.06em] text-rc-fg-subtle">
                           <span>{a.plays} played</span>
                           <span>
                             {a.wins}W / {a.losses}L
@@ -1216,172 +1424,49 @@ export default function PublicMetaDashboard() {
                       </div>
                     </div>
                     {isAvatarExpanded && (
-                      <div className="col-span-full rounded border border-slate-700/20 bg-slate-900/10 p-3">
-                        {expandedAvatarLoading ? (
-                          <p className="text-xs text-slate-400">Loading deck details...</p>
-                        ) : expandedAvatarSites.length === 0 && expandedAvatarSpells.length === 0 && expandedAvatarElementCombos.length === 0 ? (
-                          <p className="text-xs text-slate-400">No deck detail data available yet. Data appears after the server recomputes statistics.</p>
-                        ) : (
-                          <div className="flex flex-col gap-4">
-                            {expandedAvatarElementCombos.length > 0 && (
-                              <div>
-                                <h4 className="text-xs font-semibold text-slate-300 mb-2">Element Combinations</h4>
-                                <div className="flex flex-wrap gap-2">
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setSelectedCombo(null); }}
-                                    className={clsx(
-                                      "rounded border px-3 py-1.5 text-xs transition cursor-pointer",
-                                      selectedCombo === null
-                                        ? "border-slate-400 bg-slate-700/50 ring-1 ring-slate-400/50"
-                                        : "border-slate-700/40 bg-slate-800/30 hover:bg-slate-700/40",
-                                    )}
-                                  >
-                                    <span className="text-slate-200 font-medium">All</span>
-                                  </button>
-                                  {expandedAvatarElementCombos.map((ec) => (
-                                    <button
-                                      key={ec.combo}
-                                      onClick={(e) => { e.stopPropagation(); setSelectedCombo(selectedCombo === ec.combo ? null : ec.combo); }}
-                                      className={clsx(
-                                        "rounded border px-3 py-1.5 text-xs transition cursor-pointer",
-                                        selectedCombo === ec.combo
-                                          ? "border-slate-400 bg-slate-700/50 ring-1 ring-slate-400/50"
-                                          : "border-slate-700/40 bg-slate-800/30 hover:bg-slate-700/40",
-                                      )}
-                                    >
-                                      <span className="inline-flex items-center gap-1 mr-2">
-                                        <ElementIcons element={ec.combo} size={12} />
-                                      </span>
-                                      <span className="text-slate-300">{ec.matches} decks</span>
-                                      <span className="mx-1.5 text-slate-600">|</span>
-                                      <span className="text-slate-200 font-medium">{(ec.winRate * 100).toFixed(1)}%</span>
-                                      <span className="ml-1.5 text-slate-500">{ec.wins}W/{ec.losses}L{ec.draws > 0 ? `/${ec.draws}D` : ""}</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            <div className="grid gap-4 md:grid-cols-2">
-                              {displayedSites.length > 0 && (
-                                <div>
-                                  <h4 className="text-xs font-semibold text-slate-300 mb-2">Most Used Sites{selectedCombo ? ` (${selectedCombo})` : ""}</h4>
-                                  <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                                    <table className="min-w-full text-left text-xs text-slate-200">
-                                      <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                                        <tr>
-                                          <th className="px-2 py-1.5">Site</th>
-                                          <th className="px-2 py-1.5">Avg#</th>
-                                          <th className="px-2 py-1.5">Decks</th>
-                                          <th className="px-2 py-1.5">W</th>
-                                          <th className="px-2 py-1.5">L</th>
-                                          <th className="px-2 py-1.5">D</th>
-                                          <th className="px-2 py-1.5">Win%</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {displayedSites.slice(0, 45).map((s) => (
-                                          <tr
-                                            key={s.siteName}
-                                            className="border-t border-slate-800/60 hover:bg-slate-800/40"
-                                            onMouseEnter={() =>
-                                              s.siteSlug && setHoveredCard({ slug: s.siteSlug, type: "Site" })
-                                            }
-                                            onMouseLeave={() => setHoveredCard(null)}
-                                          >
-                                            <td className="px-2 py-1.5 font-medium text-white">{s.siteName}</td>
-                                            <td className="px-2 py-1.5 text-slate-400">{s.avgCopies}</td>
-                                            <td className="px-2 py-1.5">{s.matches}</td>
-                                            <td className="px-2 py-1.5 text-emerald-400">{s.wins}</td>
-                                            <td className="px-2 py-1.5 text-rose-400">{s.losses}</td>
-                                            <td className="px-2 py-1.5 text-slate-400">{s.draws}</td>
-                                            <td className="px-2 py-1.5 text-slate-300 font-medium">
-                                              {(s.winRate * 100).toFixed(1)}%
-                                            </td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
-                              )}
-                              {displayedSpells.length > 0 && (
-                                <div>
-                                  <h4 className="text-xs font-semibold text-slate-300 mb-2">Most Used Spells{selectedCombo ? ` (${selectedCombo})` : ""}</h4>
-                                  <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                                    <table className="min-w-full text-left text-xs text-slate-200">
-                                      <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                                        <tr>
-                                          <th className="px-2 py-1.5">Spell</th>
-                                          <th className="px-2 py-1.5">Avg#</th>
-                                          <th className="px-2 py-1.5">Decks</th>
-                                          <th className="px-2 py-1.5">W</th>
-                                          <th className="px-2 py-1.5">L</th>
-                                          <th className="px-2 py-1.5">D</th>
-                                          <th className="px-2 py-1.5">Win%</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {displayedSpells.slice(0, 45).map((s) => (
-                                          <tr
-                                            key={s.spellName}
-                                            className="border-t border-slate-800/60 hover:bg-slate-800/40"
-                                            onMouseEnter={() =>
-                                              s.spellSlug && setHoveredCard({ slug: s.spellSlug, type: null })
-                                            }
-                                            onMouseLeave={() => setHoveredCard(null)}
-                                          >
-                                            <td className="px-2 py-1.5 font-medium text-white">{s.spellName}</td>
-                                            <td className="px-2 py-1.5 text-slate-400">{s.avgCopies}</td>
-                                            <td className="px-2 py-1.5">{s.matches}</td>
-                                            <td className="px-2 py-1.5 text-emerald-400">{s.wins}</td>
-                                            <td className="px-2 py-1.5 text-rose-400">{s.losses}</td>
-                                            <td className="px-2 py-1.5 text-slate-400">{s.draws}</td>
-                                            <td className="px-2 py-1.5 text-slate-300 font-medium">
-                                              {(s.winRate * 100).toFixed(1)}%
-                                            </td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      <AvatarDetail
+                        loading={expandedAvatarLoading}
+                        sites={expandedAvatarSites}
+                        spells={expandedAvatarSpells}
+                        elementCombos={expandedAvatarElementCombos}
+                        selectedCombo={selectedCombo}
+                        onSelectCombo={setSelectedCombo}
+                        displayedSites={displayedSites}
+                        displayedSpells={displayedSpells}
+                        onHoverCard={setHoveredCard}
+                        onLeaveCard={() => setHoveredCard(null)}
+                      />
                     )}
                   </React.Fragment>
                 );
               })}
             </div>
           )}
-        </section>
+        </div>
+      </section>
 
-        {/* Deck Composition - Avatar + Element Combos */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-semibold text-white">
-                Deck Composition
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Avatar performance with spellbook element distribution ({format})
-                {deckArchetypes.length > 0 && (
-                  <span className="ml-1">
-                    &middot; {deckArchetypes.reduce((sum, d) => sum + d.matches, 0)} decks analyzed
-                  </span>
-                )}
-              </p>
-            </div>
-            <ElementLegend />
-          </div>
+      {/* Deck Composition - Avatar + Element Combos */}
+      <section className="rc-panel">
+        <PanelHeader
+          title="Deck Composition"
+          meta={
+            deckArchetypes.length > 0
+              ? `${format} · ${deckArchetypes.reduce((sum, d) => sum + d.matches, 0)} decks analyzed`
+              : format
+          }
+        >
+          <ElementLegend />
+        </PanelHeader>
+        <div className="px-[18px] py-3.5">
+          <p className="mb-3.5 font-rc-sans text-sm text-rc-fg-muted">
+            Avatar performance with spellbook element distribution.
+          </p>
           {deckArchetypesLoading ? (
-            <p className="text-sm text-slate-400">Loading...</p>
+            <div className="rc-hint py-6 text-center">loading…</div>
           ) : deckArchetypes.length === 0 ? (
-            <p className="text-sm text-slate-400">
-              No deck composition data available.
-            </p>
+            <RcEmpty title="No deck composition data.">
+              decks are analysed once enough matches are recorded
+            </RcEmpty>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {deckArchetypes.map((d) => {
@@ -1390,13 +1475,13 @@ export default function PublicMetaDashboard() {
                   <React.Fragment key={d.avatarCardId}>
                     <div
                       className={clsx(
-                        "flex gap-3 rounded border border-indigo-700/30 bg-indigo-950/15 p-3 hover:bg-indigo-950/30 transition overflow-hidden cursor-pointer",
-                        isAvatarExpanded && "ring-1 ring-indigo-500/50 bg-indigo-950/30",
+                        "flex cursor-pointer gap-3 overflow-hidden rounded-rc-md border border-rc-line/12 bg-black/30 p-3 transition-colors hover:border-rc-accent/40 hover:bg-rc-accent/6",
+                        isAvatarExpanded && "border-rc-accent/50 bg-rc-accent/8",
                       )}
                       onClick={() => void handleAvatarClick(d.avatarName)}
                     >
                       {d.avatarSlug && (
-                        <div className="relative w-14 h-[75px] flex-shrink-0 rounded-md overflow-hidden bg-black/40">
+                        <div className="relative w-14 h-[75px] flex-shrink-0 rounded-rc-sm overflow-hidden bg-black/45">
                           <Image
                             src={`/api/images/${d.avatarSlug}`}
                             alt={d.avatarName}
@@ -1408,16 +1493,16 @@ export default function PublicMetaDashboard() {
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-white truncate text-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate font-rc-display text-[17px] leading-[1.1] text-rc-fg-strong">
                             {d.avatarName}
                           </span>
-                          <span className="text-sm font-semibold text-indigo-300 ml-2 flex-shrink-0">
+                          <span className="rc-stat flex-shrink-0 text-sm">
                             {(d.winRate * 100).toFixed(1)}%
                           </span>
                         </div>
                         <ElementDistributionBar elements={d.elements} />
-                        <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1">
+                        <div className="mt-1 flex items-center gap-3 font-rc-mono text-[11px] tracking-[0.06em] text-rc-fg-subtle">
                           <span>{d.matches} decks</span>
                           <span>
                             {d.wins}W / {d.losses}L
@@ -1428,159 +1513,39 @@ export default function PublicMetaDashboard() {
                       </div>
                     </div>
                     {isAvatarExpanded && (
-                      <div className="col-span-full rounded border border-indigo-700/20 bg-indigo-950/10 p-3">
-                        {expandedAvatarLoading ? (
-                          <p className="text-xs text-slate-400">Loading deck details...</p>
-                        ) : expandedAvatarSites.length === 0 && expandedAvatarSpells.length === 0 && expandedAvatarElementCombos.length === 0 ? (
-                          <p className="text-xs text-slate-400">No deck detail data available yet. Data appears after the server recomputes statistics.</p>
-                        ) : (
-                          <div className="flex flex-col gap-4">
-                            {expandedAvatarElementCombos.length > 0 && (
-                              <div>
-                                <h4 className="text-xs font-semibold text-indigo-300 mb-2">Element Combinations</h4>
-                                <div className="flex flex-wrap gap-2">
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setSelectedCombo(null); }}
-                                    className={clsx(
-                                      "rounded border px-3 py-1.5 text-xs transition cursor-pointer",
-                                      selectedCombo === null
-                                        ? "border-indigo-400 bg-indigo-800/50 ring-1 ring-indigo-400/50"
-                                        : "border-indigo-700/30 bg-indigo-950/20 hover:bg-indigo-900/30",
-                                    )}
-                                  >
-                                    <span className="text-indigo-200 font-medium">All</span>
-                                  </button>
-                                  {expandedAvatarElementCombos.map((ec) => (
-                                    <button
-                                      key={ec.combo}
-                                      onClick={(e) => { e.stopPropagation(); setSelectedCombo(selectedCombo === ec.combo ? null : ec.combo); }}
-                                      className={clsx(
-                                        "rounded border px-3 py-1.5 text-xs transition cursor-pointer",
-                                        selectedCombo === ec.combo
-                                          ? "border-indigo-400 bg-indigo-800/50 ring-1 ring-indigo-400/50"
-                                          : "border-indigo-700/30 bg-indigo-950/20 hover:bg-indigo-900/30",
-                                      )}
-                                    >
-                                      <span className="inline-flex items-center gap-1 mr-2">
-                                        <ElementIcons element={ec.combo} size={12} />
-                                      </span>
-                                      <span className="text-slate-300">{ec.matches} decks</span>
-                                      <span className="mx-1.5 text-slate-600">|</span>
-                                      <span className="text-indigo-200 font-medium">{(ec.winRate * 100).toFixed(1)}%</span>
-                                      <span className="ml-1.5 text-slate-500">{ec.wins}W/{ec.losses}L{ec.draws > 0 ? `/${ec.draws}D` : ""}</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            <div className="grid gap-4 md:grid-cols-2">
-                              {displayedSites.length > 0 && (
-                                <div>
-                                  <h4 className="text-xs font-semibold text-indigo-300 mb-2">Most Used Sites{selectedCombo ? ` (${selectedCombo})` : ""}</h4>
-                                  <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                                    <table className="min-w-full text-left text-xs text-slate-200">
-                                      <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                                        <tr>
-                                          <th className="px-2 py-1.5">Site</th>
-                                          <th className="px-2 py-1.5">Avg#</th>
-                                          <th className="px-2 py-1.5">Decks</th>
-                                          <th className="px-2 py-1.5">W</th>
-                                          <th className="px-2 py-1.5">L</th>
-                                          <th className="px-2 py-1.5">D</th>
-                                          <th className="px-2 py-1.5">Win%</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {displayedSites.slice(0, 45).map((s) => (
-                                          <tr
-                                            key={s.siteName}
-                                            className="border-t border-slate-800/60 hover:bg-slate-800/40"
-                                            onMouseEnter={() =>
-                                              s.siteSlug && setHoveredCard({ slug: s.siteSlug, type: "Site" })
-                                            }
-                                            onMouseLeave={() => setHoveredCard(null)}
-                                          >
-                                            <td className="px-2 py-1.5 font-medium text-white">{s.siteName}</td>
-                                            <td className="px-2 py-1.5 text-slate-400">{s.avgCopies}</td>
-                                            <td className="px-2 py-1.5">{s.matches}</td>
-                                            <td className="px-2 py-1.5 text-emerald-400">{s.wins}</td>
-                                            <td className="px-2 py-1.5 text-rose-400">{s.losses}</td>
-                                            <td className="px-2 py-1.5 text-slate-400">{s.draws}</td>
-                                            <td className="px-2 py-1.5 text-indigo-300 font-medium">
-                                              {(s.winRate * 100).toFixed(1)}%
-                                            </td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
-                              )}
-                              {displayedSpells.length > 0 && (
-                                <div>
-                                  <h4 className="text-xs font-semibold text-indigo-300 mb-2">Most Used Spells{selectedCombo ? ` (${selectedCombo})` : ""}</h4>
-                                  <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                                    <table className="min-w-full text-left text-xs text-slate-200">
-                                      <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                                        <tr>
-                                          <th className="px-2 py-1.5">Spell</th>
-                                          <th className="px-2 py-1.5">Avg#</th>
-                                          <th className="px-2 py-1.5">Decks</th>
-                                          <th className="px-2 py-1.5">W</th>
-                                          <th className="px-2 py-1.5">L</th>
-                                          <th className="px-2 py-1.5">D</th>
-                                          <th className="px-2 py-1.5">Win%</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {displayedSpells.slice(0, 45).map((s) => (
-                                          <tr
-                                            key={s.spellName}
-                                            className="border-t border-slate-800/60 hover:bg-slate-800/40"
-                                            onMouseEnter={() =>
-                                              s.spellSlug && setHoveredCard({ slug: s.spellSlug, type: null })
-                                            }
-                                            onMouseLeave={() => setHoveredCard(null)}
-                                          >
-                                            <td className="px-2 py-1.5 font-medium text-white">{s.spellName}</td>
-                                            <td className="px-2 py-1.5 text-slate-400">{s.avgCopies}</td>
-                                            <td className="px-2 py-1.5">{s.matches}</td>
-                                            <td className="px-2 py-1.5 text-emerald-400">{s.wins}</td>
-                                            <td className="px-2 py-1.5 text-rose-400">{s.losses}</td>
-                                            <td className="px-2 py-1.5 text-slate-400">{s.draws}</td>
-                                            <td className="px-2 py-1.5 text-indigo-300 font-medium">
-                                              {(s.winRate * 100).toFixed(1)}%
-                                            </td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      <AvatarDetail
+                        loading={expandedAvatarLoading}
+                        sites={expandedAvatarSites}
+                        spells={expandedAvatarSpells}
+                        elementCombos={expandedAvatarElementCombos}
+                        selectedCombo={selectedCombo}
+                        onSelectCombo={setSelectedCombo}
+                        displayedSites={displayedSites}
+                        displayedSpells={displayedSpells}
+                        onHoverCard={setHoveredCard}
+                        onLeaveCard={() => setHoveredCard(null)}
+                      />
                     )}
                   </React.Fragment>
                 );
               })}
             </div>
           )}
-        </section>
+        </div>
+      </section>
 
-        {/* Card Synergies — moved to bottom, see below */}
+      {/* Card Synergies — moved to bottom, see below */}
 
-        {/* Element Distribution */}
-        <section>
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Win Rate by Element
-          </h2>
+      {/* Element Distribution */}
+      <section className="rc-panel">
+        <PanelHeader title="Win Rate by Element" />
+        <div className="px-[18px] py-3.5">
           {elementStatsLoading ? (
-            <p className="text-sm text-slate-400">Loading...</p>
+            <div className="rc-hint py-6 text-center">loading…</div>
           ) : elementStats.length === 0 ? (
-            <p className="text-sm text-slate-400">No element data available.</p>
+            <RcEmpty title="No element data.">
+              nothing recorded for this format and period
+            </RcEmpty>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {elementStats.map((e) => {
@@ -1599,60 +1564,63 @@ export default function PublicMetaDashboard() {
                   <React.Fragment key={e.element}>
                     <div
                       className={clsx(
-                        "rounded border px-4 py-3 cursor-pointer transition hover:brightness-110",
+                        "cursor-pointer rounded-rc-md border px-4 py-3.5 transition hover:brightness-110",
                         !hasGradient && `${style.border} ${style.bg}`,
-                        isElementExpanded && "ring-1 ring-white/20",
+                        isElementExpanded && "ring-1 ring-rc-accent/35",
                       )}
                       style={hasGradient ? gradientStyle : undefined}
                       onClick={() => handleElementClick(e.element)}
                     >
-                      <div className="flex items-center justify-between">
-                        <span className={`font-medium ${style.text} inline-flex items-center gap-1.5`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`inline-flex items-center gap-1.5 ${style.text}`}>
                           <ElementIcons element={e.element} size={16} />
                         </span>
-                        <span className="text-xs text-slate-400">
+                        <span className="font-rc-mono text-[11px] tracking-[0.06em] tabular-nums text-rc-fg-subtle">
                           {e.plays.toLocaleString()} plays
                         </span>
                       </div>
                       <WinRateBar winRate={e.winRate} barColor={style.bar} />
-                      <div className="text-xs text-slate-400 mt-1">
+                      <div className="mt-1 font-rc-mono text-[11px] tracking-[0.06em] tabular-nums text-rc-fg-subtle">
                         {e.wins.toLocaleString()} wins of{" "}
                         {e.plays.toLocaleString()} plays
                       </div>
                     </div>
                     {isElementExpanded && (
-                      <div className="col-span-full rounded border border-slate-700/20 bg-slate-900/10 p-3">
-                        <h4 className="text-xs font-semibold text-slate-300 mb-2">
-                          Avatar Win Rates with <ElementIcons element={e.element} size={14} />
+                      <div className="col-span-full rounded-rc-md border border-rc-line/12 bg-black/30 p-3">
+                        <h4 className="rc-eyebrow mb-2 inline-flex items-center gap-1.5">
+                          Avatar Win Rates with{" "}
+                          <ElementIcons element={e.element} size={14} />
                         </h4>
                         {matchingAvatars.length === 0 ? (
-                          <p className="text-xs text-slate-400">No deck composition data for this element yet.</p>
+                          <div className="rc-hint py-4">
+                            no deck composition data for this element yet
+                          </div>
                         ) : (
-                          <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                            <table className="min-w-full text-left text-xs text-slate-200">
-                              <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+                          <div className="overflow-x-auto">
+                            <table className="rc-table">
+                              <thead>
                                 <tr>
-                                  <th className="px-3 py-1.5">Avatar</th>
-                                  <th className="px-3 py-1.5">Element %</th>
-                                  <th className="px-3 py-1.5">Decks</th>
-                                  <th className="px-3 py-1.5">W</th>
-                                  <th className="px-3 py-1.5">L</th>
-                                  <th className="px-3 py-1.5">D</th>
-                                  <th className="px-3 py-1.5">Win Rate</th>
+                                  <th>Avatar</th>
+                                  <th>Element %</th>
+                                  <th>Decks</th>
+                                  <th>W</th>
+                                  <th>L</th>
+                                  <th>D</th>
+                                  <th>Win Rate</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {matchingAvatars.map((d) => {
                                   const elemPct = elementParts.reduce((sum, ep) => sum + (d.elements[ep] || 0), 0);
                                   return (
-                                    <tr key={d.avatarCardId} className="border-t border-slate-800/60 hover:bg-slate-800/40">
-                                      <td className="px-3 py-1.5 font-medium text-white">{d.avatarName}</td>
-                                      <td className="px-3 py-1.5 text-slate-400">{elemPct}%</td>
-                                      <td className="px-3 py-1.5">{d.matches}</td>
-                                      <td className="px-3 py-1.5 text-emerald-400">{d.wins}</td>
-                                      <td className="px-3 py-1.5 text-rose-400">{d.losses}</td>
-                                      <td className="px-3 py-1.5 text-slate-400">{d.draws}</td>
-                                      <td className="px-3 py-1.5 font-medium">{(d.winRate * 100).toFixed(1)}%</td>
+                                    <tr key={d.avatarCardId}>
+                                      <td className="font-rc-display text-[15px] text-rc-fg-strong">{d.avatarName}</td>
+                                      <td className="tabular-nums text-rc-fg-subtle">{elemPct}%</td>
+                                      <td className="tabular-nums">{d.matches}</td>
+                                      <td className="tabular-nums text-rc-success">{d.wins}</td>
+                                      <td className="tabular-nums text-rc-danger">{d.losses}</td>
+                                      <td className="tabular-nums text-rc-fg-subtle">{d.draws}</td>
+                                      <td className="tabular-nums text-rc-fg-strong">{(d.winRate * 100).toFixed(1)}%</td>
                                     </tr>
                                   );
                                 })}
@@ -1667,32 +1635,36 @@ export default function PublicMetaDashboard() {
               })}
             </div>
           )}
-        </section>
+        </div>
+      </section>
 
-        {/* Type Distribution */}
-        <section>
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Win Rate by Card Type
-          </h2>
+      {/* Type Distribution */}
+      <section className="rc-panel">
+        <PanelHeader title="Win Rate by Card Type" />
+        <div className="px-[18px] py-3.5">
           {typeStatsLoading ? (
-            <p className="text-sm text-slate-400">Loading...</p>
+            <div className="rc-hint py-6 text-center">loading…</div>
           ) : typeStats.length === 0 ? (
-            <p className="text-sm text-slate-400">No type data available.</p>
+            <RcEmpty title="No card type data.">
+              nothing recorded for this format and period
+            </RcEmpty>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {typeStats.map((t) => (
                 <div
                   key={t.type}
-                  className="rounded border border-slate-700 bg-slate-900/60 px-4 py-3"
+                  className="rounded-rc-md border border-rc-line/12 bg-black/30 px-4 py-3.5"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-white">{t.type}</span>
-                    <span className="text-xs text-slate-400">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-rc-display text-[17px] leading-[1.1] text-rc-fg-strong">
+                      {t.type}
+                    </span>
+                    <span className="font-rc-mono text-[11px] tracking-[0.06em] tabular-nums text-rc-fg-subtle">
                       {t.plays.toLocaleString()} plays
                     </span>
                   </div>
-                  <WinRateBar winRate={t.winRate} barColor="bg-emerald-500" />
-                  <div className="text-xs text-slate-400 mt-1">
+                  <WinRateBar winRate={t.winRate} />
+                  <div className="mt-1 font-rc-mono text-[11px] tracking-[0.06em] tabular-nums text-rc-fg-subtle">
                     {t.wins.toLocaleString()} wins of {t.plays.toLocaleString()}{" "}
                     plays
                   </div>
@@ -1700,17 +1672,19 @@ export default function PublicMetaDashboard() {
               ))}
             </div>
           )}
-        </section>
+        </div>
+      </section>
 
-        {/* Rarity Distribution */}
-        <section>
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Win Rate by Rarity
-          </h2>
+      {/* Rarity Distribution */}
+      <section className="rc-panel">
+        <PanelHeader title="Win Rate by Rarity" />
+        <div className="px-[18px] py-3.5">
           {rarityStatsLoading ? (
-            <p className="text-sm text-slate-400">Loading...</p>
+            <div className="rc-hint py-6 text-center">loading…</div>
           ) : rarityStats.length === 0 ? (
-            <p className="text-sm text-slate-400">No rarity data available.</p>
+            <RcEmpty title="No rarity data.">
+              nothing recorded for this format and period
+            </RcEmpty>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {rarityStats.map((r) => {
@@ -1718,18 +1692,18 @@ export default function PublicMetaDashboard() {
                 return (
                   <div
                     key={r.rarity}
-                    className={`rounded border ${style.border} ${style.bg} px-4 py-3`}
+                    className={`rounded-rc-md border ${style.border} ${style.bg} px-4 py-3.5`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className={`font-medium ${style.text}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`font-rc-display text-[17px] leading-[1.1] ${style.text}`}>
                         {r.rarity}
                       </span>
-                      <span className="text-xs text-slate-400">
+                      <span className="font-rc-mono text-[11px] tracking-[0.06em] tabular-nums text-rc-fg-subtle">
                         {r.plays.toLocaleString()} plays
                       </span>
                     </div>
                     <WinRateBar winRate={r.winRate} barColor={style.bar} />
-                    <div className="text-xs text-slate-400 mt-1">
+                    <div className="mt-1 font-rc-mono text-[11px] tracking-[0.06em] tabular-nums text-rc-fg-subtle">
                       {r.wins.toLocaleString()} wins of{" "}
                       {r.plays.toLocaleString()} plays
                     </div>
@@ -1738,35 +1712,37 @@ export default function PublicMetaDashboard() {
               })}
             </div>
           )}
-        </section>
+        </div>
+      </section>
 
-        {/* Mana Curve */}
-        <section>
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Win Rate by Mana Cost
-          </h2>
+      {/* Mana Curve */}
+      <section className="rc-panel">
+        <PanelHeader title="Win Rate by Mana Cost" />
+        <div className="px-[18px] py-3.5">
           {costStatsLoading ? (
-            <p className="text-sm text-slate-400">Loading...</p>
+            <div className="rc-hint py-6 text-center">loading…</div>
           ) : costStats.length === 0 ? (
-            <p className="text-sm text-slate-400">No cost data available.</p>
+            <RcEmpty title="No mana cost data.">
+              nothing recorded for this format and period
+            </RcEmpty>
           ) : (
-            <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-              <table className="min-w-full text-left text-sm text-slate-200">
-                <thead className="bg-slate-900/70 text-xs uppercase tracking-wide text-slate-400">
+            <div className="overflow-x-auto">
+              <table className="rc-table">
+                <thead>
                   <tr>
-                    <th className="px-3 py-2">Cost</th>
-                    <th className="px-3 py-2">Plays</th>
-                    <th className="px-3 py-2">Wins</th>
-                    <th className="px-3 py-2">Win Rate</th>
+                    <th>Cost</th>
+                    <th>Plays</th>
+                    <th>Wins</th>
+                    <th>Win Rate</th>
                   </tr>
                 </thead>
                 <tbody>
                   {costStats.map((c) => (
-                    <tr key={c.cost} className="border-t border-slate-800/60">
-                      <td className="px-3 py-2 font-medium">{c.cost}</td>
-                      <td className="px-3 py-2">{c.plays.toLocaleString()}</td>
-                      <td className="px-3 py-2">{c.wins.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-emerald-300">
+                    <tr key={c.cost}>
+                      <td className="tabular-nums text-rc-fg-strong">{c.cost}</td>
+                      <td className="tabular-nums">{c.plays.toLocaleString()}</td>
+                      <td className="tabular-nums">{c.wins.toLocaleString()}</td>
+                      <td className="tabular-nums text-rc-fg-strong">
                         {(c.winRate * 100).toFixed(1)}%
                       </td>
                     </tr>
@@ -1775,11 +1751,13 @@ export default function PublicMetaDashboard() {
               </table>
             </div>
           )}
-        </section>
+        </div>
+      </section>
 
-        {/* Site Win Rates */}
-        <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold text-white">Site Win Rates</h2>
+      {/* Site Win Rates */}
+      <section className="rc-panel">
+        <PanelHeader title="Site Win Rates" />
+        <div className="px-[18px] py-3.5">
           <CardStatsTable
             stats={siteStats}
             loading={siteStatsLoading}
@@ -1796,14 +1774,14 @@ export default function PublicMetaDashboard() {
             expandedCardLoading={expandedCardLoading}
             onRowClick={handleCardClick}
           />
-        </section>
+        </div>
+      </section>
 
-        {/* Spellbook Win Rates */}
-        <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold text-white">
-            Spellbook Win Rates
-          </h2>
-          <p className="text-xs text-slate-400 -mt-2">
+      {/* Spellbook Win Rates */}
+      <section className="rc-panel">
+        <PanelHeader title="Spellbook Win Rates" />
+        <div className="px-[18px] py-3.5">
+          <p className="mb-3.5 font-rc-sans text-sm text-rc-fg-muted">
             Minions, Auras, Artifacts, Magic, and other non-site cards
           </p>
           <CardStatsTable
@@ -1823,53 +1801,53 @@ export default function PublicMetaDashboard() {
             expandedCardLoading={expandedCardLoading}
             onRowClick={handleCardClick}
           />
-        </section>
+        </div>
+      </section>
 
-        {/* Spell Synergies — at the bottom, lazy-loaded */}
-        {synergyTotalDecks >= 100 && (
-          <>
-            <section>
-              <h2 className="text-lg font-semibold text-white mb-1">
-                Top Spell Synergies
-              </h2>
-              <p className="text-xs text-slate-400 mb-4">
+      {/* Spell Synergies — at the bottom, lazy-loaded */}
+      {synergyTotalDecks >= 100 && (
+        <>
+          <section className="rc-panel">
+            <PanelHeader title="Top Spell Synergies" />
+            <div className="px-[18px] py-3.5">
+              <p className="mb-3.5 font-rc-sans text-sm text-rc-fg-muted">
                 Spell pairs with the highest win rate when played together (min. 3 co-occurrences)
               </p>
               {synergiesLoading ? (
-                <p className="text-sm text-slate-400">Loading...</p>
+                <div className="rc-hint py-6 text-center">loading…</div>
               ) : synergies.length === 0 ? (
-                <p className="text-sm text-slate-400">
-                  No synergy data available yet.
-                </p>
+                <RcEmpty title="No synergy data yet.">
+                  pairs appear once enough decks are recorded
+                </RcEmpty>
               ) : (
-                <div className="max-h-[600px] overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                  <table className="min-w-full text-left text-xs text-slate-200">
-                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400 sticky top-0 z-10">
+                <div className="max-h-[600px] overflow-auto rounded-rc-md border border-rc-line/12">
+                  <table className="rc-table">
+                    <thead className="sticky top-0 z-10 [&>tr>th]:bg-rc-bg">
                       <tr>
-                        <th className="px-3 py-2">Card A</th>
-                        <th className="px-3 py-2">Card B</th>
-                        <th className="px-3 py-2">Paired</th>
-                        <th className="px-3 py-2">Wins</th>
-                        <th className="px-3 py-2">Losses</th>
-                        <th className="px-3 py-2">Win Rate</th>
+                        <th>Card A</th>
+                        <th>Card B</th>
+                        <th>Paired</th>
+                        <th>Wins</th>
+                        <th>Losses</th>
+                        <th>Win Rate</th>
                       </tr>
                     </thead>
                     <tbody>
                       {synergies.slice(0, synergyVisible).map((pair) => (
                         <tr
                           key={`${pair.cardA}||${pair.cardB}`}
-                          className="border-t border-slate-800/60 hover:bg-slate-800/40 cursor-pointer"
+                          className="cursor-pointer"
                           onMouseEnter={() =>
                             pair.slugA && setHoveredCard({ slug: pair.slugA, type: null })
                           }
                           onMouseLeave={() => setHoveredCard(null)}
                         >
-                          <td className="px-3 py-2 font-medium text-emerald-200">{pair.cardA}</td>
-                          <td className="px-3 py-2 font-medium text-emerald-200">{pair.cardB}</td>
-                          <td className="px-3 py-2">{pair.coOccurrences}</td>
-                          <td className="px-3 py-2">{pair.wins}</td>
-                          <td className="px-3 py-2">{pair.losses}</td>
-                          <td className="px-3 py-2 text-emerald-300 font-medium">
+                          <td className="font-rc-display text-[15px] text-rc-fg-strong">{pair.cardA}</td>
+                          <td className="font-rc-display text-[15px] text-rc-fg-strong">{pair.cardB}</td>
+                          <td className="tabular-nums">{pair.coOccurrences}</td>
+                          <td className="tabular-nums">{pair.wins}</td>
+                          <td className="tabular-nums">{pair.losses}</td>
+                          <td className="tabular-nums font-medium text-rc-success">
                             {(pair.winRate * 100).toFixed(1)}%
                           </td>
                         </tr>
@@ -1877,61 +1855,62 @@ export default function PublicMetaDashboard() {
                     </tbody>
                   </table>
                   {synergyVisible < synergies.length && (
-                    <div className="flex justify-center py-3 border-t border-slate-800/60">
-                      <button
+                    <div className="flex justify-center border-t border-rc-line/8 py-3">
+                      <RcButton
+                        variant="link"
+                        size="sm"
                         onClick={() => setSynergyVisible((v) => v + SYNERGY_PAGE_SIZE)}
-                        className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
                       >
                         Show more ({synergies.length - synergyVisible} remaining)
-                      </button>
+                      </RcButton>
                     </div>
                   )}
                 </div>
               )}
-            </section>
+            </div>
+          </section>
 
-            <section>
-              <h2 className="text-lg font-semibold text-white mb-1">
-                Spell Anti-Synergies
-              </h2>
-              <p className="text-xs text-slate-400 mb-4">
+          <section className="rc-panel">
+            <PanelHeader title="Spell Anti-Synergies" />
+            <div className="px-[18px] py-3.5">
+              <p className="mb-3.5 font-rc-sans text-sm text-rc-fg-muted">
                 Spell pairs with the lowest win rate when played together
               </p>
               {synergiesLoading ? (
-                <p className="text-sm text-slate-400">Loading...</p>
+                <div className="rc-hint py-6 text-center">loading…</div>
               ) : antiSynergies.length === 0 ? (
-                <p className="text-sm text-slate-400">
-                  No anti-synergy data available yet.
-                </p>
+                <RcEmpty title="No anti-synergy data yet.">
+                  pairs appear once enough decks are recorded
+                </RcEmpty>
               ) : (
-                <div className="max-h-[600px] overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                  <table className="min-w-full text-left text-xs text-slate-200">
-                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400 sticky top-0 z-10">
+                <div className="max-h-[600px] overflow-auto rounded-rc-md border border-rc-line/12">
+                  <table className="rc-table">
+                    <thead className="sticky top-0 z-10 [&>tr>th]:bg-rc-bg">
                       <tr>
-                        <th className="px-3 py-2">Card A</th>
-                        <th className="px-3 py-2">Card B</th>
-                        <th className="px-3 py-2">Paired</th>
-                        <th className="px-3 py-2">Wins</th>
-                        <th className="px-3 py-2">Losses</th>
-                        <th className="px-3 py-2">Win Rate</th>
+                        <th>Card A</th>
+                        <th>Card B</th>
+                        <th>Paired</th>
+                        <th>Wins</th>
+                        <th>Losses</th>
+                        <th>Win Rate</th>
                       </tr>
                     </thead>
                     <tbody>
                       {antiSynergies.slice(0, antiSynergyVisible).map((pair) => (
                         <tr
                           key={`${pair.cardA}||${pair.cardB}`}
-                          className="border-t border-slate-800/60 hover:bg-slate-800/40 cursor-pointer"
+                          className="cursor-pointer"
                           onMouseEnter={() =>
                             pair.slugA && setHoveredCard({ slug: pair.slugA, type: null })
                           }
                           onMouseLeave={() => setHoveredCard(null)}
                         >
-                          <td className="px-3 py-2 font-medium text-rose-200">{pair.cardA}</td>
-                          <td className="px-3 py-2 font-medium text-rose-200">{pair.cardB}</td>
-                          <td className="px-3 py-2">{pair.coOccurrences}</td>
-                          <td className="px-3 py-2">{pair.wins}</td>
-                          <td className="px-3 py-2">{pair.losses}</td>
-                          <td className="px-3 py-2 text-rose-300 font-medium">
+                          <td className="font-rc-display text-[15px] text-rc-fg-strong">{pair.cardA}</td>
+                          <td className="font-rc-display text-[15px] text-rc-fg-strong">{pair.cardB}</td>
+                          <td className="tabular-nums">{pair.coOccurrences}</td>
+                          <td className="tabular-nums">{pair.wins}</td>
+                          <td className="tabular-nums">{pair.losses}</td>
+                          <td className="tabular-nums font-medium text-rc-danger">
                             {(pair.winRate * 100).toFixed(1)}%
                           </td>
                         </tr>
@@ -1939,20 +1918,22 @@ export default function PublicMetaDashboard() {
                     </tbody>
                   </table>
                   {antiSynergyVisible < antiSynergies.length && (
-                    <div className="flex justify-center py-3 border-t border-slate-800/60">
-                      <button
+                    <div className="flex justify-center border-t border-rc-line/8 py-3">
+                      <RcButton
+                        variant="link"
+                        size="sm"
                         onClick={() => setAntiSynergyVisible((v) => v + SYNERGY_PAGE_SIZE)}
-                        className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
                       >
                         Show more ({antiSynergies.length - antiSynergyVisible} remaining)
-                      </button>
+                      </RcButton>
                     </div>
                   )}
                 </div>
               )}
-            </section>
-          </>
-        )}
+            </div>
+          </section>
+        </>
+      )}
 
       {/* Card Preview Overlay - rendered via portal to ensure viewport-fixed positioning */}
       {hoveredCard &&
@@ -1960,7 +1941,7 @@ export default function PublicMetaDashboard() {
         createPortal(
           <div className="fixed top-1/4 right-8 z-[9999] pointer-events-none">
             <div
-              className={`relative rounded-xl overflow-hidden bg-black/60 backdrop-blur-md shadow-2xl ring-2 ring-white/20 ${
+              className={`relative overflow-hidden rounded-rc-lg bg-black/60 shadow-rc-md ring-1 ring-rc-accent/30 backdrop-blur-md ${
                 (hoveredCard.type || "").toLowerCase().includes("site")
                   ? "w-72 aspect-[4/3]"
                   : "w-56 aspect-[3/4]"

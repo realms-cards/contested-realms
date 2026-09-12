@@ -429,17 +429,14 @@ export default function PlayersInvitePanel({
       </div>
 
       {error && (
-        <div className="mx-[18px] mb-3 rounded-rc-md border border-rc-danger/40 bg-rc-danger/12 px-3 py-2 font-rc-mono text-xs text-[#f0c2b5]">
+        <div className="rc-alert mx-[18px] mb-3" data-tone="danger">
           {error}
         </div>
       )}
       {status && (
         <div
-          className={`mx-[18px] mb-3 rounded-rc-md border px-3 py-2 font-rc-mono text-xs ${
-            status.kind === "error"
-              ? "border-rc-danger/40 bg-rc-danger/12 text-[#f0c2b5]"
-              : "border-rc-success/35 bg-rc-success/18 text-[#c5d6a8]"
-          }`}
+          className="rc-alert mx-[18px] mb-3"
+          data-tone={status.kind === "error" ? "danger" : "success"}
           role="status"
         >
           {status.text}

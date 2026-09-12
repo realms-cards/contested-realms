@@ -5,14 +5,16 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useSession, signOut, signIn } from "next-auth/react";
 import React, {
+  useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
-  useCallback,
 } from "react";
 import { OnlineContext } from "@/app/online/online-context";
 import AuthButton from "@/components/auth/AuthButton";
+import { registerUserBadge } from "@/components/auth/userBadgePresence";
 import SeatMediaControls from "@/components/rtc/SeatMediaControls";
 import CacheSettingsSection from "@/components/settings/CacheSettingsSection";
 import NotificationSettingsSection from "@/components/settings/NotificationSettingsSection";
@@ -36,12 +38,23 @@ export default function UserBadge({
   variant = "inline",
   className = "",
   showPresence = true,
+  announcePresence = true,
 }: {
   variant?: "inline" | "floating";
   className?: string;
   showPresence?: boolean;
+  /**
+   * Register in the shared badge store so the floating GlobalUserBadge knows a
+   * badge is already on screen. Only GlobalUserBadge itself opts out.
+   */
+  announcePresence?: boolean;
 }) {
   const { isLoading: isGlobalLoading } = useLoadingContext();
+  // Layout effect so the hand-off happens before paint, with no flash of two.
+  useLayoutEffect(() => {
+    if (!announcePresence) return;
+    return registerUserBadge();
+  }, [announcePresence]);
   const { data: session, status, update: updateSession } = useSession();
   const user = session?.user;
   const guestSession = useGuestSession();
@@ -392,7 +405,7 @@ export default function UserBadge({
     if (variant === "floating") return null;
     return (
       <div
-        className={`w-8 h-8 rounded-full bg-slate-800/80 animate-pulse ${className}`}
+        className={`h-8 w-8 animate-pulse rounded-full border border-rc-line/18 bg-black/40 ${className}`}
       />
     );
   }
@@ -401,7 +414,7 @@ export default function UserBadge({
   if (!user?.id) {
     const guestChip = guest ? (
       <span
-        className="rounded-full bg-slate-800/90 ring-1 ring-slate-700 px-3 py-1 text-xs text-slate-200 whitespace-nowrap"
+        className="whitespace-nowrap rounded-full border border-rc-line/22 bg-black/35 px-3 py-1 font-rc-mono text-xs text-rc-fg-muted"
         title="Playing as a guest - sign in to save decks and use matchmaking"
       >
         Guest · {guest.name}
@@ -603,18 +616,18 @@ export default function UserBadge({
   const avatarImageSrc = previewAvatar ?? null;
   const presencePillClass = connected
     ? colorBlindEnabled
-      ? "bg-sky-500/15 text-sky-300 ring-sky-500/30"
-      : "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+      ? "bg-rc-info/15 text-rc-info ring-rc-info/30"
+      : "bg-rc-success/15 text-rc-success ring-rc-success/30"
     : colorBlindEnabled
-      ? "bg-amber-500/15 text-amber-300 ring-amber-500/30"
-      : "bg-rose-500/15 text-rose-300 ring-rose-500/30";
+      ? "bg-rc-warning/15 text-rc-warning ring-rc-warning/30"
+      : "bg-rc-danger/15 text-rc-danger ring-rc-danger/30";
   const presenceDotClass = connected
     ? colorBlindEnabled
-      ? "bg-sky-400"
-      : "bg-emerald-400"
+      ? "bg-rc-info"
+      : "bg-rc-success"
     : colorBlindEnabled
-      ? "bg-amber-400"
-      : "bg-rose-400";
+      ? "bg-rc-warning"
+      : "bg-rc-danger";
   const normalizedEmailInput = profileEmail.trim().toLowerCase();
   const normalizedServerEmail = serverEmail.trim().toLowerCase();
   const emailDirty = normalizedEmailInput !== normalizedServerEmail;
@@ -626,12 +639,12 @@ export default function UserBadge({
       alt={user?.name || "User avatar"}
       width={32}
       height={32}
-      className="rounded-full w-8 h-8"
+      className="h-8 w-8 rounded-full border border-rc-line/25"
       priority={false}
       unoptimized
     />
   ) : (
-    <div className="w-8 h-8 rounded-full bg-slate-700 text-white grid place-items-center text-[12px]">
+    <div className="grid h-8 w-8 place-items-center rounded-full border border-rc-line/25 bg-gradient-to-br from-[#1a2440] to-[#0b1020] font-rc-display text-sm text-rc-fg-muted">
       {(user?.name || "?").slice(0, 1).toUpperCase()}
     </div>
   );
@@ -661,7 +674,7 @@ export default function UserBadge({
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
           aria-haspopup="menu"
-          className={`rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-white/30 transition-opacity duration-300 ease-out ${
+          className={`rounded-full overflow-hidden focus:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring transition-opacity duration-300 ease-out ${
             isGlobalLoading ? "opacity-0 pointer-events-none" : "opacity-100"
           }`}
           title={user?.name || "User"}
@@ -672,11 +685,11 @@ export default function UserBadge({
 
       {open && (
         <div className="absolute right-0 top-[calc(100%+0.5rem)] z-[75] min-w-[220px] origin-top-right">
-          <div className="rounded-lg bg-slate-900 ring-1 ring-slate-800 shadow-xl p-2 text-sm">
+          <div className="rc-panel p-2 text-sm">
             <div className="px-2 py-1.5 flex items-center gap-2">
               {avatar}
               <div className="min-w-0 flex-1">
-                <div className="text-slate-200 text-sm truncate">
+                <div className="truncate font-rc-mono text-sm font-semibold text-rc-fg-strong">
                   {user?.name || "User"}
                 </div>
                 {shouldShowPresence && (
@@ -699,42 +712,42 @@ export default function UserBadge({
               </div>
               <button
                 onClick={handleOpenSettings}
-                className="ml-2 p-1 rounded hover:bg-white/10 text-slate-300"
+                className="ml-2 cursor-pointer rounded-rc-sm p-1 text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-accent-ring"
                 title="User Settings"
                 aria-label="Open user settings"
               >
                 <Settings className="w-5 h-5" />
               </button>
             </div>
-            <div className="my-2 h-px bg-white/10" />
+            <div className="my-2 h-px bg-rc-line/12" />
             {voice && voice.enabled && voice.rtc.featureEnabled && (
-              <div className="px-2 py-2 mb-2 rounded-md bg-slate-800/70 ring-1 ring-slate-700/50">
-                <div className="flex items-center justify-between text-xs text-slate-200">
-                  <span className="font-semibold tracking-wide uppercase">
+              <div className="mb-2 rounded-rc-md border border-rc-line/12 bg-black/30 px-2 py-2">
+                <div className="flex items-center justify-between font-rc-mono text-xs text-rc-fg">
+                  <span className="rc-eyebrow">
                     Voice Chat
                   </span>
                   <span
                     className={`text-[10px] uppercase ${
                       voice.rtc.state === "connected"
-                        ? "text-emerald-300"
+                        ? "text-rc-success"
                         : voice.rtc.state === "joining" ||
                             voice.rtc.state === "negotiating"
-                          ? "text-amber-300"
-                          : "text-slate-400"
+                          ? "text-rc-warning"
+                          : "text-rc-fg-subtle"
                     }`}
                   >
                     {voice.rtc.state}
                   </span>
                 </div>
                 {!hasVoiceContext && (
-                  <p className="mt-2 text-[11px] text-slate-400">
+                  <p className="mt-2 font-rc-mono text-[11px] text-rc-fg-subtle">
                     Join a lobby or match to start a voice call.
                   </p>
                 )}
                 <div className="mt-2">
                   <SeatMediaControls
                     rtc={voice.rtc}
-                    className="w-full flex-wrap justify-start gap-2 bg-slate-900/70 ring-1 ring-white/5"
+                    className="w-full flex-wrap justify-start gap-2 rounded-rc-md border border-rc-line/12 bg-black/30"
                     playbackEnabled={voice.playbackEnabled}
                     onTogglePlayback={voice.setPlaybackEnabled}
                     renderAudioElement={false}
@@ -755,11 +768,11 @@ export default function UserBadge({
                   />
                 </div>
                 {voice.connectedPeers.length > 0 && (
-                  <div className="mt-2 text-[11px] text-slate-300">
-                    <span className="uppercase tracking-wide text-slate-400 mr-1">
+                  <div className="mt-2 font-rc-mono text-[11px] text-rc-fg-muted">
+                    <span className="rc-eyebrow mr-1">
                       Connected:
                     </span>
-                    <span className="text-slate-100">
+                    <span className="text-rc-fg-strong">
                       {voice.connectedPeers
                         .map(
                           (peer) =>
@@ -777,7 +790,7 @@ export default function UserBadge({
                   setOpen(false);
                   router.push("/");
                 }}
-                className="w-full text-left px-2 py-1 rounded hover:bg-white/10"
+                className="w-full cursor-pointer rounded-rc-sm px-2 py-1 text-left font-rc-mono text-xs uppercase tracking-[0.14em] text-rc-fg-muted transition-colors hover:bg-rc-accent/10 hover:text-rc-accent-ring"
               >
                 Home
               </button>
@@ -789,7 +802,7 @@ export default function UserBadge({
                     setOpen(false);
                     router.push(`/tournaments/${joinedTournament.id}`);
                   }}
-                  className="w-full text-left px-2 py-1 rounded hover:bg-white/10"
+                  className="w-full cursor-pointer rounded-rc-sm px-2 py-1 text-left font-rc-mono text-xs uppercase tracking-[0.14em] text-rc-fg-muted transition-colors hover:bg-rc-accent/10 hover:text-rc-accent-ring"
                   title={joinedTournament.name}
                 >
                   My Tournament
@@ -802,7 +815,7 @@ export default function UserBadge({
                   setOpen(false);
                   router.push("/online/lobby");
                 }}
-                className="w-full text-left px-2 py-1 rounded hover:bg-white/10"
+                className="w-full cursor-pointer rounded-rc-sm px-2 py-1 text-left font-rc-mono text-xs uppercase tracking-[0.14em] text-rc-fg-muted transition-colors hover:bg-rc-accent/10 hover:text-rc-accent-ring"
               >
                 Lobby
               </button>
@@ -813,7 +826,7 @@ export default function UserBadge({
                   setOpen(false);
                   router.push("/decks");
                 }}
-                className="w-full text-left px-2 py-1 rounded hover:bg-white/10"
+                className="w-full cursor-pointer rounded-rc-sm px-2 py-1 text-left font-rc-mono text-xs uppercase tracking-[0.14em] text-rc-fg-muted transition-colors hover:bg-rc-accent/10 hover:text-rc-accent-ring"
               >
                 Decks
               </button>
@@ -824,7 +837,7 @@ export default function UserBadge({
                   setOpen(false);
                   router.push("/cubes");
                 }}
-                className="w-full text-left px-2 py-1 rounded hover:bg-white/10"
+                className="w-full cursor-pointer rounded-rc-sm px-2 py-1 text-left font-rc-mono text-xs uppercase tracking-[0.14em] text-rc-fg-muted transition-colors hover:bg-rc-accent/10 hover:text-rc-accent-ring"
               >
                 Cubes
               </button>
@@ -836,7 +849,7 @@ export default function UserBadge({
                     await signOut({ callbackUrl: "/" });
                   } catch {}
                 }}
-                className="w-full text-left px-2 py-1 rounded hover:bg-white/10 text-rose-300"
+                className="w-full cursor-pointer rounded-rc-sm px-2 py-1 text-left font-rc-mono text-xs uppercase tracking-[0.14em] text-rc-danger transition-colors hover:bg-rc-danger/12 hover:text-rc-danger-hover"
               >
                 Sign Out
               </button>
@@ -847,7 +860,7 @@ export default function UserBadge({
       {/* Settings overlay */}
       {settingsOpen && (
         <div
-          className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-[rgba(6,10,20,0.82)] p-4 backdrop-blur-[4px]"
           onMouseDown={(e) => {
             if (e.currentTarget === e.target) handleCloseSettings();
           }}
@@ -855,23 +868,23 @@ export default function UserBadge({
           role="dialog"
         >
           <div
-            className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-xl bg-slate-900 ring-1 ring-slate-800 shadow-2xl p-5"
+            className="rc-panel thin-scrollbar relative max-h-[90vh] w-full max-w-xl overflow-y-auto p-5 shadow-[0_18px_40px_rgba(0,0,0,0.55),0_0_18px_rgba(243,207,106,0.2)]"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold text-white">
+              <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
                 User Settings
               </h2>
               <button
                 onClick={handleCloseSettings}
-                className="p-1 rounded hover:bg-white/10 text-slate-300"
+                className="cursor-pointer rounded-rc-sm p-1 text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
                 aria-label="Close"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="mt-3 flex flex-col gap-3">
-              <label className="flex flex-col gap-1 text-xs text-slate-300">
+              <label className="flex flex-col gap-1 font-rc-mono text-xs text-rc-fg-muted">
                 <span>Email Address (optional)</span>
                 <input
                   type="email"
@@ -882,11 +895,11 @@ export default function UserBadge({
                     setProfileError(null);
                   }}
                   autoComplete="email"
-                  className="h-9 rounded bg-slate-800 px-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/60"
+                  className="rc-input h-9"
                   placeholder="you@example.com"
                 />
               </label>
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+              <div className="flex flex-wrap items-center justify-between gap-2 font-rc-mono text-[11px] text-rc-fg-subtle">
                 <span className="leading-tight">
                   {normalizedServerEmail || profileEmail.trim()
                     ? emailDirty
@@ -901,8 +914,8 @@ export default function UserBadge({
                     type="button"
                     onClick={handleSendVerificationEmail}
                     disabled={verificationSending}
-                    className={`inline-flex items-center gap-1 rounded bg-white/10 px-2 py-1 text-[11px] text-white hover:bg-white/20 ${
-                      verificationSending ? "opacity-60 cursor-progress" : ""
+                    className={`inline-flex cursor-pointer items-center gap-1 rounded-rc-sm border border-rc-line/22 px-2 py-1 font-rc-mono text-[11px] text-rc-fg transition-colors hover:border-rc-accent hover:text-rc-accent-ring ${
+                      verificationSending ? "cursor-progress opacity-60" : ""
                     }`}
                   >
                     {verificationSending
@@ -911,14 +924,14 @@ export default function UserBadge({
                   </button>
                 )}
               </div>
-              <label className="flex flex-col gap-1 text-xs text-slate-300">
+              <label className="flex flex-col gap-1 font-rc-mono text-xs text-rc-fg-muted">
                 <span>Display Name</span>
                 <input
                   type="text"
                   value={profileName}
                   onChange={(e) => setProfileName(e.currentTarget.value)}
                   maxLength={40}
-                  className="h-9 rounded bg-slate-800 px-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/60"
+                  className="rc-input h-9"
                   placeholder="Enter your name"
                 />
               </label>
@@ -928,23 +941,23 @@ export default function UserBadge({
                 <button
                   type="button"
                   onClick={() => setColorBlindEnabled(!colorBlindEnabled)}
-                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                  className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     colorBlindEnabled
-                      ? "bg-sky-500/20 ring-sky-500/40"
-                      : "bg-slate-800 ring-slate-600"
+                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      : "border-rc-line/12 bg-black/30"
                   }`}
                 >
                   <div className="min-w-0">
-                    <div className="text-xs text-slate-200 font-medium">
+                    <div className="font-rc-mono text-xs font-medium text-rc-fg-strong">
                       Color blind
                     </div>
-                    <div className="text-[10px] text-slate-400 truncate">
+                    <div className="truncate font-rc-mono text-[10px] text-rc-fg-subtle">
                       Accessible colors
                     </div>
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
-                      colorBlindEnabled ? "bg-sky-300" : "bg-slate-500"
+                      colorBlindEnabled ? "bg-rc-accent" : "bg-rc-fg-dim"
                     }`}
                   />
                 </button>
@@ -952,25 +965,25 @@ export default function UserBadge({
                 <button
                   type="button"
                   onClick={toggleMonochromeMode}
-                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                  className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     graphicsSettings.monochromeMode
-                      ? "bg-white/20 ring-white/40"
-                      : "bg-slate-800 ring-slate-600"
+                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      : "border-rc-line/12 bg-black/30"
                   }`}
                 >
                   <div className="min-w-0">
-                    <div className="text-xs text-slate-200 font-medium">
+                    <div className="font-rc-mono text-xs font-medium text-rc-fg-strong">
                       Monochrome
                     </div>
-                    <div className="text-[10px] text-slate-400 truncate">
+                    <div className="truncate font-rc-mono text-[10px] text-rc-fg-subtle">
                       Black and white UI
                     </div>
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       graphicsSettings.monochromeMode
-                        ? "bg-white"
-                        : "bg-slate-500"
+                        ? "bg-rc-accent"
+                        : "bg-rc-fg-dim"
                     }`}
                   />
                 </button>
@@ -979,25 +992,25 @@ export default function UserBadge({
                 <button
                   type="button"
                   onClick={toggleEnhanced3DCards}
-                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                  className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     graphicsSettings.enhanced3DCards
-                      ? "bg-purple-500/20 ring-purple-500/40"
-                      : "bg-slate-800 ring-slate-600"
+                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      : "border-rc-line/12 bg-black/30"
                   }`}
                 >
                   <div className="min-w-0">
-                    <div className="text-xs text-slate-200 font-medium">
+                    <div className="font-rc-mono text-xs font-medium text-rc-fg-strong">
                       Enhanced 3D
                     </div>
-                    <div className="text-[10px] text-slate-400 truncate">
+                    <div className="truncate font-rc-mono text-[10px] text-rc-fg-subtle">
                       Lit cards with depth
                     </div>
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       graphicsSettings.enhanced3DCards
-                        ? "bg-purple-300"
-                        : "bg-slate-500"
+                        ? "bg-rc-accent"
+                        : "bg-rc-fg-dim"
                     }`}
                   />
                 </button>
@@ -1007,25 +1020,25 @@ export default function UserBadge({
                   type="button"
                   onClick={handleToggleOpponentPlaymat}
                   disabled={playmatPrefLoading}
-                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                  className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     playmatPrefLoading ? "opacity-60 cursor-wait" : ""
                   } ${
                     showOpponentPlaymat
-                      ? "bg-emerald-500/20 ring-emerald-500/40"
-                      : "bg-slate-800 ring-slate-600"
+                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      : "border-rc-line/12 bg-black/30"
                   }`}
                 >
                   <div className="min-w-0">
-                    <div className="text-xs text-slate-200 font-medium">
+                    <div className="font-rc-mono text-xs font-medium text-rc-fg-strong">
                       Opponent mat
                     </div>
-                    <div className="text-[10px] text-slate-400 truncate">
+                    <div className="truncate font-rc-mono text-[10px] text-rc-fg-subtle">
                       Show custom playmats
                     </div>
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
-                      showOpponentPlaymat ? "bg-emerald-300" : "bg-slate-500"
+                      showOpponentPlaymat ? "bg-rc-accent" : "bg-rc-fg-dim"
                     }`}
                   />
                 </button>
@@ -1034,25 +1047,25 @@ export default function UserBadge({
                 <button
                   type="button"
                   onClick={toggleShowTable}
-                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                  className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     graphicsSettings.showTable
-                      ? "bg-amber-500/20 ring-amber-500/40"
-                      : "bg-slate-800 ring-slate-600"
+                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      : "border-rc-line/12 bg-black/30"
                   }`}
                 >
                   <div className="min-w-0">
-                    <div className="text-xs text-slate-200 font-medium">
+                    <div className="font-rc-mono text-xs font-medium text-rc-fg-strong">
                       3D Table
                     </div>
-                    <div className="text-[10px] text-slate-400 truncate">
+                    <div className="truncate font-rc-mono text-[10px] text-rc-fg-subtle">
                       Wooden table model
                     </div>
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       graphicsSettings.showTable
-                        ? "bg-amber-300"
-                        : "bg-slate-500"
+                        ? "bg-rc-accent"
+                        : "bg-rc-fg-dim"
                     }`}
                   />
                 </button>
@@ -1061,17 +1074,17 @@ export default function UserBadge({
                 <button
                   type="button"
                   onClick={toggleHandSortOrder}
-                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                  className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     graphicsSettings.handSortOrder === "spellsFirst"
-                      ? "bg-rose-500/20 ring-rose-500/40"
-                      : "bg-slate-800 ring-slate-600"
+                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      : "border-rc-line/12 bg-black/30"
                   }`}
                 >
                   <div className="min-w-0">
-                    <div className="text-xs text-slate-200 font-medium">
+                    <div className="font-rc-mono text-xs font-medium text-rc-fg-strong">
                       Hand sort
                     </div>
-                    <div className="text-[10px] text-slate-400 truncate">
+                    <div className="truncate font-rc-mono text-[10px] text-rc-fg-subtle">
                       {graphicsSettings.handSortOrder === "spellsFirst"
                         ? "Spells first"
                         : "Sites first"}
@@ -1080,8 +1093,8 @@ export default function UserBadge({
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       graphicsSettings.handSortOrder === "spellsFirst"
-                        ? "bg-rose-300"
-                        : "bg-slate-500"
+                        ? "bg-rc-accent"
+                        : "bg-rc-fg-dim"
                     }`}
                   />
                 </button>
@@ -1090,25 +1103,25 @@ export default function UserBadge({
                 <button
                   type="button"
                   onClick={toggleGamepadLifeControls}
-                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                  className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     graphicsSettings.gamepadLifeControls
-                      ? "bg-cyan-500/20 ring-cyan-500/40"
-                      : "bg-slate-800 ring-slate-600"
+                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      : "border-rc-line/12 bg-black/30"
                   }`}
                 >
                   <div className="min-w-0">
-                    <div className="text-xs text-slate-200 font-medium">
+                    <div className="font-rc-mono text-xs font-medium text-rc-fg-strong">
                       Gamepad life
                     </div>
-                    <div className="text-[10px] text-slate-400 truncate">
+                    <div className="truncate font-rc-mono text-[10px] text-rc-fg-subtle">
                       LB/RB for ±life
                     </div>
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       graphicsSettings.gamepadLifeControls
-                        ? "bg-cyan-300"
-                        : "bg-slate-500"
+                        ? "bg-rc-accent"
+                        : "bg-rc-fg-dim"
                     }`}
                   />
                 </button>
@@ -1117,25 +1130,25 @@ export default function UserBadge({
                 <button
                   type="button"
                   onClick={togglePreferRaster}
-                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                  className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     graphicsSettings.preferRaster
-                      ? "bg-orange-500/20 ring-orange-500/40"
-                      : "bg-slate-800 ring-slate-600"
+                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      : "border-rc-line/12 bg-black/30"
                   }`}
                 >
                   <div className="min-w-0">
-                    <div className="text-xs text-slate-200 font-medium">
+                    <div className="font-rc-mono text-xs font-medium text-rc-fg-strong">
                       Lite Textures
                     </div>
-                    <div className="text-[10px] text-slate-400 truncate">
+                    <div className="truncate font-rc-mono text-[10px] text-rc-fg-subtle">
                       Faster on old hardware
                     </div>
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       graphicsSettings.preferRaster
-                        ? "bg-orange-300"
-                        : "bg-slate-500"
+                        ? "bg-rc-accent"
+                        : "bg-rc-fg-dim"
                     }`}
                   />
                 </button>
@@ -1144,23 +1157,23 @@ export default function UserBadge({
                 <button
                   type="button"
                   onClick={toggleContextMenuIcons}
-                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                  className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     contextMenuIcons
-                      ? "bg-indigo-500/20 ring-indigo-500/40"
-                      : "bg-slate-800 ring-slate-600"
+                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      : "border-rc-line/12 bg-black/30"
                   }`}
                 >
                   <div className="min-w-0">
-                    <div className="text-xs text-slate-200 font-medium">
+                    <div className="font-rc-mono text-xs font-medium text-rc-fg-strong">
                       Icon Menu
                     </div>
-                    <div className="text-[10px] text-slate-400 truncate">
+                    <div className="truncate font-rc-mono text-[10px] text-rc-fg-subtle">
                       Compact context menu
                     </div>
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
-                      contextMenuIcons ? "bg-indigo-300" : "bg-slate-500"
+                      contextMenuIcons ? "bg-rc-accent" : "bg-rc-fg-dim"
                     }`}
                   />
                 </button>
@@ -1169,23 +1182,23 @@ export default function UserBadge({
                 <button
                   type="button"
                   onClick={toggleControlScheme}
-                  className={`hidden [@media(pointer:fine)]:flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg ring-1 transition-colors text-left ${
+                  className={`hidden [@media(pointer:fine)]:flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     controlScheme === "tts"
-                      ? "bg-purple-500/20 ring-purple-500/40"
-                      : "bg-slate-800 ring-slate-600"
+                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      : "border-rc-line/12 bg-black/30"
                   }`}
                 >
                   <div className="min-w-0">
-                    <div className="text-xs text-slate-200 font-medium">
+                    <div className="font-rc-mono text-xs font-medium text-rc-fg-strong">
                       TTS Controls
                     </div>
-                    <div className="text-[10px] text-slate-400 truncate">
+                    <div className="truncate font-rc-mono text-[10px] text-rc-fg-subtle">
                       Tabletop Simulator style
                     </div>
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
-                      controlScheme === "tts" ? "bg-purple-300" : "bg-slate-500"
+                      controlScheme === "tts" ? "bg-rc-accent" : "bg-rc-fg-dim"
                     }`}
                   />
                 </button>
@@ -1196,10 +1209,10 @@ export default function UserBadge({
                 {/* Card Preview Size */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] text-slate-200 font-medium">
+                    <span className="font-rc-mono text-[11px] font-medium text-rc-fg-strong">
                       Card Preview
                     </span>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="font-rc-mono text-[10px] tabular-nums text-rc-fg-subtle">
                       {Math.round(graphicsSettings.cardPreviewScale * 100)}%
                     </span>
                   </div>
@@ -1212,16 +1225,16 @@ export default function UserBadge({
                     onChange={(e) =>
                       setCardPreviewScale(Number(e.target.value) / 100)
                     }
-                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                    className="h-1.5 w-full cursor-pointer appearance-none rounded-full border border-rc-line/12 bg-black/45 accent-rc-accent"
                   />
                 </div>
                 {/* Hand Card Size */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] text-slate-200 font-medium">
+                    <span className="font-rc-mono text-[11px] font-medium text-rc-fg-strong">
                       Hand Cards
                     </span>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="font-rc-mono text-[10px] tabular-nums text-rc-fg-subtle">
                       {Math.round((graphicsSettings.handCardScale ?? 1) * 100)}%
                     </span>
                   </div>
@@ -1234,16 +1247,16 @@ export default function UserBadge({
                     onChange={(e) =>
                       setHandCardScale(Number(e.target.value) / 100)
                     }
-                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                    className="h-1.5 w-full cursor-pointer appearance-none rounded-full border border-rc-line/12 bg-black/45 accent-rc-accent"
                   />
                 </div>
                 {/* Text Size */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] text-slate-200 font-medium">
+                    <span className="font-rc-mono text-[11px] font-medium text-rc-fg-strong">
                       Text Size
                     </span>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="font-rc-mono text-[10px] tabular-nums text-rc-fg-subtle">
                       {Math.round(graphicsSettings.uiTextScale * 100)}%
                     </span>
                   </div>
@@ -1256,7 +1269,7 @@ export default function UserBadge({
                     onChange={(e) =>
                       setUiTextScale(Number(e.target.value) / 100)
                     }
-                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                    className="h-1.5 w-full cursor-pointer appearance-none rounded-full border border-rc-line/12 bg-black/45 accent-rc-accent"
                   />
                 </div>
               </div>
@@ -1265,14 +1278,14 @@ export default function UserBadge({
               <CacheSettingsSection />
 
               {/* Browser Notifications section */}
-              <div className="mt-2 pt-3 border-t border-slate-700/50">
+              <div className="mt-2 border-t border-rc-line/12 pt-3">
                 <NotificationSettingsSection />
               </div>
 
               {/* Leagues section */}
-              <div className="mt-2 pt-3 border-t border-slate-700/50">
+              <div className="mt-2 border-t border-rc-line/12 pt-3">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-medium text-slate-300">
+                  <span className="rc-eyebrow">
                     Leagues &amp; Communities
                   </span>
                 </div>
@@ -1282,15 +1295,15 @@ export default function UserBadge({
                     handleCloseSettings();
                     router.push("/settings/soatc");
                   }}
-                  className="w-full flex items-center justify-between gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-amber-900/30 to-amber-800/20 ring-1 ring-amber-500/30 text-sm font-medium text-amber-100 hover:from-amber-900/40 hover:to-amber-800/30 transition-all"
+                  className="flex h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-rc-md border border-rc-line/14 bg-rc-line/6 px-4 font-rc-sans text-sm font-medium text-rc-fg transition-colors hover:border-rc-accent hover:bg-rc-accent/8"
                 >
-                  <span>🔘 Sorcerers at the Core</span>
+                  <span>Sorcerers at the Core</span>
                   {soatcLinked ? (
-                    <span className="text-[10px] text-emerald-400">
-                      Account linked ✓
+                    <span className="font-rc-mono text-[10px] text-rc-success">
+                      Account linked
                     </span>
                   ) : (
-                    <span className="text-[10px] text-amber-300/70">
+                    <span className="font-rc-mono text-[10px] text-rc-fg-subtle">
                       Link your account
                     </span>
                   )}
@@ -1301,27 +1314,27 @@ export default function UserBadge({
                     handleCloseSettings();
                     router.push("/settings/discord");
                   }}
-                  className="w-full flex items-center justify-between gap-2 h-10 mt-1 px-4 rounded-lg bg-gradient-to-r from-indigo-900/30 to-indigo-800/20 ring-1 ring-indigo-500/30 text-sm font-medium text-indigo-100 hover:from-indigo-900/40 hover:to-indigo-800/30 transition-all"
+                  className="mt-1 flex h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-rc-md border border-rc-line/14 bg-rc-line/6 px-4 font-rc-sans text-sm font-medium text-rc-fg transition-colors hover:border-rc-accent hover:bg-rc-accent/8"
                 >
-                  <span>🎮 Discord &amp; Leagues</span>
+                  <span>Discord &amp; Leagues</span>
                   {discordLinked ? (
-                    <span className="text-[10px] text-emerald-400">
-                      Discord linked ✓
+                    <span className="font-rc-mono text-[10px] text-rc-success">
+                      Discord linked
                     </span>
                   ) : (
-                    <span className="text-[10px] text-indigo-300/70">
+                    <span className="font-rc-mono text-[10px] text-rc-fg-subtle">
                       Link Discord account
                     </span>
                   )}
                 </button>
               </div>
               {/* Patron Perks section */}
-              <div className="mt-2 pt-3 border-t border-slate-700/50">
+              <div className="mt-2 border-t border-rc-line/12 pt-3">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-medium text-amber-400">
+                  <span className="rc-eyebrow">
                     Patron Perks
                   </span>
-                  <span className="text-[10px] text-slate-400">
+                  <span className="font-rc-mono text-[10px] tabular-nums text-rc-fg-subtle">
                     Thank you for your support!
                   </span>
                 </div>
@@ -1331,10 +1344,10 @@ export default function UserBadge({
                     handleCloseSettings();
                     router.push("/settings/playmat");
                   }}
-                  className="w-full flex items-center justify-between gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 ring-1 ring-amber-500/30 text-sm font-medium text-amber-100 hover:from-amber-500/30 hover:to-orange-500/30 transition-all"
+                  className="flex h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-rc-md border border-rc-accent/35 bg-rc-accent/16 px-4 font-rc-sans text-sm font-medium text-rc-accent-link transition-colors hover:border-rc-accent hover:bg-rc-accent/24"
                 >
                   <span>Custom Playmat</span>
-                  <span className="text-[10px] text-amber-300/70">
+                  <span className="font-rc-mono text-[10px] text-rc-fg-subtle">
                     Upload your own
                   </span>
                 </button>
@@ -1345,17 +1358,17 @@ export default function UserBadge({
                       handleCloseSettings();
                       router.push("/settings/cardbacks");
                     }}
-                    className="w-full flex items-center justify-between gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 ring-1 ring-amber-500/30 text-sm font-medium text-amber-100 hover:from-amber-500/30 hover:to-orange-500/30 transition-all"
+                    className="flex h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-rc-md border border-rc-accent/35 bg-rc-accent/16 px-4 font-rc-sans text-sm font-medium text-rc-accent-link transition-colors hover:border-rc-accent hover:bg-rc-accent/24"
                   >
                     <span>Custom Card Sleeves</span>
-                    <span className="text-[10px] text-amber-300/70">
+                    <span className="font-rc-mono text-[10px] text-rc-fg-subtle">
                       Visible to opponents
                     </span>
                   </button>
                 )}
               </div>
               <div className="flex items-center gap-3">
-                <div className="w-14 h-14 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden">
+                <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-rc-line/25 bg-gradient-to-br from-[#1a2440] to-[#0b1020]">
                   {previewAvatar ? (
                     <img
                       src={previewAvatar}
@@ -1363,7 +1376,7 @@ export default function UserBadge({
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <span className="text-base text-slate-300">
+                    <span className="font-rc-display text-xl text-rc-fg-muted">
                       {(profileName || user?.name || "?")
                         .slice(0, 1)
                         .toUpperCase()}
@@ -1371,7 +1384,7 @@ export default function UserBadge({
                   )}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <label className="inline-flex items-center gap-2 h-9 px-3 rounded bg-white/10 text-sm text-white cursor-pointer hover:bg-white/20">
+                  <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-rc-md border border-rc-line/28 px-3 font-rc-sans text-sm text-rc-fg transition-colors hover:border-rc-accent hover:bg-rc-accent/8">
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -1389,7 +1402,7 @@ export default function UserBadge({
                       setProfileSuccess(null);
                       if (fileInputRef.current) fileInputRef.current.value = "";
                     }}
-                    className="h-9 px-3 rounded bg-white/10 text-sm text-white hover:bg-white/20"
+                    className="h-9 cursor-pointer rounded-rc-md border border-rc-line/28 px-3 font-rc-sans text-sm text-rc-fg transition-colors hover:border-rc-accent hover:bg-rc-accent/8"
                     title="Use current avatar"
                   >
                     Reset
@@ -1402,7 +1415,7 @@ export default function UserBadge({
                       setProfileSuccess(null);
                       if (fileInputRef.current) fileInputRef.current.value = "";
                     }}
-                    className="h-9 px-3 rounded bg-rose-500/20 text-sm text-rose-200 hover:bg-rose-500/30"
+                    className="h-9 cursor-pointer rounded-rc-md border border-rc-danger/40 bg-rc-danger/12 px-3 font-rc-sans text-sm text-rc-danger transition-colors hover:bg-rc-danger/20"
                     title="Remove avatar"
                   >
                     Remove
@@ -1410,16 +1423,16 @@ export default function UserBadge({
                 </div>
               </div>
               {profileError && (
-                <p className="text-[11px] text-rose-300">{profileError}</p>
+                <p className="font-rc-mono text-[11px] text-rc-danger">{profileError}</p>
               )}
               {profileSuccess && (
-                <p className="text-[11px] text-emerald-300">{profileSuccess}</p>
+                <p className="font-rc-mono text-[11px] text-rc-success">{profileSuccess}</p>
               )}
               <div className="mt-1 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={handleCloseSettings}
-                  className="h-9 px-3 rounded bg-white/10 text-sm text-white hover:bg-white/20"
+                  className="h-9 cursor-pointer rounded-rc-md border border-rc-line/28 px-3 font-rc-sans text-sm text-rc-fg transition-colors hover:border-rc-accent hover:bg-rc-accent/8"
                 >
                   Cancel
                 </button>
@@ -1430,8 +1443,8 @@ export default function UserBadge({
                     // Keep overlay open but reflect saved state
                   }}
                   disabled={profileSaving}
-                  className={`h-9 px-4 rounded bg-purple-600 text-sm font-semibold text-white hover:bg-purple-500 transition-colors ${
-                    profileSaving ? "opacity-60 cursor-progress" : ""
+                  className={`h-9 cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent px-4 font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px ${
+                    profileSaving ? "cursor-progress opacity-60" : ""
                   }`}
                 >
                   {profileSaving ? "Saving…" : "Save"}
@@ -1439,23 +1452,23 @@ export default function UserBadge({
               </div>
 
               {/* Delete account section */}
-              <div className="mt-4 pt-4 border-t border-slate-700/50">
+              <div className="mt-4 border-t border-rc-line/12 pt-4">
                 {!deleteConfirmOpen ? (
                   <button
                     type="button"
                     onClick={() => setDeleteConfirmOpen(true)}
-                    className="text-[11px] text-slate-400 hover:text-rose-300 underline"
+                    className="cursor-pointer font-rc-mono text-[11px] text-rc-fg-subtle underline underline-offset-4 transition-colors hover:text-rc-danger"
                   >
                     Delete my account and data
                   </button>
                 ) : (
                   <div className="space-y-2">
-                    <p className="text-[11px] text-rose-300">
+                    <p className="font-rc-mono text-[11px] leading-relaxed text-rc-danger">
                       This will permanently delete your account, decks, cubes,
                       and all associated data. This cannot be undone.
                     </p>
                     {deleteError && (
-                      <p className="text-[11px] text-rose-400">{deleteError}</p>
+                      <p className="font-rc-mono text-[11px] text-rc-danger">{deleteError}</p>
                     )}
                     <div className="flex gap-2">
                       <button
@@ -1464,7 +1477,7 @@ export default function UserBadge({
                           setDeleteConfirmOpen(false);
                           setDeleteError(null);
                         }}
-                        className="h-7 px-2 rounded bg-white/10 text-[11px] text-white hover:bg-white/20"
+                        className="h-7 cursor-pointer rounded-rc-md border border-rc-line/28 px-2 font-rc-mono text-[11px] text-rc-fg transition-colors hover:border-rc-accent hover:text-rc-accent-ring"
                         disabled={deleteInProgress}
                       >
                         Cancel
@@ -1473,8 +1486,8 @@ export default function UserBadge({
                         type="button"
                         onClick={handleDeleteAccount}
                         disabled={deleteInProgress}
-                        className={`h-7 px-3 rounded bg-rose-600 text-[11px] font-semibold text-white hover:bg-rose-500 ${
-                          deleteInProgress ? "opacity-60 cursor-progress" : ""
+                        className={`h-7 cursor-pointer rounded-rc-md border border-white/8 bg-rc-danger px-3 font-rc-mono text-[11px] font-semibold text-[#faf3e5] transition-colors hover:bg-rc-danger-hover ${
+                          deleteInProgress ? "cursor-progress opacity-60" : ""
                         }`}
                       >
                         {deleteInProgress

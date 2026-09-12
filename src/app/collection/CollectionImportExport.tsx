@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { RcButton, rcButtonVariants } from "@/components/ui/rc-button";
+import { RcDialog } from "@/components/ui/rc-dialog";
 
 interface CollectionImportExportProps {
   onImported: () => void;
@@ -154,211 +155,172 @@ export default function CollectionImportExport({
 
   return (
     <>
-      <button
+      <RcButton
+        variant="outline"
+        size="sm"
         onClick={() => setIsOpen(true)}
-        className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
         title="Import/Export collection"
       >
-        <span>📋</span>
-        <span className="hidden sm:inline">Import/Export</span>
-      </button>
+        Import / Export
+      </RcButton>
 
-      {isOpen &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div
-            className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4"
-            onClick={() => setIsOpen(false)}
-          >
-            <div
-              className="bg-gray-900 rounded-xl max-w-lg w-full overflow-hidden shadow-2xl border border-gray-700 max-h-[90vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
+      {isOpen && (
+        <RcDialog
+          title="Import / Export Collection"
+          eyebrow="collection"
+          onClose={() => setIsOpen(false)}
+          size="md"
+        >
+          {/* Mode toggle */}
+          <div className="rc-segment">
+            <button
+              type="button"
+              aria-pressed={mode === "export"}
+              onClick={() => setMode("export")}
             >
-              {/* Header */}
-              <div className="p-4 border-b border-gray-800 flex items-center justify-between">
-                <h3 className="text-lg font-bold">
-                  Import / Export Collection
-                </h3>
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="text-gray-400 hover:text-white"
-                >
-                  ✕
-                </button>
-              </div>
+              Export
+            </button>
+            <button
+              type="button"
+              aria-pressed={mode === "import"}
+              onClick={() => setMode("import")}
+            >
+              Import
+            </button>
+          </div>
 
-              {/* Mode toggle */}
-              <div className="flex border-b border-gray-800">
-                <button
-                  onClick={() => setMode("export")}
-                  className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                    mode === "export"
-                      ? "bg-gray-800 text-white"
-                      : "text-gray-400 hover:text-white"
-                  }`}
-                >
-                  Export
-                </button>
-                <button
-                  onClick={() => setMode("import")}
-                  className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                    mode === "import"
-                      ? "bg-gray-800 text-white"
-                      : "text-gray-400 hover:text-white"
-                  }`}
-                >
-                  Import
-                </button>
-              </div>
+          <div className="mt-4 space-y-4">
+            {mode === "export" ? (
+              <>
+                <p className="text-sm text-rc-fg-muted">
+                  Export your collection in various formats.
+                </p>
 
-              <div className="p-4 space-y-4">
-                {mode === "export" ? (
-                  <>
-                    <p className="text-sm text-gray-400">
-                      Export your collection in various formats.
-                    </p>
-
-                    {/* Curiosa Export - Primary */}
-                    <div className="p-3 bg-purple-900/30 border border-purple-700 rounded-lg space-y-2">
-                      <div className="text-sm font-medium text-purple-300">
-                        Curiosa Collection
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleDownload("curiosa")}
-                          disabled={loading}
-                          className="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded font-medium text-sm disabled:opacity-50"
-                        >
-                          📥 Download CSV
-                        </button>
-                        <button
-                          onClick={() => handleExport("curiosa")}
-                          disabled={loading}
-                          className="flex-1 px-3 py-2 bg-purple-600/50 hover:bg-purple-600 rounded font-medium text-sm disabled:opacity-50"
-                        >
-                          📋 Copy
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Other formats */}
-                    <div className="text-xs text-gray-500 mt-2">
-                      Other formats
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleExport("text")}
-                        disabled={loading}
-                        className="flex-1 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded font-medium text-sm disabled:opacity-50"
-                      >
-                        Text (4x Card)
-                      </button>
-                      <button
-                        onClick={() => handleExport("csv")}
-                        disabled={loading}
-                        className="flex-1 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded font-medium text-sm disabled:opacity-50"
-                      >
-                        CSV
-                      </button>
-                    </div>
-
-                    {text && (
-                      <textarea
-                        readOnly
-                        value={text}
-                        className="w-full h-32 bg-gray-800 rounded p-3 text-xs font-mono"
-                      />
-                    )}
-                  </>
-                ) : (
-                  <>
-                    {/* Curiosa Import - Primary */}
-                    <div className="p-3 bg-purple-900/30 border border-purple-700 rounded-lg space-y-2">
-                      <div className="text-sm font-medium text-purple-300">
-                        Curiosa Collection
-                      </div>
-                      <p className="text-xs text-gray-400">
-                        Upload a CSV exported from Curiosa (auto-detects format)
-                      </p>
-                      <label className="flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded font-medium text-sm cursor-pointer transition-colors">
-                        📤 Upload CSV File
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept=".csv,.txt"
-                          onChange={handleFileUpload}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-
-                    <div className="text-xs text-gray-500 text-center">
-                      — or paste text below —
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="block text-sm text-gray-400">
-                        Format
-                      </label>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setImportFormat("sorcery")}
-                          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                            importFormat === "sorcery"
-                              ? "bg-blue-600 text-white"
-                              : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                          }`}
-                        >
-                          Text (i.e. CardNexus)
-                        </button>
-                        <button
-                          onClick={() => setImportFormat("curiosa")}
-                          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                            importFormat === "curiosa"
-                              ? "bg-purple-600 text-white"
-                              : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                          }`}
-                        >
-                          Curiosa CSV
-                        </button>
-                      </div>
-                    </div>
-                    <textarea
-                      value={text}
-                      onChange={(e) => setText(e.target.value)}
-                      placeholder={
-                        importFormat === "curiosa"
-                          ? "card name,set,finish,product,quantity,notes\n13 Treasures of Britain,Arthurian Legends,Standard,Booster,1,"
-                          : "4 Apprentice Wizard\n2 Black Obelisk\n1 Queen Guinevere"
-                      }
-                      className="w-full h-32 bg-gray-800 rounded p-3 text-xs font-mono"
-                    />
-                    <button
-                      onClick={handleImport}
-                      disabled={loading || !text.trim()}
-                      className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded font-medium disabled:opacity-50"
+                {/* Curiosa Export - Primary */}
+                <div className="space-y-2 rounded-rc-md border border-rc-line/18 bg-black/30 p-3">
+                  <div className="rc-eyebrow">Curiosa Collection</div>
+                  <div className="flex flex-wrap gap-2">
+                    <RcButton
+                      className="flex-1"
+                      onClick={() => handleDownload("curiosa")}
+                      disabled={loading}
                     >
-                      {loading ? "Importing..." : "Import to Collection"}
-                    </button>
-                  </>
-                )}
-
-                {result && (
-                  <div
-                    className={`text-sm px-3 py-2 rounded ${
-                      result.type === "success"
-                        ? "bg-green-900/30 text-green-400"
-                        : "bg-red-900/30 text-red-400"
-                    }`}
-                  >
-                    {result.message}
+                      Download CSV
+                    </RcButton>
+                    <RcButton
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => handleExport("curiosa")}
+                      disabled={loading}
+                    >
+                      Copy
+                    </RcButton>
                   </div>
+                </div>
+
+                {/* Other formats */}
+                <div className="rc-hint">Other formats</div>
+                <div className="flex flex-wrap gap-2">
+                  <RcButton
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => handleExport("text")}
+                    disabled={loading}
+                  >
+                    Text (4x Card)
+                  </RcButton>
+                  <RcButton
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => handleExport("csv")}
+                    disabled={loading}
+                  >
+                    CSV
+                  </RcButton>
+                </div>
+
+                {text && (
+                  <textarea readOnly value={text} className="rc-textarea h-32 w-full" />
                 )}
+              </>
+            ) : (
+              <>
+                {/* Curiosa Import - Primary */}
+                <div className="space-y-2 rounded-rc-md border border-rc-line/18 bg-black/30 p-3">
+                  <div className="rc-eyebrow">Curiosa Collection</div>
+                  <p className="text-xs text-rc-fg-muted">
+                    Upload a CSV exported from Curiosa (auto-detects format)
+                  </p>
+                  <label
+                    className={rcButtonVariants({
+                      className: "w-full cursor-pointer",
+                    })}
+                  >
+                    Upload CSV File
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv,.txt"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                <div className="rc-hint text-center">
+                  — or paste text below —
+                </div>
+
+                <div className="space-y-2">
+                  <div className="rc-eyebrow">Format</div>
+                  <div className="rc-segment">
+                    <button
+                      type="button"
+                      aria-pressed={importFormat === "sorcery"}
+                      onClick={() => setImportFormat("sorcery")}
+                    >
+                      Text (i.e. CardNexus)
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={importFormat === "curiosa"}
+                      onClick={() => setImportFormat("curiosa")}
+                    >
+                      Curiosa CSV
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder={
+                    importFormat === "curiosa"
+                      ? "card name,set,finish,product,quantity,notes\n13 Treasures of Britain,Arthurian Legends,Standard,Booster,1,"
+                      : "4 Apprentice Wizard\n2 Black Obelisk\n1 Queen Guinevere"
+                  }
+                  className="rc-textarea h-32 w-full"
+                />
+                <RcButton
+                  className="w-full"
+                  onClick={handleImport}
+                  disabled={loading || !text.trim()}
+                >
+                  {loading ? "Importing..." : "Import to Collection"}
+                </RcButton>
+              </>
+            )}
+
+            {result && (
+              <div
+                className="rc-alert"
+                data-tone={result.type === "success" ? "success" : "danger"}
+              >
+                {result.message}
               </div>
-            </div>
-          </div>,
-          document.body
-        )}
+            )}
+          </div>
+        </RcDialog>
+      )}
     </>
   );
 }

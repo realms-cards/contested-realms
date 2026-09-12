@@ -1,7 +1,14 @@
 "use client";
 
-import Link from "next/link";
+import { ChevronDown, ChevronUp, Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import {
+  RcButton,
+  RcLinkButton,
+  rcButtonVariants,
+} from "@/components/ui/rc-button";
 
 type PlaymatSummary = {
   id: string;
@@ -41,6 +48,16 @@ function toBase64Png(blob: Blob): Promise<string> {
     };
     reader.readAsDataURL(blob);
   });
+}
+
+function playmatTileClass(selected: boolean, selecting: boolean): string {
+  return [
+    "rounded-rc-md border bg-black/30 px-3 py-2 text-left transition-colors",
+    selected
+      ? "border-rc-accent shadow-[0_0_18px_rgba(243,207,106,0.28)]"
+      : "border-rc-line/12 hover:border-rc-accent/40",
+    selecting ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+  ].join(" ");
 }
 
 export default function PlaymatSettingsPage() {
@@ -133,7 +150,7 @@ export default function PlaymatSettingsPage() {
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#1e293b";
+    ctx.fillStyle = "#090d19";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const img = new Image();
@@ -142,7 +159,7 @@ export default function PlaymatSettingsPage() {
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     };
     img.onerror = () => {
-      ctx.fillStyle = "#64748b";
+      ctx.fillStyle = "#5f5c50";
       ctx.font = "12px sans-serif";
       ctx.textAlign = "center";
       ctx.fillText("Failed to load", canvas.width / 2, canvas.height / 2);
@@ -615,140 +632,149 @@ export default function PlaymatSettingsPage() {
   }, [selectedPlaymatRef]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto max-w-5xl px-4 py-8">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold">Playmat Settings</h1>
-            <p className="mt-1 text-sm text-slate-400">
-              Upload and select your playmat. Exports must be {REQUIRED_WIDTH}×
-              {REQUIRED_HEIGHT} PNG.
-            </p>
-          </div>
-          <Link href="/" className="text-sm text-slate-300 hover:text-white">
-            Home
-          </Link>
-        </div>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="settings"
+        title="Playmat"
+        description={`Upload and select your playmat. Exports must be ${REQUIRED_WIDTH}×${REQUIRED_HEIGHT} PNG.`}
+        actions={
+          <>
+            <Badge tone="gold">patrons</Badge>
+            <RcLinkButton href="/" variant="outline" size="sm">
+              Home
+            </RcLinkButton>
+          </>
+        }
+      />
 
-        {loading ? (
-          <div className="mt-6 text-sm text-slate-400">Loading…</div>
-        ) : error ? (
-          <div className="mt-6 rounded-lg bg-slate-900 ring-1 ring-slate-800 p-4">
-            <div className="text-sm text-rose-200">{error}</div>
-          </div>
-        ) : (
-          <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="rounded-lg bg-slate-900 ring-1 ring-slate-800 p-4">
-              <h2 className="text-base font-semibold">Current Playmat</h2>
-              <p className="mt-1 text-xs text-slate-400">
+      {loading ? (
+        <div className="rc-hint py-6 text-center">loading…</div>
+      ) : error ? (
+        <div className="rc-alert" data-tone="danger">
+          {error}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <section className="rc-panel">
+            <PanelHeader title="Current playmat" />
+            <div className="px-[18px] py-3.5">
+              <p className="m-0 font-rc-sans text-xs leading-relaxed text-rc-fg-muted">
                 Preview of your active playmat
               </p>
 
               <div className="mt-3 flex justify-center">
                 <canvas
                   ref={currentPlaymatCanvasRef}
-                  className="rounded ring-1 ring-emerald-500/30"
+                  className="max-w-full rounded-rc-md ring-1 ring-rc-accent/35"
                   style={{
                     width: 360,
                     height: Math.round(
-                      (360 * REQUIRED_HEIGHT) / REQUIRED_WIDTH
+                      (360 * REQUIRED_HEIGHT) / REQUIRED_WIDTH,
                     ),
                   }}
                 />
               </div>
 
-              <h2 className="mt-6 text-base font-semibold">Select Playmat</h2>
+              <div className="rc-eyebrow mt-6">Select playmat</div>
 
               <div className="mt-3 space-y-2">
                 <button
                   type="button"
                   disabled={selecting}
                   onClick={() => void setSelected(defaultRef)}
-                  className={`w-full text-left px-3 py-2 rounded ring-1 transition-colors ${
+                  className={`${playmatTileClass(
                     selectedPlaymatRef === defaultRef ||
-                    selectedPlaymatRef == null
-                      ? "bg-emerald-500/10 ring-emerald-500/30"
-                      : "bg-white/5 ring-white/10 hover:bg-white/10"
-                  }`}
+                      selectedPlaymatRef == null,
+                    selecting,
+                  )} w-full`}
                 >
-                  <div className="text-sm font-medium">Default Playmat</div>
-                  <div className="text-[11px] text-slate-400">
-                    Uses /playmat.jpg
+                  <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                    Default playmat
                   </div>
+                  <div className="rc-hint mt-0.5">uses /playmat.jpg</div>
                 </button>
 
                 {playmats.map((p) => (
-                  <div key={p.id} className="flex gap-2">
+                  <div key={p.id} className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       disabled={selecting}
                       onClick={() => void setSelected(`custom:${p.id}`)}
-                      className={`flex-1 text-left px-3 py-2 rounded ring-1 transition-colors ${
-                        selectedId === p.id
-                          ? "bg-emerald-500/10 ring-emerald-500/30"
-                          : "bg-white/5 ring-white/10 hover:bg-white/10"
-                      }`}
+                      className={`${playmatTileClass(
+                        selectedId === p.id,
+                        selecting,
+                      )} min-w-0 flex-1`}
                     >
-                      <div className="text-sm font-medium truncate">
+                      <div className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
                         {p.name}
                       </div>
-                      <div className="text-[11px] text-slate-400">
+                      <div className="rc-hint mt-0.5">
                         {p.width}×{p.height} · {(p.sizeBytes / 1024).toFixed(0)}{" "}
                         KB
                       </div>
                     </button>
-                    <button
-                      type="button"
+                    <RcButton
+                      variant="outline"
                       onClick={() => void loadPlaymatForEditing(p)}
-                      className={`px-3 py-2 rounded bg-blue-500/15 text-blue-200 hover:bg-blue-500/25 ring-1 ring-blue-500/20 ${
-                        editingPlaymatId === p.id ? "ring-blue-400" : ""
-                      }`}
                       title="Edit"
+                      className={
+                        editingPlaymatId === p.id ? "border-rc-accent" : ""
+                      }
                     >
                       Edit
-                    </button>
-                    <button
-                      type="button"
+                    </RcButton>
+                    <RcButton
+                      variant="destructive"
                       onClick={() => void deletePlaymat(p.id)}
-                      className="px-3 py-2 rounded bg-rose-500/15 text-rose-200 hover:bg-rose-500/25 ring-1 ring-rose-500/20"
                       title="Delete"
                     >
                       Delete
-                    </button>
+                    </RcButton>
                   </div>
                 ))}
               </div>
 
               {uploadError && (
-                <div className="mt-3 text-[11px] text-rose-200">
+                <div className="rc-alert mt-3" data-tone="danger">
                   {uploadError}
                 </div>
               )}
             </div>
+          </section>
 
-            <div className="rounded-lg bg-slate-900 ring-1 ring-slate-800 p-4">
+          <section className="rc-panel">
+            <div className="px-[18px] py-3.5">
               {/* Upload / Edit - Collapsible */}
-              <button
-                type="button"
+              <RcButton
+                variant="outline"
+                className="w-full justify-between"
                 onClick={() => setUploadExpanded((v) => !v)}
-                className="w-full flex items-center justify-between px-3 py-2 rounded bg-white/5 ring-1 ring-white/10 hover:bg-white/10 transition-colors"
+                aria-expanded={uploadExpanded}
               >
-                <span className="text-sm font-semibold">Upload / Edit</span>
-                <span className="text-slate-400 text-lg">
-                  {uploadExpanded ? "−" : "+"}
-                </span>
-              </button>
+                <span>Upload / edit</span>
+                {uploadExpanded ? (
+                  <ChevronUp className="h-4 w-4 text-rc-fg-muted" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-rc-fg-muted" />
+                )}
+              </RcButton>
 
               {uploadExpanded && (
                 <div className="mt-3 flex flex-col gap-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <input
                       value={name}
                       onChange={(e) => setName(e.currentTarget.value)}
-                      className="h-9 flex-1 rounded bg-slate-800 px-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/60"
+                      className="rc-input h-9 min-w-0 flex-1"
                       placeholder="Playmat name"
                     />
-                    <label className="h-9 px-3 inline-flex items-center rounded bg-white/10 text-sm text-white hover:bg-white/20 cursor-pointer">
+                    <label
+                      className={rcButtonVariants({
+                        variant: "outline",
+                        size: "sm",
+                        className: "h-9 cursor-pointer",
+                      })}
+                    >
                       <input
                         type="file"
                         accept="image/*"
@@ -759,69 +785,72 @@ export default function PlaymatSettingsPage() {
                           e.currentTarget.value = "";
                         }}
                       />
-                      Choose Image
+                      Choose image
                     </label>
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowGrid((v) => !v)}
-                        className="h-8 px-3 rounded bg-white/10 text-xs text-white hover:bg-white/20"
-                      >
-                        {showGrid ? "Hide Grid" : "Show Grid"}
-                      </button>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className="rc-check">
+                        <input
+                          type="checkbox"
+                          checked={showGrid}
+                          onChange={() => setShowGrid((v) => !v)}
+                        />
+                        Grid
+                      </label>
                       {showGrid && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setGridColor((c) =>
-                              c === "grey" ? "black" : "grey"
-                            )
-                          }
-                          className="h-8 px-3 rounded bg-white/10 text-xs text-white hover:bg-white/20 flex items-center gap-1.5"
-                        >
-                          <span
-                            className={`w-3 h-3 rounded-sm ring-1 ring-white/30 ${
-                              gridColor === "grey" ? "bg-gray-400" : "bg-black"
-                            }`}
-                          />
-                          {gridColor === "grey" ? "Grey" : "Black"}
-                        </button>
+                        <div className="rc-segment">
+                          <button
+                            type="button"
+                            aria-pressed={gridColor === "grey"}
+                            onClick={() => setGridColor("grey")}
+                          >
+                            Grey
+                          </button>
+                          <button
+                            type="button"
+                            aria-pressed={gridColor === "black"}
+                            onClick={() => setGridColor("black")}
+                          >
+                            Black
+                          </button>
+                        </div>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
+                      <RcButton
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
                         onClick={zoomOut}
                         disabled={!img}
-                        className="h-8 w-8 rounded bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-lg font-bold"
                         title="Zoom out"
+                        aria-label="Zoom out"
                       >
-                        −
-                      </button>
-                      <button
-                        type="button"
+                        <Minus className="h-4 w-4" />
+                      </RcButton>
+                      <RcButton
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
                         onClick={zoomIn}
                         disabled={!img}
-                        className="h-8 w-8 rounded bg-white/10 text-white hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-lg font-bold"
                         title="Zoom in"
+                        aria-label="Zoom in"
                       >
-                        +
-                      </button>
-                      <div className="text-[11px] text-slate-400">
-                        Drag to pan
-                      </div>
+                        <Plus className="h-4 w-4" />
+                      </RcButton>
+                      <div className="rc-hint">drag to pan</div>
                     </div>
                   </div>
 
-                  <div className="rounded-md overflow-hidden ring-1 ring-white/10 bg-black">
+                  <div className="overflow-hidden rounded-rc-md bg-black ring-1 ring-rc-line/12">
                     <canvas
                       ref={canvasRef}
                       width={PREVIEW_WIDTH}
                       height={PREVIEW_HEIGHT}
-                      className="block w-full h-auto touch-none"
+                      className="block h-auto w-full touch-none"
                       onPointerDown={onPointerDown}
                       onPointerMove={onPointerMove}
                       onPointerUp={onPointerUp}
@@ -830,26 +859,22 @@ export default function PlaymatSettingsPage() {
                     />
                   </div>
 
-                  <button
-                    type="button"
+                  <RcButton
                     disabled={uploading || !img}
                     onClick={() => void exportAndUpload()}
-                    className={`h-10 rounded bg-purple-600 text-sm font-semibold text-white hover:bg-purple-500 transition-colors ${
-                      uploading || !img ? "opacity-60 cursor-not-allowed" : ""
-                    }`}
                   >
-                    {uploading ? "Uploading…" : "Export & Upload"}
-                  </button>
+                    {uploading ? "Uploading…" : "Export & upload"}
+                  </RcButton>
 
-                  <div className="text-[11px] text-slate-400">
-                    Upload limit: 5 playmats. Stored privately.
+                  <div className="rc-hint">
+                    upload limit: 5 playmats · stored privately
                   </div>
                 </div>
               )}
             </div>
-          </div>
-        )}
-      </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

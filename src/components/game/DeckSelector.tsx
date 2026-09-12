@@ -92,15 +92,14 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
   };
 
   return (
-    <div className="w-full max-w-5xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="grid w-full max-w-5xl grid-cols-1 gap-6 rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-rc-fg shadow-rc-panel md:grid-cols-2">
       <div className="md:col-span-2 flex items-center justify-between gap-4">
-        <div className="text-sm opacity-80">
+        <div className="font-rc-sans text-sm text-rc-fg-muted">
           Select decks for both players. Optionally include precon decks.
         </div>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="rc-check flex text-[13px]">
           <input
             type="checkbox"
-            className="rounded"
             checked={includePublic}
             onChange={(e) => {
               const next = e.target.checked;
@@ -118,9 +117,9 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
       </div>
 
       <div>
-        <div className="text-lg font-semibold mb-2">Player 1 Deck</div>
+        <div className="mb-2 font-rc-display text-[22px] leading-none text-rc-fg-strong">Player 1 Deck</div>
         {!decksLoaded ? (
-          <div className="w-full bg-black/40 rounded px-3 py-2 text-gray-400">
+          <div className="rc-hint w-full rounded-rc-md border border-rc-line/12 bg-black/45 px-3 py-2">
             Loading decks...
           </div>
         ) : (
@@ -144,10 +143,10 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
           />
         )}
         {deckErrP1 && (
-          <div className="text-red-300 text-xs mt-2">{deckErrP1}</div>
+          <div className="mt-2 font-rc-mono text-xs text-rc-danger">{deckErrP1}</div>
         )}
         {!deckErrP1 && isPreconP1 && (
-          <div className="text-amber-300 text-xs mt-2 bg-amber-900/20 ring-1 ring-amber-800 rounded px-2 py-1">
+          <div className="rc-alert mt-2" data-tone="warning">
             Precon deck selected. These lists are for learning the game and are
             not competitive constructed-legal.
           </div>
@@ -155,9 +154,9 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
       </div>
 
       <div>
-        <div className="text-lg font-semibold mb-2">Player 2 Deck</div>
+        <div className="mb-2 font-rc-display text-[22px] leading-none text-rc-fg-strong">Player 2 Deck</div>
         {!decksLoaded ? (
-          <div className="w-full bg-black/40 rounded px-3 py-2 text-gray-400">
+          <div className="rc-hint w-full rounded-rc-md border border-rc-line/12 bg-black/45 px-3 py-2">
             Loading decks...
           </div>
         ) : (
@@ -181,10 +180,10 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
           />
         )}
         {deckErrP2 && (
-          <div className="text-red-300 text-xs mt-2">{deckErrP2}</div>
+          <div className="mt-2 font-rc-mono text-xs text-rc-danger">{deckErrP2}</div>
         )}
         {!deckErrP2 && isPreconP2 && (
-          <div className="text-amber-300 text-xs mt-2 bg-amber-900/20 ring-1 ring-amber-800 rounded px-2 py-1">
+          <div className="rc-alert mt-2" data-tone="warning">
             Precon deck selected. These lists are for learning the game and are
             not competitive constructed-legal.
           </div>
@@ -193,14 +192,13 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
 
       <div className="md:col-span-2 flex items-center justify-between pt-2">
         <div className="flex items-center gap-4">
-          <div className="opacity-80 text-sm">
+          <div className="font-rc-sans text-sm text-rc-fg-muted">
             Select both decks, then prepare opening hands.
           </div>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="rc-check flex text-[13px]">
             <input
               type="checkbox"
-              className="rounded"
-              checked={enableSeer}
+                checked={enableSeer}
               onChange={(e) => {
                 const next = e.target.checked;
                 setEnableSeer(next);
@@ -217,7 +215,7 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
         </div>
         <div className="flex items-center gap-3">
           <button
-            className="rounded bg-emerald-600/90 hover:bg-emerald-500 px-4 py-2"
+            className="cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent px-4 py-2 font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px disabled:pointer-events-none disabled:opacity-50"
             disabled={!deckIdP1 || !deckIdP2}
             onClick={prepareHands}
           >

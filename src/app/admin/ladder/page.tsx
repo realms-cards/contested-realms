@@ -1,5 +1,6 @@
 import "server-only";
 import { GameFormat, TimeFrame as DbTimeFrame } from "@prisma/client";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
 import { requireAdminSession } from "@/lib/admin/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -13,6 +14,9 @@ function getParam<T extends string>(value: string | string[] | undefined, allowe
   const v = Array.isArray(value) ? value[0] : value;
   return allowed.includes((v as T) ?? (fallback as T)) ? ((v as T) ?? fallback) : fallback;
 }
+
+const FILTER_LINK =
+  "rounded-rc-sm border px-2.5 py-1 font-rc-mono text-[11px] uppercase tracking-[0.14em] transition-colors";
 
 export default async function AdminLadderPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
   await requireAdminSession();
@@ -30,31 +34,32 @@ export default async function AdminLadderPage({ searchParams }: { searchParams?:
   const linkTo = (format: string, timeFrame: string) => `/admin/ladder?format=${encodeURIComponent(format)}&timeFrame=${encodeURIComponent(timeFrame)}`;
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8">
-      <div className="mb-4">
-        <h1 className="text-2xl font-semibold text-white">Admin: Ladder</h1>
-        <p className="text-sm text-slate-400">Format and time frame filters</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="admin"
+        title="Ladder"
+        description="Format and time frame filters"
+      />
 
-      <div className="mb-4 flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-slate-200">Format:</span>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rc-eyebrow">Format</span>
           {FORMATS.map((f) => (
             <a
               key={f}
-              className={`text-xs px-2 py-1 rounded border border-slate-700 text-slate-200 ${f === fmt ? "bg-slate-800" : "hover:bg-slate-800/50"}`}
+              className={`${FILTER_LINK} ${f === fmt ? "border-rc-accent/45 bg-rc-accent/16 text-rc-accent-link" : "border-rc-line/22 text-rc-fg-muted hover:border-rc-accent hover:text-rc-accent-ring"}`}
               href={linkTo(f, tf)}
             >
               {f}
             </a>
           ))}
         </div>
-        <div className="ml-4 flex items-center gap-2">
-          <span className="text-sm font-medium text-slate-200">Time frame:</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rc-eyebrow">Time frame</span>
           {TIMEFRAMES.map((t) => (
             <a
               key={t}
-              className={`text-xs px-2 py-1 rounded border border-slate-700 text-slate-200 ${t === tf ? "bg-slate-800" : "hover:bg-slate-800/50"}`}
+              className={`${FILTER_LINK} ${t === tf ? "border-rc-accent/45 bg-rc-accent/16 text-rc-accent-link" : "border-rc-line/22 text-rc-fg-muted hover:border-rc-accent hover:text-rc-accent-ring"}`}
               href={linkTo(fmt, t)}
             >
               {t}
@@ -63,41 +68,47 @@ export default async function AdminLadderPage({ searchParams }: { searchParams?:
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded border border-slate-800 bg-slate-900/40">
-        <table className="min-w-full text-sm text-slate-200">
-          <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-            <tr>
-              <th className="px-3 py-2 text-left">#</th>
-              <th className="px-3 py-2 text-left">Player</th>
-              <th className="px-3 py-2 text-left">Rating</th>
-              <th className="px-3 py-2 text-left">W</th>
-              <th className="px-3 py-2 text-left">L</th>
-              <th className="px-3 py-2 text-left">D</th>
-              <th className="px-3 py-2 text-left">Win Rate</th>
-              <th className="px-3 py-2 text-left">Last Active</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((e, i) => (
-              <tr key={e.id} className={`border-t border-slate-800/60 ${i % 2 ? "bg-slate-900/40" : "bg-slate-900/60"}`}>
-                <td className="px-3 py-2">{i + 1}</td>
-                <td className="px-3 py-2">{e.displayName}</td>
-                <td className="px-3 py-2">{e.rating}</td>
-                <td className="px-3 py-2">{e.wins}</td>
-                <td className="px-3 py-2">{e.losses}</td>
-                <td className="px-3 py-2">{e.draws}</td>
-                <td className="px-3 py-2">{(e.winRate * 100).toFixed(1)}%</td>
-                <td className="px-3 py-2">{new Date(e.lastActive).toLocaleString()}</td>
-              </tr>
-            ))}
-            {entries.length === 0 && (
+      <section className="rc-panel overflow-hidden">
+        <PanelHeader
+          title="Leaderboard"
+          meta={`${entries.length} ${entries.length === 1 ? "entry" : "entries"}`}
+        />
+        <div className="overflow-x-auto">
+          <table className="rc-table">
+            <thead>
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-slate-400">No entries</td>
+                <th>#</th>
+                <th>Player</th>
+                <th>Rating</th>
+                <th>W</th>
+                <th>L</th>
+                <th>D</th>
+                <th>Win Rate</th>
+                <th>Last Active</th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {entries.map((e, i) => (
+                <tr key={e.id}>
+                  <td className="text-rc-fg-dim">{i + 1}</td>
+                  <td className="text-rc-fg-strong">{e.displayName}</td>
+                  <td className="rc-stat">{e.rating}</td>
+                  <td className="tabular-nums">{e.wins}</td>
+                  <td className="tabular-nums">{e.losses}</td>
+                  <td className="tabular-nums">{e.draws}</td>
+                  <td className="tabular-nums">{(e.winRate * 100).toFixed(1)}%</td>
+                  <td className="text-rc-fg-muted">{new Date(e.lastActive).toLocaleString()}</td>
+                </tr>
+              ))}
+              {entries.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-6 text-center text-rc-fg-subtle">No entries</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }

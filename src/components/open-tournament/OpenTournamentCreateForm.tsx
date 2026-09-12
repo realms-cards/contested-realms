@@ -1,19 +1,28 @@
 "use client";
 
 import { useState } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { generateTournamentName } from "@/lib/random-name-generator";
 
 interface Props {
   onCreated: (tournamentId: string) => void;
 }
 
+/** Mono spaced-caps label above a form control. */
+const FIELD_LABEL =
+  "mb-1.5 block font-rc-mono text-[11px] uppercase tracking-[0.18em] text-rc-fg-subtle";
+
 export function OpenTournamentCreateForm({ onCreated }: Props) {
   const [name, setName] = useState(() => generateTournamentName());
-  const [gameFormat, setGameFormat] = useState<"constructed" | "sealed" | "draft">("constructed");
+  const [gameFormat, setGameFormat] = useState<
+    "constructed" | "sealed" | "draft"
+  >("constructed");
   const [maxPlayers, setMaxPlayers] = useState(16);
   const [isPrivate, setIsPrivate] = useState(false);
   const [playNetworkUrl, setPlayNetworkUrl] = useState("");
-  const [pairingSource, setPairingSource] = useState<"swiss" | "manual">("swiss");
+  const [pairingSource, setPairingSource] = useState<"swiss" | "manual">(
+    "swiss",
+  );
   const [allowRealms, setAllowRealms] = useState(true);
   const [allowManualReport, setAllowManualReport] = useState(true);
   const [requireHostApproval, setRequireHostApproval] = useState(true);
@@ -31,7 +40,9 @@ export function OpenTournamentCreateForm({ onCreated }: Props) {
         gameFormat,
         maxPlayers,
         isPrivate,
-        ...(playNetworkUrl.trim() ? { playNetworkUrl: playNetworkUrl.trim() } : {}),
+        ...(playNetworkUrl.trim()
+          ? { playNetworkUrl: playNetworkUrl.trim() }
+          : {}),
         pairing: { source: pairingSource },
         matchResolution: {
           allowRealms,
@@ -60,21 +71,19 @@ export function OpenTournamentCreateForm({ onCreated }: Props) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
-        <div className="bg-red-900/50 border border-red-700 text-red-300 px-3 py-2 rounded text-sm">
+        <div className="rc-alert" data-tone="danger">
           {error}
         </div>
       )}
 
       {/* Name */}
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1">
-          Event Name
-        </label>
+        <label className={FIELD_LABEL}>Event Name</label>
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="rc-input h-10 w-full"
           required
           minLength={3}
           maxLength={100}
@@ -83,128 +92,116 @@ export function OpenTournamentCreateForm({ onCreated }: Props) {
 
       {/* Game Format */}
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1">
-          Game Format
-        </label>
-        <div className="flex gap-2">
+        <label className={FIELD_LABEL}>Game Format</label>
+        <div className="rc-segment">
           {(["constructed", "sealed", "draft"] as const).map((f) => (
             <button
               key={f}
               type="button"
-              className={`flex-1 px-3 py-2 rounded text-sm capitalize ${
-                gameFormat === f
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-              }`}
+              aria-pressed={gameFormat === f}
               onClick={() => setGameFormat(f)}
             >
-              {f === "constructed" ? "Constructed" : f === "sealed" ? "Sealed" : "Draft"}
+              {f === "constructed"
+                ? "Constructed"
+                : f === "sealed"
+                  ? "Sealed"
+                  : "Draft"}
             </button>
           ))}
         </div>
-        <p className="text-xs text-slate-500 mt-1">
-          Players are expected to use this format — deck prep is handled externally
+        <p className="rc-hint mt-1.5 leading-relaxed">
+          Players are expected to use this format — deck prep is handled
+          externally
         </p>
       </div>
 
       {/* Max Players */}
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1">
-          Max Players
-        </label>
+        <label className={FIELD_LABEL}>Max Players</label>
         <input
           type="number"
           value={maxPlayers}
           onChange={(e) => setMaxPlayers(Number(e.target.value))}
           min={2}
           max={128}
-          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="rc-input h-10 w-full"
         />
-        <p className="text-xs text-slate-500 mt-1">Soft limit — host can add more players</p>
+        <p className="rc-hint mt-1.5">Soft limit — host can add more players</p>
       </div>
 
       {/* Play Network URL */}
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1">
+        <label className={FIELD_LABEL}>
           Play Network Event URL
-          <span className="text-slate-500 font-normal ml-1">(optional)</span>
+          <span className="ml-1 normal-case tracking-[0.1em] text-rc-fg-dim">
+            (optional)
+          </span>
         </label>
         <input
           type="url"
           value={playNetworkUrl}
           onChange={(e) => setPlayNetworkUrl(e.target.value)}
           placeholder="https://playnetwork.gg/event/..."
-          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="rc-input h-10 w-full"
         />
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="rc-hint mt-1.5">
           Players can click this link to register on Play Network
         </p>
       </div>
 
       {/* Pairing Mode */}
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1">
-          Default Pairing Mode
-        </label>
-        <div className="flex gap-3">
-          <label className="flex items-center gap-2 text-sm text-slate-300">
+        <label className={FIELD_LABEL}>Default Pairing Mode</label>
+        <div className="flex flex-wrap gap-4">
+          <label className="rc-check">
             <input
               type="radio"
               name="pairingSource"
               value="swiss"
               checked={pairingSource === "swiss"}
               onChange={() => setPairingSource("swiss")}
-              className="accent-blue-500"
             />
             Swiss (auto)
           </label>
-          <label className="flex items-center gap-2 text-sm text-slate-300">
+          <label className="rc-check">
             <input
               type="radio"
               name="pairingSource"
               value="manual"
               checked={pairingSource === "manual"}
               onChange={() => setPairingSource("manual")}
-              className="accent-blue-500"
             />
             Manual
           </label>
         </div>
-        <p className="text-xs text-slate-500 mt-1">
-          You can always override per round
-        </p>
+        <p className="rc-hint mt-1.5">You can always override per round</p>
       </div>
 
       {/* Match Resolution */}
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-2">
-          Match Resolution
-        </label>
-        <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm text-slate-300">
+        <label className={FIELD_LABEL}>Match Resolution</label>
+        <div className="flex flex-col gap-2">
+          <label className="rc-check">
             <input
               type="checkbox"
               checked={allowRealms}
               onChange={(e) => setAllowRealms(e.target.checked)}
-              className="accent-blue-500"
             />
             Allow playing on Realms
           </label>
-          <label className="flex items-center gap-2 text-sm text-slate-300">
+          <label className="rc-check">
             <input
               type="checkbox"
               checked={allowManualReport}
               onChange={(e) => setAllowManualReport(e.target.checked)}
-              className="accent-blue-500"
             />
             Allow manual result reporting (TTS, paper)
           </label>
-          <label className="flex items-center gap-2 text-sm text-slate-300">
+          <label className="rc-check">
             <input
               type="checkbox"
               checked={requireHostApproval}
               onChange={(e) => setRequireHostApproval(e.target.checked)}
-              className="accent-blue-500"
             />
             Require host approval for manual results
           </label>
@@ -212,24 +209,23 @@ export function OpenTournamentCreateForm({ onCreated }: Props) {
       </div>
 
       {/* Private */}
-      <label className="flex items-center gap-2 text-sm text-slate-300">
+      <label className="rc-check">
         <input
           type="checkbox"
           checked={isPrivate}
           onChange={(e) => setIsPrivate(e.target.checked)}
-          className="accent-blue-500"
         />
         Private event (only visible to invited players)
       </label>
 
       {/* Submit */}
-      <button
+      <RcButton
         type="submit"
         disabled={submitting || !name.trim()}
-        className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+        className="w-full"
       >
         {submitting ? "Creating..." : "Create Event"}
-      </button>
+      </RcButton>
     </form>
   );
 }

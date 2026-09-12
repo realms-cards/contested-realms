@@ -14,6 +14,9 @@ import {
   DynamicPiles3D as Piles3D,
 } from "@/components/game/dynamic-3d";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
@@ -182,26 +185,31 @@ export default function AdminBotReplayViewerPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-white">Loading bot replay...</div>
+      <div className="rc-app flex min-h-screen items-center justify-center px-4">
+        <div className="rc-hint">loading bot replay…</div>
       </div>
     );
   }
 
   if (error || !recording) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-center text-white">
-          <div className="text-xl mb-4">Error loading bot replay</div>
-          <div className="text-slate-400 mb-4">
+      <div className="rc-app flex min-h-screen items-center justify-center px-4">
+        <div className="w-full max-w-md space-y-4">
+          <PageHeader
+            eyebrow="admin"
+            size="md"
+            title="Bot replay"
+            description="The recording could not be loaded."
+          />
+          <div className="rc-alert" data-tone="danger">
             {error || "Recording not found"}
           </div>
-          <button
+          <RcButton
+            variant="outline"
             onClick={() => router.push("/admin/training")}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
           >
             Back to Training Dashboard
-          </button>
+          </RcButton>
         </div>
       </div>
     );
@@ -214,12 +222,10 @@ export default function AdminBotReplayViewerPage() {
       : 0;
 
   return (
-    <div className="fixed inset-0 w-screen h-[100dvh] bg-slate-900">
+    <div className="rc-app fixed inset-0 h-[100dvh] w-screen">
       {/* Admin Badge */}
-      <div className="absolute top-4 left-4 z-50 bg-amber-500/20 border border-amber-500/50 px-3 py-1 rounded-lg">
-        <span className="text-amber-200 text-xs font-semibold uppercase tracking-wide">
-          Admin View - Bot Replay
-        </span>
+      <div className="absolute left-4 top-4 z-50">
+        <Badge tone="gold">Admin View · Bot Replay</Badge>
       </div>
 
       {/* 3D Game View */}
@@ -328,21 +334,24 @@ export default function AdminBotReplayViewerPage() {
       />
 
       {/* Replay Controls Overlay */}
-      <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm p-4">
-        <div className="max-w-6xl mx-auto">
+      <div className="absolute bottom-0 left-0 right-0 border-t border-rc-line/18 bg-black/80 p-4 backdrop-blur-[6px]">
+        <div className="mx-auto max-w-6xl">
           {/* Match Info */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-white">
-              <div className="font-semibold text-lg">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
                 {recording.playerNames.join(" vs ")}
               </div>
-              <div className="text-sm text-slate-400">
-                {recording.initialState.matchType} • {recording.actions.length}{" "}
-                actions • Bot Match
+              <div className="rc-hint mt-1">
+                {recording.initialState.matchType} · {recording.actions.length}{" "}
+                actions · bot match
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button
+              <RcButton
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
                 onClick={() => {
                   const blob = new Blob([JSON.stringify(recording, null, 2)], {
                     type: "application/json",
@@ -362,30 +371,30 @@ export default function AdminBotReplayViewerPage() {
                   document.body.removeChild(a);
                   URL.revokeObjectURL(url);
                 }}
-                className="h-9 w-9 grid place-items-center bg-emerald-600 hover:bg-emerald-700 rounded-lg text-white transition-colors"
                 title="Download Replay"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 24 24"
                   fill="currentColor"
-                  className="w-5 h-5"
+                  className="h-5 w-5"
                 >
                   <path d="M12 16l-6-6h4V4h4v6h4l-6 6zm-8 2h16v2H4v-2z" />
                 </svg>
-              </button>
-              <button
+              </RcButton>
+              <RcButton
+                variant="outline"
+                size="sm"
                 onClick={() => router.push("/admin/training")}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors"
               >
                 Back to Training Dashboard
-              </button>
+              </RcButton>
             </div>
           </div>
 
           {/* Progress Bar */}
           <div className="mb-4">
-            <div className="flex items-center justify-between text-sm text-slate-400 mb-2">
+            <div className="mb-2 flex items-center justify-between font-rc-mono text-[11px] uppercase tracking-[0.14em] text-rc-fg-subtle">
               <span>
                 Action {currentActionIndex + 1} of {recording.actions.length}
               </span>
@@ -393,11 +402,10 @@ export default function AdminBotReplayViewerPage() {
                 {currentAction ? formatTime(currentAction.timestamp) : "0:00"}
               </span>
             </div>
-            <div className="relative bg-slate-700 h-2 rounded-full">
-              <div
-                className="absolute left-0 top-0 h-full bg-blue-500 rounded-full transition-all"
-                style={{ width: `${progress}%` }}
-              />
+            <div className="relative">
+              <div className="rc-progress">
+                <span style={{ width: `${progress}%` }} />
+              </div>
               <input
                 type="range"
                 min={0}
@@ -410,38 +418,43 @@ export default function AdminBotReplayViewerPage() {
           </div>
 
           {/* Control Buttons */}
-          <div className="flex items-center justify-center gap-3">
-            <button
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <RcButton
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
               onClick={() => jumpToAction(0)}
-              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
               title="Jump to Start"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
                 fill="currentColor"
-                className="w-5 h-5"
+                className="h-5 w-5"
               >
                 <path d="M6 6h2v12H6V6zm12 6-8 6V6l8 6z" />
               </svg>
-            </button>
-            <button
+            </RcButton>
+            <RcButton
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
               onClick={stepBackward}
-              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
               title="Step Backward"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
                 fill="currentColor"
-                className="w-5 h-5"
+                className="h-5 w-5"
               >
                 <path d="M6 5h2v14H6V5zm12 7-9 6V6l9 6z" />
               </svg>
-            </button>
-            <button
+            </RcButton>
+            <RcButton
+              size="sm"
+              className="h-9 px-4"
               onClick={() => setIsPlaying(!isPlaying)}
-              className="h-9 px-4 bg-blue-600 hover:bg-blue-700 rounded text-white transition-colors font-semibold flex items-center gap-2"
             >
               {isPlaying ? (
                 <>
@@ -449,7 +462,7 @@ export default function AdminBotReplayViewerPage() {
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24"
                     fill="currentColor"
-                    className="w-5 h-5"
+                    className="h-5 w-5"
                   >
                     <path d="M8 6h3v12H8V6zm5 0h3v12h-3V6z" />
                   </svg>
@@ -461,46 +474,50 @@ export default function AdminBotReplayViewerPage() {
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24"
                     fill="currentColor"
-                    className="w-5 h-5"
+                    className="h-5 w-5"
                   >
                     <path d="M8 5v14l11-7-11-7z" />
                   </svg>
                   Play
                 </>
               )}
-            </button>
-            <button
+            </RcButton>
+            <RcButton
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
               onClick={stepForward}
-              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
               title="Step Forward"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
                 fill="currentColor"
-                className="w-5 h-5"
+                className="h-5 w-5"
               >
                 <path d="M7 6h3v12H7V6zm4 6 9 6V6l-9 6z" />
               </svg>
-            </button>
-            <button
+            </RcButton>
+            <RcButton
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
               onClick={() => jumpToAction(recording.actions.length - 1)}
-              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
               title="Jump to End"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
                 fill="currentColor"
-                className="w-5 h-5"
+                className="h-5 w-5"
               >
                 <path d="M16 6h2v12h-2V6zM6 12l8-6v12l-8-6z" />
               </svg>
-            </button>
+            </RcButton>
 
             {/* Speed Control */}
             <div className="ml-4 flex items-center gap-2">
-              <span className="text-sm text-slate-400">Speed:</span>
+              <span className="rc-eyebrow">Speed</span>
               <CustomSelect
                 value={String(playbackSpeed)}
                 onChange={(v) => setPlaybackSpeed(parseFloat(v))}

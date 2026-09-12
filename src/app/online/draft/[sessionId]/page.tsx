@@ -6,6 +6,10 @@ import { useOnline } from "@/app/online/online-context";
 import GuestGate from "@/components/auth/GuestGate";
 import FloatingChat from "@/components/chat/FloatingChat";
 import TournamentDraft3DScreen from "@/components/game/TournamentDraft3DScreen";
+import AppShell from "@/components/ui/AppShell";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
 import { useViewer } from "@/lib/guest/useViewer";
 
 type DraftParticipant = {
@@ -274,33 +278,31 @@ export default function TournamentDraftSessionPage() {
 
   if (viewer.status === "loading" || (loading && !viewer.isAnonymous)) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white grid place-items-center">
-        <div className="text-slate-300">Loading draft session…</div>
-      </div>
+      <AppShell width="wide">
+        <div className="rc-hint py-6 text-center">Loading draft session…</div>
+      </AppShell>
     );
   }
 
   if (viewer.isAnonymous) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white">
-        <div className="container mx-auto px-4 py-8 max-w-2xl">
-          <GuestGate
-            title="Tournament draft"
-            description="Sign in or continue as a guest to take your seat in the draft."
-            returnTo={currentHref}
-          />
-        </div>
-      </div>
+      <AppShell width="narrow">
+        <GuestGate
+          title="Tournament draft"
+          description="Sign in or continue as a guest to take your seat in the draft."
+          returnTo={currentHref}
+        />
+      </AppShell>
     );
   }
 
   if (error || !draftSession) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white grid place-items-center">
-        <div className="p-4 bg-rose-900/40 border border-rose-700 rounded">
+      <AppShell width="wide">
+        <div className="rc-alert" data-tone="danger">
           {error || "Draft session not found"}
         </div>
-      </div>
+      </AppShell>
     );
   }
 
@@ -317,11 +319,11 @@ export default function TournamentDraftSessionPage() {
 
     if (!myParticipant) {
       return (
-        <div className="min-h-screen bg-slate-900 text-white grid place-items-center">
-          <div className="p-4 bg-rose-900/40 border border-rose-700 rounded">
+        <AppShell width="wide">
+          <div className="rc-alert" data-tone="danger">
             You are not a participant in this draft session
           </div>
-        </div>
+        </AppShell>
       );
     }
 
@@ -346,123 +348,132 @@ export default function TournamentDraftSessionPage() {
 
   // Show waiting screen
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
+    <AppShell width="wide">
       {draftSession?.tournamentId && (
         <FloatingChat tournamentId={draftSession.tournamentId} mode="bubble" />
       )}
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6">Tournament Draft Session</h1>
+      <PageHeader
+        eyebrow="tournament"
+        title="Tournament Draft Session"
+        description="Waiting for the draft to open. Seats and status update live."
+      />
 
-        <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-4 mb-6">
-          <div className="text-slate-300">
-            Status:{" "}
-            <span className="font-semibold text-white capitalize">
+      <section className="rc-panel flex flex-wrap items-center gap-8 px-[18px] py-3.5">
+        <div>
+          <div className="rc-hint uppercase">Status</div>
+          <div className="mt-1">
+            <Badge tone={draftSession.status === "completed" ? "ok" : "default"}>
               {draftSession.status}
-            </span>
-          </div>
-          <div className="text-slate-300 mt-2">
-            Players: {draftSession.participants.length}
+            </Badge>
           </div>
         </div>
+        <div>
+          <div className="rc-hint uppercase">Players</div>
+          <div className="rc-stat text-xl">
+            {draftSession.participants.length}
+          </div>
+        </div>
+      </section>
 
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold mb-3">Participants</h2>
-          <div className="grid gap-2">
-            {draftSession.participants.map((p) => (
-              <div
-                key={p.playerId}
-                className="flex items-center justify-between bg-black/20 border border-slate-700 rounded px-3 py-2"
-              >
-                <div className="text-white">{p.playerName}</div>
-                <div className="text-xs text-slate-300">
-                  Seat {p.seatNumber} • {p.status}
-                </div>
+      <section className="rc-panel">
+        <PanelHeader
+          title="Participants"
+          meta={`${draftSession.participants.length} seated`}
+        />
+        <div className="grid gap-2 px-[18px] py-3.5">
+          {draftSession.participants.map((p) => (
+            <div
+              key={p.playerId}
+              className="flex items-center justify-between gap-3 rounded-rc-md border border-rc-line/12 bg-black/30 px-3 py-2"
+            >
+              <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                {p.playerName}
               </div>
-            ))}
-          </div>
+              <div className="font-rc-mono text-[11px] uppercase tracking-[0.14em] text-rc-fg-subtle">
+                Seat {p.seatNumber} · {p.status}
+              </div>
+            </div>
+          ))}
         </div>
+      </section>
 
-        {draftSession.status === "completed" && (
-          <div className="bg-green-900/40 border border-green-700 rounded-lg p-4">
-            <div className="text-green-200 font-semibold mb-2">
-              Draft completed
-            </div>
-            <div className="text-green-100 text-sm mb-4">
-              The draft has finished. You can now build your deck.
-            </div>
-            <button
-              onClick={async () => {
-                // Fallback persistence: fetch final picks and store them for the editor
-                try {
-                  const res = await fetch(
-                    `/api/draft-sessions/${draftSession.id}/state`,
-                    { cache: "no-store" }
-                  );
-                  if (res.ok) {
-                    const payload = await res.json();
-                    const ds = payload?.draftState as unknown;
-                    type DraftCard = {
-                      id: string | number;
-                      slug: string;
-                      name?: string;
-                      cardName?: string;
-                      type?: string | null;
-                      setName?: string;
-                      rarity?: string;
-                    };
-                    type DraftStateLike = { picks?: DraftCard[][] };
-                    const state = ds as DraftStateLike;
-                    const me = viewer.id
-                      ? String(viewer.id)
+      {draftSession.status === "completed" && (
+        <section className="space-y-3">
+          <div className="rc-alert" data-tone="success">
+            Draft completed. The draft has finished. You can now build your
+            deck.
+          </div>
+          <RcButton
+            onClick={async () => {
+              // Fallback persistence: fetch final picks and store them for the editor
+              try {
+                const res = await fetch(
+                  `/api/draft-sessions/${draftSession.id}/state`,
+                  { cache: "no-store" }
+                );
+                if (res.ok) {
+                  const payload = await res.json();
+                  const ds = payload?.draftState as unknown;
+                  type DraftCard = {
+                    id: string | number;
+                    slug: string;
+                    name?: string;
+                    cardName?: string;
+                    type?: string | null;
+                    setName?: string;
+                    rarity?: string;
+                  };
+                  type DraftStateLike = { picks?: DraftCard[][] };
+                  const state = ds as DraftStateLike;
+                  const me = viewer.id
+                    ? String(viewer.id)
+                    : null;
+                  const mySeat = me
+                    ? draftSession.participants.find((p) => p.playerId === me)
+                        ?.seatNumber
+                    : undefined;
+                  const myIdx =
+                    typeof mySeat === "number" && mySeat > 0 ? mySeat - 1 : 0;
+                  const seatPicks =
+                    state && Array.isArray(state.picks)
+                      ? state.picks[myIdx]
                       : null;
-                    const mySeat = me
-                      ? draftSession.participants.find((p) => p.playerId === me)
-                          ?.seatNumber
-                      : undefined;
-                    const myIdx =
-                      typeof mySeat === "number" && mySeat > 0 ? mySeat - 1 : 0;
-                    const seatPicks =
-                      state && Array.isArray(state.picks)
-                        ? state.picks[myIdx]
-                        : null;
-                    const mine = Array.isArray(seatPicks)
-                      ? (seatPicks as DraftCard[])
-                      : [];
-                    if (mine.length) {
-                      try {
-                        const playerId = viewer.id || "";
-                        const storageSuffix = playerId
-                          ? `${draftSession.id}_${playerId}`
-                          : draftSession.id;
+                  const mine = Array.isArray(seatPicks)
+                    ? (seatPicks as DraftCard[])
+                    : [];
+                  if (mine.length) {
+                    try {
+                      const playerId = viewer.id || "";
+                      const storageSuffix = playerId
+                        ? `${draftSession.id}_${playerId}`
+                        : draftSession.id;
+                      localStorage.setItem(
+                        `draftedCards_${storageSuffix}`,
+                        JSON.stringify(mine)
+                      );
+                      if (playerId) {
                         localStorage.setItem(
-                          `draftedCards_${storageSuffix}`,
+                          `draftedCards_${draftSession.id}`,
                           JSON.stringify(mine)
                         );
-                        if (playerId) {
-                          localStorage.setItem(
-                            `draftedCards_${draftSession.id}`,
-                            JSON.stringify(mine)
-                          );
-                        }
-                      } catch {}
-                    }
+                      }
+                    } catch {}
                   }
-                } catch {}
-                const params = new URLSearchParams({
-                  draft: "true",
-                  tournament: draftSession.tournamentId,
-                  matchName: "Draft",
-                  sessionId: draftSession.id,
-                });
-                router.push(`/decks/editor-3d?${params.toString()}`);
-              }}
-              className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm"
-            >
-              Build Draft Deck
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+                }
+              } catch {}
+              const params = new URLSearchParams({
+                draft: "true",
+                tournament: draftSession.tournamentId,
+                matchName: "Draft",
+                sessionId: draftSession.id,
+              });
+              router.push(`/decks/editor-3d?${params.toString()}`);
+            }}
+          >
+            Build Draft Deck
+          </RcButton>
+        </section>
+      )}
+    </AppShell>
   );
 }

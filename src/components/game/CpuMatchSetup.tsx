@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useOnline } from "@/app/online/online-context";
+import AppShell from "@/components/ui/AppShell";
+import { PageHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
 import { betaPrecons } from "@/lib/game/cpu/precons";
 import { fetchPatrons, isPatron } from "@/lib/patrons";
 
@@ -17,6 +20,12 @@ type Status =
   | "creating"
   | "redirecting"
   | "error";
+
+const TILE_BASE =
+  "w-full rounded-rc-md border bg-black/30 px-3.5 py-3 text-left transition-[border-color,box-shadow,background-color] duration-150";
+const TILE_IDLE = "border-rc-line/12 hover:border-rc-accent/50";
+const TILE_SELECTED =
+  "border-rc-accent shadow-[0_0_18px_rgba(243,207,106,0.28)]";
 
 /**
  * Detect whether the current match (from online context) is a CPU match.
@@ -178,96 +187,148 @@ export default function CpuMatchSetup({ mode }: { mode: "precon" | "goldfish" })
     startedRef.current = false;
   };
 
+  const title =
+    mode === "precon" ? "VS CPU Precons" : "Goldfish — Test Any Deck";
+  const description =
+    mode === "precon"
+      ? "Choose your opponent. You will choose your own Beta precon next."
+      : "Choose a CPU sparring partner, then load any of your decks or import a deck. Cards outside the supported precons may need manual resolution.";
+
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-      <div className="text-center space-y-4">
-        {status === "init" || status === "connecting" || status === "checking" ? (
-          <>
-            <div className="text-slate-300 text-lg">
-              {status === "checking" ? "Checking for active game..." : "Connecting to server..."}
-            </div>
-            <div className="animate-pulse text-slate-500 text-sm">
-              {status === "checking" ? "Looking for existing match" : "Establishing connection"}
-            </div>
-          </>
-        ) : status === "prompt" ? (
-          <div className="space-y-4">
-            <div className="text-slate-300 text-lg">
+    <AppShell width="narrow">
+      <PageHeader
+        eyebrow="experimental"
+        title={title}
+        description={description}
+      />
+
+      {status === "init" || status === "connecting" || status === "checking" ? (
+        <section className="rc-panel px-[18px] py-3.5">
+          <div className="font-rc-display text-[26px] leading-none text-rc-fg-strong">
+            {status === "checking"
+              ? "Checking for active game…"
+              : "Connecting to server…"}
+          </div>
+          <div className="rc-hint mt-2 animate-pulse">
+            {status === "checking"
+              ? "Looking for existing match"
+              : "Establishing connection"}
+          </div>
+        </section>
+      ) : status === "prompt" ? (
+        <section className="rc-panel space-y-4 px-[18px] py-3.5">
+          <div>
+            <div className="font-rc-display text-[26px] leading-none text-rc-fg-strong">
               You have an active game against CPU
             </div>
-            <div className="text-slate-500 text-sm">
+            <div className="rc-hint mt-2">
               Would you like to resume or start a new game?
             </div>
-            <div className="flex gap-3 justify-center">
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <RcButton onClick={handleResume}>Resume Game</RcButton>
+            <RcButton variant="outline" onClick={() => setStatus("selecting")}>
+              New Game
+            </RcButton>
+          </div>
+        </section>
+      ) : status === "selecting" ? (
+        <section className="rc-panel space-y-4 px-[18px] py-3.5">
+          <div className="rc-alert" data-tone="warning">
+            Experimental: card automation is still incomplete. Some effects need
+            manual resolution, and the CPU skips Magic cards without a supported
+            resolver.
+          </div>
+
+          <div>
+            <div className="rc-eyebrow mb-2" id="cpu-precon-label">
+              Opponent&rsquo;s deck
+            </div>
+            <div
+              role="radiogroup"
+              aria-labelledby="cpu-precon-label"
+              className="grid gap-2 sm:grid-cols-2"
+            >
               <button
-                onClick={handleResume}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors"
+                type="button"
+                role="radio"
+                aria-checked={preconId === ""}
+                onClick={() => setPreconId("")}
+                className={`${TILE_BASE} ${
+                  preconId === "" ? TILE_SELECTED : TILE_IDLE
+                }`}
               >
-                Resume Game
+                <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                  Random element
+                </div>
+                <div className="rc-hint mt-1">any beta precon</div>
               </button>
-              <button
-                onClick={() => setStatus("selecting")}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded transition-colors"
-              >
-                New Game
-              </button>
+              {betaPrecons.map((deck) => (
+                <button
+                  key={deck.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={preconId === deck.id}
+                  onClick={() => setPreconId(deck.id)}
+                  className={`${TILE_BASE} ${
+                    preconId === deck.id ? TILE_SELECTED : TILE_IDLE
+                  }`}
+                >
+                  <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                    {deck.name}
+                  </div>
+                  <div className="rc-hint mt-1">{deck.avatar}</div>
+                </button>
+              ))}
             </div>
           </div>
-        ) : status === "selecting" ? (
-          <div className="space-y-4 rounded-xl border border-slate-700 bg-slate-900 p-6">
-            <h1 className="font-fantaisie text-3xl text-amber-100">{mode === "precon" ? "VS CPU Precons" : "Goldfish — Test Any Deck"}</h1>
-            <p className="text-sm text-slate-400">{mode === "precon" ? "Choose your opponent. You will choose your own Beta precon next." : "Choose a CPU sparring partner, then load any of your decks or import a deck. Cards outside the supported precons may need manual resolution."}</p>
-            <p className="max-w-lg text-sm text-amber-200/80">Experimental: card automation is still incomplete. Some effects need manual resolution, and the CPU skips Magic cards without a supported resolver.</p>
-            <label htmlFor="cpu-precon" className="block text-left text-sm text-slate-200">Opponent’s deck</label>
-            <select id="cpu-precon" value={preconId} onChange={event => setPreconId(event.target.value)} className="w-full rounded border border-slate-600 bg-slate-800 px-3 py-2 text-white">
-              <option value="">Random element</option>
-              {betaPrecons.map(deck => <option key={deck.id} value={deck.id}>{deck.name} — {deck.avatar}</option>)}
-            </select>
-            <button onClick={handleNewGame} className="rounded bg-indigo-600 px-5 py-2 text-white hover:bg-indigo-500">Start game</button>
-            <p className="text-sm text-slate-400">
-              <Link href={mode === "precon" ? "/play/goldfish" : "/play/vs-cpu"} className="text-amber-200 underline underline-offset-4">
-                {mode === "precon" ? "Want to test your own deck? Open Goldfish" : "Prefer fixed decks? Open VS CPU Precons"}
-              </Link>
-            </p>
+
+          <RcButton size="lg" onClick={handleNewGame}>
+            Start game
+          </RcButton>
+
+          <p className="font-rc-sans text-sm text-rc-fg-muted">
+            <Link
+              href={mode === "precon" ? "/play/goldfish" : "/play/vs-cpu"}
+              className="rc-link underline underline-offset-4"
+            >
+              {mode === "precon"
+                ? "Want to test your own deck? Open Goldfish"
+                : "Prefer fixed decks? Open VS CPU Precons"}
+            </Link>
+          </p>
+        </section>
+      ) : status === "creating" ? (
+        <section className="rc-panel px-[18px] py-3.5">
+          <div className="font-rc-display text-[26px] leading-none text-rc-fg-strong">
+            Setting up match against CPU…
           </div>
-        ) : status === "creating" ? (
-          <>
-            <div className="text-slate-300 text-lg">
-              Setting up match against CPU...
-            </div>
-            <div className="animate-pulse text-slate-500 text-sm">
-              Creating lobby and spawning bot
-            </div>
-          </>
-        ) : status === "redirecting" ? (
-          <>
-            <div className="text-slate-300 text-lg">Match ready!</div>
-            <div className="animate-pulse text-slate-500 text-sm">
-              Redirecting to game...
-            </div>
-          </>
-        ) : status === "error" ? (
-          <div className="space-y-4">
-            <div className="text-red-400 text-lg">
-              {errorMsg || "Something went wrong"}
-            </div>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={handleRetry}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded transition-colors"
-              >
-                Try Again
-              </button>
-              <button
-                onClick={() => router.push("/")}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded transition-colors"
-              >
-                Back to Home
-              </button>
-            </div>
+          <div className="rc-hint mt-2 animate-pulse">
+            Creating lobby and spawning bot
           </div>
-        ) : null}
-      </div>
-    </div>
+        </section>
+      ) : status === "redirecting" ? (
+        <section className="rc-panel px-[18px] py-3.5">
+          <div className="font-rc-display text-[26px] leading-none text-rc-fg-strong">
+            Match ready
+          </div>
+          <div className="rc-hint mt-2 animate-pulse">Redirecting to game…</div>
+        </section>
+      ) : status === "error" ? (
+        <section className="space-y-4">
+          <div className="rc-alert" data-tone="danger">
+            {errorMsg || "Something went wrong"}
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <RcButton variant="outline" onClick={handleRetry}>
+              Try Again
+            </RcButton>
+            <RcButton variant="ghost" onClick={() => router.push("/")}>
+              Back to Home
+            </RcButton>
+          </div>
+        </section>
+      ) : null}
+    </AppShell>
   );
 }

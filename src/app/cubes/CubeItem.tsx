@@ -5,6 +5,8 @@ import { Globe, Lock, Trash2, List, Pencil, Copy } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { Badge } from "@/components/ui/badge";
+import { RcButton } from "@/components/ui/rc-button";
 import type { CubeSummary } from "@/lib/cubes/types";
 
 export type CubeListItem = CubeSummary;
@@ -15,33 +17,11 @@ type CubeItemProps = {
   variant?: "grid" | "list";
 };
 
-type TagTone = "default" | "public" | "private" | "info";
+/** Icon-only row action (list view); the grid overlay uses the default size. */
+const ROW_ACTION = "h-7 w-7 bg-black/35";
 
-const TAG_TONE_STYLES: Record<TagTone, string> = {
-  default: "bg-foreground/10 text-foreground/80 border-white/10",
-  public: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
-  private: "bg-zinc-800/70 text-zinc-300 border-zinc-600/60",
-  info: "bg-blue-500/15 text-blue-200 border-blue-400/20",
-};
-
-function Tag({
-  children,
-  tone = "default",
-}: {
-  children: ReactNode;
-  tone?: TagTone;
-}) {
-  return (
-    <span
-      className={clsx(
-        "inline-flex items-center text-xs px-2 py-0.5 rounded border leading-tight max-w-full overflow-hidden text-ellipsis whitespace-nowrap",
-        TAG_TONE_STYLES[tone]
-      )}
-    >
-      {children}
-    </span>
-  );
-}
+/** Public toggle when the cube is public. */
+const PUBLIC_ACTION = "border-rc-success/40 bg-rc-success/15 text-[#c5d6a8]";
 
 export default function CubeItem({
   cube,
@@ -221,23 +201,19 @@ export default function CubeItem({
 
   const tags = useMemo(() => {
     const items: ReactNode[] = [];
-    items.push(
-      <Tag key="count" tone="default">
-        {shortCardCount}
-      </Tag>
-    );
+    items.push(<Badge key="count">{shortCardCount}</Badge>);
     if (isOwner || typeof cube.isPublic === "boolean") {
       items.push(
-        <Tag key="visibility" tone={effectiveIsPublic ? "public" : "private"}>
+        <Badge key="visibility" tone={effectiveIsPublic ? "ok" : "default"}>
           {effectiveIsPublic ? "Public" : "Private"}
-        </Tag>
+        </Badge>
       );
     }
     if (cube.imported) {
       items.push(
-        <Tag key="imported" tone="info">
+        <Badge key="imported" tone="gold">
           Imported
-        </Tag>
+        </Badge>
       );
     }
     return items;
@@ -248,11 +224,11 @@ export default function CubeItem({
     return (
       <Link
         href={`/cubes/${encodeURIComponent(cube.id)}/edit`}
-        className="border rounded px-3 py-2 hover:bg-muted/60 relative group flex items-center gap-3"
+        className="group relative flex items-center gap-3 rounded-rc-md border border-rc-line/12 bg-black/30 px-3 py-2 transition-colors hover:border-rc-accent/30 hover:bg-rc-accent/6"
       >
         {copiedMsg && (
           <div
-            className="absolute top-1 left-1/2 -translate-x-1/2 rounded bg-black/90 text-white text-xs px-2 py-1 ring-1 ring-white/20 z-20"
+            className="absolute top-1 left-1/2 z-20 -translate-x-1/2 rounded-rc-sm border border-rc-line/22 bg-black/90 px-2 py-1 font-rc-mono text-[11px] text-rc-fg-strong"
             aria-live="polite"
           >
             {copiedMsg}
@@ -260,100 +236,109 @@ export default function CubeItem({
         )}
 
         {/* Name */}
-        <span className="font-medium truncate min-w-[120px] flex-1">
+        <span className="min-w-[120px] flex-1 truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
           {cube.name}
         </span>
 
         {/* Tags */}
-        <div className="flex items-center gap-1 flex-shrink-0">{tags}</div>
+        <div className="flex flex-shrink-0 items-center gap-1">{tags}</div>
 
         {/* Date */}
-        <div className="flex-shrink-0 text-xs text-slate-400 hidden sm:block w-28 text-right">
-          {cube.userName && <span>{cube.userName} - </span>}
+        <div className="rc-hint hidden w-28 flex-shrink-0 text-right sm:block">
+          {cube.userName && <span>{cube.userName} · </span>}
           {new Date(cube.updatedAt).toLocaleDateString()}
         </div>
 
         {/* Actions on hover */}
-        <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex flex-shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           {/* Edit */}
-          <button
+          <RcButton
+            size="icon"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               router.push(`/cubes/${encodeURIComponent(cube.id)}/edit`);
             }}
-            className="p-1.5 rounded bg-amber-600/80 hover:bg-amber-500 text-white"
+            className="h-7 w-7"
             aria-label="Edit"
             title="Edit Cube"
           >
             <Pencil className="h-3.5 w-3.5" />
-          </button>
+          </RcButton>
 
           {/* TTS Export */}
-          <button
+          <RcButton
+            variant="outline"
+            size="icon"
+            className={ROW_ACTION}
             aria-label="TTS Export"
             title="Download TTS JSON"
             onClick={handleTTSExport}
-            className="p-1.5 rounded bg-zinc-700/80 ring-1 ring-purple-500/50 hover:bg-purple-600/70 text-purple-300 hover:text-white"
           >
-            <span className="text-[10px] font-bold leading-none">TTS</span>
-          </button>
+            <span className="font-rc-mono text-[10px] leading-none tracking-[0.08em]">
+              TTS
+            </span>
+          </RcButton>
 
           {/* Export List */}
-          <button
+          <RcButton
+            variant="outline"
+            size="icon"
+            className={ROW_ACTION}
             aria-label="Export List"
             title="Copy card list"
             onClick={handleExportList}
             disabled={exportingText}
-            className="p-1.5 rounded bg-zinc-700/80 ring-1 ring-zinc-500/50 hover:bg-zinc-600/80 text-zinc-300 hover:text-white"
           >
             <List className="h-3.5 w-3.5" />
-          </button>
+          </RcButton>
 
           {/* Copy Cube */}
           {!isOwner && (
-            <button
+            <RcButton
+              variant="outline"
+              size="icon"
+              className={ROW_ACTION}
               aria-label="Copy Cube"
               title="Copy to your cubes"
               onClick={handleCopy}
-              className="p-1.5 rounded bg-zinc-700/80 ring-1 ring-emerald-500/50 hover:bg-emerald-600/70 text-emerald-300 hover:text-white"
             >
               <Copy className="h-3.5 w-3.5" />
-            </button>
+            </RcButton>
           )}
 
           {/* Toggle Public/Private */}
           {isOwner && (
-            <button
+            <RcButton
+              variant="outline"
+              size="icon"
+              className={clsx(ROW_ACTION, effectiveIsPublic && PUBLIC_ACTION)}
               aria-label="Toggle public/private"
               title={effectiveIsPublic ? "Make private" : "Make public"}
               onClick={handleTogglePublic}
               disabled={updatingPublic}
-              className={`p-1.5 rounded ring-1 transition-colors ${
-                effectiveIsPublic
-                  ? "bg-green-700/60 text-green-300 ring-green-500/50 hover:bg-green-600/80 hover:text-white"
-                  : "bg-zinc-700/80 text-zinc-400 ring-zinc-500/50 hover:bg-zinc-600/80 hover:text-white"
-              }`}
             >
               {effectiveIsPublic ? (
                 <Globe className="h-3.5 w-3.5" />
               ) : (
                 <Lock className="h-3.5 w-3.5" />
               )}
-            </button>
+            </RcButton>
           )}
 
           {/* Delete */}
           {isOwner && (
-            <button
+            <RcButton
+              variant="destructive"
+              size="icon"
+              className="h-7 w-7"
               onClick={handleDelete}
               disabled={deleting}
-              className="p-1.5 rounded bg-zinc-700/80 ring-1 ring-red-500/50 hover:bg-red-600/70 text-red-400 hover:text-white"
               aria-label="Delete"
               title="Delete cube"
             >
               <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            </RcButton>
           )}
         </div>
       </Link>
@@ -364,31 +349,33 @@ export default function CubeItem({
   return (
     <Link
       href={`/cubes/${encodeURIComponent(cube.id)}/edit`}
-      className="border rounded p-3 hover:bg-muted/60 relative group block"
+      className="group relative block rounded-rc-md border border-rc-line/12 bg-black/30 p-3 transition-colors hover:border-rc-accent/30 hover:bg-rc-accent/6"
     >
       <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="font-medium line-clamp-1 pr-8">{cube.name}</div>
+        <div className="min-w-0 flex-1">
+          <div className="line-clamp-1 pr-8 font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+            {cube.name}
+          </div>
           {cube.description && (
-            <p className="mt-1 text-sm text-slate-300/80 line-clamp-2">
+            <p className="mt-1 line-clamp-2 font-rc-sans text-sm text-rc-fg-muted">
               {cube.description}
             </p>
           )}
           {tags.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">{tags}</div>
           )}
-          <div className="opacity-70 text-xs mt-2">
-            {cube.userName && <span>by {cube.userName} - </span>}
+          <div className="rc-hint mt-2">
+            {cube.userName && <span>by {cube.userName} · </span>}
             Updated {updatedStr}
           </div>
         </div>
       </div>
 
       {/* Full card overlay with action buttons */}
-      <div className="absolute inset-0 z-10 flex items-center justify-center gap-3 rounded-lg bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute inset-0 z-10 flex flex-wrap items-center justify-center gap-3 rounded-rc-md bg-[rgba(6,10,20,0.86)] opacity-0 transition-opacity group-hover:opacity-100">
         {copiedMsg && (
           <div
-            className="absolute top-2 left-2 rounded bg-black/90 text-white text-xs px-2 py-1 ring-1 ring-white/20"
+            className="absolute top-2 left-2 rounded-rc-sm border border-rc-line/22 bg-black/90 px-2 py-1 font-rc-mono text-[11px] text-rc-fg-strong"
             aria-live="polite"
           >
             {copiedMsg}
@@ -396,84 +383,88 @@ export default function CubeItem({
         )}
 
         {/* Edit Cube */}
-        <button
+        <RcButton
           aria-label="Edit Cube"
-          onClick={(e: MouseEvent) => {
+          onClick={(e: MouseEvent<HTMLButtonElement>) => {
             e.preventDefault();
             e.stopPropagation();
             router.push(`/cubes/${encodeURIComponent(cube.id)}/edit`);
           }}
-          className="inline-flex items-center justify-center h-10 px-3 gap-1.5 rounded-lg bg-gradient-to-r from-amber-600 to-amber-500 ring-1 ring-amber-400/60 hover:from-amber-500 hover:to-amber-400 text-white font-medium shadow-md shadow-amber-500/20 transition-all hover:scale-105"
         >
           <Pencil className="h-4 w-4" />
-          <span className="text-sm">Edit</span>
-        </button>
+          <span>Edit</span>
+        </RcButton>
 
         {/* TTS Export */}
-        <button
+        <RcButton
+          variant="outline"
+          size="icon"
+          className="bg-black/35"
           aria-label="TTS Export"
           title="Download TTS JSON"
           onClick={handleTTSExport}
-          className="inline-flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-700/80 ring-1 ring-purple-500/50 hover:bg-purple-600/70 text-purple-300 hover:text-white transition-colors"
         >
-          <span className="text-xs font-bold">TTS</span>
-        </button>
+          <span className="font-rc-mono text-xs tracking-[0.08em]">TTS</span>
+        </RcButton>
 
         {/* Export List */}
-        <button
+        <RcButton
+          variant="outline"
+          size="icon"
+          className="bg-black/35"
           aria-label="Export List"
           title="Copy card list"
           onClick={handleExportList}
           disabled={exportingText}
-          className="inline-flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-700/80 ring-1 ring-zinc-500/50 hover:bg-zinc-600/80 text-zinc-300 hover:text-white transition-colors"
         >
           <List className="h-5 w-5" />
-        </button>
+        </RcButton>
 
         {/* Copy Cube (for public cubes not owned) */}
         {!isOwner && (
-          <button
+          <RcButton
+            variant="outline"
+            size="icon"
+            className="bg-black/35"
             aria-label="Copy Cube"
             title="Copy to your cubes"
             onClick={handleCopy}
-            className="inline-flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-700/80 ring-1 ring-emerald-500/50 hover:bg-emerald-600/70 text-emerald-300 hover:text-white transition-colors"
           >
             <Copy className="h-5 w-5" />
-          </button>
+          </RcButton>
         )}
 
         {/* Toggle Public/Private */}
         {isOwner && (
-          <button
+          <RcButton
+            variant="outline"
+            size="icon"
+            className={clsx("bg-black/35", effectiveIsPublic && PUBLIC_ACTION)}
             aria-label="Toggle public/private"
             title={effectiveIsPublic ? "Make private" : "Make public"}
             onClick={handleTogglePublic}
             disabled={updatingPublic}
-            className={`inline-flex items-center justify-center h-10 w-10 rounded-lg ring-1 transition-colors ${
-              effectiveIsPublic
-                ? "bg-green-700/60 text-green-300 ring-green-500/50 hover:bg-green-600/80 hover:text-white"
-                : "bg-zinc-700/80 text-zinc-400 ring-zinc-500/50 hover:bg-zinc-600/80 hover:text-white"
-            }`}
           >
             {effectiveIsPublic ? (
               <Globe className="h-5 w-5" />
             ) : (
               <Lock className="h-5 w-5" />
             )}
-          </button>
+          </RcButton>
         )}
 
         {/* Delete */}
         {isOwner && (
-          <button
+          <RcButton
+            variant="destructive"
+            size="icon"
             aria-label="Delete cube"
             title="Delete"
             onClick={handleDelete}
             disabled={deleting}
-            className="inline-flex items-center justify-center h-10 w-10 rounded-lg bg-zinc-700/80 ring-1 ring-red-500/50 hover:bg-red-600/70 text-red-400 hover:text-white transition-colors"
           >
             <Trash2 className="h-5 w-5" />
-          </button>
+          </RcButton>
         )}
       </div>
     </Link>

@@ -25,9 +25,6 @@ export default function LobbyHero({
   return (
     <div className="grid grid-cols-1 items-end gap-3 md:grid-cols-[1fr_auto_1fr] md:gap-6">
       <div className="hidden md:block" />
-      <h1 className="m-0 text-center font-rc-display text-[clamp(36px,3.6vw,56px)] leading-none text-rc-fg-strong [text-shadow:0_0_24px_rgba(212,169,74,0.2)]">
-        The Lobby
-      </h1>
       <div className="text-center font-rc-mono text-xs leading-[1.8] tracking-[0.12em] text-rc-fg-subtle md:text-right">
         QUEUE{" "}
         <span className="tabular-nums text-rc-fg-strong">

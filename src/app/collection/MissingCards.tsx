@@ -1,7 +1,10 @@
 "use client";
 
+import { ChevronRight } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
+import { PanelHeader } from "@/components/ui/page-header";
+import { RcEmpty } from "@/components/ui/rc-empty";
 
 interface MissingCard {
   cardId: number;
@@ -30,30 +33,38 @@ type RarityFilter = "unique" | "elite" | "exceptional" | "ordinary" | null;
 function getRarityColor(rarity: string): string {
   switch (rarity?.toLowerCase()) {
     case "unique":
-      return "text-purple-400";
+      return "text-rc-spark";
     case "elite":
-      return "text-yellow-400";
+      return "text-rc-accent-link";
     case "exceptional":
-      return "text-blue-400";
+      return "text-rc-info";
     case "ordinary":
     default:
-      return "text-gray-400";
+      return "text-rc-fg-muted";
   }
 }
 
-function getRarityBg(rarity: string, active?: boolean): string {
-  const opacity = active ? "/50" : "/20";
-  switch (rarity?.toLowerCase()) {
-    case "unique":
-      return `bg-purple-500${opacity}`;
-    case "elite":
-      return `bg-yellow-500${opacity}`;
-    case "exceptional":
-      return `bg-blue-500${opacity}`;
-    case "ordinary":
-    default:
-      return `bg-gray-500${opacity}`;
-  }
+// Mono pill used for the per-rarity filter chips
+function getRarityChipClass(rarity: string, active?: boolean): string {
+  const base =
+    "inline-flex cursor-pointer items-center rounded-full border px-2.5 py-[3px] font-rc-mono text-[11px] uppercase tracking-[0.12em] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring";
+  const tone = (() => {
+    switch (rarity?.toLowerCase()) {
+      case "unique":
+        return "border-rc-spark/35 bg-rc-spark/12 text-rc-spark";
+      case "elite":
+        return "border-rc-accent/35 bg-rc-accent/16 text-rc-accent-link";
+      case "exceptional":
+        return "border-rc-info/40 bg-rc-info/16 text-rc-info";
+      case "ordinary":
+      default:
+        return "border-rc-line/14 bg-rc-line/8 text-rc-fg-muted";
+    }
+  })();
+  const state = active
+    ? "ring-1 ring-rc-accent-ring"
+    : "hover:border-rc-accent hover:text-rc-accent-ring";
+  return `${base} ${tone} ${state}`;
 }
 
 // Generate slug from card name and set
@@ -132,265 +143,195 @@ export default function MissingCards() {
     }, {} as Record<string, SetSummary>)
   ).sort((a, b) => b.total - a.total);
 
+  const rarityChips: Array<{
+    key: Exclude<RarityFilter, null>;
+    short: string;
+  }> = [
+    { key: "unique", short: "U" },
+    { key: "elite", short: "E" },
+    { key: "exceptional", short: "Ex" },
+    { key: "ordinary", short: "O" },
+  ];
+
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold">Missing Cards</h2>
-        {total > 0 && (
-          <p className="text-sm text-gray-400">
-            {total} cards missing from your collection
-          </p>
-        )}
-      </div>
+    <section className="rc-panel">
+      <PanelHeader
+        title="Missing Cards"
+        meta={total > 0 ? `${total} missing from your collection` : undefined}
+      />
 
-      {loading ? (
-        <div className="flex justify-center py-8">
-          <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full" />
-        </div>
-      ) : summaryBySet.length > 0 ? (
-        <div className="space-y-2">
-          {summaryBySet.map((setSummary) => (
-            <div
-              key={setSummary.setName}
-              className="bg-gray-800/50 rounded-lg overflow-hidden"
-            >
-              {/* Set Header - Clickable */}
-              <div className="p-3 flex items-center justify-between">
-                <button
-                  onClick={() => {
-                    if (expandedSet === setSummary.setName) {
-                      setExpandedSet(null);
-                      setRarityFilter(null);
-                    } else {
-                      setExpandedSet(setSummary.setName);
-                      setRarityFilter(null);
-                    }
-                  }}
-                  className="flex items-center gap-3 hover:text-white transition-colors"
-                >
-                  <span
-                    className={`text-lg transition-transform ${
-                      expandedSet === setSummary.setName ? "rotate-90" : ""
-                    }`}
+      <div className="px-[18px] py-3.5">
+        {loading ? (
+          <div className="rc-hint py-6 text-center">loading…</div>
+        ) : summaryBySet.length > 0 ? (
+          <div className="space-y-2">
+            {summaryBySet.map((setSummary) => (
+              <div
+                key={setSummary.setName}
+                className="overflow-hidden rounded-rc-md border border-rc-line/12 bg-black/30"
+              >
+                {/* Set Header - Clickable */}
+                <div className="flex flex-wrap items-center justify-between gap-2 p-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (expandedSet === setSummary.setName) {
+                        setExpandedSet(null);
+                        setRarityFilter(null);
+                      } else {
+                        setExpandedSet(setSummary.setName);
+                        setRarityFilter(null);
+                      }
+                    }}
+                    aria-expanded={expandedSet === setSummary.setName}
+                    className="flex cursor-pointer items-center gap-3 text-left transition-colors hover:text-rc-accent-ring"
                   >
-                    ▶
-                  </span>
-                  <span className="font-medium">{setSummary.setName}</span>
-                  <span className="text-gray-500 text-sm">
-                    ({setSummary.total} missing)
-                  </span>
-                </button>
-                {/* Rarity breakdown - clickable filters */}
-                <div className="flex gap-2 text-xs">
-                  {setSummary.byRarity.unique > 0 && (
-                    <button
-                      onClick={() => {
-                        setExpandedSet(setSummary.setName);
-                        setRarityFilter(
-                          rarityFilter === "unique" &&
-                            expandedSet === setSummary.setName
-                            ? null
-                            : "unique"
-                        );
-                      }}
-                      className={`px-2 py-0.5 rounded transition-all ${getRarityBg(
-                        "unique",
-                        rarityFilter === "unique" &&
-                          expandedSet === setSummary.setName
-                      )} ${getRarityColor("unique")} ${
-                        rarityFilter === "unique" &&
-                        expandedSet === setSummary.setName
-                          ? "ring-1 ring-purple-400"
-                          : "hover:ring-1 hover:ring-purple-400/50"
+                    <ChevronRight
+                      className={`h-4 w-4 text-rc-fg-muted transition-transform ${
+                        expandedSet === setSummary.setName ? "rotate-90" : ""
                       }`}
-                    >
-                      {setSummary.byRarity.unique} U
-                    </button>
-                  )}
-                  {setSummary.byRarity.elite > 0 && (
-                    <button
-                      onClick={() => {
-                        setExpandedSet(setSummary.setName);
-                        setRarityFilter(
-                          rarityFilter === "elite" &&
-                            expandedSet === setSummary.setName
-                            ? null
-                            : "elite"
-                        );
-                      }}
-                      className={`px-2 py-0.5 rounded transition-all ${getRarityBg(
-                        "elite",
-                        rarityFilter === "elite" &&
-                          expandedSet === setSummary.setName
-                      )} ${getRarityColor("elite")} ${
-                        rarityFilter === "elite" &&
-                        expandedSet === setSummary.setName
-                          ? "ring-1 ring-yellow-400"
-                          : "hover:ring-1 hover:ring-yellow-400/50"
-                      }`}
-                    >
-                      {setSummary.byRarity.elite} E
-                    </button>
-                  )}
-                  {setSummary.byRarity.exceptional > 0 && (
-                    <button
-                      onClick={() => {
-                        setExpandedSet(setSummary.setName);
-                        setRarityFilter(
-                          rarityFilter === "exceptional" &&
-                            expandedSet === setSummary.setName
-                            ? null
-                            : "exceptional"
-                        );
-                      }}
-                      className={`px-2 py-0.5 rounded transition-all ${getRarityBg(
-                        "exceptional",
-                        rarityFilter === "exceptional" &&
-                          expandedSet === setSummary.setName
-                      )} ${getRarityColor("exceptional")} ${
-                        rarityFilter === "exceptional" &&
-                        expandedSet === setSummary.setName
-                          ? "ring-1 ring-blue-400"
-                          : "hover:ring-1 hover:ring-blue-400/50"
-                      }`}
-                    >
-                      {setSummary.byRarity.exceptional} Ex
-                    </button>
-                  )}
-                  {setSummary.byRarity.ordinary > 0 && (
-                    <button
-                      onClick={() => {
-                        setExpandedSet(setSummary.setName);
-                        setRarityFilter(
-                          rarityFilter === "ordinary" &&
-                            expandedSet === setSummary.setName
-                            ? null
-                            : "ordinary"
-                        );
-                      }}
-                      className={`px-2 py-0.5 rounded transition-all ${getRarityBg(
-                        "ordinary",
-                        rarityFilter === "ordinary" &&
-                          expandedSet === setSummary.setName
-                      )} ${getRarityColor("ordinary")} ${
-                        rarityFilter === "ordinary" &&
-                        expandedSet === setSummary.setName
-                          ? "ring-1 ring-gray-400"
-                          : "hover:ring-1 hover:ring-gray-400/50"
-                      }`}
-                    >
-                      {setSummary.byRarity.ordinary} O
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Expanded Card List */}
-              {expandedSet === setSummary.setName && (
-                <div className="border-t border-gray-700 p-3 bg-gray-900/50 relative">
-                  {/* Card preview tooltip - fixed to left side of viewport */}
-                  {hoveredCard &&
-                    (() => {
-                      const isSite = hoveredCard.type
-                        ?.toLowerCase()
-                        .includes("site");
+                    />
+                    <span className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                      {setSummary.setName}
+                    </span>
+                    <span className="font-rc-mono text-xs tracking-[0.1em] text-rc-fg-subtle">
+                      {setSummary.total} missing
+                    </span>
+                  </button>
+                  {/* Rarity breakdown - clickable filters */}
+                  <div className="flex flex-wrap gap-2">
+                    {rarityChips.map(({ key, short }) => {
+                      const count = setSummary.byRarity[key];
+                      if (count <= 0) return null;
+                      const active =
+                        rarityFilter === key &&
+                        expandedSet === setSummary.setName;
                       return (
-                        <div className="fixed left-8 top-1/2 -translate-y-1/2 z-50 pointer-events-none">
-                          <div
-                            className={`relative rounded-lg overflow-hidden shadow-2xl ring-2 ring-white/20 bg-gray-900 ${
-                              isSite
-                                ? "w-[400px] aspect-[7/5]"
-                                : "w-72 aspect-[5/7]"
-                            }`}
-                          >
-                            {isSite ? (
-                              <div className="absolute inset-0 flex items-center justify-center">
-                                <div className="w-[286px] h-[400px] relative rotate-90">
-                                  <Image
-                                    src={`/api/images/${getCardSlug(
-                                      hoveredCard.name,
-                                      hoveredCard.set
-                                    )}`}
-                                    alt={hoveredCard.name}
-                                    fill
-                                    className="object-cover rounded"
-                                    sizes="400px"
-                                    unoptimized
-                                  />
-                                </div>
-                              </div>
-                            ) : (
-                              <Image
-                                src={`/api/images/${getCardSlug(
-                                  hoveredCard.name,
-                                  hoveredCard.set
-                                )}`}
-                                alt={hoveredCard.name}
-                                fill
-                                className="object-cover"
-                                sizes="288px"
-                                unoptimized
-                              />
-                            )}
-                          </div>
-                          <div className="mt-2 text-center text-sm font-medium text-white">
-                            {hoveredCard.name}
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                  {/* Filter indicator */}
-                  {rarityFilter && (
-                    <div className="mb-2 text-xs text-gray-400">
-                      Showing {rarityFilter} cards only •{" "}
-                      <button
-                        onClick={() => setRarityFilter(null)}
-                        className="text-blue-400 hover:underline"
-                      >
-                        Show all
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Cards list - single column when filtered */}
-                  <div
-                    className={
-                      rarityFilter
-                        ? "space-y-0.5 max-h-96 overflow-y-auto"
-                        : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-1 max-h-96 overflow-y-auto"
-                    }
-                  >
-                    {setSummary.cards
-                      .filter(
-                        (card) =>
-                          !rarityFilter ||
-                          card.rarity?.toLowerCase() === rarityFilter
-                      )
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((card) => (
-                        <div
-                          key={`${card.cardId}-${card.setId}`}
-                          className={`py-1 px-2 rounded hover:bg-gray-700/50 cursor-pointer text-sm ${getRarityColor(
-                            card.rarity
-                          )}`}
-                          onMouseEnter={() => setHoveredCard(card)}
-                          onMouseLeave={() => setHoveredCard(null)}
+                        <button
+                          key={key}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => {
+                            setExpandedSet(setSummary.setName);
+                            setRarityFilter(active ? null : key);
+                          }}
+                          className={getRarityChipClass(key, active)}
                         >
-                          {card.name}
-                        </div>
-                      ))}
+                          {count} {short}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-8 text-gray-400">
-          🎉 You have all the cards!
-        </div>
-      )}
-    </div>
+
+                {/* Expanded Card List */}
+                {expandedSet === setSummary.setName && (
+                  <div className="relative border-t border-rc-line/12 bg-black/30 p-3">
+                    {/* Card preview tooltip - fixed to left side of viewport */}
+                    {hoveredCard &&
+                      (() => {
+                        const isSite = hoveredCard.type
+                          ?.toLowerCase()
+                          .includes("site");
+                        return (
+                          <div className="pointer-events-none fixed left-8 top-1/2 z-50 -translate-y-1/2">
+                            <div
+                              className={`relative overflow-hidden rounded-rc-lg border border-rc-line/22 bg-black shadow-rc-panel ${
+                                isSite
+                                  ? "w-[400px] aspect-[7/5]"
+                                  : "w-72 aspect-[5/7]"
+                              }`}
+                            >
+                              {isSite ? (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="relative h-[400px] w-[286px] rotate-90">
+                                    <Image
+                                      src={`/api/images/${getCardSlug(
+                                        hoveredCard.name,
+                                        hoveredCard.set
+                                      )}`}
+                                      alt={hoveredCard.name}
+                                      fill
+                                      className="rounded object-cover"
+                                      sizes="400px"
+                                      unoptimized
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <Image
+                                  src={`/api/images/${getCardSlug(
+                                    hoveredCard.name,
+                                    hoveredCard.set
+                                  )}`}
+                                  alt={hoveredCard.name}
+                                  fill
+                                  className="object-cover"
+                                  sizes="288px"
+                                  unoptimized
+                                />
+                              )}
+                            </div>
+                            <div className="mt-2 text-center font-rc-display text-[17px] text-rc-fg-strong">
+                              {hoveredCard.name}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                    {/* Filter indicator */}
+                    {rarityFilter && (
+                      <div className="rc-hint mb-2">
+                        Showing {rarityFilter} cards only ·{" "}
+                        <button
+                          type="button"
+                          onClick={() => setRarityFilter(null)}
+                          className="rc-link cursor-pointer"
+                        >
+                          Show all
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Cards list - single column when filtered */}
+                    <div
+                      className={
+                        rarityFilter
+                          ? "thin-scrollbar max-h-96 space-y-0.5 overflow-y-auto"
+                          : "thin-scrollbar grid max-h-96 grid-cols-1 gap-x-4 gap-y-1 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                      }
+                    >
+                      {setSummary.cards
+                        .filter(
+                          (card) =>
+                            !rarityFilter ||
+                            card.rarity?.toLowerCase() === rarityFilter
+                        )
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((card) => (
+                          <div
+                            key={`${card.cardId}-${card.setId}`}
+                            className={`cursor-pointer rounded-rc-sm px-2 py-1 font-rc-sans text-sm transition-colors hover:bg-rc-accent/6 ${getRarityColor(
+                              card.rarity
+                            )}`}
+                            onMouseEnter={() => setHoveredCard(card)}
+                            onMouseLeave={() => setHoveredCard(null)}
+                          >
+                            {card.name}
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <RcEmpty title="You have every card.">
+            nothing missing from your collection
+          </RcEmpty>
+        )}
+      </div>
+    </section>
   );
 }

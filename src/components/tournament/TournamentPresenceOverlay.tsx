@@ -200,17 +200,17 @@ export default function TournamentPresenceOverlay({
     (tournamentsCtx?.isSocketConnected ?? true);
   const summaryPillColor = allConnected
     ? colorBlindEnabled
-      ? "bg-sky-500"
-      : "bg-green-500"
+      ? "bg-rc-info"
+      : "bg-rc-success"
     : colorBlindEnabled
-    ? "bg-amber-500"
-    : "bg-red-600";
+    ? "bg-rc-warning"
+    : "bg-rc-danger";
   const rosterDotConnectedClass = colorBlindEnabled
-    ? "bg-sky-400"
-    : "bg-green-400";
+    ? "bg-rc-info"
+    : "bg-rc-success";
   const rosterDotDisconnectedClass = colorBlindEnabled
-    ? "bg-amber-400"
-    : "bg-red-500";
+    ? "bg-rc-warning"
+    : "bg-rc-danger";
 
   // Hide entirely if no tournament context and no id hint
   const shouldRender = Boolean(
@@ -258,40 +258,36 @@ export default function TournamentPresenceOverlay({
       {/* Summary pill */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className={`flex items-center gap-1.5 px-2 py-1 rounded-md shadow ring-1 ring-white/15 text-white/90 backdrop-blur-sm bg-black/60 hover:bg-black/70`}
+        className="flex cursor-pointer items-center gap-1.5 rounded-rc-md border border-rc-line/22 bg-black/60 px-2 py-1 font-rc-mono text-rc-fg shadow-rc-sm backdrop-blur-[6px] transition-colors hover:border-rc-accent hover:text-rc-fg-strong focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring"
         title="Show player connections"
         aria-label="Tournament presence"
       >
         <span
-          className={`inline-block w-1.5 h-1.5 rounded-full ${summaryPillColor}`}
+          className={`inline-block h-1.5 w-1.5 rounded-full ${summaryPillColor}`}
         />
-        <span className="text-[11px] whitespace-nowrap">
+        <span className="whitespace-nowrap text-[11px] tabular-nums tracking-[0.1em]">
           {connectedCount}/{expectedTotal}
         </span>
       </button>
       {/* Details popover */}
       {open && (
-        <div
-          className={`mt-2 w-56 rounded-lg bg-black/85 ring-1 ring-white/15 shadow-xl p-2 text-white/90`}
-        >
-          <div className="text-[10px] opacity-80 mb-1.5">
-            Tournament Players
-          </div>
+        <div className="rc-panel mt-2 w-56 p-2 backdrop-blur-[6px]">
+          <div className="rc-eyebrow mb-1.5">Tournament Players</div>
           <div className="grid gap-1 max-h-60 overflow-auto pr-1">
             {roster.map((p, i) => (
               <div
                 key={`${p.playerId}-${i}`}
-                className="flex items-center justify-between gap-2 bg-white/5 rounded px-1.5 py-0.5"
+                className="flex items-center justify-between gap-2 rounded-rc-sm bg-rc-line/6 px-1.5 py-0.5"
               >
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span
-                    className={`inline-block w-1.5 h-1.5 rounded-full ${
+                    className={`inline-block h-1.5 w-1.5 rounded-full ${
                       p.isConnected
                         ? rosterDotConnectedClass
                         : rosterDotDisconnectedClass
                     }`}
                   />
-                  <span className="truncate text-[11px]">
+                  <span className="truncate font-rc-mono text-[11px] text-rc-fg">
                     {typeof p.seatNumber === "number"
                       ? `S${p.seatNumber} `
                       : ""}
@@ -300,7 +296,7 @@ export default function TournamentPresenceOverlay({
                 </div>
                 {!p.isConnected && (
                   <div
-                    className="text-[10px] text-white/70 whitespace-nowrap"
+                    className="whitespace-nowrap font-rc-mono text-[10px] tracking-[0.1em] text-rc-fg-dim"
                     title={new Date(p.lastActivity || 0).toLocaleString()}
                   >
                     {`offline ${fmtSince(p.lastActivity)} ago`}

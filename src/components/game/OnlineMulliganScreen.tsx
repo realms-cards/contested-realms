@@ -222,19 +222,19 @@ export default function OnlineMulliganScreen({
   ]);
 
   return (
-    <div className="w-full max-w-[98vw] sm:max-w-4xl bg-zinc-900/80 text-white rounded-lg sm:rounded-2xl ring-1 ring-white/10 p-2 sm:p-6 max-h-[90vh] overflow-y-auto">
+    <div className="thin-scrollbar max-h-[90vh] w-full max-w-[98vw] overflow-y-auto rounded-rc-md border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-2 text-rc-fg shadow-rc-panel sm:max-w-4xl sm:rounded-rc-lg sm:p-6">
       <div className="mb-2 sm:mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
         <div className="text-center sm:text-left">
-          <div className="text-base sm:text-lg font-semibold mb-0.5 sm:mb-1">
+          <div className="mb-0.5 font-rc-display text-[22px] leading-none text-rc-fg-strong sm:mb-1 sm:text-[28px]">
             Mulligan Phase
           </div>
-          <div className="text-xs sm:text-sm opacity-80">
+          <div className="font-rc-sans text-xs text-rc-fg-muted sm:text-sm">
             Playing as:{" "}
-            <span className="font-medium text-blue-400">
+            <span className="font-rc-mono font-medium text-rc-info">
               {playerNames[myPlayerKey]}
             </span>
           </div>
-          <div className="text-[10px] sm:text-xs opacity-60 mt-0.5 sm:mt-1">
+          <div className="rc-hint mt-0.5 sm:mt-1">
             Select up to 3 cards to put back.
           </div>
         </div>
@@ -242,11 +242,11 @@ export default function OnlineMulliganScreen({
           <div className="flex-shrink-0 flex flex-row gap-2 sm:gap-4 items-center sm:items-end">
             {myAvatar?.slug && (
               <div className="flex flex-col items-center sm:items-end">
-                <div className="text-[9px] sm:text-[10px] uppercase tracking-wide opacity-70 mb-0.5 sm:mb-1">
+                <div className="mb-0.5 font-rc-mono text-[9px] uppercase tracking-[0.18em] text-rc-accent-link sm:mb-1 sm:text-[10px]">
                   You
                 </div>
                 <div
-                  className="relative aspect-[3/4] w-10 sm:w-20 md:w-24 rounded-md sm:rounded-lg overflow-hidden ring-1 ring-white/30 shadow-lg"
+                  className="relative aspect-[3/4] w-10 overflow-hidden rounded-rc-sm shadow-rc-md ring-1 ring-rc-line/25 sm:w-20 sm:rounded-rc-md md:w-24"
                   onMouseEnter={() => setPreviewCard(myAvatar)}
                   onMouseLeave={() => setPreviewCard(null)}
                 >
@@ -261,7 +261,7 @@ export default function OnlineMulliganScreen({
                 </div>
                 {myChampion &&
                   myAvatar.name?.toLowerCase() === "dragonlord" && (
-                    <div className="mt-1 px-2 py-0.5 bg-amber-900/40 rounded text-[10px] text-amber-200 ring-1 ring-amber-500/30">
+                    <div className="rc-alert mt-1 px-2 py-0.5 text-[10px]" data-tone="warning">
                       ⚔ {myChampion.name}
                     </div>
                   )}
@@ -269,11 +269,11 @@ export default function OnlineMulliganScreen({
             )}
             {opponentAvatar?.slug && (
               <div className="flex flex-col items-center sm:items-end">
-                <div className="text-[9px] sm:text-[10px] uppercase tracking-wide opacity-70 mb-0.5 sm:mb-1">
+                <div className="mb-0.5 font-rc-mono text-[9px] uppercase tracking-[0.18em] text-rc-accent-link sm:mb-1 sm:text-[10px]">
                   Opp
                 </div>
                 <div
-                  className="relative aspect-[3/4] w-10 sm:w-20 md:w-24 rounded-md sm:rounded-lg overflow-hidden ring-1 ring-white/30 shadow-lg"
+                  className="relative aspect-[3/4] w-10 overflow-hidden rounded-rc-sm shadow-rc-md ring-1 ring-rc-line/25 sm:w-20 sm:rounded-rc-md md:w-24"
                   onMouseEnter={() => setPreviewCard(opponentAvatar)}
                   onMouseLeave={() => setPreviewCard(null)}
                 >
@@ -288,7 +288,7 @@ export default function OnlineMulliganScreen({
                 </div>
                 {opponentChampion &&
                   opponentAvatar.name?.toLowerCase() === "dragonlord" && (
-                    <div className="mt-1 px-2 py-0.5 bg-amber-900/40 rounded text-[10px] text-amber-200 ring-1 ring-amber-500/30">
+                    <div className="rc-alert mt-1 px-2 py-0.5 text-[10px]" data-tone="warning">
                       ⚔ {opponentChampion.name}
                     </div>
                   )}
@@ -299,18 +299,18 @@ export default function OnlineMulliganScreen({
       </div>
 
       {/* Always show hand - players need to see their cards during seer phase */}
-      <div className="bg-black/30 rounded-lg sm:rounded-xl p-2 sm:p-4 ring-1 ring-white/10">
+      <div className="rounded-rc-sm border border-rc-line/12 bg-black/30 p-2 sm:rounded-rc-md sm:p-4">
         <div className="flex items-center justify-between mb-1 sm:mb-2">
-          <div className="text-sm sm:text-base font-semibold">Your Hand</div>
+          <div className="font-rc-display text-[18px] leading-none text-rc-fg-strong sm:text-[22px]">Your Hand</div>
           {!showSeerUI && (
-            <div className="text-[10px] sm:text-xs opacity-80">
+            <div className="font-rc-mono text-[10px] tabular-nums text-rc-fg-muted sm:text-xs">
               Mulligans: {myMulligans}
             </div>
           )}
         </div>
 
         {!showSeerUI && (
-          <div className="text-[10px] sm:text-xs opacity-80 mb-1 sm:mb-3">
+          <div className="mb-1 font-rc-sans text-[10px] text-rc-fg-muted sm:mb-3 sm:text-xs">
             {!done && myMulligans > 0
               ? "Tap cards to select (max 3)"
               : myMulligans === 0
@@ -336,7 +336,7 @@ export default function OnlineMulliganScreen({
                       : ""
                   } ${
                     isSelected && !showSeerUI
-                      ? "ring-2 ring-red-400 scale-95 sm:-translate-y-2"
+                      ? "ring-2 ring-rc-danger scale-95 sm:-translate-y-2"
                       : ""
                   } ${
                     done || myMulligans === 0 || showSeerUI
@@ -352,7 +352,7 @@ export default function OnlineMulliganScreen({
                       isSite
                         ? "aspect-[4/3] w-[72px] sm:w-36"
                         : "aspect-[3/4] w-[54px] sm:w-24"
-                    } rounded-md sm:rounded-lg overflow-hidden ring-1 ring-white/20 shadow-lg ${
+                    } rounded-rc-sm sm:rounded-rc-md overflow-hidden ring-1 ring-rc-line/18 shadow-rc-md ${
                       isSelected && !showSeerUI ? "opacity-70" : ""
                     } ${done || myMulligans === 0 ? "opacity-60" : ""}`}
                   >
@@ -369,8 +369,8 @@ export default function OnlineMulliganScreen({
                       unoptimized
                     />
                     {isSelected && !showSeerUI && (
-                      <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center">
-                        <div className="text-white text-[10px] sm:text-xs font-bold bg-red-600 rounded px-1.5 py-0.5 sm:px-2 sm:py-1">
+                      <div className="absolute inset-0 flex items-center justify-center bg-rc-danger/30">
+                        <div className="rounded-rc-sm bg-rc-danger px-1.5 py-0.5 font-rc-mono text-[10px] font-semibold text-rc-fg-strong sm:px-2 sm:py-1">
                           ✕
                         </div>
                       </div>
@@ -381,21 +381,21 @@ export default function OnlineMulliganScreen({
             })}
           </div>
         ) : (
-          <div className="text-center py-4 sm:py-8 text-gray-400 text-sm">
+          <div className="rc-hint py-4 text-center sm:py-8">
             No cards in hand
           </div>
         )}
 
         {!showSeerUI && (
           <div className="flex flex-col sm:flex-row justify-between items-center gap-2 mt-2 sm:mt-4">
-            <div className="text-[11px] sm:text-xs opacity-70 order-2 sm:order-1">
+            <div className="rc-hint order-2 sm:order-1">
               {selected.length > 0 && `${selected.length} card(s) selected`}
             </div>
 
             <div className="flex gap-2 order-1 sm:order-2 w-full sm:w-auto justify-center sm:justify-end">
               {!done && myMulligans > 0 && (
                 <button
-                  className="bg-orange-600 hover:bg-orange-700 active:bg-orange-800 disabled:opacity-50 disabled:cursor-not-allowed rounded px-3 py-2 sm:px-4 text-sm font-medium transition-colors flex-1 sm:flex-none"
+                  className="cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px disabled:pointer-events-none disabled:opacity-50 flex-1 px-3 py-2 sm:flex-none sm:px-4"
                   onClick={handleMulligan}
                 >
                   {selected.length === 0
@@ -407,10 +407,10 @@ export default function OnlineMulliganScreen({
               {/* Show finalize button only when seer phase is complete (or not needed) */}
               {(done || myMulligans === 0) && (
                 <button
-                  className={`rounded px-3 py-2 text-sm font-medium transition-colors flex-1 sm:flex-none ${
+                  className={`flex-1 px-3 py-2 sm:flex-none ${
                     submitted
-                      ? "bg-green-700/60 cursor-not-allowed"
-                      : "bg-green-600 hover:bg-green-700 active:bg-green-800"
+                      ? "cursor-not-allowed rounded-rc-md border border-rc-line/22 bg-black/35 font-rc-mono text-xs tracking-[0.08em] text-rc-fg-muted"
+                      : "cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px disabled:pointer-events-none disabled:opacity-50"
                   }`}
                   onClick={handleFinalize}
                   disabled={submitted}
@@ -430,20 +430,20 @@ export default function OnlineMulliganScreen({
 
       {/* Second Player Seer Phase - shown after mulligan is done */}
       {showSeerUI && (
-        <div className="bg-black/30 rounded-xl p-4 ring-1 ring-white/10">
+        <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-4">
           <div className="text-center mb-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 rounded-full ring-1 ring-amber-500/40 mb-2">
-              <span className="text-sm font-bold text-amber-300">
+            <div className="mb-2 inline-flex items-center gap-2 px-3 py-1.5">
+              <span className="rc-eyebrow">
                 Second Player Seer
               </span>
             </div>
             {isSecondSeat ? (
-              <div className="text-xs opacity-80">
+              <div className="font-rc-sans text-xs text-rc-fg-muted">
                 Look at the top card of your Spellbook or Atlas and choose to
                 keep it on top or put it on the bottom.
               </div>
             ) : (
-              <div className="text-xs opacity-80">
+              <div className="font-rc-sans text-xs text-rc-fg-muted">
                 {playerNames[secondSeat]} is using their Seer ability...
               </div>
             )}
@@ -454,20 +454,20 @@ export default function OnlineMulliganScreen({
               {/* Pile Selection */}
               {!seerRevealed && (
                 <div className="mb-4">
-                  <div className="text-xs font-medium mb-2 text-center opacity-70">
+                  <div className="rc-hint mb-2 text-center">
                     Choose a pile to scry:
                   </div>
                   <div className="flex justify-center gap-6">
                     <button
-                      className={`flex flex-col items-center gap-2 p-3 rounded-lg transition-all ${
+                      className={`flex cursor-pointer flex-col items-center gap-2 rounded-rc-md p-3 transition-all ${
                         chosenPile === "spellbook"
-                          ? "bg-blue-600/30 ring-2 ring-blue-400"
-                          : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10"
+                          ? "border border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                          : "border border-rc-line/12 bg-black/30 hover:border-rc-accent/40"
                       }`}
                       onClick={() => handleSeerPileSelect("spellbook")}
                     >
                       {/* Spellbook cardback */}
-                      <div className="relative w-16 h-24 rounded overflow-hidden ring-1 ring-white/20">
+                      <div className="relative w-16 h-24 rounded-rc-sm overflow-hidden ring-1 ring-rc-line/18">
                         <Image
                           src="/api/assets/cardback_spellbook.png"
                           alt="Spellbook"
@@ -477,21 +477,21 @@ export default function OnlineMulliganScreen({
                           unoptimized
                         />
                       </div>
-                      <div className="text-xs font-medium">Spellbook</div>
-                      <div className="text-[10px] opacity-60">
+                      <div className="font-rc-mono text-xs uppercase tracking-[0.14em] text-rc-fg-strong">Spellbook</div>
+                      <div className="rc-hint tabular-nums">
                         {zones[secondSeat]?.spellbook?.length || 0} cards
                       </div>
                     </button>
                     <button
-                      className={`flex flex-col items-center gap-2 p-3 rounded-lg transition-all ${
+                      className={`flex cursor-pointer flex-col items-center gap-2 rounded-rc-md p-3 transition-all ${
                         chosenPile === "atlas"
-                          ? "bg-green-600/30 ring-2 ring-green-400"
-                          : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10"
+                          ? "border border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                          : "border border-rc-line/12 bg-black/30 hover:border-rc-accent/40"
                       }`}
                       onClick={() => handleSeerPileSelect("atlas")}
                     >
                       {/* Atlas cardback (landscape) */}
-                      <div className="relative w-24 h-16 rounded overflow-hidden ring-1 ring-white/20">
+                      <div className="relative w-24 h-16 rounded-rc-sm overflow-hidden ring-1 ring-rc-line/18">
                         <Image
                           src={cardbackAtlasUrl()}
                           alt="Atlas"
@@ -501,8 +501,8 @@ export default function OnlineMulliganScreen({
                           unoptimized
                         />
                       </div>
-                      <div className="text-xs font-medium">Atlas</div>
-                      <div className="text-[10px] opacity-60">
+                      <div className="font-rc-mono text-xs uppercase tracking-[0.14em] text-rc-fg-strong">Atlas</div>
+                      <div className="rc-hint tabular-nums">
                         {zones[secondSeat]?.atlas?.length || 0} cards
                       </div>
                     </button>
@@ -514,7 +514,7 @@ export default function OnlineMulliganScreen({
               {!seerRevealed ? (
                 <div className="text-center">
                   <button
-                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm font-medium transition-colors"
+                    className="cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px disabled:pointer-events-none disabled:opacity-50 px-4 py-2"
                     onClick={handleSeerReveal}
                   >
                     Reveal Top Card
@@ -525,7 +525,7 @@ export default function OnlineMulliganScreen({
                   {/* Card Display */}
                   {topCard ? (
                     <div
-                      className="relative rounded-lg overflow-hidden ring-2 ring-amber-400/50 shadow-lg"
+                      className="relative overflow-hidden rounded-rc-md shadow-rc-md ring-2 ring-rc-accent/50"
                       onMouseEnter={() => setPreviewCard(topCard)}
                       onMouseLeave={() => setPreviewCard(null)}
                     >
@@ -555,7 +555,7 @@ export default function OnlineMulliganScreen({
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-4 text-gray-400 text-sm">
+                    <div className="rc-hint py-4 text-center">
                       Pile is empty
                     </div>
                   )}
@@ -563,17 +563,17 @@ export default function OnlineMulliganScreen({
                   {/* Decision Buttons */}
                   {topCard && !seerCompleted && (
                     <div className="flex flex-col gap-2">
-                      <div className="text-xs font-medium text-center mb-1">
+                      <div className="mb-1 text-center font-rc-display text-[17px] leading-tight text-rc-fg-strong">
                         {topCard.name}
                       </div>
                       <button
-                        className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium transition-colors"
+                        className="cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px disabled:pointer-events-none disabled:opacity-50 px-4 py-2"
                         onClick={() => handleSeerComplete("top")}
                       >
                         Keep on Top
                       </button>
                       <button
-                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm font-medium transition-colors"
+                        className="cursor-pointer rounded-rc-md border border-rc-line/22 bg-black/35 font-rc-sans text-sm text-rc-fg-muted transition-colors hover:border-rc-accent hover:text-rc-accent-ring px-4 py-2"
                         onClick={() => handleSeerComplete("bottom")}
                       >
                         Put on Bottom
@@ -587,7 +587,7 @@ export default function OnlineMulliganScreen({
               {!seerCompleted && (
                 <div className="mt-4 text-center">
                   <button
-                    className="px-4 py-1.5 bg-red-600/80 hover:bg-red-700 rounded-lg text-xs font-medium transition-colors"
+                    className="cursor-pointer rounded-rc-md border border-rc-danger/40 px-4 py-1.5 font-rc-mono text-xs tracking-[0.08em] text-rc-danger transition-colors hover:border-rc-danger hover:text-rc-danger-hover"
                     onClick={() => handleSeerComplete("skip")}
                   >
                     Skip Seer
@@ -598,13 +598,13 @@ export default function OnlineMulliganScreen({
           ) : (
             /* First player waiting screen */
             <div className="text-center py-4">
-              <div className="animate-pulse text-cyan-400 text-2xl">⏳</div>
+              <div className="mx-auto h-2.5 w-2.5 animate-rc-blink bg-rc-accent shadow-[0_0_10px_#d4a94a]" aria-hidden="true" />
             </div>
           )}
         </div>
       )}
 
-      <div className="mt-4 text-xs opacity-60 text-center">
+      <div className="rc-hint mt-4 text-center">
         {showSeerUI
           ? isSecondSeat
             ? "Use your Seer ability to look at the top card of a pile."

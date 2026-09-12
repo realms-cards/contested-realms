@@ -111,15 +111,15 @@ export default function OnlineStatusBar({
 
   const starClass = isMyTurn
     ? colorBlindEnabled
-      ? "w-4 h-4 fill-sky-400 text-sky-400"
-      : "w-4 h-4 fill-green-400 text-green-400"
-    : "w-4 h-4 fill-yellow-400 text-yellow-400";
+      ? "w-4 h-4 fill-rc-info text-rc-info"
+      : "w-4 h-4 fill-rc-success text-rc-success"
+    : "w-4 h-4 fill-rc-warning text-rc-warning";
 
   const endTurnButtonClass =
-    "rounded-full text-white px-3 py-1 transition-colors " +
-    (colorBlindEnabled
-      ? "bg-sky-600/90 hover:bg-sky-500"
-      : "bg-emerald-600/90 hover:bg-emerald-500");
+    "rounded-full px-2.5 py-1 font-rc-mono text-[11px] uppercase tracking-[0.1em] " +
+    "ring-1 ring-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent " +
+    "text-rc-accent-fg transition-[background-color,transform] hover:-translate-y-px " +
+    "hover:from-rc-accent-ring hover:to-rc-accent-hover";
 
   return (
     <div
@@ -134,7 +134,7 @@ export default function OnlineStatusBar({
       onContextMenu={(e) => e.preventDefault()}
     >
       <div
-        className={`flex items-center ${isMobileScreen ? "gap-1 px-2 py-0.5 text-[11px]" : "gap-3 px-4 py-1.5 text-sm"} rounded-full bg-black/60 backdrop-blur text-white shadow-lg ring-1 ring-white/10`}
+        className={`flex items-center ${isMobileScreen ? "gap-1 px-2 py-0.5 text-[10px]" : "gap-2.5 px-3.5 py-1.5 text-xs"} rounded-full bg-[rgba(9,13,25,0.82)] backdrop-blur text-rc-fg shadow-rc-panel ring-1 ring-rc-line/18`}
       >
         {/* === ESSENTIAL CONTROLS (always visible) === */}
 
@@ -145,14 +145,14 @@ export default function OnlineStatusBar({
               ? "w-3 h-3 " +
                 (isMyTurn
                   ? colorBlindEnabled
-                    ? "fill-sky-400 text-sky-400"
-                    : "fill-green-400 text-green-400"
-                  : "fill-yellow-400 text-yellow-400")
+                    ? "fill-rc-info text-rc-info"
+                    : "fill-rc-success text-rc-success"
+                  : "fill-rc-warning text-rc-warning")
               : starClass
           }
         />
         <span
-          className={`opacity-80 truncate ${isMobileScreen ? "max-w-[5rem]" : "max-w-none text-sm"}`}
+          className={`truncate font-rc-mono uppercase tracking-[0.08em] text-rc-fg-muted ${isMobileScreen ? "max-w-[5rem]" : "max-w-[14rem] text-[11px]"}`}
         >
           {currentPlayerName}&apos;s Turn
         </span>
@@ -186,7 +186,7 @@ export default function OnlineStatusBar({
               endTurnButtonClass +
               (isMobileScreen
                 ? " text-[10px] px-2 py-0.5 whitespace-nowrap"
-                : " text-sm whitespace-nowrap")
+                : " whitespace-nowrap")
             }
             onClick={() => requestEndTurn()}
             onContextMenu={(e) => e.preventDefault()}
@@ -200,8 +200,8 @@ export default function OnlineStatusBar({
           <button
             className={`rounded-full p-1 transition-colors ${
               uiHidden
-                ? "bg-amber-600/80 hover:bg-amber-500"
-                : "bg-white/10 hover:bg-white/20"
+                ? "bg-rc-accent text-rc-accent-fg hover:bg-rc-accent-hover"
+                : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
             }`}
             onClick={toggleUiHidden}
             title={`UI ${uiHidden ? "Hidden" : "Visible"} (U)`}
@@ -217,7 +217,7 @@ export default function OnlineStatusBar({
         {/* Hand visibility indicator - shows red when hand is hidden (Space key) */}
         {handVisibilityMode === "hidden" && (
           <button
-            className={`rounded-full ${isMobileScreen ? "p-1" : "p-1.5"} transition-colors bg-red-600/80 hover:bg-red-500`}
+            className={`rounded-full ${isMobileScreen ? "p-1" : "p-1.5"} transition-colors bg-rc-danger text-rc-fg-strong hover:bg-rc-danger-hover`}
             onClick={toggleHandVisibility}
             title="Show Hand (Space)"
           >
@@ -227,26 +227,28 @@ export default function OnlineStatusBar({
 
         {/* Match Info Button - icon-only on mobile */}
         <button
-          className={`rounded-full bg-white/15 hover:bg-white/25 text-white ${isMobileScreen ? "p-1" : "p-1.5 md:px-3 md:py-1"} flex items-center gap-1.5`}
+          className={`rounded-full transition-colors bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent ${isMobileScreen ? "p-1" : "p-1.5 md:px-3 md:py-1"} flex items-center gap-1.5`}
           onClick={onOpenMatchInfo}
           title="Match Info & Settings"
           onContextMenu={(e) => e.preventDefault()}
         >
           <Settings className={isMobileScreen ? "w-3 h-3" : "w-3.5 h-3.5"} />
-          <span className="hidden md:inline">Info</span>
+          <span className="hidden font-rc-mono text-[11px] uppercase tracking-[0.1em] md:inline">
+            Info
+          </span>
         </button>
 
         {/* === DESKTOP-ONLY CONTROLS (hidden on mobile, shown in overflow) === */}
         {!isMobileScreen && (
           <>
-            <div className="w-px h-4 bg-white/20" />
+            <div className="w-px h-4 bg-rc-line/22" />
 
             {/* UI visibility toggle (keyboard: U) */}
             <button
               className={`rounded-full p-1.5 transition-colors ${
                 uiHidden
-                  ? "bg-amber-600/80 hover:bg-amber-500"
-                  : "bg-white/10 hover:bg-white/20"
+                  ? "bg-rc-accent text-rc-accent-fg hover:bg-rc-accent-hover"
+                  : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
               }`}
               onClick={toggleUiHidden}
               title={`UI ${uiHidden ? "Hidden" : "Visible"} (U)`}
@@ -262,8 +264,8 @@ export default function OnlineStatusBar({
             <button
               className={`rounded-full p-1.5 transition-colors ${
                 cardPreviewsEnabled
-                  ? "bg-cyan-600/80 hover:bg-cyan-500"
-                  : "bg-white/10 hover:bg-white/20"
+                  ? "bg-rc-accent text-rc-accent-fg hover:bg-rc-accent-hover"
+                  : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
               }`}
               onClick={toggleCardPreviews}
               title={`Card Previews ${cardPreviewsEnabled ? "On" : "Off"} (P)`}
@@ -275,8 +277,8 @@ export default function OnlineStatusBar({
             <button
               className={`rounded-full p-1.5 transition-colors ${
                 showPlaymatOverlay
-                  ? "bg-blue-600/80 hover:bg-blue-500"
-                  : "bg-white/10 hover:bg-white/20"
+                  ? "bg-rc-accent text-rc-accent-fg hover:bg-rc-accent-hover"
+                  : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
               }`}
               onClick={() => {
                 togglePlaymatOverlay();
@@ -291,28 +293,28 @@ export default function OnlineStatusBar({
             {myPlayerKey && !readOnly && (
               <>
                 <span
-                  className={`font-medium font-fantaisie px-2 py-0.5 rounded text-white ${
+                  className={`font-rc-mono text-[11px] font-medium tracking-[0.08em] whitespace-nowrap px-2 py-0.5 rounded-rc-sm ${
                     myPlayerKey === "p1"
                       ? colorBlindEnabled
-                        ? "bg-sky-600"
-                        : "bg-blue-600"
+                        ? "bg-rc-moonlight text-rc-accent-fg"
+                        : "bg-rc-info text-rc-fg-strong"
                       : colorBlindEnabled
-                        ? "bg-amber-600"
-                        : "bg-red-600"
+                        ? "bg-rc-warning text-rc-accent-fg"
+                        : "bg-rc-danger text-rc-fg-strong"
                   }`}
                 >
                   {myPlayerKey === "p1" ? "P1" : "P2"}:{" "}
                   {playerNames[myPlayerKey]}
                 </span>
-                <div className="w-px h-4 bg-white/20" />
+                <div className="w-px h-4 bg-rc-line/22" />
               </>
             )}
 
             {FEATURE_UNDO && (
               <>
-                <div className="w-px h-4 bg-white/20" />
+                <div className="w-px h-4 bg-rc-line/22" />
                 <button
-                  className="rounded-full bg-white/15 hover:bg-white/25 text-white px-3 py-1 disabled:opacity-40 transition-colors"
+                  className="rounded-full font-rc-mono text-[11px] uppercase tracking-[0.1em] px-2.5 py-1 disabled:opacity-40 transition-colors bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
                   onClick={() => undo()}
                   disabled={!history.length || !canControlTurn}
                   title={
@@ -330,9 +332,9 @@ export default function OnlineStatusBar({
             {/* Spectator presence chip */}
             {typeof spectatorCount === "number" && (
               <>
-                <div className="w-px h-4 bg-white/20" />
+                <div className="w-px h-4 bg-rc-line/22" />
                 <div
-                  className="rounded-full bg-white/10 text-white px-3 py-1 flex items-center gap-1.5"
+                  className="rounded-full bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 font-rc-mono text-[11px] tabular-nums px-2.5 py-1 flex items-center gap-1.5"
                   title="Spectator Count"
                   aria-label="Spectator Count"
                 >
@@ -345,12 +347,12 @@ export default function OnlineStatusBar({
             {/* Touch/Mouse Mode Toggle */}
             {isNativeTouch && (
               <>
-                <div className="w-px h-4 bg-white/20" />
+                <div className="w-px h-4 bg-rc-line/22" />
                 <button
                   className={`rounded-full p-1.5 transition-colors ${
                     effectiveMode === "touch"
-                      ? "bg-cyan-600/80 hover:bg-cyan-500"
-                      : "bg-white/10 hover:bg-white/20"
+                      ? "bg-rc-accent text-rc-accent-fg hover:bg-rc-accent-hover"
+                      : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
                   }`}
                   onClick={toggleOverride}
                   title={
@@ -369,7 +371,7 @@ export default function OnlineStatusBar({
             )}
 
             {/* Audio Controls */}
-            <div className="w-px h-4 bg-white/20" />
+            <div className="w-px h-4 bg-rc-line/22" />
             <AudioControls enableMusic={!inDraftMode} />
           </>
         )}
@@ -379,7 +381,9 @@ export default function OnlineStatusBar({
           <div className="relative" ref={moreRef}>
             <button
               className={`rounded-full p-1.5 transition-colors ${
-                moreOpen ? "bg-white/25" : "bg-white/10 hover:bg-white/20"
+                moreOpen
+                  ? "bg-rc-accent text-rc-accent-fg"
+                  : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
               }`}
               onClick={() => setMoreOpen((v) => !v)}
               title="More options"
@@ -393,20 +397,20 @@ export default function OnlineStatusBar({
 
             {/* Dropdown */}
             {moreOpen && (
-              <div className="absolute top-full right-0 mt-2 bg-black/90 backdrop-blur rounded-xl ring-1 ring-white/15 shadow-xl p-2 min-w-[200px] flex flex-col gap-1 z-50">
+              <div className="absolute top-full right-0 mt-2 bg-[rgba(9,13,25,0.92)] backdrop-blur rounded-rc-lg ring-1 ring-rc-line/18 shadow-rc-panel p-2 min-w-[200px] flex flex-col gap-1 z-50">
                 {/* Playing as indicator */}
                 {myPlayerKey && !readOnly && (
-                  <div className="px-3 py-1.5 text-xs opacity-80">
+                  <div className="px-3 py-1.5 text-xs font-rc-mono tracking-[0.06em] text-rc-fg-muted">
                     Playing as{" "}
                     <span
-                      className={`font-medium font-fantaisie px-1.5 py-0.5 rounded text-white ${
+                      className={`font-rc-mono font-medium tracking-[0.1em] px-1.5 py-0.5 rounded-rc-sm ${
                         myPlayerKey === "p1"
                           ? colorBlindEnabled
-                            ? "bg-sky-600"
-                            : "bg-blue-600"
+                            ? "bg-rc-moonlight text-rc-accent-fg"
+                            : "bg-rc-info text-rc-fg-strong"
                           : colorBlindEnabled
-                            ? "bg-amber-600"
-                            : "bg-red-600"
+                            ? "bg-rc-warning text-rc-accent-fg"
+                            : "bg-rc-danger text-rc-fg-strong"
                       }`}
                     >
                       {myPlayerKey === "p1" ? "P1" : "P2"}:{" "}
@@ -417,7 +421,7 @@ export default function OnlineStatusBar({
 
                 {/* UI visibility toggle */}
                 <button
-                  className="flex items-center gap-2 w-full text-left rounded px-3 py-1.5 text-xs hover:bg-white/10 transition-colors"
+                  className="flex items-center gap-2 w-full text-left rounded-rc-sm px-3 py-1.5 text-xs font-rc-mono tracking-[0.06em] text-rc-fg-muted hover:bg-rc-accent/12 hover:text-rc-accent-ring transition-colors"
                   onClick={() => {
                     toggleUiHidden();
                     setMoreOpen(false);
@@ -433,7 +437,7 @@ export default function OnlineStatusBar({
 
                 {/* Card Previews toggle */}
                 <button
-                  className="flex items-center gap-2 w-full text-left rounded px-3 py-1.5 text-xs hover:bg-white/10 transition-colors"
+                  className="flex items-center gap-2 w-full text-left rounded-rc-sm px-3 py-1.5 text-xs font-rc-mono tracking-[0.06em] text-rc-fg-muted hover:bg-rc-accent/12 hover:text-rc-accent-ring transition-colors"
                   onClick={() => {
                     toggleCardPreviews();
                     setMoreOpen(false);
@@ -445,7 +449,7 @@ export default function OnlineStatusBar({
 
                 {/* Playmat/Grid toggle */}
                 <button
-                  className="flex items-center gap-2 w-full text-left rounded px-3 py-1.5 text-xs hover:bg-white/10 transition-colors"
+                  className="flex items-center gap-2 w-full text-left rounded-rc-sm px-3 py-1.5 text-xs font-rc-mono tracking-[0.06em] text-rc-fg-muted hover:bg-rc-accent/12 hover:text-rc-accent-ring transition-colors"
                   onClick={() => {
                     togglePlaymatOverlay();
                     togglePlaymat();
@@ -459,7 +463,7 @@ export default function OnlineStatusBar({
                 {/* Undo */}
                 {FEATURE_UNDO && (
                   <button
-                    className="flex items-center gap-2 w-full text-left rounded px-3 py-1.5 text-xs hover:bg-white/10 transition-colors disabled:opacity-40"
+                    className="flex items-center gap-2 w-full text-left rounded-rc-sm px-3 py-1.5 text-xs font-rc-mono tracking-[0.06em] text-rc-fg-muted hover:bg-rc-accent/12 hover:text-rc-accent-ring transition-colors disabled:opacity-40"
                     onClick={() => {
                       undo();
                       setMoreOpen(false);
@@ -473,7 +477,7 @@ export default function OnlineStatusBar({
                 {/* Touch/Mouse Mode Toggle */}
                 {isNativeTouch && (
                   <button
-                    className="flex items-center gap-2 w-full text-left rounded px-3 py-1.5 text-xs hover:bg-white/10 transition-colors"
+                    className="flex items-center gap-2 w-full text-left rounded-rc-sm px-3 py-1.5 text-xs font-rc-mono tracking-[0.06em] text-rc-fg-muted hover:bg-rc-accent/12 hover:text-rc-accent-ring transition-colors"
                     onClick={() => {
                       toggleOverride();
                       setMoreOpen(false);
@@ -490,14 +494,14 @@ export default function OnlineStatusBar({
 
                 {/* Spectator count */}
                 {typeof spectatorCount === "number" && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 text-xs opacity-70">
+                  <div className="flex items-center gap-2 px-3 py-1.5 text-xs font-rc-mono tabular-nums text-rc-fg-subtle">
                     <Users className="w-3.5 h-3.5" />
                     {spectatorCount} spectator{spectatorCount !== 1 ? "s" : ""}
                   </div>
                 )}
 
                 {/* Audio Controls */}
-                <div className="border-t border-white/10 pt-1 mt-1 px-3 py-1.5">
+                <div className="border-t border-rc-line/18 pt-1 mt-1 px-3 py-1.5">
                   <AudioControls enableMusic={!inDraftMode} />
                 </div>
               </div>

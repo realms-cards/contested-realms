@@ -14,7 +14,6 @@ import { buildLobbyInviteUrl } from "@/lib/lobby-links";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
 import { generateLobbyName } from "@/lib/random-name-generator";
 
-
 // Format duration from timestamp to human-readable string
 function formatDuration(startedAt: number | null | undefined): string {
   if (!startedAt) return "";
@@ -186,7 +185,7 @@ function TournamentMatchesModal({
                           <div className="divide-y divide-slate-800">
                             {group.map(
                               (
-                                m: TournamentMatchesResponse["matches"][number]
+                                m: TournamentMatchesResponse["matches"][number],
                               ) => (
                                 <div
                                   key={m.id}
@@ -198,8 +197,8 @@ function TournamentMatchesModal({
                                         {m.players
                                           .map(
                                             (
-                                              p: TournamentMatchesResponse["matches"][number]["players"][number]
-                                            ) => p.name
+                                              p: TournamentMatchesResponse["matches"][number]["players"][number],
+                                            ) => p.name,
                                           )
                                           .join(" vs ")}
                                       </span>
@@ -213,8 +212,8 @@ function TournamentMatchesModal({
                                         ? `• Winner: ${
                                             m.players.find(
                                               (
-                                                p: TournamentMatchesResponse["matches"][number]["players"][number]
-                                              ) => p.id === m.winnerId
+                                                p: TournamentMatchesResponse["matches"][number]["players"][number],
+                                              ) => p.id === m.winnerId,
                                             )?.name ?? "—"
                                           }`
                                         : ""}
@@ -274,7 +273,7 @@ function TournamentMatchesModal({
                                                   const detailRes = await fetch(
                                                     `/api/tournaments/${
                                                       tObj?.id as string
-                                                    }`
+                                                    }`,
                                                   );
                                                   if (detailRes.ok) {
                                                     const detail =
@@ -315,7 +314,7 @@ function TournamentMatchesModal({
                                               // Persist bootstrap payload so the play page can initialize the match room
                                               const payload = {
                                                 players: m.players.map(
-                                                  (p) => p.id
+                                                  (p) => p.id,
                                                 ),
                                                 matchType: tMatchType as
                                                   | "constructed"
@@ -328,15 +327,15 @@ function TournamentMatchesModal({
                                                 sealedConfig,
                                                 draftConfig,
                                                 tournamentId: String(
-                                                  tObj?.id || ""
+                                                  tObj?.id || "",
                                                 ),
                                               };
                                               localStorage.setItem(
                                                 `tournamentMatchBootstrap_${m.id}`,
-                                                JSON.stringify(payload)
+                                                JSON.stringify(payload),
                                               );
                                               window.location.href = `/online/play/${encodeURIComponent(
-                                                m.id
+                                                m.id,
                                               )}`;
                                             } catch {}
                                           }}
@@ -347,7 +346,7 @@ function TournamentMatchesModal({
                                       )}
                                   </div>
                                 </div>
-                              )
+                              ),
                             )}
                           </div>
                         </div>
@@ -429,7 +428,7 @@ export default function LobbiesCentral({
   onCreate: (config: CreateLobbyConfig) => void;
   onLeaveLobby?: () => void;
   onSetLobbyVisibility?: (
-    visibility: "open" | "private" | "tournament"
+    visibility: "open" | "private" | "tournament",
   ) => void;
   onResync?: () => void;
   onAddCpuBot?: (displayName?: string) => void;
@@ -444,14 +443,14 @@ export default function LobbiesCentral({
       format?: "swiss" | "elimination" | "round_robin";
       matchType?: "constructed" | "sealed" | "draft";
       maxPlayers?: number;
-    }
+    },
   ) => void;
   onToggleTournamentReady?: (tournamentId: string, ready: boolean) => void;
   onStartTournament?: (tournamentId: string) => void;
   onEndTournament?: (tournamentId: string) => void;
   onToggleTournamentRegistrationLock?: (
     tournamentId: string,
-    locked: boolean
+    locked: boolean,
   ) => void;
   onRefresh: () => void;
   tournamentsEnabled?: boolean;
@@ -501,10 +500,10 @@ export default function LobbiesCentral({
   // Pending states for tournament actions to prevent double clicks and show small loaders
   const [pendingJoinT, setPendingJoinT] = useState<Record<string, boolean>>({});
   const [pendingLeaveT, setPendingLeaveT] = useState<Record<string, boolean>>(
-    {}
+    {},
   );
   const [pendingStartT, setPendingStartT] = useState<Record<string, boolean>>(
-    {}
+    {},
   );
   const [pendingLockT, setPendingLockT] = useState<Record<string, boolean>>({});
 
@@ -523,8 +522,8 @@ export default function LobbiesCentral({
       t.registeredPlayers.some(
         (p) =>
           p.id === myId &&
-          (p as { seatStatus?: string }).seatStatus !== "vacant"
-      ) && t.status !== "completed"
+          (p as { seatStatus?: string }).seatStatus !== "vacant",
+      ) && t.status !== "completed",
   );
   const isInTournament = joinedTournament !== undefined;
   const isEngaged = isInLobby || isInTournament;
@@ -700,7 +699,7 @@ export default function LobbiesCentral({
         // Always exclude completed tournaments from Active Games view
         if (tournament.status === "completed") return false;
         const isJoined = tournament.registeredPlayers.some(
-          (p) => p.id === myId
+          (p) => p.id === myId,
         );
         const registrationSettings = (
           (tournament as unknown as { settings?: Record<string, unknown> })
@@ -710,11 +709,11 @@ export default function LobbiesCentral({
         const isOpenSeat = registrationSettings?.mode === "open";
         const isLocked = registrationSettings?.locked === true;
         const activeCount = tournament.registeredPlayers.filter(
-          (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
+          (p) => (p as { seatStatus?: string }).seatStatus !== "vacant",
         ).length;
         const vacantCount = Math.max(
           0,
-          tournament.registeredPlayers.length - activeCount
+          tournament.registeredPlayers.length - activeCount,
         );
         const canJoin = isOpenSeat
           ? !isJoined &&
@@ -759,14 +758,22 @@ export default function LobbiesCentral({
 
         // Then by player count
         const aActive = a.registeredPlayers.filter(
-          (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
+          (p) => (p as { seatStatus?: string }).seatStatus !== "vacant",
         ).length;
         const bActive = b.registeredPlayers.filter(
-          (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
+          (p) => (p as { seatStatus?: string }).seatStatus !== "vacant",
         ).length;
         return bActive - aActive;
       });
-  }, [tournaments, query, hideFull, hideStarted, statusFilter, formatFilter, myId]);
+  }, [
+    tournaments,
+    query,
+    hideFull,
+    hideStarted,
+    statusFilter,
+    formatFilter,
+    myId,
+  ]);
 
   const gameCount =
     filtered.length + (tournamentsEnabled ? filteredTournaments.length : 0);
@@ -805,7 +812,7 @@ export default function LobbiesCentral({
       setMatchesData(data);
     } catch (e) {
       setMatchesError(
-        e instanceof Error ? e.message : "Failed to load matches"
+        e instanceof Error ? e.message : "Failed to load matches",
       );
     } finally {
       setMatchesLoading(false);
@@ -956,7 +963,7 @@ export default function LobbiesCentral({
               meta.push(
                 `${l.plannedTimer.matchTimeMinutes}m timer${
                   l.plannedTimer.tiebreakEnabled ? " · tiebreak" : ""
-                }`
+                }`,
               );
             }
             if (l.plannedEnableSeer) meta.push("seer");
@@ -969,12 +976,12 @@ export default function LobbiesCentral({
             const statusClass = open
               ? "text-rc-success"
               : live
-              ? "text-rc-danger"
-              : "text-rc-fg-dim";
+                ? "text-rc-danger"
+                : "text-rc-fg-dim";
             const isRegisteredInTournament =
               l.visibility === "tournament" && l.soatcLeagueMatch
                 ? soatcStatus?.tournaments?.some(
-                    (t) => t.id === l.soatcLeagueMatch?.tournamentId
+                    (t) => t.id === l.soatcLeagueMatch?.tournamentId,
                   ) ||
                   soatcStatus?.tournament?.id ===
                     l.soatcLeagueMatch?.tournamentId
@@ -984,10 +991,10 @@ export default function LobbiesCentral({
             const joinTitle = !open
               ? "Lobby not open"
               : full
-              ? "Lobby is full"
-              : isEngaged
-              ? `Already in ${isInLobby ? "another lobby" : "tournament"}`
-              : "Join this lobby";
+                ? "Lobby is full"
+                : isEngaged
+                  ? `Already in ${isInLobby ? "another lobby" : "tournament"}`
+                  : "Join this lobby";
             return (
               <div
                 key={`lobby-${l.id}`}
@@ -1043,7 +1050,7 @@ export default function LobbiesCentral({
                           className="animate-pulse"
                           onClick={() => {
                             const panel = document.getElementById(
-                              "players-invite-panel"
+                              "players-invite-panel",
                             );
                             if (panel) {
                               panel.scrollIntoView({
@@ -1052,15 +1059,15 @@ export default function LobbiesCentral({
                               });
                               panel.classList.add(
                                 "ring-1",
-                                "ring-rc-accent-ring"
+                                "ring-rc-accent-ring",
                               );
                               setTimeout(
                                 () =>
                                   panel.classList.remove(
                                     "ring-1",
-                                    "ring-rc-accent-ring"
+                                    "ring-rc-accent-ring",
                                   ),
-                                2000
+                                2000,
                               );
                             }
                           }}
@@ -1079,7 +1086,7 @@ export default function LobbiesCentral({
                           size="sm"
                           onClick={() =>
                             onSetLobbyVisibility(
-                              l.visibility === "open" ? "private" : "open"
+                              l.visibility === "open" ? "private" : "open",
                             )
                           }
                           title={
@@ -1088,7 +1095,9 @@ export default function LobbiesCentral({
                               : "Set lobby to open"
                           }
                         >
-                          {l.visibility === "open" ? "Make private" : "Make open"}
+                          {l.visibility === "open"
+                            ? "Make private"
+                            : "Make open"}
                         </RcButton>
                       )}
                       {/* CPU bot lobby buttons hidden — use Solo vs CPU route instead */}
@@ -1122,7 +1131,7 @@ export default function LobbiesCentral({
                             variant="outline"
                             size="sm"
                             href={`/online/play/${encodeURIComponent(
-                              l.matchId
+                              l.matchId,
                             )}?watch=true`}
                             title="Watch this match as a spectator"
                           >
@@ -1158,21 +1167,23 @@ export default function LobbiesCentral({
                               !l.hostReady
                                 ? "Host is still setting up the match"
                                 : !open
-                                ? "Lobby not open"
-                                : full
-                                ? "Lobby is full"
-                                : isEngaged
-                                ? `Already in ${
-                                    isInLobby ? "another lobby" : "tournament"
-                                  }`
-                                : `Join tournament match: ${l.soatcLeagueMatch.tournamentName}`
+                                  ? "Lobby not open"
+                                  : full
+                                    ? "Lobby is full"
+                                    : isEngaged
+                                      ? `Already in ${
+                                          isInLobby
+                                            ? "another lobby"
+                                            : "tournament"
+                                        }`
+                                      : `Join tournament match: ${l.soatcLeagueMatch.tournamentName}`
                             }
                           >
                             {full
                               ? "Full"
                               : !l.hostReady
-                              ? "Setting up…"
-                              : "Join Match"}
+                                ? "Setting up…"
+                                : "Join Match"}
                           </RcButton>
                         ) : (
                           <span className={HINT}>
@@ -1192,25 +1203,28 @@ export default function LobbiesCentral({
           {tournamentsEnabled &&
             filteredTournaments.map((tournament) => {
               const myRegistration = tournament.registeredPlayers.find(
-                (p) => p.id === myId
+                (p) => p.id === myId,
               );
               const isSeatVacant = myRegistration?.seatStatus === "vacant";
               const isRegistered = Boolean(myRegistration && !isSeatVacant);
               const isReady = myRegistration?.ready || false;
               const registrationSettings = (
-                (tournament as unknown as { settings?: Record<string, unknown> })
-                  .settings ?? {}
+                (
+                  tournament as unknown as {
+                    settings?: Record<string, unknown>;
+                  }
+                ).settings ?? {}
               ).registration as Record<string, unknown> | undefined;
               const status = tournament.status as string;
               const isOpenSeat = registrationSettings?.mode === "open";
               const isLocked = registrationSettings?.locked === true;
               const activePlayers = tournament.registeredPlayers.filter(
-                (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
+                (p) => (p as { seatStatus?: string }).seatStatus !== "vacant",
               );
               const activeCount = activePlayers.length;
               const vacantCount = Math.max(
                 0,
-                tournament.registeredPlayers.length - activeCount
+                tournament.registeredPlayers.length - activeCount,
               );
               // Consider a deck submitted when the API marks deckSubmitted (preferred) or when the player is ready
               const hasSubmitted = (() => {
@@ -1243,18 +1257,18 @@ export default function LobbiesCentral({
                 status === "registering"
                   ? "open"
                   : live
-                  ? "live"
-                  : status === "completed"
-                  ? "done"
-                  : "prep";
+                    ? "live"
+                    : status === "completed"
+                      ? "done"
+                      : "prep";
               const statusClass =
                 status === "registering"
                   ? "text-rc-success"
                   : live
-                  ? "text-rc-danger"
-                  : status === "completed"
-                  ? "text-rc-fg-dim"
-                  : "text-rc-warning";
+                    ? "text-rc-danger"
+                    : status === "completed"
+                      ? "text-rc-fg-dim"
+                      : "text-rc-warning";
               const meta: string[] = [
                 `round ${tournament.currentRound}/${tournament.totalRounds}`,
               ];
@@ -1321,7 +1335,7 @@ export default function LobbiesCentral({
                           }));
                           try {
                             await Promise.resolve(
-                              onJoinTournament(tournament.id)
+                              onJoinTournament(tournament.id),
                             );
                             if (onRefresh) onRefresh();
                           } finally {
@@ -1336,8 +1350,8 @@ export default function LobbiesCentral({
                         {pendingJoinT[tournament.id]
                           ? "Joining…"
                           : canRejoin
-                          ? "Rejoin"
-                          : "Join"}
+                            ? "Rejoin"
+                            : "Join"}
                       </RcButton>
                     )}
                     {isRegistered &&
@@ -1354,7 +1368,7 @@ export default function LobbiesCentral({
                             }));
                             try {
                               await Promise.resolve(
-                                onLeaveTournament(tournament.id)
+                                onLeaveTournament(tournament.id),
                               );
                               if (onRefresh) onRefresh();
                             } finally {
@@ -1400,8 +1414,8 @@ export default function LobbiesCentral({
                               await Promise.resolve(
                                 onToggleTournamentRegistrationLock(
                                   tournament.id,
-                                  !isLocked
-                                )
+                                  !isLocked,
+                                ),
                               );
                               if (onRefresh) onRefresh();
                             } finally {
@@ -1416,8 +1430,8 @@ export default function LobbiesCentral({
                           {pendingLockT[tournament.id]
                             ? "Updating…"
                             : isLocked
-                            ? "Unlock Seats"
-                            : "Lock Seats"}
+                              ? "Unlock Seats"
+                              : "Lock Seats"}
                         </RcButton>
                       )}
                     {isRegistered && tournament.status === "registering" && (
@@ -1441,7 +1455,7 @@ export default function LobbiesCentral({
                           }));
                           try {
                             await Promise.resolve(
-                              onStartTournament(tournament.id)
+                              onStartTournament(tournament.id),
                             );
                             if (onRefresh) onRefresh();
                           } finally {
@@ -1492,17 +1506,19 @@ export default function LobbiesCentral({
                             try {
                               const res = await fetch(
                                 `/api/tournaments/${encodeURIComponent(
-                                  tournament.id
+                                  tournament.id,
                                 )}/preparation/start`,
                                 {
                                   method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                }
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                },
                               );
                               const data = await res.json();
                               if (!res.ok)
                                 throw new Error(
-                                  data?.error || "Failed to start preparation"
+                                  data?.error || "Failed to start preparation",
                                 );
                               // Persist generated packs for the editor (if provided)
                               const packs = data?.preparationData?.sealed
@@ -1523,7 +1539,7 @@ export default function LobbiesCentral({
                                 try {
                                   localStorage.setItem(
                                     `sealedPacks_tournament_${tournament.id}`,
-                                    JSON.stringify(storePacks)
+                                    JSON.stringify(storePacks),
                                   );
                                 } catch {}
                               }
@@ -1544,12 +1560,11 @@ export default function LobbiesCentral({
                                 }
                               ).settings?.sealedConfig || {};
                             const packCount =
-                              Object.values(cfg.packCounts || { Beta: 6 }).reduce(
-                                (a, b) => a + (b || 0),
-                                0
-                              ) || 6;
+                              Object.values(
+                                cfg.packCounts || { Beta: 6 },
+                              ).reduce((a, b) => a + (b || 0), 0) || 6;
                             const setMix = Object.entries(
-                              cfg.packCounts || { Beta: 6 }
+                              cfg.packCounts || { Beta: 6 },
                             )
                               .filter(([, c]) => (c || 0) > 0)
                               .map(([s]) => s);
@@ -1566,7 +1581,7 @@ export default function LobbiesCentral({
                               constructionStartTime: String(Date.now()),
                               replaceAvatars: String(replaceAvatars),
                               allowDragonlordChampion: String(
-                                allowDragonlordChampion
+                                allowDragonlordChampion,
                               ),
                               matchName: tournament.name,
                             });
@@ -1639,7 +1654,7 @@ export default function LobbiesCentral({
             The realm is quiet.
           </div>
           <div className="relative mt-1.5 font-rc-mono text-xs tracking-[0.1em] text-rc-fg-subtle">
-            No games match your filters — create one and they will come.
+            No games match your filters — be bold and start one.
           </div>
         </div>
       )}
@@ -1864,7 +1879,7 @@ export default function LobbiesCentral({
                       }`}
                       onClick={() =>
                         setTournamentMatchType(
-                          type as "constructed" | "sealed" | "draft"
+                          type as "constructed" | "sealed" | "draft",
                         )
                       }
                     >
@@ -1896,11 +1911,11 @@ export default function LobbiesCentral({
                             onClick={() => {
                               const newCount = Math.max(
                                 1,
-                                sealedBoosterCount - 1
+                                sealedBoosterCount - 1,
                               );
                               setSealedBoosterCount(newCount);
                               setSealedBoosters((prev) =>
-                                prev.slice(0, newCount)
+                                prev.slice(0, newCount),
                               );
                             }}
                             className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
@@ -1915,7 +1930,7 @@ export default function LobbiesCentral({
                             onClick={() => {
                               const newCount = Math.min(
                                 10,
-                                sealedBoosterCount + 1
+                                sealedBoosterCount + 1,
                               );
                               setSealedBoosterCount(newCount);
                               setSealedBoosters((prev) => [
@@ -1950,7 +1965,10 @@ export default function LobbiesCentral({
                               className="flex-1"
                               options={[
                                 { value: "Beta", label: "Beta" },
-                                { value: "Arthurian Legends", label: "Arthurian Legends" },
+                                {
+                                  value: "Arthurian Legends",
+                                  label: "Arthurian Legends",
+                                },
                                 { value: "Alpha", label: "Alpha" },
                               ]}
                             />
@@ -2048,8 +2066,8 @@ export default function LobbiesCentral({
                           setSealedTimeLimit(
                             Math.max(
                               10,
-                              Math.min(90, parseInt(e.target.value) || 40)
-                            )
+                              Math.min(90, parseInt(e.target.value) || 40),
+                            ),
                           )
                         }
                         className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
@@ -2109,11 +2127,11 @@ export default function LobbiesCentral({
                             onClick={() => {
                               const newCount = Math.max(
                                 1,
-                                draftBoosterCount - 1
+                                draftBoosterCount - 1,
                               );
                               setDraftBoosterCount(newCount);
                               setDraftBoosters((prev) =>
-                                prev.slice(0, newCount)
+                                prev.slice(0, newCount),
                               );
                             }}
                             className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
@@ -2128,13 +2146,13 @@ export default function LobbiesCentral({
                             onClick={() => {
                               const newCount = Math.min(
                                 5,
-                                draftBoosterCount + 1
+                                draftBoosterCount + 1,
                               );
                               setDraftBoosterCount(newCount);
                               setDraftBoosters((prev) => [
                                 ...prev,
                                 ...Array(newCount - prev.length).fill(
-                                  "Arthurian Legends"
+                                  "Arthurian Legends",
                                 ),
                               ]);
                             }}
@@ -2165,7 +2183,10 @@ export default function LobbiesCentral({
                               className="flex-1"
                               options={[
                                 { value: "Beta", label: "Beta" },
-                                { value: "Arthurian Legends", label: "Arthurian Legends" },
+                                {
+                                  value: "Arthurian Legends",
+                                  label: "Arthurian Legends",
+                                },
                                 { value: "Alpha", label: "Alpha" },
                               ]}
                             />
@@ -2240,8 +2261,8 @@ export default function LobbiesCentral({
                           setDraftPickTimeLimit(
                             Math.max(
                               30,
-                              Math.min(300, parseInt(e.target.value) || 60)
-                            )
+                              Math.min(300, parseInt(e.target.value) || 60),
+                            ),
                           )
                         }
                         className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
@@ -2261,8 +2282,8 @@ export default function LobbiesCentral({
                           setDraftConstructionTimeLimit(
                             Math.max(
                               10,
-                              Math.min(60, parseInt(e.target.value) || 20)
-                            )
+                              Math.min(60, parseInt(e.target.value) || 20),
+                            ),
                           )
                         }
                         className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
@@ -2296,8 +2317,8 @@ export default function LobbiesCentral({
                       setTournamentMaxPlayers(
                         Math.max(
                           2,
-                          Math.min(128, parseInt(e.target.value) || 2)
-                        )
+                          Math.min(128, parseInt(e.target.value) || 2),
+                        ),
                       )
                     }
                     className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
@@ -2549,7 +2570,7 @@ function TournamentSettingsForm({
   ).registration as Record<string, unknown> | undefined;
   const isOpenSeat = registrationSettings?.mode === "open";
   const activeCount = tournament.registeredPlayers.filter(
-    (p) => (p as { seatStatus?: string }).seatStatus !== "vacant"
+    (p) => (p as { seatStatus?: string }).seatStatus !== "vacant",
   ).length;
 
   const handleSave = () => {
@@ -2636,7 +2657,7 @@ function TournamentSettingsForm({
             value={maxPlayers}
             onChange={(e) =>
               setMaxPlayers(
-                Math.max(2, Math.min(128, parseInt(e.target.value) || 2))
+                Math.max(2, Math.min(128, parseInt(e.target.value) || 2)),
               )
             }
             className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
