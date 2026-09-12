@@ -3067,10 +3067,12 @@ class BotClient {
 
       if (this._game.phase === "Start" && this._game.currentPlayer === myNum) {
         if (this._startPhaseHandled.has(turnKey)) return;
-        this._startPhaseHandled.add(turnKey);
         const state = this._game;
         const zones = state.zones?.[meKey];
         if (!zones) return;
+        // A Start patch can precede our opening zones. Do not mark the turn
+        // handled until initialization is present, or readiness retries stall.
+        this._startPhaseHandled.add(turnKey);
         const hand = [...(zones.hand || [])];
         const hasSite = hand.some(card => card.type === "Site");
         const siteCount = Object.values(state.board?.sites || {}).filter(site => site.owner === myNum && site.card).length;

@@ -108,12 +108,13 @@ export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps 
     prevPlayerRef.current = currentPlayer;
     prevGameStartedRef.current = gameStarted;
 
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-    };
   }, [currentPlayer, turn, phase, actorKey, gameStarted, playTurnGong, setTurnOverlayActive]);
+
+  // A phase update must not cancel the only timer that dismisses the overlay.
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setTurnOverlayActive(false);
+  }, [setTurnOverlayActive]);
 
   // Hide immediately once the player draws their card
   useEffect(() => {

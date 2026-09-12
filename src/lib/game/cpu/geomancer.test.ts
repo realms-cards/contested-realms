@@ -34,6 +34,10 @@ describe("CPU Geomancer site-play bonus", () => {
     await settle();
     expect(store.getState().pendingMagic?.cpuEvent?.kind).toBe("geomancerFill");
     expect(getSpellChoices(store.getState(),"p1","Geomancer").map(choice => choice.key).sort()).toEqual(["geomancer/fill/1,3","geomancer/fill/3,3"]);
+    expect(getSpellChoices(store.getState(),"p1","Geomancer").flatMap(choice => choice.boardTiles || []).sort()).toEqual(["1,3","3,3"]);
+    store.getState().setCpuMagicChoice("geomancer/fill/3,3");
+    store.getState().setCpuMagicChoice("");
+    expect(store.getState().pendingMagic?.cpuChoice).toBeUndefined();
     store.getState().setCpuMagicChoice("geomancer/fill/1,3");
     store.getState().resolveMagic();
     await settle();
@@ -59,6 +63,7 @@ describe("CPU Geomancer site-play bonus", () => {
     store.setState({matchId:"geomancer-replace",transport:new LocalTransport(),board:{...store.getState().board,sites:{...store.getState().board.sites,"1,3":{owner:1,cpuNeutral:true,card:{cardId:2,name:"Rubble",type:"Token"}}}},zones:{...store.getState().zones,p1:{...store.getState().zones.p1,atlas:[card("Holy Ground")]}}});
     const choice = abilityChoices(store.getState(),"p1").find(choice => choice.key.startsWith("geomancer/"));
     if (!choice) throw new Error("Missing atlas replacement");
+    expect(choice.boardTiles).toEqual(["1,3"]);
     store.getState().activateCpuAbility(choice.key);
     await settle();
     expect(store.getState().pendingMagic?.cpuEvent?.kind).toBe("genesis");

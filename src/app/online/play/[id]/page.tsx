@@ -3669,6 +3669,7 @@ export default function OnlineMatchPage() {
             }
           />
 
+          {!isSpectatorView && !setupOpen && <CpuBoardReady paused={turnOverlayActive || (pausedGoldfishMatchId !== null && pausedGoldfishMatchId === matchId)} />}
           {/* All player-interactive overlays hidden for spectators; deferred while Turn overlay is active */}
           {!isSpectatorView && !turnOverlayActive && (
             <>
@@ -3676,7 +3677,6 @@ export default function OnlineMatchPage() {
               <CombatHudOverlay />
               {/* Magic HUD Overlay (layout-level, not inside Canvas) */}
               <MagicHudOverlay />
-              <CpuBoardReady paused={pausedGoldfishMatchId !== null && pausedGoldfishMatchId === matchId} />
               {/* Chaos Twister Overlay (dexterity minigame) */}
               <ChaosTwisterOverlay transport={transport} />
               {/* Corpse Explosion Overlay (corpse assignment to 2x2 area) */}

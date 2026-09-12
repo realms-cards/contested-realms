@@ -61,6 +61,8 @@ export interface DamageHit {
 }
 
 export interface SpellChoice {
+  /** Board fields that can be clicked to narrow this choice. Internal keys only. */
+  boardTiles?: string[];
   key: string;
   label: string;
   caster: NonNullable<PendingMagic["caster"]>;

@@ -1,5 +1,6 @@
 "use client";
 
+import CpuFieldChoices from "@/components/game/CpuFieldChoices";
 import { cardText, getSpellChoices, projectileKey, supportsSpell } from "@/lib/game/cpu/spells";
 import { useGameStore } from "@/lib/game/store";
 import type { PendingMagic } from "@/lib/game/store/types";
@@ -36,11 +37,7 @@ export default function CpuMagicChoices() {
       ) : canChoose ? (
         <div className="mt-3 space-y-3">
           <label className="block text-sm" htmlFor="cpu-spell-choice">Spellcaster and effect</label>
-          <select id="cpu-spell-choice" className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm"
-            value={selected?.key || ""} onChange={event => state.setCpuMagicChoice(event.target.value)}>
-            <option value="">Choose how to cast this spell…</option>
-            {choices.map(choice => <option key={choice.key} value={choice.key}>{choice.label}</option>)}
-          </select>
+          <CpuFieldChoices id="cpu-spell-choice" request={`${state.matchId}:${pending.id}`} choices={choices} value={selected?.key || ""} onChange={state.setCpuMagicChoice} />
           {selected?.projectile?.decisions.map((decision, index) => (
             <label key={index} className="block text-sm">
               {decision.label}

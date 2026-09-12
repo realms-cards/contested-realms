@@ -154,6 +154,28 @@ describe("shared CPU spell choices", () => {
 });
 
 describe("CPU resolution lifecycle", () => {
+  it("retries its first Start phase when opening zones arrive late, without a human action", () => {
+    vi.useFakeTimers();
+    const state = position().getState();
+    const bot = new BotClient({serverUrl:"http://localhost:3010"});
+    const socket = io("http://localhost:3010",{autoConnect:false});
+    const emit = vi.spyOn(socket,"emit").mockReturnValue(socket);
+    bot.socket = socket;
+    bot.currentMatch = {id:"late-opening-zones",status:"in_progress"};
+    bot.playerIndex = 0;
+    bot._game = {...state,phase:"Start",turn:1,zones:undefined};
+    vi.spyOn(bot,"_hasHumanOpponent").mockReturnValue(true);
+    bot._actionPacing.ready("late-opening-zones",Date.now());
+    try {
+      bot._maybeAct();
+      vi.advanceTimersByTime(5000);
+      expect(emit).not.toHaveBeenCalledWith("action",expect.anything());
+      bot._game.zones = state.zones;
+      bot._maybeAct();
+      vi.advanceTimersByTime(1600);
+      expect(emit).toHaveBeenCalledWith("action",expect.objectContaining({action:expect.objectContaining({phase:"Main"})}));
+    } finally {bot.stop();}
+  });
   it("plays its opening site with an omitted empty board instead of crashing in ability selection", () => {
     vi.useFakeTimers();
     const state = position().getState();

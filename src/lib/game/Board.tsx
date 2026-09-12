@@ -22,6 +22,7 @@ import { BoardDragGhost } from "@/lib/game/components/BoardDragGhost";
 import { BoardEnvironment } from "@/lib/game/components/BoardEnvironment";
 import BoardPingLayer from "@/lib/game/components/BoardPingLayer";
 import { BoardTile } from "@/lib/game/components/BoardTile";
+import CpuFieldTargets from "@/lib/game/components/CpuFieldTargets";
 import { DraggingSiteGhost } from "@/lib/game/components/DraggingSiteGhost";
 import { GemToken3D } from "@/lib/game/components/GemToken3D";
 import { HandDragGhost } from "@/lib/game/components/HandDragGhost";
@@ -1546,6 +1547,7 @@ export default function Board({
       />
 
       {/* Interactive tiles */}
+      <CpuFieldTargets offsetX={offsetX} offsetY={offsetY} />
       <group position={[0, 0, 0]}>
         {cells.map(({ x, y, key }) => {
           const position: [number, number, number] = [

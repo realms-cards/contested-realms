@@ -32,6 +32,7 @@ it("Desert labels point at the same numbered tile as its damage targets", async 
   const choices = getSpellChoices(store.getState(),"p1","Red Desert");
   const choice = choices.find(choice => choice.label.includes("Tile #13"));
   expect(choice).toBeDefined();
+  expect(choice?.boardTiles).toEqual(["2,2"]);
   expect(choice?.operations).toContainEqual(expect.objectContaining({kind:"damageEvent",hits:[expect.objectContaining({target:expect.objectContaining({at:"2,2"}),amount:1})]}));
   expect(choices.every(choice => !/\b\d+,\d+\b/.test(choice.label))).toBe(true);
 });

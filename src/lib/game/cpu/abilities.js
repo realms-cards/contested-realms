@@ -152,7 +152,7 @@ function abilityChoices(state, seat) {
       }
     }
   }
-  const {tileLabel} = require('./tileLabels');
-  return choices.map(choice => ({...choice,label:tileLabel(choice.label,state.board.size)}));
+  const {tileLabel,choiceTiles} = require('./tileLabels');
+  return choices.map(choice => ({...choice,boardTiles:choiceTiles(choice.label,state.board.size),label:tileLabel(choice.label,state.board.size)}));
 }
 module.exports = { abilityChoices };

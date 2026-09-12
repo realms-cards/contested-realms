@@ -118,8 +118,8 @@ function hasStealth(state,unit) {
 
 /** @param {SpellState} state @param {PlayerKey} seat @param {string} name @param {string} [selectionKey] @returns {SpellChoice[]} */
 function getSpellChoices(state, seat, name, selectionKey) {
-  const {tileLabel} = require('./tileLabels');
-  return rawSpellChoices(state,seat,name,selectionKey).map(choice => ({...choice,label:tileLabel(choice.label,state.board.size),
+  const {tileLabel,choiceTiles} = require('./tileLabels');
+  return rawSpellChoices(state,seat,name,selectionKey).map(choice => ({...choice,boardTiles:choiceTiles(choice.label,state.board.size),label:tileLabel(choice.label,state.board.size),
     ...(choice.projectile ? {projectile:{...choice.projectile,decisions:choice.projectile.decisions.map(decision => ({...decision,label:tileLabel(decision.label,state.board.size),options:decision.options.map(option => ({...option,label:tileLabel(option.label,state.board.size)}))}))}} : {})}));
 }
 

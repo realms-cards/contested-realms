@@ -103,6 +103,10 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
     const pending = state.pendingMagic;
     if (!pending || !state.opponentPlayerId?.startsWith("cpu_") ||
         state.actorKey !== seatFromOwner(pending.spell.owner)) return;
+    if (!key) {
+      set({pendingMagic:{...pending,cpuChoice:undefined,caster:undefined,target:null,status:"choosingTarget"}});
+      return;
+    }
     const choice = getSpellChoice(state, seatFromOwner(pending.spell.owner), pending.spell.card.name || "", key);
     if (!choice) return;
     set({ pendingMagic: { ...pending, cpuChoice: key, caster: choice.caster, target: choice.target, status: "choosingTarget" } });
