@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
@@ -1207,13 +1208,13 @@ export default function TournamentDetailsPage() {
   const getFormatIcon = (format: Tournament["format"]) => {
     switch (format) {
       case "sealed":
-        return "📦";
+        return "game-icons:cardboard-box-closed";
       case "draft":
-        return "🎯";
+        return "game-icons:card-pick";
       case "constructed":
-        return "⚔️";
+        return "game-icons:crossed-swords";
       default:
-        return "🏆";
+        return "game-icons:laurels-trophy";
     }
   };
 
@@ -1531,8 +1532,8 @@ export default function TournamentDetailsPage() {
             </div>
           )}
         {/* Header */}
-        <div className="flex items-start justify-between mb-8">
-          <div>
+        <div className="flex items-start justify-between gap-4 mb-8">
+          <div className="min-w-0">
             <Link
               href="/tournaments"
               className="text-slate-400 hover:text-white mb-2 inline-flex items-center"
@@ -1540,16 +1541,19 @@ export default function TournamentDetailsPage() {
               ← Back to Tournaments
             </Link>
             <div className="flex items-center space-x-3 mb-2">
-              <span className="text-3xl">
-                {getFormatIcon(tournament.format)}
-              </span>
-              <div>
+              <Icon
+                icon={getFormatIcon(tournament.format)}
+                className="shrink-0 text-slate-300"
+                width={34}
+                height={34}
+              />
+              <div className="min-w-0">
                 <h1 className="text-3xl font-fantaisie text-white">
                   {tournament.name}
                 </h1>
-                <div className="flex items-center space-x-4 mt-1">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
                   <span
-                    className={`px-3 py-1 rounded-full text-sm font-medium border capitalize ${getStatusBadgeColor(
+                    className={`shrink-0 whitespace-nowrap px-3 py-1 rounded-full text-sm font-medium border capitalize ${getStatusBadgeColor(
                       tournament.status,
                     )}`}
                   >

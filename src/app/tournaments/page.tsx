@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -428,13 +429,13 @@ export default function TournamentsPage() {
   const getFormatIcon = (format: Tournament["format"]) => {
     switch (format) {
       case "sealed":
-        return "📦";
+        return "game-icons:cardboard-box-closed";
       case "draft":
-        return "🎯";
+        return "game-icons:card-pick";
       case "constructed":
-        return "⚔️";
+        return "game-icons:crossed-swords";
       default:
-        return "🏆";
+        return "game-icons:laurels-trophy";
     }
   };
 
@@ -649,7 +650,12 @@ export default function TournamentsPage() {
               : localTournaments.length === 0
         ) ? (
           <div className="text-center py-12">
-            <div className="text-6xl mb-4">🏆</div>
+            <Icon
+              icon="game-icons:laurels-trophy"
+              className="mx-auto mb-4 text-slate-500"
+              width={72}
+              height={72}
+            />
             <h2 className="text-2xl font-semibold text-slate-300 mb-2">
               No tournaments found
             </h2>
@@ -705,20 +711,28 @@ export default function TournamentsPage() {
                     key={tournament.id}
                     className="bg-slate-800 border border-slate-700 rounded-lg p-6 hover:bg-slate-750 transition-colors"
                   >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-2xl">
-                          {getFormatIcon(tournament.format)}
-                        </span>
-                        <div>
+                    <div className="flex items-start justify-between gap-2 mb-4">
+                      <div className="flex min-w-0 items-center space-x-2">
+                        <Icon
+                          icon={getFormatIcon(tournament.format)}
+                          className="shrink-0 text-slate-300"
+                          width={26}
+                          height={26}
+                        />
+                        <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <h3 className="font-fantaisie text-lg text-white truncate">
                               {tournament.name}
                             </h3>
                             {(tournament as unknown as { isPrivate?: boolean })
                               .isPrivate && (
-                              <span className="text-xs px-1.5 py-0.5 bg-purple-600/20 text-purple-300 border border-purple-500/30 rounded">
-                                🔒 Private
+                              <span className="flex shrink-0 items-center gap-1 text-xs px-1.5 py-0.5 bg-purple-600/20 text-purple-300 border border-purple-500/30 rounded">
+                                <Icon
+                                  icon="game-icons:padlock"
+                                  width={11}
+                                  height={11}
+                                />
+                                Private
                               </span>
                             )}
                           </div>
@@ -728,7 +742,7 @@ export default function TournamentsPage() {
                         </div>
                       </div>
                       <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium border capitalize ${getStatusBadgeColor(
+                        className={`shrink-0 whitespace-nowrap px-2 py-1 rounded-full text-xs font-medium border capitalize ${getStatusBadgeColor(
                           tournament.status,
                         )}`}
                       >
