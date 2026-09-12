@@ -24,6 +24,9 @@ import BetrayalOverlay from "@/components/game/BetrayalOverlay";
 import BlackMassOverlay from "@/components/game/BlackMassOverlay";
 import BrowseOverlay from "@/components/game/BrowseOverlay";
 import CallToWarOverlay from "@/components/game/CallToWarOverlay";
+import CameraOrbitPad, {
+  ORBIT_DEFAULT_TILT,
+} from "@/components/game/CameraOrbitPad";
 import CardPreview from "@/components/game/CardPreview";
 import CastPlacementBanner from "@/components/game/CastPlacementBanner";
 import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
@@ -2581,9 +2584,12 @@ export default function OnlineMatchPage() {
         );
         cam.up.set(0, 1, 0);
       } else {
-        // Reasonable default orbit position based on seat (slightly offset)
-        const orbitZ = viewPlayerNumber === 2 ? -5 : 5;
-        cam.position.set(0, 10, orbitZ);
+        // Gently tilted default orbit view from the player's side
+        const dist = Math.hypot(10, 5);
+        const theta = viewPlayerNumber === 2 ? Math.PI : 0;
+        cam.position.setFromSpherical(
+          new THREE.Spherical(dist, ORBIT_DEFAULT_TILT, theta),
+        );
         cam.up.set(0, 1, 0);
       }
       cam.lookAt(0, 0, 0);
@@ -3157,6 +3163,9 @@ export default function OnlineMatchPage() {
             >
               3D
             </button>
+            {cameraMode === "orbit" && (
+              <CameraOrbitPad controlsRef={controlsRef} isMobile={isMobile} />
+            )}
           </div>
         </div>
       )}
@@ -3964,14 +3973,19 @@ export default function OnlineMatchPage() {
                             RIGHT: THREE.MOUSE.PAN,
                           }
                         : {
-                            MIDDLE: THREE.MOUSE.DOLLY,
+                            MIDDLE:
+                              cameraMode === "orbit"
+                                ? THREE.MOUSE.ROTATE
+                                : THREE.MOUSE.DOLLY,
                             RIGHT: THREE.MOUSE.PAN,
                           }
                   }
                   touches={{ TWO: THREE.TOUCH.PAN }}
                   enabled={canPanCamera}
                   enablePan={canPanCamera}
-                  enableRotate={isSpectatorView || isTTS}
+                  enableRotate={
+                    isSpectatorView || isTTS || cameraMode === "orbit"
+                  }
                   enableZoom={!resyncing && !dragFromHand && !dragFromPile}
                   enableDamping={isSpectatorView}
                   dampingFactor={isSpectatorView ? 0.08 : 0}

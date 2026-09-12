@@ -20,6 +20,9 @@ import BetrayalOverlay from "@/components/game/BetrayalOverlay";
 import BlackMassOverlay from "@/components/game/BlackMassOverlay";
 import BrowseOverlay from "@/components/game/BrowseOverlay";
 import CallToWarOverlay from "@/components/game/CallToWarOverlay";
+import CameraOrbitPad, {
+  ORBIT_DEFAULT_TILT,
+} from "@/components/game/CameraOrbitPad";
 import CardPreview from "@/components/game/CardPreview";
 import CastPlacementBanner from "@/components/game/CastPlacementBanner";
 import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
@@ -672,7 +675,7 @@ export default function PlayPage() {
       } else {
         // 3D orbit mode - preserve distance and polar angle if available
         const defaultDist = Math.hypot(10, 5); // ~11.18
-        const defaultPhi = Math.atan2(10, 5); // ~1.107 radians
+        const defaultPhi = ORBIT_DEFAULT_TILT;
         const dist = saved?.distance ?? defaultDist;
         const phi = saved?.polarAngle ?? defaultPhi;
         // Azimuth: P1 looks from +Z, P2 from -Z
@@ -932,6 +935,9 @@ export default function PlayPage() {
             >
               3D
             </button>
+            {cameraMode === "orbit" && (
+              <CameraOrbitPad controlsRef={controlsRef} isMobile={isMobile} />
+            )}
           </div>
         </div>
       )}
@@ -1451,7 +1457,8 @@ export default function PlayPage() {
           makeDefault
           target={[0, 0, 0]}
           mouseButtons={{
-            MIDDLE: THREE.MOUSE.DOLLY,
+            MIDDLE:
+              cameraMode === "orbit" ? THREE.MOUSE.ROTATE : THREE.MOUSE.DOLLY,
             RIGHT: THREE.MOUSE.PAN,
           }}
           touches={{ TWO: THREE.TOUCH.PAN }}

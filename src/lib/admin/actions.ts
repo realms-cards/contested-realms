@@ -317,7 +317,7 @@ export const ADMIN_ACTIONS = [
     id: "recomputeLadder",
     label: "Recompute ladder",
     description:
-      "Replay match history into the leaderboard now (decay, per-opponent caps, provisional gating, weekly/monthly windows).",
+      "Replay match history into the leaderboard now (per-opponent caps, provisional gating, 60-day inactivity, weekly/monthly windows).",
     dangerous: false,
   },
   {

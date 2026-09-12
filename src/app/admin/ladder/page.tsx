@@ -7,6 +7,9 @@ import { prisma } from "@/lib/prisma";
 const FORMATS = ["constructed", "sealed", "draft"] as const;
 const TIMEFRAMES = ["all_time", "monthly", "weekly"] as const;
 
+// Mirrors LADDER.INACTIVE_AFTER_MS in server/modules/leaderboard/rating-model.ts.
+const INACTIVE_AFTER_MS = 60 * 24 * 60 * 60 * 1000;
+
 type Format = typeof FORMATS[number];
 type TimeFrame = typeof TIMEFRAMES[number];
 
@@ -22,12 +25,30 @@ export default async function AdminLadderPage({ searchParams }: { searchParams?:
   const fmt: GameFormat = getParam<Format>(sp?.format, FORMATS, "constructed") as GameFormat;
   const tf: DbTimeFrame = getParam<TimeFrame>(sp?.timeFrame, TIMEFRAMES, "all_time") as DbTimeFrame;
 
-  const entries = await prisma.leaderboardEntry.findMany({
-    where: { format: fmt, timeFrame: tf },
-    orderBy: [{ provisional: "asc" }, { rating: "desc" }, { winRate: "desc" }, { wins: "desc" }],
-    take: 100,
-    include: { player: { select: { isGuest: true, ladderExcluded: true } } },
-  });
+  // Admins see the ranked list and, separately, players hidden for inactivity
+  // (rank 0). Querying them apart keeps a large inactive population from
+  // crowding ranked players out of the page limit.
+  const include = { player: { select: { isGuest: true, ladderExcluded: true } } } as const;
+  const [ranked, hidden, rankedCount, hiddenCount] = await Promise.all([
+    prisma.leaderboardEntry.findMany({
+      where: { format: fmt, timeFrame: tf, rank: { gt: 0 } },
+      orderBy: { rank: "asc" },
+      take: 200,
+      include,
+    }),
+    prisma.leaderboardEntry.findMany({
+      where: { format: fmt, timeFrame: tf, rank: 0 },
+      orderBy: [{ rating: "desc" }, { wins: "desc" }],
+      take: 100,
+      include,
+    }),
+    prisma.leaderboardEntry.count({ where: { format: fmt, timeFrame: tf, rank: { gt: 0 } } }),
+    prisma.leaderboardEntry.count({ where: { format: fmt, timeFrame: tf, rank: 0 } }),
+  ]);
+  const entries = [...ranked, ...hidden];
+
+  const activeSince = Date.now() - INACTIVE_AFTER_MS;
+  const isInactive = (lastRatedAt: Date | null) => lastRatedAt === null || lastRatedAt.getTime() < activeSince;
 
   const linkTo = (format: string, timeFrame: string) => `/admin/ladder?format=${encodeURIComponent(format)}&timeFrame=${encodeURIComponent(timeFrame)}`;
 
@@ -38,6 +59,7 @@ export default async function AdminLadderPage({ searchParams }: { searchParams?:
           <h1 className="text-2xl font-semibold text-white">Admin: Ladder</h1>
           <p className="text-sm text-slate-400">
             Ratings are replayed from match history by the socket server (startup, every 10 min, after each match).
+            Players with no rated game in 60 days are hidden from the public list but keep their rating.
             Unrate a match or exclude a player via <code className="text-slate-300">POST /api/admin/ladder</code>.
           </p>
         </div>
@@ -69,6 +91,9 @@ export default async function AdminLadderPage({ searchParams }: { searchParams?:
             </a>
           ))}
         </div>
+        <span className="ml-auto text-xs text-slate-400">
+          {rankedCount} ranked · {hiddenCount} hidden (inactive)
+        </span>
       </div>
 
       <div className="overflow-x-auto rounded border border-slate-800 bg-slate-900/40">
@@ -90,27 +115,39 @@ export default async function AdminLadderPage({ searchParams }: { searchParams?:
             </tr>
           </thead>
           <tbody>
-            {entries.map((e, i) => (
-              <tr key={e.id} className={`border-t border-slate-800/60 ${i % 2 ? "bg-slate-900/40" : "bg-slate-900/60"}`}>
-                <td className="px-3 py-2">{e.rank > 0 ? e.rank : i + 1}</td>
-                <td className="px-3 py-2">
-                  {e.displayName}
-                  <span className="ml-2 text-[10px] text-slate-500">{e.playerId}</span>
-                </td>
-                <td className="px-3 py-2">{e.rating}</td>
-                <td className="px-3 py-2">{e.wins}</td>
-                <td className="px-3 py-2">{e.losses}</td>
-                <td className="px-3 py-2">{e.draws}</td>
-                <td className="px-3 py-2">{(e.winRate * 100).toFixed(1)}%</td>
-                <td className="px-3 py-2">{e.uniqueOpponents}</td>
-                <td className="px-3 py-2">{e.ratedGames}</td>
-                <td className="px-3 py-2">{e.provisional ? "yes" : ""}</td>
-                <td className="px-3 py-2">{e.lastRatedAt ? new Date(e.lastRatedAt).toLocaleDateString() : "—"}</td>
-                <td className="px-3 py-2 text-xs text-amber-300">
-                  {[e.player.isGuest ? "guest" : null, e.player.ladderExcluded ? "excluded" : null].filter(Boolean).join(", ")}
-                </td>
-              </tr>
-            ))}
+            {entries.map((e, i) => {
+              const inactive = isInactive(e.lastRatedAt);
+              return (
+                <tr
+                  key={e.id}
+                  className={`border-t border-slate-800/60 ${i % 2 ? "bg-slate-900/40" : "bg-slate-900/60"} ${inactive ? "opacity-60" : ""}`}
+                >
+                  <td className="px-3 py-2">{e.rank > 0 ? e.rank : "—"}</td>
+                  <td className="px-3 py-2">
+                    {e.displayName}
+                    <span className="ml-2 text-[10px] text-slate-500">{e.playerId}</span>
+                  </td>
+                  <td className="px-3 py-2">{e.rating}</td>
+                  <td className="px-3 py-2">{e.wins}</td>
+                  <td className="px-3 py-2">{e.losses}</td>
+                  <td className="px-3 py-2">{e.draws}</td>
+                  <td className="px-3 py-2">{(e.winRate * 100).toFixed(1)}%</td>
+                  <td className="px-3 py-2">{e.uniqueOpponents}</td>
+                  <td className="px-3 py-2">{e.ratedGames}</td>
+                  <td className="px-3 py-2">{e.provisional ? "yes" : ""}</td>
+                  <td className="px-3 py-2">{e.lastRatedAt ? new Date(e.lastRatedAt).toLocaleDateString() : "—"}</td>
+                  <td className="px-3 py-2 text-xs text-amber-300">
+                    {[
+                      inactive ? "inactive" : null,
+                      e.player.isGuest ? "guest" : null,
+                      e.player.ladderExcluded ? "excluded" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(", ")}
+                  </td>
+                </tr>
+              );
+            })}
             {entries.length === 0 && (
               <tr>
                 <td colSpan={12} className="px-3 py-6 text-center text-slate-400">No entries</td>

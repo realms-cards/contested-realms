@@ -5,9 +5,10 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-// Mirrors LADDER.DECAY_GRACE_DAYS in server/modules/leaderboard/rating-model.ts:
-// past this idle span a rating above 1200 starts decaying.
-const INACTIVE_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
+// Mirrors LADDER.INACTIVE_AFTER_MS in server/modules/leaderboard/rating-model.ts
+// (the Next.js build cannot import server/). Players without a rated game in
+// this span are hidden from the list but keep their rating.
+const INACTIVE_AFTER_MS = 60 * 24 * 60 * 60 * 1000;
 
 // Rows are precomputed by the socket server's ladder replay (rating, rank,
 // windowed W-L-D, opponent counts, provisional flag), so this route only reads.
@@ -40,11 +41,17 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const now = Date.now();
+    const activeSince = new Date(now - INACTIVE_AFTER_MS);
+
     // Invite-link guests get a shadow User row but never a ranking; excluded
     // users are dropped by the replay but filtered here too for safety.
+    // Filtering on lastRatedAt here (not only in the replay) keeps a player
+    // who crosses the two-month line hidden immediately, between replays.
     const where = {
       format,
       timeFrame,
+      lastRatedAt: { gte: activeSince },
       player: { isGuest: false, ladderExcluded: false },
     };
 
@@ -70,6 +77,8 @@ export async function GET(req: NextRequest) {
         skip: offset,
       }),
       prisma.leaderboardEntry.count({ where }),
+      // The viewer's own row is read without the activity filter so an
+      // inactive player still sees their kept rating and how to get back.
       prisma.leaderboardEntry.findUnique({
         where: {
           playerId_format_timeFrame: {
@@ -81,14 +90,19 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-    const now = Date.now();
     const isInactive = (lastRatedAt: Date | null): boolean =>
-      lastRatedAt !== null && now - lastRatedAt.getTime() > INACTIVE_AFTER_MS;
+      lastRatedAt === null || lastRatedAt.getTime() < activeSince.getTime();
 
+    const currentUserInactive = currentUserEntry
+      ? isInactive(currentUserEntry.lastRatedAt)
+      : false;
     const currentUserRank = currentUserEntry
       ? {
-          // Stored rank is 0 only until the first replay after a deploy.
-          rank: currentUserEntry.rank > 0 ? currentUserEntry.rank : null,
+          // Stored rank is 0 for inactive players and until the first replay.
+          rank:
+            !currentUserInactive && currentUserEntry.rank > 0
+              ? currentUserEntry.rank
+              : null,
           rating: currentUserEntry.rating,
           wins: currentUserEntry.wins,
           losses: currentUserEntry.losses,
@@ -98,7 +112,7 @@ export async function GET(req: NextRequest) {
           ratedGames: currentUserEntry.ratedGames,
           provisional: currentUserEntry.provisional,
           lastRatedAt: currentUserEntry.lastRatedAt?.toISOString() ?? null,
-          inactive: isInactive(currentUserEntry.lastRatedAt),
+          inactive: currentUserInactive,
         }
       : null;
 
@@ -117,7 +131,6 @@ export async function GET(req: NextRequest) {
       ratedGames: entry.ratedGames,
       provisional: entry.provisional,
       lastRatedAt: entry.lastRatedAt?.toISOString() ?? null,
-      inactive: isInactive(entry.lastRatedAt),
       lastActive: entry.lastActive.toISOString(),
     }));
 

@@ -21,7 +21,6 @@ interface LeaderboardEntry {
   ratedGames: number;
   provisional: boolean;
   lastRatedAt: string | null;
-  inactive: boolean;
   lastActive: string;
 }
 
@@ -36,13 +35,14 @@ interface CurrentUserRank {
   ratedGames: number;
   provisional: boolean;
   lastRatedAt: string | null;
+  /** No rated game in 60 days: hidden from the list, rating kept. */
   inactive: boolean;
 }
 
 const PROVISIONAL_HINT =
   "Provisional: needs 5 different opponents and 10 rated games to be ranked";
-const INACTIVE_HINT =
-  "No rated game in 14+ days: rating above 1200 decays 2 points per day";
+const INACTIVE_NOTE =
+  "No rated game in the last 60 days, so you're hidden from the list. Your rating is kept: play a rated game to return.";
 
 function ProvisionalPill() {
   return (
@@ -51,14 +51,6 @@ function ProvisionalPill() {
       title={PROVISIONAL_HINT}
     >
       Provisional
-    </span>
-  );
-}
-
-function InactiveHint() {
-  return (
-    <span className="text-slate-500" title={INACTIVE_HINT}>
-      · decaying
     </span>
   );
 }
@@ -182,6 +174,9 @@ export default function LeaderboardPage() {
               <p className="text-sm text-slate-300/90">
                 Compete with players across all game formats
               </p>
+              <p className="text-xs text-slate-400">
+                Players show up here after a rated game in the last 60 days.
+              </p>
             </div>
             <div className="flex flex-wrap gap-3 items-center">
               <button
@@ -278,17 +273,16 @@ export default function LeaderboardPage() {
                     <span className="text-2xl font-bold text-white">
                       {data.currentUser.rank !== null
                         ? `#${data.currentUser.rank}`
-                        : "—"}
+                        : data.currentUser.inactive
+                          ? "Unranked"
+                          : "—"}
                     </span>
-                    <span className="text-sm text-slate-400">
-                      of {data.pagination.total}
-                    </span>
-                    {data.currentUser.provisional && <ProvisionalPill />}
-                    {data.currentUser.inactive && (
-                      <span className="text-xs">
-                        <InactiveHint />
+                    {data.currentUser.rank !== null && (
+                      <span className="text-sm text-slate-400">
+                        of {data.pagination.total}
                       </span>
                     )}
+                    {data.currentUser.provisional && <ProvisionalPill />}
                   </div>
                 </div>
                 <div className="flex items-center gap-6 text-sm">
@@ -322,6 +316,9 @@ export default function LeaderboardPage() {
                   </div>
                 </div>
               </div>
+              {data.currentUser.inactive && (
+                <p className="mt-3 text-xs text-slate-300">{INACTIVE_NOTE}</p>
+              )}
             </div>
           )}
 
@@ -402,12 +399,6 @@ export default function LeaderboardPage() {
                           <span>
                             Last active:{" "}
                             {new Date(entry.lastActive).toLocaleDateString()}
-                            {entry.inactive && (
-                              <>
-                                {" "}
-                                <InactiveHint />
-                              </>
-                            )}
                           </span>
                         </div>
                       </div>

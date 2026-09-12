@@ -13,15 +13,17 @@
  *  - Per-opponent cap: the net rating one player has taken from a single
  *    opponent (lifetime) is clamped to +-PAIR_CAP. Deltas past the cap are
  *    clipped; the W/L record still counts.
- *  - Decay: after DECAY_GRACE_DAYS without a rated game, rating above BASE
- *    loses DECAY_PER_DAY per day, never dropping below BASE. Applied at every
- *    game boundary and again "as of now" when summarizing.
+ *  - Inactivity: a player with no rated game in INACTIVE_AFTER_MS drops off
+ *    the ranked list but keeps their rating untouched. Ratings never decay:
+ *    decay only drained points from players above BASE, which made the whole
+ *    ladder deflate toward BASE. Playing one rated game puts them back.
  *  - Provisional: fewer than PROVISIONAL_MIN_OPPONENTS distinct rated
  *    opponents or PROVISIONAL_MIN_GAMES rated games sorts below every
  *    ranked player.
  *  - leaver_only games (early concede/leave): only the leaver's rating and
- *    record move. The winner gains nothing, their decay clock does not reset,
- *    and the pair window still burns, so farming quick concessions is inert.
+ *    record move. The winner gains nothing, the game does not count as
+ *    activity for them, and the pair window still burns, so farming quick
+ *    concessions is inert.
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -40,8 +42,12 @@ export const LADDER = {
   /** Index = prior rated games vs the same opponent inside the window. */
   REPEAT_MULTIPLIERS: [1, 1, 0.5, 0.25] as readonly number[],
   PAIR_CAP: 80,
-  DECAY_GRACE_DAYS: 14,
-  DECAY_PER_DAY: 2,
+  /**
+   * No rated game for this long: hidden from the ranked list, rating kept.
+   * Mirrored in src/app/api/leaderboard/route.ts and src/app/admin/ladder/page.tsx
+   * (the Next.js build cannot import server/). Keep them in sync.
+   */
+  INACTIVE_AFTER_MS: 60 * DAY_MS,
   PROVISIONAL_MIN_OPPONENTS: 5,
   PROVISIONAL_MIN_GAMES: 10,
   EARLY_TURN: 5,
@@ -137,19 +143,13 @@ export function repeatMultiplier(
     : 0;
 }
 
-/** Decayed rating as of `now`. Never lifts a rating, never goes below BASE. */
-export function applyDecay(
-  rating: number,
-  lastRatedAt: number | null,
-  now: number,
-): number {
-  if (rating <= LADDER.BASE) return rating;
-  if (lastRatedAt === null || !Number.isFinite(lastRatedAt)) return rating;
-  const idleDays = Math.floor((now - lastRatedAt) / DAY_MS);
-  if (idleDays <= LADDER.DECAY_GRACE_DAYS) return rating;
-  const decayed =
-    rating - (idleDays - LADDER.DECAY_GRACE_DAYS) * LADDER.DECAY_PER_DAY;
-  return Math.max(LADDER.BASE, decayed);
+/**
+ * Whether a player is off the ranked list as of `now`. A player with no rated
+ * game on record counts as inactive; their rating is never changed by this.
+ */
+export function isInactive(lastRatedAt: number | null, now: number): boolean {
+  if (lastRatedAt === null || !Number.isFinite(lastRatedAt)) return true;
+  return now - lastRatedAt > LADDER.INACTIVE_AFTER_MS;
 }
 
 /** Clamp `delta` so the pair's net stays within +-PAIR_CAP after applying it. */
@@ -303,9 +303,6 @@ export function applyGame(
   }
 
   const [a, b] = sides;
-  a.s.rating = applyDecay(a.s.rating, a.s.lastRatedAt, t);
-  b.s.rating = applyDecay(b.s.rating, b.s.lastRatedAt, t);
-
   const prior = priorGamesInWindow(a.s, b.id, t);
   priorGamesInWindow(b.s, a.id, t);
   const mult = repeatMultiplier(prior, game.tournamentId !== null);
@@ -323,7 +320,8 @@ export function applyGame(
     pushPairTime(side.s, opp.id, t);
     if (!side.moves) {
       // Deliberately no lastRatedAt bump: a leaver_only win is not a played
-      // game for the winner, so it must not reset their inactivity decay.
+      // game for the winner, so a friend conceding on turn 1 cannot keep an
+      // idle player on the ranked list.
       deltas[side.id] = 0;
       continue;
     }
@@ -369,12 +367,15 @@ export interface LadderRow {
   ratedGames: number;
   uniqueOpponents: number;
   provisional: boolean;
+  /** No rated game within INACTIVE_AFTER_MS: kept, but unranked (rank 0). */
+  inactive: boolean;
   lastRatedAt: number | null;
   lastActive: number | null;
   rank: number;
 }
 
 export function compareRows(a: LadderRow, b: LadderRow): number {
+  if (a.inactive !== b.inactive) return a.inactive ? 1 : -1;
   if (a.provisional !== b.provisional) return a.provisional ? 1 : -1;
   if (a.rating !== b.rating) return b.rating - a.rating;
   if (a.winRate !== b.winRate) return b.winRate - a.winRate;
@@ -385,7 +386,9 @@ export function compareRows(a: LadderRow, b: LadderRow): number {
 /**
  * Rank the state as of `now`. With a window, W/L/D and opponents come from
  * games inside it and players without a game in the window are dropped;
- * `provisional` always uses all-time counts.
+ * `provisional` always uses all-time counts. Inactive players are still
+ * returned (so their stored rating survives) but sort last with rank 0, and
+ * active players are ranked 1..n without gaps.
  */
 export function summarize(
   state: LadderState,
@@ -414,7 +417,7 @@ export function summarize(
     const lastGame = s.history[s.history.length - 1].t;
     rows.push({
       playerId,
-      rating: applyDecay(s.rating, s.lastRatedAt, now),
+      rating: s.rating,
       wins,
       losses,
       draws,
@@ -422,14 +425,16 @@ export function summarize(
       ratedGames,
       uniqueOpponents,
       provisional: isProvisional(s.opponents.size, s.ratedGames),
+      inactive: isInactive(s.lastRatedAt, now),
       lastRatedAt: s.lastRatedAt,
       lastActive: Math.max(lastGame, s.lastRatedAt ?? lastGame),
       rank: 0,
     });
   }
   rows.sort(compareRows);
-  rows.forEach((row, i) => {
-    row.rank = i + 1;
-  });
+  let rank = 0;
+  for (const row of rows) {
+    row.rank = row.inactive ? 0 : ++rank;
+  }
   return rows;
 }

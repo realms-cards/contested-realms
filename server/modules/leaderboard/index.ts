@@ -2,7 +2,6 @@
 
 import type { PrismaClient } from "@prisma/client";
 import {
-  applyDecay,
   expectedScore,
   LADDER,
   repeatMultiplier,
@@ -186,10 +185,10 @@ export function createLeaderboardService({
       now,
     );
     const mult = repeatMultiplier(prior, isTournament);
-    const toMs = (d: Date | null | undefined): number | null =>
-      d instanceof Date ? d.getTime() : null;
-    const ratingA = applyDecay(a.entry.rating, toMs(a.entry.lastRatedAt), now);
-    const ratingB = applyDecay(b.entry.rating, toMs(b.entry.lastRatedAt), now);
+    // Ratings never decay: an idle player keeps their stored rating and is
+    // only hidden from the ranked list (see LADDER.INACTIVE_AFTER_MS).
+    const ratingA = a.entry.rating;
+    const ratingB = b.entry.rating;
 
     const updates = [
       [a, ratingA, ratingB],
@@ -202,7 +201,8 @@ export function createLeaderboardService({
       };
       if (!side.moves) {
         // leaver_only winner: presence only. No rating, no record, and no
-        // lastRatedAt bump (that would reset their inactivity decay).
+        // lastRatedAt bump (that would count as activity and keep an idle
+        // player on the ranked list).
         return prisma.leaderboardEntry.update({
           where: { id: side.entry.id },
           data: base,

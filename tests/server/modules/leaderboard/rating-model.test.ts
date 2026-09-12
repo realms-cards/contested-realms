@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  applyDecay,
   applyGame,
   classifyResult,
   clipToPairCap,
   compareRows,
+  isInactive,
   isProvisional,
   LADDER,
   replayGames,
@@ -53,13 +53,13 @@ describe("rating-model primitives", () => {
     expect(repeatMultiplier(9, true)).toBe(1);
   });
 
-  it("decays only above base after the grace period", () => {
-    expect(applyDecay(1300, T0, T0 + 20 * DAY)).toBe(1288);
-    expect(applyDecay(1300, T0, T0 + 100 * DAY)).toBe(1200);
-    expect(applyDecay(1150, T0, T0 + 100 * DAY)).toBe(1150);
-    expect(applyDecay(1300, T0, T0 + 13 * DAY)).toBe(1300);
-    expect(applyDecay(1300, T0, T0 + 14 * DAY)).toBe(1300);
-    expect(applyDecay(1300, null, T0 + 100 * DAY)).toBe(1300);
+  it("marks players inactive after two months without a rated game", () => {
+    expect(LADDER.INACTIVE_AFTER_MS).toBe(60 * DAY);
+    expect(isInactive(T0, T0 + 59 * DAY)).toBe(false);
+    expect(isInactive(T0, T0 + 60 * DAY)).toBe(false);
+    expect(isInactive(T0, T0 + 60 * DAY + 1)).toBe(true);
+    expect(isInactive(T0, T0 + 132 * DAY)).toBe(true);
+    expect(isInactive(null, T0)).toBe(true);
   });
 
   it("clips deltas to the pair cap", () => {
@@ -201,7 +201,7 @@ describe("applyGame / replayGames", () => {
     expect(state.get("A")?.opponents.size).toBe(1);
   });
 
-  it("mimic: 93-1 against two opponents ends at 1360 and decays to 1200", () => {
+  it("mimic: 93-1 against two opponents caps at 1360 and goes unranked when idle", () => {
     const games: LadderGame[] = [];
     let t = T0;
     let wins = 0;
@@ -228,21 +228,26 @@ describe("applyGame / replayGames", () => {
 
     const lastGame = games[games.length - 1].completedAt;
     const fresh = summarize(state, lastGame, null);
-    expect(fresh.find((r) => r.playerId === "A")?.rating).toBe(1360);
-    expect(fresh.find((r) => r.playerId === "A")?.provisional).toBe(true);
+    const freshA = fresh.find((r) => r.playerId === "A");
+    expect(freshA?.rating).toBe(1360);
+    expect(freshA?.provisional).toBe(true);
+    expect(freshA?.inactive).toBe(false);
 
+    // 132 days idle: off the ranked list, but the rating is kept as-is.
     const idle = summarize(state, lastGame + 132 * DAY, null);
-    expect(idle.find((r) => r.playerId === "A")?.rating).toBe(1200);
-    expect(idle.find((r) => r.playerId === "X")?.rating).toBe(1120);
+    const idleA = idle.find((r) => r.playerId === "A");
+    expect(idleA?.rating).toBe(1360);
+    expect(idleA?.inactive).toBe(true);
+    expect(idleA?.rank).toBe(0);
   });
 
-  it("applies decay at game boundaries", () => {
-    // A climbs to 1216, idles 34 days (20 past grace = -40, floored at 1200), then plays again.
+  it("keeps a rating through a long break", () => {
+    // No decay: A's 1216 is still there after 90 idle days and moves normally.
     const state = replayGames([
       game({ completedAt: T0 }),
-      game({ completedAt: T0 + 34 * DAY, winnerId: "A", loserId: "C" }),
+      game({ completedAt: T0 + 90 * DAY, winnerId: "A", loserId: "C" }),
     ]);
-    expect(rating(state, "A")).toBe(1216);
+    expect(rating(state, "A")).toBe(1231);
   });
 
   it("handles draws symmetrically", () => {
@@ -296,8 +301,8 @@ describe("applyGame / replayGames", () => {
     expect(a.wins).toBe(0);
     expect(a.ratedGames).toBe(0);
     expect(a.opponents.size).toBe(0);
-    // The winner's inactivity clock must NOT reset: otherwise a friend could
-    // concede on turn 1 forever to keep a decaying rating frozen.
+    // Not activity for the winner: otherwise a friend could concede on turn 1
+    // every few weeks to keep an idle player on the ranked list.
     expect(a.lastRatedAt).toBeNull();
     expect(a.pairTimes.get("B")).toEqual([T0]);
 
@@ -349,19 +354,40 @@ describe("summarize / compareRows", () => {
     ratedGames: 0,
     uniqueOpponents: 0,
     provisional: false,
+    inactive: false,
     lastRatedAt: null,
     lastActive: null,
     rank: 0,
     ...partial,
   });
 
-  it("sorts provisional players below everyone, then by rating/winRate/wins", () => {
+  it("sorts inactive below everyone, then provisional, then by rating/winRate/wins", () => {
     const rows = [
       row({ playerId: "p1", rating: 1250, winRate: 0.6 }),
       row({ playerId: "p2", rating: 1400, provisional: true }),
       row({ playerId: "p3", rating: 1250, winRate: 0.7 }),
+      row({ playerId: "p4", rating: 1500, inactive: true }),
     ].sort(compareRows);
-    expect(rows.map((r) => r.playerId)).toEqual(["p3", "p1", "p2"]);
+    expect(rows.map((r) => r.playerId)).toEqual(["p3", "p1", "p2", "p4"]);
+  });
+
+  it("keeps inactive players' ratings but ranks only active players, without gaps", () => {
+    const now = T0 + 200 * DAY;
+    const state = replayGames([
+      // A and B last played 70 days ago: inactive.
+      game({ completedAt: now - 70 * DAY, winnerId: "A", loserId: "B" }),
+      // C and D played two days ago: active.
+      game({ completedAt: now - 2 * DAY, winnerId: "C", loserId: "D" }),
+    ]);
+    const rows = summarize(state, now, null);
+    expect(rows.map((r) => [r.playerId, r.rank, r.inactive])).toEqual([
+      ["C", 1, false],
+      ["D", 2, false],
+      ["A", 0, true],
+      ["B", 0, true],
+    ]);
+    expect(rows.find((r) => r.playerId === "A")?.rating).toBe(1216);
+    expect(rows.find((r) => r.playerId === "B")?.rating).toBe(1184);
   });
 
   it("windows W-L-D and drops players without games in the window", () => {
