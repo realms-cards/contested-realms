@@ -12,14 +12,15 @@ function genesisChoices(state) {
   if (pending?.cpuEvent?.kind !== 'genesis') return [];
   const {card,owner} = pending.spell, seat = owner === 1 ? 'p1' : 'p2', event = pending.cpuEvent;
   const units = unitsInRealm(state), source = event.source && units.find(u => sameTarget(u.target,event.source));
-  const at = source?.at || pending.spell.at, region = source?.region || event.region;
+  const siteSource = event.sourceSite && Object.entries(state.board.sites).find(([at,tile]) => tile.card && (event.sourceSite.instanceId ? tile.card.instanceId === event.sourceSite.instanceId : at === event.sourceSite.at && tile.card.name === event.sourceSite.name));
+  const at = source?.at || siteSource?.[0] || pending.spell.at, region = source?.region || event.region;
   const visible = units.filter(u => u.region === region && (u.owner === seat || !hasStealth(state,u)));
   const sites = Object.keys(state.board.sites).filter(at => state.board.sites[at]?.card);
   /** @type {import('./spellTypes').SpellChoice[]} */
   const choices = [];
   const add = (key,label,operations) => choices.push({key:`genesis/${key}`,label,operations,target:null, caster:{kind:'avatar',seat},score:scoreOperations(state,seat,operations)});
   const name = card.name;
-  if (card.type === 'Minion' && event.source && !source) {
+  if ((card.type === 'Minion' && event.source && !source) || (event.sourceSite && !siteSource)) {
     add('gone','The source left the realm; skip its Genesis',[]);
     return choices;
   }

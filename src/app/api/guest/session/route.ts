@@ -15,6 +15,18 @@ export const dynamic = "force-dynamic";
 
 // GET /api/guest/session -> { guest: { id, name } | null }
 export async function GET() {
+  const session = await getServerAuthSession();
+  if (session?.user) {
+    // Signing in retires the guest identity for good: leaving the cookie in
+    // place would let the guest name resurface (and would come back on sign
+    // out), so it is cleared the first time we see an account here.
+    const res = NextResponse.json({ guest: null });
+    res.cookies.set(GUEST_COOKIE_NAME, "", {
+      ...guestCookieOptions(),
+      maxAge: 0,
+    });
+    return res;
+  }
   const guest = await readGuestSession();
   return NextResponse.json({ guest });
 }

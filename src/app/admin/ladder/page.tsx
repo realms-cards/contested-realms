@@ -1,5 +1,6 @@
 import "server-only";
 import { GameFormat, TimeFrame as DbTimeFrame } from "@prisma/client";
+import LadderRecomputeButton from "@/components/admin/LadderRecomputeButton";
 import { PageHeader, PanelHeader } from "@/components/ui/page-header";
 import { requireAdminSession } from "@/lib/admin/auth";
 import { prisma } from "@/lib/prisma";
@@ -23,12 +24,13 @@ export default async function AdminLadderPage({ searchParams }: { searchParams?:
 
   const sp = (await searchParams) ?? {};
   const fmt: GameFormat = getParam<Format>(sp?.format, FORMATS, "constructed") as GameFormat;
-  const tf: DbTimeFrame = getParam<TimeFrame>(sp?.timeFrame, TIMEFRAMES, "monthly") as DbTimeFrame;
+  const tf: DbTimeFrame = getParam<TimeFrame>(sp?.timeFrame, TIMEFRAMES, "all_time") as DbTimeFrame;
 
   const entries = await prisma.leaderboardEntry.findMany({
     where: { format: fmt, timeFrame: tf },
-    orderBy: [{ rating: "desc" }, { wins: "desc" }],
+    orderBy: [{ provisional: "asc" }, { rating: "desc" }, { winRate: "desc" }, { wins: "desc" }],
     take: 100,
+    include: { player: { select: { isGuest: true, ladderExcluded: true } } },
   });
 
   const linkTo = (format: string, timeFrame: string) => `/admin/ladder?format=${encodeURIComponent(format)}&timeFrame=${encodeURIComponent(timeFrame)}`;
@@ -38,7 +40,17 @@ export default async function AdminLadderPage({ searchParams }: { searchParams?:
       <PageHeader
         eyebrow="admin"
         title="Ladder"
-        description="Format and time frame filters"
+        description={
+          <>
+            Ratings are replayed from match history by the socket server (startup, every 10 min, after each match).
+            Unrate a match or exclude a player via{" "}
+            <code className="rounded-rc-sm border border-rc-line/12 bg-black/45 px-1 font-rc-mono text-xs text-rc-accent-link">
+              POST /api/admin/ladder
+            </code>
+            .
+          </>
+        }
+        actions={<LadderRecomputeButton />}
       />
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
@@ -84,25 +96,38 @@ export default async function AdminLadderPage({ searchParams }: { searchParams?:
                 <th>L</th>
                 <th>D</th>
                 <th>Win Rate</th>
-                <th>Last Active</th>
+                <th>Opps</th>
+                <th>Rated</th>
+                <th>Prov</th>
+                <th>Last Rated</th>
+                <th>Flags</th>
               </tr>
             </thead>
             <tbody>
               {entries.map((e, i) => (
                 <tr key={e.id}>
-                  <td className="text-rc-fg-dim">{i + 1}</td>
-                  <td className="text-rc-fg-strong">{e.displayName}</td>
+                  <td className="text-rc-fg-dim">{e.rank > 0 ? e.rank : i + 1}</td>
+                  <td>
+                    <span className="text-rc-fg-strong">{e.displayName}</span>
+                    <span className="rc-hint ml-2">{e.playerId}</span>
+                  </td>
                   <td className="rc-stat">{e.rating}</td>
                   <td className="tabular-nums">{e.wins}</td>
                   <td className="tabular-nums">{e.losses}</td>
                   <td className="tabular-nums">{e.draws}</td>
                   <td className="tabular-nums">{(e.winRate * 100).toFixed(1)}%</td>
-                  <td className="text-rc-fg-muted">{new Date(e.lastActive).toLocaleString()}</td>
+                  <td className="tabular-nums">{e.uniqueOpponents}</td>
+                  <td className="tabular-nums">{e.ratedGames}</td>
+                  <td className="font-rc-mono text-[11px] uppercase tracking-[0.14em] text-rc-warning">{e.provisional ? "yes" : ""}</td>
+                  <td className="text-rc-fg-muted">{e.lastRatedAt ? new Date(e.lastRatedAt).toLocaleDateString() : "—"}</td>
+                  <td className="font-rc-mono text-[11px] uppercase tracking-[0.14em] text-rc-warning">
+                    {[e.player.isGuest ? "guest" : null, e.player.ladderExcluded ? "excluded" : null].filter(Boolean).join(", ")}
+                  </td>
                 </tr>
               ))}
               {entries.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-6 text-center text-rc-fg-subtle">No entries</td>
+                  <td colSpan={12} className="py-6 text-center text-rc-fg-subtle">No entries</td>
                 </tr>
               )}
             </tbody>

@@ -19,6 +19,8 @@ export interface PlayerState {
   lobbyId: string | null;
   matchId: string | null;
   location?: PlayerLocation;
+  /** Salted hash of the client IP (see modules/client-ip); null when unknown */
+  ipHash?: string | null;
 }
 
 export interface ServerMatchState extends AnyRecord {
@@ -66,6 +68,8 @@ export interface ServerMatchState extends AnyRecord {
   winnerId?: string | null;
   loserId?: string | null;
   _finalized?: boolean;
+  /** Re-entrancy guard while finalizeMatch awaits before setting _finalized */
+  _finalizing?: boolean;
   _cleanupTimer?: NodeJS.Timeout | null;
   interactionGrants?: Map<string, AnyRecord[]>;
   interactionRequests?: Map<string, AnyRecord>;

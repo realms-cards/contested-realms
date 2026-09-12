@@ -18,6 +18,19 @@ function setup() {
   } as Partial<GameState>);
   return store;
 }
+function insertTestInterruption(store: ReturnType<typeof setup>) {
+  store.setState({cpuEffectRequests:[{id:"area-interruption",tile:{x:2,y:3},
+    spell:{at:"2,3",index:-1,owner:1,card:card("Lucky Charm"),instanceId:"area-interruption"},
+    cpuEvent:{kind:"randomChoice",outcomes:[{kind:"gainMana",seat:"p1",amount:0}]},status:"choosingTarget",createdAt:0}]});
+}
+async function finishTestInterruption(store: ReturnType<typeof setup>) {
+  await Promise.resolve();
+  expect(store.getState().pendingMagic?.id).toBe("area-interruption");
+  store.getState().setCpuMagicChoice("random/0");
+  store.getState().resolveMagic();
+  for (let i=0;i<6;i++) await Promise.resolve();
+  expect(store.getState().cpuEffectContinuations).toHaveLength(0);
+}
 beforeEach(() => { vi.spyOn(HTMLMediaElement.prototype,"play").mockResolvedValue(); vi.spyOn(console,"log").mockImplementation(() => {}); });
 afterEach(() => vi.restoreAllMocks());
 
@@ -58,6 +71,38 @@ describe("precon damage grids", () => {
     expect(store.getState().zones.p1.graveyard[0].instanceId).toBe("cost");
     expect(store.getState().board.sites["0,0"]).toMatchObject({cpuNeutral:true,card:{name:"Rubble"}});
     expect(store.getState().zones.p2.graveyard[0].name).toBe("Lone Tower");
+  });
+  it("rebuilds Craterize's simultaneous impact after a destruction interruption", async () => {
+    const store = setup();
+    const departed = unit("Mountain Giant","departed");
+    const shifted = unit("Mountain Giant","shifted");
+    store.setState({permanents:{"0,0":[departed,shifted]},
+      zones:{...store.getState().zones,p1:{...store.getState().zones.p1,hand:[card("Bedrock","cost")]}}});
+    const choice = getSpellChoices(store.getState(),"p1","Craterize").find(c => c.key === "p1/0,0/cost")!;
+    store.setState({matchId:"crater-interruption",transport:new LocalTransport()});
+    // Model an event inserted by destruction; the continuation must not freeze
+    // the impact's occupants before that event has resolved.
+    const unsubscribe = store.subscribe((state,previous) => {
+      if (state.board.sites["0,0"].card?.name === "Rubble" && previous.board.sites["0,0"].card?.name !== "Rubble") {
+        insertTestInterruption(store);
+      }
+    });
+    expect(applySpellChoice(store.setState,store.getState,choice)).toBe(false);
+    unsubscribe();
+    expect(store.getState().permanents["0,0"][0].damage || 0).toBe(0);
+    const continuation = store.getState().cpuEffectContinuations![0];
+    expect(continuation.choice.operations[0].kind).toBe("damageGrid");
+    const sites = {...store.getState().board.sites};
+    delete sites["1,0"];
+    store.setState({board:{...store.getState().board,sites},
+      permanents:{"4,3":[departed],"2,0":[shifted],"1,0":[unit("Mountain Giant","void")],"1,1":[unit("Mountain Giant","arrival")]},
+      permanentPositions:{arrival:{permanentId:"arrival",state:"burrowed",position:{x:1,y:-0.15,z:1}}}});
+    await finishTestInterruption(store);
+    expect(store.getState().permanents["4,3"][0].damage || 0).toBe(0);
+    expect(store.getState().permanents["1,0"][0].damage || 0).toBe(0);
+    expect(store.getState().permanents["2,0"][0].damage).toBe(4);
+    expect(store.getState().permanents["1,1"][0].damage).toBe(4);
+    expect(store.getState().zones.p1.graveyard.filter(c => c.instanceId === "cost")).toHaveLength(1);
   });
 });
 
@@ -112,6 +157,31 @@ describe("paid chains and movement", () => {
 });
 
 describe("precon summoning and flooding", () => {
+  it("rechecks water and its occupants after Wrath's flood interruption", async () => {
+    const store = setup();
+    const escaped = unit("Ogre Goons","escaped");
+    store.setState({board:{...store.getState().board,sites:{...store.getState().board.sites,"2,2":{owner:2,card:card("Spring River")}}},
+      permanents:{"1,2":[escaped],"0,0":[unit("Ogre Goons","new-water")]}});
+    const choice = getSpellChoices(store.getState(),"p1","Wrath of the Sea")[0];
+    store.setState({matchId:"wrath-interruption",transport:new LocalTransport()});
+    const unsubscribe = store.subscribe((state,previous) => {
+      if (state.board.sites["1,2"].cpuFloodedUntil && !previous.board.sites["1,2"].cpuFloodedUntil) insertTestInterruption(store);
+    });
+    expect(applySpellChoice(store.setState,store.getState,choice)).toBe(false);
+    unsubscribe();
+    const continuation = store.getState().cpuEffectContinuations![0];
+    expect(continuation.choice.operations).toEqual([{kind:"submergeWater"}]);
+    store.setState({
+      board:{...store.getState().board,sites:{...store.getState().board.sites,"0,0":{owner:2,card:card("Spring River","new-water-site")},"3,2":{owner:2,card:card("Lone Tower","dry-site")}}},
+      permanents:{...store.getState().permanents,"1,2":[unit("Swan Maidens","arrival"),unit("Sunken Treasure","artifact")],"4,3":[escaped],"3,2":[unit("Ogre Goons","dry")]}});
+    await finishTestInterruption(store);
+    expect(store.getState().permanents["4,3"][0].instanceId).toBe("escaped");
+    expect(store.getState().permanents["3,2"][0].instanceId).toBe("dry");
+    expect(store.getState().permanents["0,0"]).toHaveLength(0);
+    expect(store.getState().permanentPositions.arrival.state).toBe("submerged");
+    expect(store.getState().permanentPositions.artifact.state).toBe("submerged");
+    expect(isWater(store.getState(),"0,2")).toBe(false);
+  });
   it("summons one usable Foot Soldier on each bordering allied site", () => {
     const store = setup();
     const choice = getSpellChoices(store.getState(),"p1","Border Militia")[0];

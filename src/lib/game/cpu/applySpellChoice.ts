@@ -2,7 +2,7 @@ import type { StateCreator } from "zustand";
 import { applyDamageEvent } from "@/lib/game/cpu/damage";
 import { luckyCharmCount } from "@/lib/game/cpu/luckyCharm";
 import type { CpuEffectCompletion, SpellChoice, SpellOperation, UnitTarget } from "@/lib/game/cpu/spellTypes";
-import { cardText, inRange, isDisabled, isWater, sameTarget, unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
+import { cardText, expandAreaOperation, inRange, isDisabled, isWater, projectileImpactChoices, sameTarget, unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
 import type { CardRef, GameState, PlayerKey } from "@/lib/game/store/types";
 import { buildMoveDeltaPatch } from "@/lib/game/store/utils/patchHelpers";
 import { movePermanentCore } from "@/lib/game/store/utils/permanentHelpers";
@@ -15,9 +15,25 @@ type StoreGet = Parameters<StateCreator<GameState>>[1];
 // All mutation happens through the game store, with normal patches and death
 // triggers. Stable identities survive earlier kills in multi-target spells.
 export function applySpellChoice(set: StoreSet, get: StoreGet, choice: SpellChoice, rng = Math.random, completion?: CpuEffectCompletion): boolean {
-  const operations = [...choice.operations];
+  const operations = [...(choice.resolutionOperations || choice.operations)];
   for (let index=0;index<operations.length;index++) {
     let op = operations[index];
+    if (op.kind === "projectileStep") {
+      const state = get(), choices = projectileImpactChoices(state,op);
+      const canQueue = state.opponentPlayerId?.startsWith("cpu_") && state.actorKey && state.matchId && state.transport && state.phase !== "Setup";
+      const preferred = op.preferred?.[0];
+      const selected = choices.find(candidate => candidate.key === preferred) || [...choices].sort((a,b) => b.score-a.score)[0];
+      const expanded: SpellOperation[] = choices.length>1 && canQueue ? [{kind:"offerProjectile",projectile:op}] : selected.operations;
+      operations.splice(index,1,...expanded);
+      index--;
+      continue;
+    }
+    const expandedArea = expandAreaOperation(get(),op);
+    if (expandedArea) {
+      operations.splice(index,1,expandedArea);
+      index--;
+      continue;
+    }
     if (op.kind === "damage" && op.random) {
       const units = unitsInRealm(get());
       op = {...op,targets:op.targets.filter(target => units.some(unit => sameTarget(unit.target,target)))};
@@ -75,7 +91,7 @@ export function applySpellChoice(set: StoreSet, get: StoreGet, choice: SpellChoi
     try { if (applyOperations(set,get,{...choice,operations:[op]},rng) === false) return true; }
     finally { set({cpuResolvingEffect:false}); }
     if ((get().cpuPendingTriggerCount || 0)>before) {
-      set({cpuEffectContinuations:[...(get().cpuEffectContinuations || []),{choice:{...choice,operations:operations.slice(index+1)},waitingFor:before,completion}]});
+      set({cpuEffectContinuations:[...(get().cpuEffectContinuations || []),{choice:{...choice,resolutionOperations:undefined,operations:operations.slice(index+1)},waitingFor:before,completion}]});
       return false;
     }
   }
@@ -130,6 +146,16 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
     }
   };
   for (const op of choice.operations) {
+    if (op.kind === "projectileStep") continue; // Expanded at the next live impact above.
+    if (op.kind === "offerProjectile") {
+      const projectile = op.projectile, id = `cpu_projectile_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const [x,y] = projectile.origin.split(",").map(Number);
+      const card: CardRef = {cardId:-1,name:projectile.name,type:"Magic"};
+      set({cpuEffectRequests:[{id,tile:{x,y},spell:{at:projectile.origin,index:-1,owner:projectile.seat === "p1" ? 1 : 2,card,instanceId:id},
+        cpuEvent:{kind:"projectileImpact",projectile},status:"choosingTarget",createdAt:Date.now()}]});
+      continue;
+    }
+    if (op.kind === "damageGrid" || op.kind === "submergeWater") continue; // Expanded when their resumable step begins.
     if (op.kind === "fillRubble") {
       const state = get(), pos = state.avatars[op.seat]?.pos, [x,y] = op.at.split(",").map(Number);
       if (!pos || !Number.isInteger(x) || !Number.isInteger(y) || x<0 || y<0 || x>=state.board.size.w || y>=state.board.size.h || Math.abs(x-pos[0])+Math.abs(y-pos[1]) !== 1 || state.board.sites[op.at]?.card || state.permanents[op.at]?.some(item => item.card.name === "Rubble")) continue;
@@ -375,7 +401,8 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
     if (op.kind === "destroySite") {
       const tile = get().board.sites[op.at];
       if (!tile?.card || (!op.sacrifice && tile.card.name === "Bedrock") || tile.cpuNeutral || (op.instanceId && tile.card.instanceId !== op.instanceId)) continue;
-      const seat = tile.owner === 1 ? "p1" : "p2", definition = TOKEN_BY_NAME.rubble;
+      const seat: PlayerKey = tile.owner === 1 ? "p1" : "p2";
+      const definition = TOKEN_BY_NAME.rubble;
       const zones = {...get().zones[seat],graveyard:[...get().zones[seat].graveyard,tile.card]};
       const rubble = {owner:tile.owner,cpuNeutral:true,card:{cardId:newTokenInstanceId(definition),name:"Rubble",type:"Token",slug:tokenSlug(definition),thresholds:{}}};
       const board = {...get().board,sites:{...get().board.sites,[op.at]:rubble}};

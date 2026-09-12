@@ -15,6 +15,7 @@ interface MatchEndOverlayProps {
   myPlayerKey: PlayerKey | null;
   onClose: () => void;
   onLeave?: () => void;
+  onTestAgain?: () => void;
   onLeaveLobby?: () => void;
   leaveLabel?: string;
   allowContinue?: boolean;
@@ -44,6 +45,7 @@ export default function MatchEndOverlay({
   myPlayerKey,
   onClose,
   onLeave,
+  onTestAgain,
   onLeaveLobby,
   leaveLabel,
   allowContinue = true,
@@ -368,6 +370,7 @@ export default function MatchEndOverlay({
 
         {/* Action Buttons */}
         <div className="space-y-2 sm:space-y-3">
+          {onTestAgain && !isSpectator && <button onClick={onTestAgain} className="w-full rounded-lg bg-indigo-600 px-4 py-3 text-white hover:bg-indigo-500">Test again in Goldfish</button>}
           {canContinue && (
             <button
               onClick={onClose}

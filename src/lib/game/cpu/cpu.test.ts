@@ -154,6 +154,45 @@ describe("shared CPU spell choices", () => {
 });
 
 describe("CPU resolution lifecycle", () => {
+  it("plays its opening site with an omitted empty board instead of crashing in ability selection", () => {
+    vi.useFakeTimers();
+    const state = position().getState();
+    const bot = new BotClient({serverUrl:"http://localhost:3010"});
+    bot.aiEnabled = true;
+    const socket = io("http://localhost:3010",{autoConnect:false});
+    const emit = vi.spyOn(socket,"emit").mockReturnValue(socket);
+    const warn = vi.spyOn(console,"warn").mockImplementation(() => {});
+    bot.socket = socket;
+    bot.currentMatch = {id:"goldfish-first-site",status:"in_progress"};
+    bot.playerIndex = 0;
+    bot._game = {...state,board:undefined,permanents:{},turn:1,
+      zones:{...state.zones,p1:{...state.zones.p1,hand:[card("Lone Tower")]}}};
+    vi.spyOn(bot,"_hasHumanOpponent").mockReturnValue(true);
+    vi.spyOn(bot._actionPacing,"delay").mockReturnValue(0);
+    try {
+      bot._maybeAct();
+      expect(warn).not.toHaveBeenCalled();
+      expect(emit).toHaveBeenCalledWith("action",expect.objectContaining({action:expect.objectContaining({board:expect.objectContaining({sites:expect.objectContaining({"0,3":expect.objectContaining({card:expect.objectContaining({name:"Lone Tower"})})})})})}));
+    } finally { bot.stop(); }
+  });
+  it("continues a human-vs-CPU opening turn when the board has not arrived yet", () => {
+    vi.useFakeTimers();
+    const bot = new BotClient({serverUrl:"http://localhost:3010"});
+    const socket = io("http://localhost:3010",{autoConnect:false});
+    const emit = vi.spyOn(socket,"emit").mockReturnValue(socket);
+    const warn = vi.spyOn(console,"warn").mockImplementation(() => {});
+    bot.socket = socket;
+    bot.currentMatch = {id:"goldfish-opening",status:"in_progress"};
+    bot.playerIndex = 0;
+    bot._game = {phase:"Main",currentPlayer:1,turn:1};
+    vi.spyOn(bot,"_hasHumanOpponent").mockReturnValue(true);
+    vi.spyOn(bot._actionPacing,"delay").mockReturnValue(0);
+    try {
+      bot._maybeAct();
+      expect(warn.mock.calls.some(([message]) => String(message).includes("_maybeAct error"))).toBe(false);
+      expect(emit).toHaveBeenCalledWith("action",expect.objectContaining({action:expect.objectContaining({avatars:expect.any(Object)})}));
+    } finally { bot.stop(); }
+  });
   it("preserves temporary avatar effects through server normalization and clears them explicitly", () => {
     const fallback = { card: card("Sparkmage"),pos: [0,3] as [number,number],tapped: false,
       cpuTurnEffect: { turn: "3:1",power: 2,movement: 1 } };
@@ -334,6 +373,116 @@ describe("CPU projectile choices", () => {
   it("counts empty locations and the origin for Ice Lance's decreasing damage", () => {
     const choice = getSpellChoice(position().getState(), "p1", "Ice Lance", "p1/E")!;
     expect(choice.operations).toEqual([{ kind: "damage", amount: 1, targets: [expect.objectContaining({ instanceId: "enemy" })] }]);
+  });
+});
+
+describe("live sequential projectile resolution", () => {
+  async function settle() { for (let i=0;i<10;i++) await Promise.resolve(); }
+  function online(store: ReturnType<typeof position>) {
+    const transport = Object.assign(new LocalTransport(),{sendMessage:vi.fn(),sendAction:vi.fn()});
+    store.setState({matchId:"projectile-test",transport});
+    return transport;
+  }
+  function cast(store: ReturnType<typeof position>, name: "Firebolts" | "Fireball" | "Heat Ray" | "Ice Lance") {
+    store.getState().beginMagicCast({tile:{x:0,y:3},spell:{at:"0,3",index:-1,owner:1,card:card(name),instanceId:"original-projectile"}});
+    const id = store.getState().pendingMagic!.id;
+    store.getState().setCpuMagicChoice("p1/E");
+    store.getState().resolveMagic();
+    return id;
+  }
+  function interruptFirstDamage(store: ReturnType<typeof position>) {
+    return store.subscribe((state,previous) => {
+      if (state.permanents["1,3"]?.[0]?.damage && !previous.permanents["1,3"]?.[0]?.damage) {
+        store.setState({cpuEffectRequests:[{id:"intervening-event",tile:{x:0,y:3},spell:{at:"0,3",index:-1,owner:1,card:card("Lucky Charm")},
+          cpuEvent:{kind:"randomChoice",outcomes:[{kind:"gainMana",seat:"p1",amount:0}]},status:"choosingTarget",createdAt:0}]});
+      }
+    });
+  }
+  async function resolve(store: ReturnType<typeof position>, key: string) {
+    store.getState().setCpuMagicChoice(key);
+    store.getState().resolveMagic();
+    await settle();
+  }
+  it("offers fresh choices for each bolt after triggers and completes the original cast once", async () => {
+    const store = position();
+    store.setState({permanents:{"1,3":[unit("Ogre Goons",2,"blocker")],"2,3":[unit("Mountain Giant",2,"rear")]}});
+    const transport = online(store), unsubscribe = interruptFirstDamage(store);
+    const id = cast(store,"Firebolts");
+    unsubscribe();
+    await settle();
+    expect(store.getState().pendingMagic?.id).toBe("intervening-event");
+    expect(store.getState().permanents["1,3"][0].damage).toBe(1);
+    store.setState({permanents:{...store.getState().permanents,"1,3":[unit("Mountain Giant",2,"arrival-a"),unit("Ogre Goons",2,"arrival-b")]}});
+    await resolve(store,"random/0");
+    expect(store.getState().pendingMagic?.cpuEvent?.kind).toBe("projectileImpact");
+    expect(getSpellChoices(store.getState(),"p1","Firebolts").map(c => c.key)).toEqual(["arrival-a","arrival-b"]);
+    const completed = () => transport.sendMessage.mock.calls.filter(([message]) => message.type === "magicResolve" && message.id === id);
+    expect(completed()).toHaveLength(0);
+    await resolve(store,"arrival-a");
+    expect(store.getState().pendingMagic?.cpuEvent).toMatchObject({kind:"projectileImpact",projectile:{shot:2}});
+    expect(completed()).toHaveLength(0);
+    await resolve(store,"arrival-b");
+    expect(store.getState().permanents["1,3"].map(item => item.damage)).toEqual([1,1]);
+    expect(store.getState().permanents["2,3"][0].damage || 0).toBe(0);
+    expect(store.getState().cpuEffectContinuations).toHaveLength(0);
+    expect(completed()).toHaveLength(1);
+    store.getState().resolveMagic();
+    expect(completed()).toHaveLength(1);
+  });
+  it.each(["Heat Ray","Ice Lance"] as const)("%s hits a new occupant, not the unit that left during interruption", async name => {
+    const store = position();
+    store.setState({permanents:{"1,3":[unit("Mountain Giant",2,"first")],"2,3":[unit("Mountain Giant",2,"departed")]}});
+    online(store);
+    const unsubscribe = interruptFirstDamage(store);
+    cast(store,name);
+    unsubscribe();
+    await settle();
+    const departed = store.getState().permanents["2,3"][0];
+    store.setState({permanents:{...store.getState().permanents,"2,3":[unit("Mountain Giant",2,"arrival")],"4,0":[departed]}});
+    await resolve(store,"random/0");
+    expect(store.getState().permanents["1,3"][0].damage).toBe(2);
+    expect(store.getState().permanents["2,3"][0].damage).toBe(name === "Heat Ray" ? 2 : 1);
+    expect(store.getState().permanents["4,0"][0].damage || 0).toBe(0);
+    expect(store.getState().pendingMagic).toBeNull();
+  });
+  it("stops a piercing flight at a newly created region boundary", async () => {
+    const store = position();
+    store.setState({permanents:{"1,3":[unit("Mountain Giant",2,"first")],"2,3":[unit("Mountain Giant",2,"rear")]}});
+    online(store);
+    const unsubscribe = interruptFirstDamage(store);
+    cast(store,"Heat Ray");
+    unsubscribe();
+    await settle();
+    const sites = {...store.getState().board.sites};
+    delete sites["2,3"];
+    store.setState({board:{...store.getState().board,sites}});
+    await resolve(store,"random/0");
+    expect(store.getState().permanents["2,3"][0].damage || 0).toBe(0);
+    expect(store.getState().pendingMagic).toBeNull();
+  });
+  it("revalidates a pending impact and applies Fireball splash simultaneously", async () => {
+    const store = position();
+    store.setState({permanents:{"1,3":[unit("Mountain Giant",2,"a"),unit("Mountain Giant",2,"b")]}});
+    online(store);
+    cast(store,"Fireball");
+    await settle();
+    expect(store.getState().pendingMagic?.cpuEvent?.kind).toBe("projectileImpact");
+    store.setState({permanents:{"1,3":[unit("Mountain Giant",2,"b"),unit("Mountain Giant",2,"c")]}});
+    expect(getSpellChoices(store.getState(),"p1","Fireball").map(c => c.key)).toEqual(["b","c"]);
+    await resolve(store,"c");
+    expect(store.getState().permanents["1,3"].map(item => item.damage)).toEqual([2,4]);
+    expect(store.getState().pendingMagic).toBeNull();
+  });
+  it("lets the CPU choose live impacts without requiring human confirmation", async () => {
+    const store = position();
+    store.setState({actorKey:"p2",permanents:{"1,3":[unit("Mountain Giant",1,"ally"),unit("Mountain Giant",2,"enemy")]}});
+    online(store);
+    applySpellChoice(store.setState,store.getState,getSpellChoice(store.getState(),"p1","Firebolts","p1/E")!);
+    await settle();
+    expect(store.getState().permanents["1,3"][0].damage || 0).toBe(0);
+    expect(store.getState().permanents["1,3"][1].damage).toBe(3);
+    expect(store.getState().pendingMagic).toBeNull();
+    expect(store.getState().cpuEffectContinuations).toHaveLength(0);
   });
 });
 

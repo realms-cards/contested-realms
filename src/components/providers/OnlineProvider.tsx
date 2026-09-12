@@ -37,6 +37,7 @@ import type {
 import {
   clearSocketTokenCache,
   fetchSocketToken,
+  setExpectedPrincipalId,
 } from "@/lib/net/socketTokenCache";
 import { SocketTransport } from "@/lib/net/socketTransport";
 import type { StartMatchConfig } from "@/lib/net/transport";
@@ -1053,10 +1054,10 @@ export default function OnlineProvider({
       return;
     }
     const user = principal;
-    if (
-      lastPrincipalIdRef.current &&
-      lastPrincipalIdRef.current !== user.id
-    ) {
+    // Bind the token cache to this identity before any fetch: a cached guest
+    // token from an earlier visit must never be reused once signed in.
+    setExpectedPrincipalId(user.id);
+    if (lastPrincipalIdRef.current && lastPrincipalIdRef.current !== user.id) {
       clearSocketTokenCache();
     }
     lastPrincipalIdRef.current = user.id;
@@ -1531,24 +1532,49 @@ export default function OnlineProvider({
             const myId = meRef.current?.id || null;
             let msg: string | null = null;
             const reason = (p as { reason?: string | null })?.reason || null;
-            // "forfeit" = explicit player action, "disconnect" = player didn't reconnect
-            if (reason === "forfeit" || reason === "disconnect") {
-              const winnerId =
-                (p as { winnerId?: string | null })?.winnerId || null;
-              const ratedRaw = (p as { rated?: boolean | null })?.rated;
-              const isRated = ratedRaw !== false;
+            const winnerId =
+              (p as { winnerId?: string | null })?.winnerId || null;
+            const ratedRaw = (p as { rated?: boolean | null })?.rated;
+            const isRated = ratedRaw !== false;
+            const ratedMode =
+              (p as { ratedMode?: string | null })?.ratedMode || null;
+            const unratedReason =
+              (p as { unratedReason?: string | null })?.unratedReason || null;
+            const iWon = Boolean(myId && winnerId && winnerId === myId);
+            const iLost = Boolean(myId && winnerId && winnerId !== myId);
+            // Ladder guards that apply to any end reason.
+            if (!isRated && unratedReason === "same_network") {
+              msg =
+                "Same network as your opponent. Match not counted for the ladder.";
+            } else if (!isRated && unratedReason === "unverified_result") {
+              msg =
+                "Result could not be verified. Match not counted for the ladder.";
+            } else if (
+              reason === "forfeit" ||
+              reason === "disconnect" ||
+              reason === "concede"
+            ) {
+              // "forfeit"/"concede" = explicit player action, "disconnect" = player didn't reconnect
               if (!isRated) {
-                if (myId && winnerId && winnerId === myId) {
+                if (iWon) {
                   msg = "Your opponent left early. Match not counted.";
-                } else if (myId && winnerId && winnerId !== myId) {
+                } else if (iLost) {
                   msg = "You left the match early. Match not counted.";
                 } else {
                   msg = "Match ended early. Not counted for global scores.";
                 }
+              } else if (ratedMode === "leaver_only") {
+                if (iWon) {
+                  msg = "Your opponent left early. You win, no rating change.";
+                } else if (iLost) {
+                  msg = "You left the match early. Counted as a loss.";
+                } else {
+                  msg = "Match ended early.";
+                }
               } else {
-                if (myId && winnerId && winnerId === myId) {
+                if (iWon) {
                   msg = "Your opponent forfeited. You win.";
-                } else if (myId && winnerId && winnerId !== myId) {
+                } else if (iLost) {
                   msg = "You forfeited the match.";
                 } else {
                   msg = "Match ended due to forfeit.";

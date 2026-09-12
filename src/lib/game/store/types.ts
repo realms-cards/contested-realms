@@ -537,6 +537,7 @@ export type PendingMagic = {
   cpuRandomMinion?: { card: CardRef; fromSeat: PlayerKey; graveyardIndex: number };
   cpuRandomMinionOptions?: { card: CardRef; fromSeat: PlayerKey; graveyardIndex: number }[];
   cpuEvent?:
+    | { kind: "projectileImpact"; projectile: import("@/lib/game/cpu/spellTypes").ProjectileOperation }
     | { kind: "geomancerFill"; seat: PlayerKey }
     | { kind: "treasurePlace"; source: import("@/lib/game/cpu/spellTypes").UnitTarget; castOwner: 1 | 2 }
     | { kind: "treasureRecover"; source: import("@/lib/game/cpu/spellTypes").UnitTarget }
@@ -545,7 +546,7 @@ export type PendingMagic = {
     | { kind: "fightChoice"; source: import("@/lib/game/cpu/spellTypes").UnitTarget; target: import("@/lib/game/cpu/spellTypes").UnitTarget; strikeOnly?: boolean }
     | { kind: "auraEnd"; source: import("@/lib/game/cpu/spellTypes").UnitTarget; counter?: boolean }
     | { kind: "blazeTrail"; from: string; to: string; region: string; source: import("@/lib/game/cpu/spellTypes").UnitTarget; forced?: boolean }
-    | { kind: "genesis"; region: string; source?: import("@/lib/game/cpu/spellTypes").UnitTarget };
+    | { kind: "genesis"; region: string; source?: import("@/lib/game/cpu/spellTypes").UnitTarget; sourceSite?: { at: string; name: string; instanceId?: string | null } };
   tile: { x: number; y: number };
   // The spell card placed on board for UX; resolved to cemetery on completion
   spell: {

@@ -18,6 +18,57 @@ interface CachedSocketToken {
   fetchedAt: number; // timestamp when token was fetched (for rate limiting)
 }
 
+// Who the cached token is expected to belong to. A guest token is valid for a
+// full day, so without this check signing in would keep reusing the guest
+// token from localStorage and the account would keep playing under the guest
+// identity. null = unknown (nothing to check against yet).
+let expectedPrincipalId: string | null = null;
+
+/**
+ * Read the subject out of a JWT without verifying it. Only used to decide
+ * whether a cached token still belongs to the current identity - the socket
+ * server is what actually verifies the signature.
+ */
+function readTokenUserId(token: string): string | null {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    const bytes = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+    const claims = JSON.parse(new TextDecoder().decode(bytes)) as {
+      userId?: unknown;
+      uid?: unknown;
+      sub?: unknown;
+    };
+    for (const claim of [claims.userId, claims.uid, claims.sub]) {
+      if (typeof claim === "string" && claim) return claim;
+    }
+  } catch {
+    // Malformed token - treat as unknown so the caller refetches
+  }
+  return null;
+}
+
+/**
+ * Tell the cache which identity the app is currently acting as, so a token
+ * minted for anyone else is never reused. Call this as soon as the principal
+ * is known and before connecting.
+ */
+export function setExpectedPrincipalId(id: string | null): void {
+  if (expectedPrincipalId === id) return;
+  expectedPrincipalId = id;
+  if (!id) return;
+  // A token that belongs to this identity stays cached - binding happens on
+  // every page load, so clearing unconditionally would refetch every time.
+  // getCachedToken() drops the entry when it was minted for somebody else;
+  // if we end up with nothing, let this identity fetch immediately instead of
+  // waiting out the rate limiter.
+  if (!getCachedToken()) {
+    lastFetchAttemptTime = 0;
+  }
+}
+
 // Singleton promise for in-flight fetch - ensures only ONE fetch happens at a time
 let activeFetchPromise: Promise<string | undefined> | null = null;
 
@@ -40,6 +91,16 @@ function getCachedToken(): CachedSocketToken | null {
     const cached: CachedSocketToken = JSON.parse(stored);
     // Check if token is still valid (with buffer time)
     if (Date.now() < cached.expiresAt - TOKEN_REFRESH_BUFFER_MS) {
+      // ...and that it belongs to whoever we are now (guest -> signed in)
+      const tokenUserId = readTokenUserId(cached.token);
+      if (
+        expectedPrincipalId &&
+        tokenUserId &&
+        tokenUserId !== expectedPrincipalId
+      ) {
+        localStorage.removeItem(SOCKET_TOKEN_STORAGE_KEY);
+        return null;
+      }
       return cached;
     }
     // Token expired or expiring soon

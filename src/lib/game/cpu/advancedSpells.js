@@ -80,7 +80,7 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
       }
       if (crater) {
         for (const {card,index} of discards) add(`${at}/${card.instanceId || index}`,`Discard ${card.name}; destroy ${at}; resolve impact`,{kind:'location',at},[
-          {kind:'discard',seat,instanceId:card.instanceId,index}, {kind:'destroySite',at}, {kind:'damageEvent',hits},
+          {kind:'discard',seat,instanceId:card.instanceId,index}, {kind:'destroySite',at}, {kind:'damageGrid',at,grid:CRATER},
         ]);
       } else add(at,`Explosion centered at ${at}: 7 / 5 / 3 damage`,{kind:'location',at},[{kind:'damageEvent',hits}]);
     }
@@ -102,9 +102,12 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
       const position = state.permanentPositions[item.instanceId || item.card.instanceId]?.state || 'surface';
       if (position === 'surface') targets.push({kind:'permanent',at,index,instanceId:item.instanceId || item.card.instanceId});
     });
-    add('flood',`Flood ${ats.length} sites this turn; submerge minions and artifacts on water`,null,[
+    const choice = add('flood',`Flood ${ats.length} sites this turn; submerge minions and artifacts on water`,null,[
       {kind:'flood',ats,expiresTurn:`${state.turn}:${state.currentPlayer}`}, {kind:'subsurface',targets,state:'submerged'},
     ]);
+    // Keep the predicted score, but determine actual occupants after flooding
+    // and any intervening events, not when the spell was announced.
+    choice.operations[1] = {kind:'submergeWater'};
     return true;
   }
   if (name === 'Raise Dead') {

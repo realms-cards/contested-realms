@@ -5,6 +5,10 @@ export type UnitTarget =
   | { kind: "permanent"; at: string; index: number; instanceId?: string | null };
 
 export type SpellOperation =
+  | ProjectileOperation
+  | { kind: "offerProjectile"; projectile: ProjectileOperation }
+  | { kind: "damageGrid"; at: string; grid: number[][] }
+  | { kind: "submergeWater" }
   | { kind: "fillRubble"; seat: PlayerKey; at: string }
   | { kind: "drawCards"; seat: PlayerKey; spells: number; sites: number }
   | { kind: "placeTreasure"; source: UnitTarget; at: string }
@@ -62,12 +66,26 @@ export interface SpellChoice {
   caster: NonNullable<PendingMagic["caster"]>;
   target: MagicTarget | null;
   operations: SpellOperation[];
+  /** Live resolution when operations describe only a tactical preview. */
+  resolutionOperations?: SpellOperation[];
   score: number;
   projectile?: {
     baseKey: string;
     selections: string[];
     decisions: { label: string; options: { key: string; label: string }[] }[];
   };
+}
+
+export interface ProjectileOperation {
+  kind: "projectileStep";
+  name: "Fireball" | "Firebolts" | "Heat Ray" | "Ice Lance";
+  seat: PlayerKey;
+  origin: string;
+  region: string;
+  direction: "N" | "E" | "S" | "W";
+  step: number;
+  shot: number;
+  preferred?: string[];
 }
 
 export interface CpuEffectCompletion {

@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
@@ -1227,6 +1228,19 @@ export default function TournamentDetailsPage() {
     }
   };
 
+  const getFormatIcon = (format: Tournament["format"]) => {
+    switch (format) {
+      case "sealed":
+        return "game-icons:cardboard-box-closed";
+      case "draft":
+        return "game-icons:card-pick";
+      case "constructed":
+        return "game-icons:crossed-swords";
+      default:
+        return "game-icons:laurels-trophy";
+    }
+  };
+
   if (
     viewer.status === "loading" ||
     (rtLoading && !initialLoaded && !viewer.isAnonymous)
@@ -1480,6 +1494,13 @@ export default function TournamentDetailsPage() {
             }
           />
           <div className="flex flex-wrap items-center gap-2">
+            <Icon
+              icon={getFormatIcon(tournament.format)}
+              className="shrink-0 text-rc-fg-muted"
+              width={22}
+              height={22}
+              aria-hidden="true"
+            />
             <Badge tone={getStatusTone(tournament.status)}>
               {tournament.status}
             </Badge>

@@ -35,6 +35,9 @@ interface PlayerStats {
     draws: number;
     winRate: number;
     tournamentWins: number;
+    uniqueOpponents: number;
+    ratedGames: number;
+    provisional: boolean;
     lastActive: string;
   }>;
   recentMatches: Array<{
@@ -46,9 +49,12 @@ interface PlayerStats {
     isDraw: boolean;
     opponent?: {
       id: string;
-      name: string;
-    };
-    tournamentId?: string;
+      name: string | null;
+    } | null;
+    tournamentId?: string | null;
+    rated: boolean;
+    ratedMode: string;
+    unratedReason?: string | null;
     completedAt: string;
   }>;
   tournamentHistory: Array<{
@@ -168,6 +174,35 @@ export default function PlayerDetailPage({
   const getMatchResultText = (isWin: boolean, isDraw: boolean) => {
     if (isDraw) return "Draw";
     return isWin ? "Win" : "Loss";
+  };
+
+  const UNRATED_LABELS: Record<string, string> = {
+    guest: "Guest opponent",
+    same_network: "Same network",
+    unverified_result: "Unverified result",
+    early_disconnect: "Early disconnect",
+    missing_user: "Deleted account",
+    precon: "Precon match",
+    admin: "Voided by admin",
+    ladder_excluded: "Excluded player",
+  };
+
+  const getLadderNote = (match: {
+    rated: boolean;
+    ratedMode: string;
+    unratedReason?: string | null;
+    isWin: boolean;
+  }) => {
+    if (!match.rated) {
+      const why = match.unratedReason
+        ? UNRATED_LABELS[match.unratedReason] ?? match.unratedReason
+        : "Not counted";
+      return `Unrated · ${why}`;
+    }
+    if (match.ratedMode === "leaver_only") {
+      return match.isWin ? "Opponent left early · no rating gain" : "Left early";
+    }
+    return null;
   };
 
   if (loading) {
@@ -295,11 +330,25 @@ export default function PlayerDetailPage({
                         {getFormatDisplay(ranking.format)}
                       </div>
                       <div className="rc-hint mt-0.5">
-                        {getTimeFrameDisplay(ranking.timeFrame)}
+                        {getTimeFrameDisplay(ranking.timeFrame)} ·{" "}
+                        {ranking.uniqueOpponents} opp · {ranking.ratedGames}{" "}
+                        rated
                       </div>
                     </td>
                     <td>
-                      <span className="rc-stat">#{ranking.rank}</span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rc-stat">
+                          {ranking.rank > 0 ? `#${ranking.rank}` : "Unranked"}
+                        </span>
+                        {ranking.provisional && (
+                          <Badge
+                            tone="warn"
+                            title="Needs 5 different opponents and 10 rated games to be ranked"
+                          >
+                            Provisional
+                          </Badge>
+                        )}
+                      </div>
                     </td>
                     <td>
                       <span className="rc-stat">{ranking.rating}</span>
@@ -347,36 +396,45 @@ export default function PlayerDetailPage({
                 </tr>
               </thead>
               <tbody>
-                {data.recentMatches.map((match) => (
-                  <tr key={match.id}>
-                    <td>
-                      <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
-                        {match.lobbyName || `Match ${match.matchId.slice(-6)}`}
-                      </div>
-                      {match.opponent && (
-                        <div className="rc-hint mt-0.5">
-                          vs {match.opponent.name}
+                {data.recentMatches.map((match) => {
+                  const ladderNote = getLadderNote(match);
+                  return (
+                    <tr
+                      key={match.id}
+                      className={match.rated ? undefined : "opacity-60"}
+                    >
+                      <td>
+                        <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                          {match.lobbyName || `Match ${match.matchId.slice(-6)}`}
                         </div>
-                      )}
-                    </td>
-                    <td>{getFormatDisplay(match.format)}</td>
-                    <td>
-                      {new Date(match.completedAt).toLocaleDateString()}
-                    </td>
-                    <td>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          tone={getMatchResultTone(match.isWin, match.isDraw)}
-                        >
-                          {getMatchResultText(match.isWin, match.isDraw)}
-                        </Badge>
-                        {match.tournamentId && (
-                          <Badge tone="gold">Tournament</Badge>
+                        {match.opponent && (
+                          <div className="rc-hint mt-0.5">
+                            vs {match.opponent.name ?? "Unknown"}
+                          </div>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td>{getFormatDisplay(match.format)}</td>
+                      <td>
+                        {new Date(match.completedAt).toLocaleDateString()}
+                      </td>
+                      <td>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            tone={getMatchResultTone(match.isWin, match.isDraw)}
+                          >
+                            {getMatchResultText(match.isWin, match.isDraw)}
+                          </Badge>
+                          {match.tournamentId && (
+                            <Badge tone="gold">Tournament</Badge>
+                          )}
+                        </div>
+                        {ladderNote && (
+                          <div className="rc-hint mt-1">{ladderNote}</div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

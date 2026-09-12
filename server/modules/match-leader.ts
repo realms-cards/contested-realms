@@ -1734,7 +1734,7 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
                 ...(winnerSeatForGame ? { winner: winnerSeatForGame } : {}),
               };
               shouldFinalizeMatch = true;
-              finalizeOptions = timerResult.finalize;
+              finalizeOptions = { ...timerResult.finalize, source: "server" };
             } else {
               // Extra-turns state changed: refresh match info on all clients
               try {
@@ -1850,7 +1850,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
               ? patchToApply.winner
               : null;
           const loserSeat = winnerSeat ? getOpponentSeat(winnerSeat) : null;
-          finalizeOptions = {};
+          // The client asserted the outcome: finalize corroborates it against
+          // the merged game state before letting it count for the ladder.
+          finalizeOptions = { source: "client_patch" };
           if (winnerSeat) finalizeOptions.winnerSeat = winnerSeat;
           if (loserSeat) finalizeOptions.loserSeat = loserSeat;
           shouldFinalizeMatch = true;

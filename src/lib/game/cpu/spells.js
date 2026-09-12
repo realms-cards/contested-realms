@@ -118,6 +118,7 @@ function hasStealth(state,unit) {
 
 /** @param {SpellState} state @param {PlayerKey} seat @param {string} name @param {string} [selectionKey] @returns {SpellChoice[]} */
 function getSpellChoices(state, seat, name, selectionKey) {
+  if (state.pendingMagic?.cpuEvent?.kind === 'projectileImpact') return projectileImpactChoices(state,state.pendingMagic.cpuEvent.projectile);
   if (state.pendingMagic?.cpuEvent?.kind === 'geomancerFill') {
     const owner = state.pendingMagic.cpuEvent.seat, pos = state.avatars[owner]?.pos;
     const choices = [];
@@ -183,8 +184,9 @@ function getSpellChoices(state, seat, name, selectionKey) {
         const plan = projectilePlan(state, seat, name, origin, direction, selections);
         const key = selections.length ? projectileKey(baseKey, plan.selections) : baseKey;
         choices.push({ key, caster, target: { kind: 'projectile', direction },
-          label: `${origin.card.name}: shoot ${direction} — ${plan.decisions.map(d => d.label).join('; ') || 'no impact'}`,
+          label: `${origin.card.name}: shoot ${direction} — projected: ${plan.decisions.map(d => d.label).join('; ') || 'no impact'}`,
           operations: plan.operations, score: scoreOperations(state, seat, plan.operations),
+          resolutionOperations: [{kind:'projectileStep',name,seat,origin:origin.at,region:origin.region,direction,step:0,shot:0,preferred:selections}],
           projectile: { baseKey, selections: plan.selections, decisions: plan.decisions } });
       }
     } else if (name === 'Overpower' || name === 'Mad Dash' || name === 'Blaze') {
@@ -399,11 +401,83 @@ function projectilePlan(state, seat, name, origin, direction, requested) {
   return { operations, decisions, selections };
 }
 
+/**
+ * Resolve area membership at the moment this step of the storyline executes.
+ * @param {SpellState} state
+ * @param {import('./spellTypes').SpellOperation} op
+ * @returns {import('./spellTypes').SpellOperation | null}
+ */
+function expandAreaOperation(state, op) {
+  if (op.kind === 'damageGrid') {
+    const [cx,cy] = op.at.split(',').map(Number);
+    const ry = Math.floor(op.grid.length/2), rx = Math.floor((op.grid[0]?.length || 0)/2);
+    return {kind:'damageEvent',hits:unitsInRealm(state).flatMap(unit => {
+      if (!state.board.sites[unit.at]?.card) return [];
+      const [x,y] = unit.at.split(',').map(Number);
+      const amount = op.grid[y-cy+ry]?.[x-cx+rx];
+      return amount ? [{target:unit.target,amount}] : [];
+    })};
+  }
+  if (op.kind === 'submergeWater') {
+    const targets = [];
+    for (const [at,items] of Object.entries(state.permanents)) {
+      if (!state.board.sites[at]?.card || !isWater(state,at)) continue;
+      items.forEach((item,index) => {
+        if (item.card.type !== 'Minion' && item.card.type !== 'Artifact' && item.card.name !== 'Foot Soldier') return;
+        const instanceId = item.instanceId || item.card.instanceId;
+        if ((state.permanentPositions[instanceId]?.state || 'surface') !== 'surface') return;
+        targets.push({kind:'permanent',at,index,instanceId});
+      });
+    }
+    return {kind:'subsurface',targets,state:'submerged'};
+  }
+  return null;
+}
+
+/**
+ * Find only the next impact using the current board. The following flight stays
+ * symbolic until this impact and all its triggered events have resolved.
+ * @param {SpellState} state
+ * @param {import('./spellTypes').ProjectileOperation} op
+ * @returns {SpellChoice[]}
+ */
+function projectileImpactChoices(state, op) {
+  const [ox,oy] = op.origin.split(',').map(Number);
+  const [dx,dy] = {N:[0,-1],E:[1,0],S:[0,1],W:[-1,0]}[op.direction];
+  const units = unitsInRealm(state);
+  const nextBolt = op.name === 'Firebolts' && op.shot < 2 ? [{...op,shot:op.shot+1,step:0,preferred:op.preferred?.slice(1)}] : [];
+  for (let step=op.step;step<Math.max(state.board.size.w,state.board.size.h);step++) {
+    if (op.name === 'Ice Lance' && step>=3) break;
+    const x=ox+dx*step,y=oy+dy*step,at=`${x},${y}`;
+    if (x<0 || y<0 || x>=state.board.size.w || y>=state.board.size.h) break;
+    const site = state.board.sites[at]?.card;
+    if (op.region === 'void' ? !!site : !site) break;
+    if (op.region === 'underwater' && !isWater(state,at) || op.region === 'underground' && isWater(state,at)) break;
+    const eligible = units.filter(unit => unit.at === at && unit.region === op.region && !(step === 0 && unit.owner === op.seat) && !hasStealth(state,unit));
+    if (!eligible.length) continue;
+    const amount = op.name === 'Fireball' ? 4 : op.name === 'Firebolts' ? 1 : op.name === 'Heat Ray' ? 2 : 3-step;
+    return eligible.map(unit => {
+      const targets = [unit.target];
+      if (op.name === 'Fireball') targets.push(...units.filter(other => other !== unit && other.at === at && other.region === op.region).map(other => other.target));
+      /** @type {import('./spellTypes').SpellOperation[]} */
+      const operations = [{kind:'damage',targets,amount,...(op.name === 'Ice Lance' ? {} : {element:'fire'}),...(op.name === 'Fireball' ? {splash:2} : {})}];
+      if (op.name === 'Heat Ray' || op.name === 'Ice Lance') operations.push({...op,step:step+1,preferred:op.preferred?.slice(1)});
+      else operations.push(...nextBolt);
+      return {key:targetKey(unit.target),label:`${op.name === 'Firebolts' ? `Bolt ${op.shot+1}` : 'Impact'}: ${unit.card.name} at ${at} takes ${amount}`,
+        caster:{kind:'avatar',seat:op.seat},target:unit.target,operations,score:scoreOperations(state,op.seat,[operations[0]])};
+    });
+  }
+  return [{key:'projectile/no-impact',label:'No further impact in this region',caster:{kind:'avatar',seat:op.seat},target:null,operations:nextBolt,score:0}];
+}
+
 /** @param {SpellState} state @param {PlayerKey} seat @param {import('./spellTypes').SpellOperation[]} operations */
 function scoreOperations(state, seat, operations) {
   const units = unitsInRealm(state);
   let score = 0;
   for (const op of operations) {
+    if (op.kind === 'projectileStep' || op.kind === 'offerProjectile') continue; // Flight is scored by the cast preview.
+    const expanded = expandAreaOperation(state,op);
+    if (expanded) { score += scoreOperations(state,seat,[expanded]); continue; }
     if (op.kind === 'fillRubble') { score += 2; continue; }
     if (op.kind === 'drawCards') { score += (op.spells+op.sites)*2; continue; }
     if (op.kind === 'placeTreasure' || op.kind === 'sacrificeTreasure') continue;
@@ -538,4 +612,4 @@ function sameTarget(a, b) {
     (a.instanceId && b.instanceId ? a.instanceId === b.instanceId : a.at === b.at && a.index === b.index);
 }
 
-module.exports = { supportsSpell, getSpellChoices, getSpellChoice, projectileKey, unitsInRealm, inRange, isWater, bodyOfWater, cardText, sameTarget, unitDefence, unitStats, getAttackTargets, scoreOperations,isDisabled,hasStealth,hasAirborne };
+module.exports = { supportsSpell, getSpellChoices, getSpellChoice, projectileKey, unitsInRealm, inRange, isWater, bodyOfWater, cardText, sameTarget, unitDefence, unitStats, getAttackTargets, scoreOperations,isDisabled,hasStealth,hasAirborne,expandAreaOperation,projectileImpactChoices };

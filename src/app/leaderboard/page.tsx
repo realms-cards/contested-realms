@@ -22,17 +22,46 @@ interface LeaderboardEntry {
   rating: number;
   tournamentWins: number;
   uniqueOpponents: number;
+  ratedGames: number;
+  provisional: boolean;
+  lastRatedAt: string | null;
+  inactive: boolean;
   lastActive: string;
 }
 
 interface CurrentUserRank {
-  rank: number;
+  rank: number | null;
   rating: number;
   wins: number;
   losses: number;
   draws: number;
   winRate: number;
   uniqueOpponents: number;
+  ratedGames: number;
+  provisional: boolean;
+  lastRatedAt: string | null;
+  inactive: boolean;
+}
+
+const PROVISIONAL_HINT =
+  "Provisional: needs 5 different opponents and 10 rated games to be ranked";
+const INACTIVE_HINT =
+  "No rated game in 14+ days: rating above 1200 decays 2 points per day";
+
+function ProvisionalPill() {
+  return (
+    <Badge tone="warn" title={PROVISIONAL_HINT}>
+      Provisional
+    </Badge>
+  );
+}
+
+function InactiveHint() {
+  return (
+    <span className="rc-hint" title={INACTIVE_HINT}>
+      · decaying
+    </span>
+  );
 }
 
 interface LeaderboardData {
@@ -211,12 +240,16 @@ export default function LeaderboardPage() {
         {data?.currentUser && (
           <div className="px-[18px] pt-3.5">
             <div className="rc-panel flex flex-wrap items-center justify-between gap-4 px-4 py-3">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <span className="rc-eyebrow">Your Rank</span>
                 <span className="rc-stat text-2xl">
-                  #{data.currentUser.rank}
+                  {data.currentUser.rank !== null
+                    ? `#${data.currentUser.rank}`
+                    : "—"}
                 </span>
                 <span className="rc-hint">of {data.pagination.total}</span>
+                {data.currentUser.provisional && <ProvisionalPill />}
+                {data.currentUser.inactive && <InactiveHint />}
               </div>
               <div className="flex flex-wrap items-center gap-6">
                 <div className="text-center">
@@ -308,19 +341,22 @@ export default function LeaderboardPage() {
                             </div>
                           )}
                           <div className="min-w-0">
-                            <div
-                              className={`font-rc-display text-[19px] leading-[1.1] ${
-                                patronStyle?.text ?? "text-rc-fg-strong"
-                              }`}
-                              style={
-                                patronStyle
-                                  ? {
-                                      textShadow: patronStyle.textShadowMinimal,
-                                    }
-                                  : undefined
-                              }
-                            >
-                              {entry.displayName}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={`font-rc-display text-[19px] leading-[1.1] ${
+                                  patronStyle?.text ?? "text-rc-fg-strong"
+                                }`}
+                                style={
+                                  patronStyle
+                                    ? {
+                                        textShadow: patronStyle.textShadowMinimal,
+                                      }
+                                    : undefined
+                                }
+                              >
+                                {entry.displayName}
+                              </span>
+                              {entry.provisional && <ProvisionalPill />}
                             </div>
                             <div className="mt-0.5 flex flex-wrap items-center gap-2">
                               {entry.tournamentWins > 0 && (
@@ -333,6 +369,12 @@ export default function LeaderboardPage() {
                                 {new Date(
                                   entry.lastActive
                                 ).toLocaleDateString()}
+                                {entry.inactive && (
+                                  <>
+                                    {" "}
+                                    <InactiveHint />
+                                  </>
+                                )}
                               </span>
                             </div>
                           </div>

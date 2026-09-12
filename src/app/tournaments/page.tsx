@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -448,6 +449,19 @@ export default function TournamentsPage() {
     }
   };
 
+  const getFormatIcon = (format: Tournament["format"]) => {
+    switch (format) {
+      case "sealed":
+        return "game-icons:cardboard-box-closed";
+      case "draft":
+        return "game-icons:card-pick";
+      case "constructed":
+        return "game-icons:crossed-swords";
+      default:
+        return "game-icons:laurels-trophy";
+    }
+  };
+
   if (
     viewer.status === "loading" ||
     (rtLoading && !initialLoaded && !viewer.isAnonymous)
@@ -626,7 +640,18 @@ export default function TournamentsPage() {
             : localTournaments.length === 0
       ) ? (
         <RcEmpty
-          title="No tournaments found."
+          title={
+                <>
+                  <Icon
+                    icon="game-icons:laurels-trophy"
+                    className="mx-auto mb-3 block text-rc-fg-dim"
+                    width={56}
+                    height={56}
+                    aria-hidden="true"
+                  />
+                  No tournaments found.
+                </>
+              }
           action={
             viewFilter === "active" ? (
               <RcButton onClick={handleShowCreateForm}>
@@ -684,9 +709,27 @@ export default function TournamentsPage() {
                         {tournament.name}
                       </h3>
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                        <Badge>{tournament.format}</Badge>
+                        <Badge>
+                          <Icon
+                            icon={getFormatIcon(tournament.format)}
+                            width={13}
+                            height={13}
+                            aria-hidden="true"
+                          />
+                          {tournament.format}
+                        </Badge>
                         {(tournament as unknown as { isPrivate?: boolean })
-                          .isPrivate && <Badge tone="warn">Private</Badge>}
+                          .isPrivate && (
+                          <Badge tone="warn">
+                            <Icon
+                              icon="game-icons:padlock"
+                              width={11}
+                              height={11}
+                              aria-hidden="true"
+                            />
+                            Private
+                          </Badge>
+                        )}
                       </div>
                     </div>
                     <div

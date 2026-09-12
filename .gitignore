@@ -79,3 +79,4 @@ prisma/*.db-journal
 
 /..bfg-report
 /design-handoff
+design_handoff
