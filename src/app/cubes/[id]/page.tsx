@@ -1,12 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import AuthButton from "@/components/auth/AuthButton";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
 
 type ApiCard = {
   cardId: number;
@@ -116,9 +118,7 @@ export default function CubeViewPage() {
   if (status === "loading" || loading) {
     return (
       <OnlinePageShell>
-        <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-6 text-center">
-          <div className="text-sm text-slate-300">Loading...</div>
-        </div>
+        <div className="rc-hint py-6 text-center">loading…</div>
       </OnlinePageShell>
     );
   }
@@ -126,16 +126,14 @@ export default function CubeViewPage() {
   if (!session) {
     return (
       <OnlinePageShell>
-        <div className="pt-2">
-          <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-6 text-center space-y-4">
-            <div className="text-sm text-slate-200">
-              Please sign in to view cubes.
-            </div>
-            <div className="flex justify-center">
-              <AuthButton />
-            </div>
+        <section className="rc-panel px-[18px] py-8 text-center">
+          <div className="font-rc-sans text-sm text-rc-fg-muted">
+            Please sign in to view cubes.
           </div>
-        </div>
+          <div className="mt-4 flex justify-center">
+            <AuthButton />
+          </div>
+        </section>
       </OnlinePageShell>
     );
   }
@@ -143,16 +141,13 @@ export default function CubeViewPage() {
   if (error && !cube) {
     return (
       <OnlinePageShell>
-        <div className="pt-2 space-y-4">
-          <div className="rounded-xl bg-red-900/20 ring-1 ring-red-600/40 p-5 text-sm text-red-200">
+        <div className="space-y-4">
+          <div className="rc-alert" data-tone="danger">
             Error: {error}
           </div>
-          <Link
-            href="/cubes"
-            className="inline-block rounded-lg bg-slate-800/80 hover:bg-slate-700/80 px-4 py-2 text-sm font-medium text-slate-200"
-          >
+          <RcLinkButton href="/cubes" variant="outline">
             Back to Cubes
-          </Link>
+          </RcLinkButton>
         </div>
       </OnlinePageShell>
     );
@@ -162,92 +157,60 @@ export default function CubeViewPage() {
 
   return (
     <OnlinePageShell>
-      <div className="space-y-6 pt-2">
-        {/* Header */}
-        <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex-1">
-              <h1 className="text-2xl font-semibold font-fantaisie text-slate-50">
-                {cube.name}
-              </h1>
-              {cube.description && (
-                <p className="mt-2 text-sm text-slate-300/90">
-                  {cube.description}
-                </p>
-              )}
-              <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                {cube.creatorName && (
-                  <span className="px-2 py-1 rounded bg-slate-800/80 text-slate-300">
-                    By {cube.creatorName}
-                  </span>
-                )}
-                <span
-                  className={`px-2 py-1 rounded ${
-                    cube.isPublic
-                      ? "bg-emerald-800/60 text-emerald-200"
-                      : "bg-slate-800/80 text-slate-300"
-                  }`}
-                >
-                  {cube.isPublic ? "Public" : "Private"}
-                </span>
-                <span className="px-2 py-1 rounded bg-slate-800/80 text-slate-300">
-                  {totalMain + totalSideboard} cards
-                </span>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href="/cubes"
-                className="rounded-lg bg-slate-800/80 hover:bg-slate-700/80 px-4 py-2 text-sm font-medium text-slate-200"
-              >
+      <>
+        <PageHeader
+          eyebrow="cube"
+          title={cube.name}
+          description={cube.description || undefined}
+          actions={
+            <>
+              <RcLinkButton href="/cubes" variant="outline">
                 Back
-              </Link>
+              </RcLinkButton>
               {cube.isOwner ? (
-                <Link
-                  href={`/cubes/${encodeURIComponent(cube.id)}/edit`}
-                  className="rounded-lg bg-blue-600 hover:bg-blue-500 px-4 py-2 text-sm font-medium text-white"
-                >
+                <RcLinkButton href={`/cubes/${encodeURIComponent(cube.id)}/edit`}>
                   Edit
-                </Link>
+                </RcLinkButton>
               ) : (
-                <button
-                  onClick={handleCopy}
-                  disabled={copying}
-                  className="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-                >
+                <RcButton onClick={handleCopy} disabled={copying}>
                   {copying ? "Copying..." : "Copy to My Cubes"}
-                </button>
+                </RcButton>
               )}
-            </div>
-          </div>
-          {copySuccess && (
-            <div className="mt-3 text-sm text-emerald-300 bg-emerald-900/30 rounded px-3 py-2">
-              {copySuccess}
-            </div>
-          )}
-          {error && (
-            <div className="mt-3 text-sm text-red-300 bg-red-900/30 rounded px-3 py-2">
-              {error}
-            </div>
-          )}
+            </>
+          }
+        />
+
+        <div className="flex flex-wrap gap-2">
+          {cube.creatorName && <Badge>By {cube.creatorName}</Badge>}
+          <Badge tone={cube.isPublic ? "ok" : "default"}>
+            {cube.isPublic ? "Public" : "Private"}
+          </Badge>
+          <Badge>{totalMain + totalSideboard} cards</Badge>
         </div>
 
-        {/* Main Deck */}
-        <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-lg font-semibold text-slate-200">
-              Main Deck
-            </div>
-            <div className="text-sm text-slate-400">{totalMain} cards</div>
+        {copySuccess && (
+          <div className="rc-alert" data-tone="success">
+            {copySuccess}
           </div>
+        )}
+        {error && (
+          <div className="rc-alert" data-tone="danger">
+            {error}
+          </div>
+        )}
+
+        {/* Main Deck */}
+        <section className="rc-panel">
+          <PanelHeader title="Main Deck" meta={`${totalMain} cards`} />
+          <div className="px-[18px] py-3.5">
           {mainCards.length === 0 ? (
-            <div className="text-sm text-slate-400">No cards in main deck</div>
+            <div className="rc-hint">No cards in main deck</div>
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
               {mainCards.map((card, idx) => (
                 <div
                   key={`main-${card.cardId}-${idx}`}
-                  className="relative bg-slate-800/60 rounded-lg overflow-hidden ring-1 ring-slate-700/50"
+                  className="relative overflow-hidden rounded-rc-md border border-rc-line/12 bg-black/30"
                 >
                   <div className="aspect-[3/4] relative">
                     <Image
@@ -262,12 +225,12 @@ export default function CubeViewPage() {
                       sizes="100px"
                       unoptimized
                     />
-                    <div className="absolute top-1 right-1 bg-black/80 rounded px-1.5 py-0.5 text-xs text-white font-bold">
+                    <div className="absolute top-1 right-1 rounded-rc-sm bg-black/80 px-1.5 py-0.5 font-rc-mono text-xs text-rc-fg-strong">
                       {card.count}x
                     </div>
                   </div>
                   <div className="p-1">
-                    <div className="text-[9px] text-slate-200 truncate">
+                    <div className="truncate font-rc-sans text-[9px] text-rc-fg">
                       {card.name}
                     </div>
                   </div>
@@ -275,28 +238,25 @@ export default function CubeViewPage() {
               ))}
             </div>
           )}
-        </div>
+          </div>
+        </section>
 
         {/* Sideboard */}
-        <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-lg font-semibold text-slate-200">
-              Sideboard
-            </div>
-            <div className="text-sm text-slate-400">{totalSideboard} cards</div>
-          </div>
-          <p className="text-xs text-slate-400 mb-3">
+        <section className="rc-panel">
+          <PanelHeader title="Sideboard" meta={`${totalSideboard} cards`} />
+          <div className="px-[18px] py-3.5">
+          <p className="rc-hint mb-3">
             Avatars in the sideboard are draftable in packs. Non-avatar cards
             are available as extras during deck building.
           </p>
           {sideboardCards.length === 0 ? (
-            <div className="text-sm text-slate-400">No cards in sideboard</div>
+            <div className="rc-hint">No cards in sideboard</div>
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
               {sideboardCards.map((card, idx) => (
                 <div
                   key={`side-${card.cardId}-${idx}`}
-                  className="relative bg-slate-800/60 rounded-lg overflow-hidden ring-1 ring-purple-700/50"
+                  className="relative overflow-hidden rounded-rc-md border border-rc-accent/25 bg-black/30"
                 >
                   <div className="aspect-[3/4] relative">
                     <Image
@@ -311,12 +271,12 @@ export default function CubeViewPage() {
                       sizes="100px"
                       unoptimized
                     />
-                    <div className="absolute top-1 right-1 bg-purple-900/80 rounded px-1.5 py-0.5 text-xs text-white font-bold">
+                    <div className="absolute top-1 right-1 rounded-rc-sm bg-rc-accent/85 px-1.5 py-0.5 font-rc-mono text-xs text-rc-accent-fg">
                       {card.count}x
                     </div>
                   </div>
                   <div className="p-1">
-                    <div className="text-[9px] text-slate-200 truncate">
+                    <div className="truncate font-rc-sans text-[9px] text-rc-fg">
                       {card.name}
                     </div>
                   </div>
@@ -324,8 +284,9 @@ export default function CubeViewPage() {
               ))}
             </div>
           )}
-        </div>
-      </div>
+          </div>
+        </section>
+      </>
     </OnlinePageShell>
   );
 }

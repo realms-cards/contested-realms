@@ -71,15 +71,23 @@ export default function CardPriceTag({
   }, [shouldFetch, cardId, variantId, finish, cardName]);
 
   if (loading) {
-    return <span className="text-gray-500 text-sm">...</span>;
+    return (
+      <span className="font-rc-mono text-[13px] tracking-[0.1em] text-rc-fg-dim">
+        ...
+      </span>
+    );
   }
 
   if (!price || price.marketPrice == null) {
-    return <span className="text-gray-500 text-sm">N/A</span>;
+    return (
+      <span className="font-rc-mono text-[13px] tracking-[0.1em] text-rc-fg-dim">
+        N/A
+      </span>
+    );
   }
 
   return (
-    <span className="font-medium text-green-400 text-sm">
+    <span className="font-rc-mono text-[13px] tabular-nums text-rc-accent-link">
       ${price.marketPrice.toFixed(2)}
     </span>
   );

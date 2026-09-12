@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import AnimatedImage from "@/components/ui/AnimatedImage";
 import HelpOverlay from "@/components/ui/HelpOverlay";
+import { RcButton } from "@/components/ui/rc-button";
 
 export default function DeckImportText() {
   const enabled = process.env.NEXT_PUBLIC_ENABLE_TEXT_IMPORT === "true";
@@ -101,10 +102,10 @@ export default function DeckImportText() {
   return (
     <form
       onSubmit={onSubmit}
-      className="w-full bg-zinc-900/70 ring-1 ring-white/10 rounded-xl p-4 space-y-3"
+      className="w-full space-y-3 rounded-rc-md border border-rc-line/12 bg-black/30 p-4"
     >
-      <div className="text-sm font-medium flex items-center gap-2">
-        <span>Import Deck from Text</span>
+      <div className="flex items-center gap-2">
+        <span className="rc-eyebrow">import deck from text</span>
         <HelpOverlay
           title="Import from text — Help"
           triggerAriaLabel="Show help for Import Deck from Text"
@@ -117,12 +118,12 @@ export default function DeckImportText() {
               width={1280}
               height={720}
               className="block w-full h-auto"
-              wrapperClassName="rounded-md border border-slate-700"
+              wrapperClassName="rounded-rc-md border border-rc-line/18"
               showSkeleton
               // keep animation intact via unoptimized
               unoptimized
             />
-            <figcaption className="text-xs text-slate-300/90">
+            <figcaption className="font-rc-sans text-xs text-rc-fg-muted">
               Tip: Copy your decklist from Sorcerytcg Decks (or any other text
               based source), paste it into the text box, optionally set a name,
               then click Import.
@@ -132,7 +133,7 @@ export default function DeckImportText() {
       </div>
       <div className="grid gap-2 sm:grid-cols-5">
         <textarea
-          className="sm:col-span-3 w-full h-40 bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white font-mono text-xs"
+          className="rc-textarea h-40 w-full sm:col-span-3"
           placeholder="Paste your decklist text here (Avatar/Aura/Artifact/Minion/Magic/Site sections)"
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -140,35 +141,29 @@ export default function DeckImportText() {
         />
         <div className="sm:col-span-2 flex flex-col gap-2">
           <input
-            className="w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
+            className="rc-input h-10 w-full"
             placeholder="Optional deck name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={loading}
           />
-          <button
-            type="submit"
-            disabled={loading || !text.trim()}
-            className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-          >
+          <RcButton type="submit" disabled={loading || !text.trim()}>
             {loading && (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-rc-accent-fg border-t-transparent" />
             )}
             {loading ? "Importing..." : "Import"}
-          </button>
+          </RcButton>
         </div>
       </div>
       {error && (
-        <div className="text-red-400 text-xs bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">
+        <div className="rc-alert" data-tone="danger">
           {error}
         </div>
       )}
       {unresolved && unresolved.length > 0 && (
-        <div className="text-xs bg-zinc-800/60 rounded px-3 py-2 ring-1 ring-zinc-700">
-          <div className="font-medium mb-1">
-            Unresolved cards (please correct names):
-          </div>
-          <ul className="list-disc pl-5 space-y-0.5">
+        <div className="rc-alert" data-tone="warning">
+          <div className="mb-1">Unresolved cards (please correct names):</div>
+          <ul className="list-disc space-y-0.5 pl-5">
             {unresolved.map((u, i) => (
               <li key={`${u.name}-${i}`}>
                 {u.count} × {u.name}
@@ -178,30 +173,14 @@ export default function DeckImportText() {
         </div>
       )}
       {importSuccess && (
-        <div className="text-green-400 text-xs bg-green-900/20 rounded px-3 py-2 ring-1 ring-green-800 flex items-center gap-2">
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-              clipRule="evenodd"
-            />
-          </svg>
+        <div className="rc-alert" data-tone="success">
           Deck imported successfully!
         </div>
       )}
       {warnings && warnings.length > 0 && (
-        <div className="text-xs bg-amber-900/20 rounded px-3 py-2 ring-1 ring-amber-700">
-          <div className="font-medium mb-1 text-amber-300 flex items-center gap-1">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                clipRule="evenodd"
-              />
-            </svg>
-            Some card names were fuzzy-matched:
-          </div>
-          <ul className="list-disc pl-5 space-y-0.5 text-amber-200/90">
+        <div className="rc-alert" data-tone="warning">
+          <div className="mb-1">Some card names were fuzzy-matched:</div>
+          <ul className="list-disc space-y-0.5 pl-5">
             {warnings.map((w, i) => (
               <li key={`${w.original}-${i}`}>
                 {w.count} × &quot;{w.original}&quot; → &quot;{w.matched}&quot;

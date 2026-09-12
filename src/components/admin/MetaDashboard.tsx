@@ -2,9 +2,11 @@
 
 import clsx from "clsx";
 import Image from "next/image";
-import Link from "next/link";
 import React, { useCallback, useEffect, useState } from "react";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
+import { RcDialog } from "@/components/ui/rc-dialog";
 
 type CardStat = {
   cardId: number;
@@ -101,24 +103,24 @@ type MetaDashboardProps = {
 };
 
 const ELEMENT_COLORS: Record<string, { bg: string; border: string; text: string; bar: string }> = {
-  Fire: { bg: "bg-red-950/40", border: "border-red-700/60", text: "text-red-300", bar: "bg-red-500" },
-  Water: { bg: "bg-blue-950/40", border: "border-blue-700/60", text: "text-blue-300", bar: "bg-blue-500" },
-  Earth: { bg: "bg-yellow-950/40", border: "border-yellow-600/60", text: "text-yellow-300", bar: "bg-yellow-500" },
-  Air: { bg: "bg-slate-800/40", border: "border-slate-500/60", text: "text-slate-300", bar: "bg-slate-400" },
+  Fire: { bg: "bg-red-950/30", border: "border-red-700/45", text: "text-red-300", bar: "bg-red-500" },
+  Water: { bg: "bg-blue-950/30", border: "border-blue-700/45", text: "text-blue-300", bar: "bg-blue-500" },
+  Earth: { bg: "bg-yellow-950/30", border: "border-yellow-600/45", text: "text-yellow-300", bar: "bg-yellow-500" },
+  Air: { bg: "bg-black/30", border: "border-rc-line/18", text: "text-rc-moonlight", bar: "bg-rc-moonlight" },
 };
 
 const DEFAULT_ELEMENT_STYLE = {
-  bg: "bg-slate-900/60",
-  border: "border-slate-700",
-  text: "text-slate-300",
-  bar: "bg-slate-500",
+  bg: "bg-black/30",
+  border: "border-rc-line/18",
+  text: "text-rc-fg-muted",
+  bar: "bg-rc-accent",
 };
 
 const RARITY_STYLES: Record<string, { bg: string; border: string; text: string; bar: string }> = {
-  Unique: { bg: "bg-yellow-950/40", border: "border-yellow-600/60", text: "text-yellow-300", bar: "bg-yellow-500" },
-  Elite: { bg: "bg-violet-950/40", border: "border-violet-600/60", text: "text-violet-300", bar: "bg-violet-500" },
-  Exceptional: { bg: "bg-sky-950/40", border: "border-sky-600/60", text: "text-sky-300", bar: "bg-sky-500" },
-  Ordinary: { bg: "bg-slate-900/60", border: "border-slate-600", text: "text-slate-300", bar: "bg-slate-400" },
+  Unique: { bg: "bg-yellow-950/30", border: "border-yellow-600/45", text: "text-yellow-300", bar: "bg-yellow-500" },
+  Elite: { bg: "bg-violet-950/30", border: "border-violet-600/45", text: "text-violet-300", bar: "bg-violet-500" },
+  Exceptional: { bg: "bg-sky-950/30", border: "border-sky-600/45", text: "text-sky-300", bar: "bg-sky-500" },
+  Ordinary: { bg: "bg-black/30", border: "border-rc-line/18", text: "text-rc-fg-muted", bar: "bg-rc-accent" },
 };
 
 const ELEMENT_BAR_COLORS: Record<string, string> = {
@@ -174,7 +176,7 @@ function ElementIcon({ element, size = 14 }: { element: string; size?: number })
 function ElementIcons({ element, size = 16 }: { element: string; size?: number }) {
   const parts = parseElements(element);
   const known = parts.filter((p) => ["Fire", "Water", "Earth", "Air"].includes(p));
-  if (known.length === 0) return <span className="text-slate-400 text-xs">None</span>;
+  if (known.length === 0) return <span className="rc-hint">None</span>;
   return (
     <span className="inline-flex items-center gap-1">
       {known.map((el) => (
@@ -203,16 +205,14 @@ function StatCard({
   sublabel?: string;
 }) {
   return (
-    <div className="rounded border border-slate-700 bg-slate-900/60 px-4 py-3">
-      <div className="text-xs uppercase tracking-wide text-slate-400">
-        {label}
-      </div>
-      <div className="mt-1 text-2xl font-semibold text-white">
+    <div className="rc-panel px-4 py-3">
+      <div className="rc-eyebrow">{label}</div>
+      <div className="rc-stat mt-1 text-2xl">
         {typeof value === "number"
           ? new Intl.NumberFormat().format(value)
           : value ?? "—"}
       </div>
-      {sublabel && <div className="text-xs text-slate-400">{sublabel}</div>}
+      {sublabel && <div className="rc-hint mt-1">{sublabel}</div>}
     </div>
   );
 }
@@ -220,14 +220,14 @@ function StatCard({
 function WinRateBar({ winRate, barColor }: { winRate: number; barColor: string }) {
   const pct = Math.round(winRate * 100);
   return (
-    <div className="flex items-center gap-2 mt-1.5">
-      <div className="flex-1 h-2 rounded-full bg-slate-800 overflow-hidden">
+    <div className="mt-1.5 flex items-center gap-2">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full border border-rc-line/12 bg-black/45">
         <div
           className={`h-full rounded-full ${barColor} transition-all`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs font-medium text-white tabular-nums w-12 text-right">
+      <span className="rc-stat w-12 text-right text-xs">
         {(winRate * 100).toFixed(1)}%
       </span>
     </div>
@@ -240,8 +240,8 @@ function ElementDistributionBar({ elements }: { elements: Record<string, number>
     .sort((a, b) => b[1] - a[1]);
   if (entries.length === 0) return null;
   return (
-    <div className="flex items-center gap-2 mt-1.5">
-      <div className="flex-1 flex h-3 rounded-full overflow-hidden bg-slate-800">
+    <div className="mt-1.5 flex items-center gap-2">
+      <div className="flex h-2.5 flex-1 overflow-hidden rounded-full border border-rc-line/12 bg-black/45">
         {entries.map(([el, pct]) => (
           <div
             key={el}
@@ -258,7 +258,7 @@ function ElementDistributionBar({ elements }: { elements: Record<string, number>
         {entries.map(([el, pct]) => (
           <span
             key={el}
-            className="text-[10px] tabular-nums"
+            className="font-rc-mono text-[10px] tabular-nums"
             style={{ color: ELEMENT_BAR_COLORS[el] || ELEMENT_BAR_COLORS.None }}
           >
             {pct}%
@@ -272,7 +272,7 @@ function ElementDistributionBar({ elements }: { elements: Record<string, number>
 function ElementLegend() {
   const elements = ["Fire", "Water", "Earth", "Air"];
   return (
-    <div className="flex gap-3 text-[10px] text-slate-400">
+    <div className="flex gap-3 font-rc-mono text-[10px] uppercase tracking-[0.14em] text-rc-fg-subtle">
       {elements.map((el) => (
         <span key={el} className="flex items-center gap-1">
           <ElementIcon element={el} size={12} />
@@ -322,21 +322,31 @@ function CardStatsTable({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div className="relative flex-1 max-w-xs">
+        <div className="relative max-w-xs flex-1">
           <input
             type="text"
             placeholder="Search cards..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded border border-slate-600 bg-slate-900 pl-8 pr-2 py-1 text-xs text-slate-200 placeholder:text-slate-500 focus:border-slate-400 focus:outline-none"
+            className="rc-input h-9 w-full pl-8"
           />
-          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+          <svg
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-rc-fg-dim"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+            />
           </svg>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <label className="flex items-center gap-1">
-            <span className="text-slate-300">Order</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2">
+            <span className="rc-eyebrow">Order</span>
             <CustomSelect
               value={order}
               onChange={(v) => setOrder(v as typeof order)}
@@ -347,8 +357,8 @@ function CardStatsTable({
               ]}
             />
           </label>
-          <label className="flex items-center gap-1">
-            <span className="text-slate-300">Limit</span>
+          <label className="flex items-center gap-2">
+            <span className="rc-eyebrow">Limit</span>
             <input
               type="number"
               min={1}
@@ -359,43 +369,41 @@ function CardStatsTable({
                   Math.max(1, Math.min(200, Number(e.target.value) || 50))
                 )
               }
-              className="w-20 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-200"
+              className="rc-input h-9 w-20"
             />
           </label>
-          <button
+          <RcButton
+            variant="outline"
+            size="sm"
             onClick={onRefresh}
-            className="inline-flex items-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
             disabled={loading}
           >
             {loading ? "Refreshing…" : "Refresh"}
-          </button>
+          </RcButton>
         </div>
       </div>
       {error && (
-        <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+        <div className="rc-alert" data-tone="danger">
           {error}
         </div>
       )}
-      <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-        <table className="min-w-full text-left text-xs text-slate-200">
-          <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+      <div className="overflow-x-auto rounded-rc-lg border border-rc-line/18">
+        <table className="rc-table">
+          <thead>
             <tr>
-              <th className="px-3 py-2">Card</th>
-              {showType && <th className="px-3 py-2">Type</th>}
-              <th className="px-3 py-2">Plays</th>
-              <th className="px-3 py-2">Wins</th>
-              <th className="px-3 py-2">Losses</th>
-              <th className="px-3 py-2">Draws</th>
-              <th className="px-3 py-2">Win Rate</th>
+              <th>Card</th>
+              {showType && <th>Type</th>}
+              <th>Plays</th>
+              <th>Wins</th>
+              <th>Losses</th>
+              <th>Draws</th>
+              <th>Win Rate</th>
             </tr>
           </thead>
           <tbody>
             {filteredStats.length === 0 ? (
               <tr>
-                <td
-                  className="px-3 py-2 text-slate-300"
-                  colSpan={colCount}
-                >
+                <td className="text-rc-fg-subtle" colSpan={colCount}>
                   {search.trim() ? "No cards match your search." : "No stats yet. Play some matches or adjust filters."}
                 </td>
               </tr>
@@ -406,51 +414,49 @@ function CardStatsTable({
                   <React.Fragment key={row.cardId}>
                     <tr
                       className={clsx(
-                        "border-t border-slate-800/60 hover:bg-slate-800/40 cursor-pointer",
-                        isExpanded && "bg-slate-800/50",
+                        "cursor-pointer",
+                        isExpanded && "bg-rc-accent/6",
                       )}
                       onClick={() => onRowClick?.(row.name)}
                     >
-                      <td className="px-3 py-2">
-                        <span className="font-medium text-white">{row.name}</span>
-                        <div className="text-[10px] text-slate-400">
-                          #{row.cardId}
-                        </div>
+                      <td>
+                        <span className="text-rc-fg-strong">{row.name}</span>
+                        <div className="rc-hint mt-0.5">#{row.cardId}</div>
                       </td>
                       {showType && (
-                        <td className="px-3 py-2 text-slate-400">{row.type}</td>
+                        <td className="text-rc-fg-subtle">{row.type}</td>
                       )}
-                      <td className="px-3 py-2">{row.plays}</td>
-                      <td className="px-3 py-2">{row.wins}</td>
-                      <td className="px-3 py-2">{row.losses}</td>
-                      <td className="px-3 py-2">{row.draws}</td>
-                      <td className="px-3 py-2">
+                      <td className="tabular-nums">{row.plays}</td>
+                      <td className="tabular-nums">{row.wins}</td>
+                      <td className="tabular-nums">{row.losses}</td>
+                      <td className="tabular-nums">{row.draws}</td>
+                      <td className="tabular-nums">
                         {(row.winRate * 100).toFixed(1)}%
                       </td>
                     </tr>
                     {isExpanded && (
                       <tr>
-                        <td colSpan={colCount} className="px-3 py-3 bg-slate-900/70">
+                        <td colSpan={colCount} className="bg-black/30">
                           {expandedCardLoading ? (
-                            <p className="text-xs text-slate-400">Loading card synergies...</p>
+                            <p className="rc-hint">loading card synergies…</p>
                           ) : !expandedCardData ? (
-                            <p className="text-xs text-slate-400">No synergy data available.</p>
+                            <p className="rc-hint">no synergy data available</p>
                           ) : (
                             <div className="grid gap-4 md:grid-cols-2">
                               <div>
-                                <h4 className="text-xs font-semibold text-emerald-300 mb-2">Best Partners</h4>
+                                <h4 className="rc-eyebrow mb-2 text-rc-success">Best Partners</h4>
                                 {expandedCardData.synergies.length === 0 ? (
-                                  <p className="text-[11px] text-slate-500">No data</p>
+                                  <p className="rc-hint">no data</p>
                                 ) : (
                                   <div className="space-y-1">
                                     {expandedCardData.synergies.slice(0, 10).map((p) => {
                                       const partner = p.cardA === row.name ? p.cardB : p.cardA;
                                       return (
                                         <div key={partner} className="flex items-center justify-between text-[11px]">
-                                          <span className="text-slate-200 truncate mr-2">{partner}</span>
-                                          <span className="flex-shrink-0 text-slate-400">
+                                          <span className="mr-2 truncate text-rc-fg">{partner}</span>
+                                          <span className="flex-shrink-0 text-rc-fg-subtle">
                                             {p.coOccurrences}x &middot;{" "}
-                                            <span className="text-emerald-300 font-medium">
+                                            <span className="text-rc-success">
                                               {(p.winRate * 100).toFixed(1)}%
                                             </span>
                                           </span>
@@ -461,19 +467,19 @@ function CardStatsTable({
                                 )}
                               </div>
                               <div>
-                                <h4 className="text-xs font-semibold text-rose-300 mb-2">Worst Partners</h4>
+                                <h4 className="rc-eyebrow mb-2 text-rc-danger">Worst Partners</h4>
                                 {expandedCardData.antiSynergies.length === 0 ? (
-                                  <p className="text-[11px] text-slate-500">No data</p>
+                                  <p className="rc-hint">no data</p>
                                 ) : (
                                   <div className="space-y-1">
                                     {expandedCardData.antiSynergies.slice(0, 10).map((p) => {
                                       const partner = p.cardA === row.name ? p.cardB : p.cardA;
                                       return (
                                         <div key={partner} className="flex items-center justify-between text-[11px]">
-                                          <span className="text-slate-200 truncate mr-2">{partner}</span>
-                                          <span className="flex-shrink-0 text-slate-400">
+                                          <span className="mr-2 truncate text-rc-fg">{partner}</span>
+                                          <span className="flex-shrink-0 text-rc-fg-subtle">
                                             {p.coOccurrences}x &middot;{" "}
-                                            <span className="text-rose-300 font-medium">
+                                            <span className="text-rc-danger">
                                               {(p.winRate * 100).toFixed(1)}%
                                             </span>
                                           </span>
@@ -884,679 +890,633 @@ export default function MetaDashboard({ adminName }: MetaDashboardProps) {
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto flex max-w-6xl flex-col gap-10 px-6 py-10">
-        <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-white">
-              Meta Statistics
-            </h1>
-            <p className="text-sm text-slate-400">
-              Card and match analytics • Signed in as {adminName || "admin"}
-            </p>
-            {lastUpdated && (
-              <p className="text-xs text-slate-500 mt-0.5">
-                Last updated: {new Date(lastUpdated).toLocaleString()}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/admin"
-              className="inline-flex items-center justify-center rounded border border-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800"
-            >
-              ← Back to Admin
-            </Link>
-            <button
-              onClick={refreshAll}
-              className="inline-flex items-center justify-center rounded border border-emerald-400 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20"
-            >
-              Refresh All
-            </button>
-            <button
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        eyebrow="admin"
+        title="Meta Statistics"
+        description={`Card and match analytics · Signed in as ${adminName || "admin"}`}
+        actions={
+          <>
+            <RcLinkButton variant="outline" href="/admin">
+              Back to Admin
+            </RcLinkButton>
+            <RcButton onClick={refreshAll}>Refresh All</RcButton>
+            <RcButton
+              variant="destructive"
               onClick={() => setShowClearConfirm(true)}
-              className="inline-flex items-center justify-center rounded border border-rose-400 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:bg-rose-500/20"
             >
               Clear Stats
-            </button>
-          </div>
-        </header>
+            </RcButton>
+          </>
+        }
+      />
+      {lastUpdated && (
+        <div className="rc-hint -mt-6">
+          Last updated: {new Date(lastUpdated).toLocaleString()}
+        </div>
+      )}
 
-        {/* Clear confirmation modal */}
-        {showClearConfirm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-            <div className="rounded-lg border border-slate-700 bg-slate-900 p-6 shadow-xl max-w-md w-full mx-4">
-              <h3 className="text-lg font-semibold text-white mb-2">
-                Clear Meta Statistics
-              </h3>
-              <p className="text-sm text-slate-300 mb-4">
-                This will permanently delete card win rate data. Choose which
-                format to clear:
-              </p>
-              <div className="flex flex-col gap-2 mb-4">
-                <button
-                  onClick={() => void clearStats(format)}
-                  disabled={clearing}
-                  className="w-full rounded border border-amber-400 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200 hover:bg-amber-500/20 disabled:opacity-50"
-                >
-                  {clearing ? "Clearing..." : `Clear ${format} only`}
-                </button>
-                <button
-                  onClick={() => void clearStats()}
-                  disabled={clearing}
-                  className="w-full rounded border border-rose-400 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:bg-rose-500/20 disabled:opacity-50"
-                >
-                  {clearing ? "Clearing..." : "Clear ALL formats"}
-                </button>
-              </div>
-              <button
-                onClick={() => setShowClearConfirm(false)}
-                disabled={clearing}
-                className="w-full rounded border border-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-            </div>
+      {/* Clear confirmation modal */}
+      {showClearConfirm && (
+        <RcDialog
+          eyebrow="destructive"
+          title="Clear Meta Statistics"
+          size="sm"
+          closeOnBackdrop={false}
+          onClose={() => setShowClearConfirm(false)}
+          actions={
+            <RcButton
+              variant="outline"
+              onClick={() => setShowClearConfirm(false)}
+              disabled={clearing}
+            >
+              Cancel
+            </RcButton>
+          }
+        >
+          <p className="m-0">
+            This will permanently delete card win rate data. Choose which format
+            to clear:
+          </p>
+          <div className="mt-4 flex flex-col gap-2">
+            <RcButton
+              variant="outline"
+              onClick={() => void clearStats(format)}
+              disabled={clearing}
+            >
+              {clearing ? "Clearing..." : `Clear ${format} only`}
+            </RcButton>
+            <RcButton
+              variant="destructive"
+              onClick={() => void clearStats()}
+              disabled={clearing}
+            >
+              {clearing ? "Clearing..." : "Clear ALL formats"}
+            </RcButton>
           </div>
-        )}
+        </RcDialog>
+      )}
 
-        {/* Format selector */}
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-slate-300">Format:</span>
+      {/* Format selector */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="rc-eyebrow">Format</span>
+        <div className="rc-segment">
           {(["constructed", "sealed", "draft"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFormat(f)}
-              className={clsx(
-                "rounded px-3 py-1.5 text-sm font-medium transition",
-                format === f
-                  ? "bg-emerald-500/20 text-emerald-200 border border-emerald-400"
-                  : "bg-slate-800 text-slate-300 border border-slate-600 hover:bg-slate-700"
-              )}
+              aria-pressed={format === f}
             >
-              {f.charAt(0).toUpperCase() + f.slice(1)}
+              {f}
             </button>
           ))}
         </div>
+      </div>
 
-        {/* Match Overview */}
-        <section>
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Match Overview
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {matchStats.map((stat) => (
-              <StatCard
-                key={stat.format}
-                label={`${stat.format} matches`}
-                value={stat.totalMatches}
-                sublabel={
-                  stat.avgDurationSec
-                    ? `Avg ${Math.round(stat.avgDurationSec / 60)} min`
-                    : undefined
-                }
-              />
-            ))}
-          </div>
-          {matchStatsLoading && (
-            <p className="text-xs text-slate-400 mt-2">Loading...</p>
-          )}
-        </section>
+      {/* Match Overview */}
+      <section className="flex flex-col gap-4">
+        <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
+          Match Overview
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {matchStats.map((stat) => (
+            <StatCard
+              key={stat.format}
+              label={`${stat.format} matches`}
+              value={stat.totalMatches}
+              sublabel={
+                stat.avgDurationSec
+                  ? `Avg ${Math.round(stat.avgDurationSec / 60)} min`
+                  : undefined
+              }
+            />
+          ))}
+        </div>
+        {matchStatsLoading && <p className="rc-hint">loading…</p>}
+      </section>
 
-        {/* Avatar Win Rates */}
-        <section>
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Avatar Win Rates
-          </h2>
-          {avatarStatsLoading ? (
-            <p className="text-sm text-slate-400">Loading...</p>
-          ) : avatarStats.length === 0 ? (
-            <p className="text-sm text-slate-400">No avatar data available.</p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {avatarStats.map((a) => {
-                const isAvatarExpanded = expandedAvatar === a.name;
-                return (
-                  <React.Fragment key={a.cardId}>
-                    <div
-                      className={clsx(
-                        "rounded border border-slate-700/40 bg-slate-900/20 px-4 py-3 hover:bg-slate-800/40 transition cursor-pointer",
-                        isAvatarExpanded && "ring-1 ring-slate-500/50 bg-slate-800/40",
-                      )}
-                      onClick={() => void handleAvatarClick(a.name)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-white">{a.name}</span>
-                        <span className="text-sm font-semibold text-slate-300">
-                          {(a.winRate * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                      <WinRateBar winRate={a.winRate} barColor="bg-slate-400" />
-                      <div className="flex items-center gap-3 text-xs text-slate-400 mt-1.5">
-                        <span>{a.plays} played</span>
-                        <span>{a.wins}W / {a.losses}L{a.draws > 0 ? ` / ${a.draws}D` : ""}</span>
-                        <span className="text-[10px]">#{a.cardId}</span>
-                      </div>
-                    </div>
-                    {isAvatarExpanded && (
-                      <div className="col-span-full rounded border border-slate-700/20 bg-slate-900/10 p-3">
-                        {expandedAvatarLoading ? (
-                          <p className="text-xs text-slate-400">Loading deck details...</p>
-                        ) : expandedAvatarSites.length === 0 && expandedAvatarSpells.length === 0 ? (
-                          <p className="text-xs text-slate-400">No deck detail data available yet. Data appears after the server recomputes statistics.</p>
-                        ) : (
-                          <div className="grid gap-4 md:grid-cols-2">
-                            {expandedAvatarSites.length > 0 && (
-                              <div>
-                                <h4 className="text-xs font-semibold text-slate-300 mb-2">
-                                  Most Used Sites
-                                </h4>
-                                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                                  <table className="min-w-full text-left text-xs text-slate-200">
-                                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                                      <tr>
-                                        <th className="px-3 py-1.5">Site</th>
-                                        <th className="px-3 py-1.5">Decks</th>
-                                        <th className="px-3 py-1.5">Win Rate</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {expandedAvatarSites.slice(0, 10).map((s) => (
-                                        <tr
-                                          key={s.siteName}
-                                          className="border-t border-slate-800/60 hover:bg-slate-800/40"
-                                        >
-                                          <td className="px-3 py-1.5 font-medium text-white">{s.siteName}</td>
-                                          <td className="px-3 py-1.5">{s.matches}</td>
-                                          <td className="px-3 py-1.5 text-slate-300 font-medium">
-                                            {(s.winRate * 100).toFixed(1)}%
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            )}
-                            {expandedAvatarSpells.length > 0 && (
-                              <div>
-                                <h4 className="text-xs font-semibold text-slate-300 mb-2">
-                                  Most Used Spells
-                                </h4>
-                                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                                  <table className="min-w-full text-left text-xs text-slate-200">
-                                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                                      <tr>
-                                        <th className="px-3 py-1.5">Spell</th>
-                                        <th className="px-3 py-1.5">Decks</th>
-                                        <th className="px-3 py-1.5">Win Rate</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {expandedAvatarSpells.slice(0, 10).map((s) => (
-                                        <tr
-                                          key={s.spellName}
-                                          className="border-t border-slate-800/60 hover:bg-slate-800/40"
-                                        >
-                                          <td className="px-3 py-1.5 font-medium text-white">{s.spellName}</td>
-                                          <td className="px-3 py-1.5">{s.matches}</td>
-                                          <td className="px-3 py-1.5 text-slate-300 font-medium">
-                                            {(s.winRate * 100).toFixed(1)}%
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* Deck Composition */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-semibold text-white">
-                Deck Composition
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Avatar performance with spellbook element distribution ({format})
-                {deckArchetypes.length > 0 && (
-                  <span className="ml-1">
-                    &middot; {deckArchetypes.reduce((sum, d) => sum + d.matches, 0)} decks analyzed
-                  </span>
-                )}
-              </p>
-            </div>
-            <ElementLegend />
-          </div>
-          {deckArchetypesLoading ? (
-            <p className="text-sm text-slate-400">Loading...</p>
-          ) : deckArchetypes.length === 0 ? (
-            <p className="text-sm text-slate-400">
-              No deck composition data available.
-            </p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {deckArchetypes.map((d) => {
-                const isAvatarExpanded = expandedAvatar === d.avatarName;
-                return (
-                  <React.Fragment key={d.avatarCardId}>
-                    <div
-                      className={clsx(
-                        "rounded border border-indigo-700/30 bg-indigo-950/15 px-4 py-3 hover:bg-indigo-950/30 transition cursor-pointer",
-                        isAvatarExpanded && "ring-1 ring-indigo-500/50 bg-indigo-950/30",
-                      )}
-                      onClick={() => void handleAvatarClick(d.avatarName)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-white text-sm">
-                          {d.avatarName}
-                        </span>
-                        <span className="text-sm font-semibold text-indigo-300">
-                          {(d.winRate * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                      <ElementDistributionBar elements={d.elements} />
-                      <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1">
-                        <span>{d.matches} decks</span>
-                        <span>
-                          {d.wins}W / {d.losses}L
-                          {d.draws > 0 ? ` / ${d.draws}D` : ""}
-                        </span>
-                        <span>~{d.totalCards} spells</span>
-                        <span className="text-[10px]">#{d.avatarCardId}</span>
-                      </div>
-                    </div>
-                    {isAvatarExpanded && (
-                      <div className="col-span-full rounded border border-indigo-700/20 bg-indigo-950/10 p-3">
-                        {expandedAvatarLoading ? (
-                          <p className="text-xs text-slate-400">Loading deck details...</p>
-                        ) : expandedAvatarSites.length === 0 && expandedAvatarSpells.length === 0 ? (
-                          <p className="text-xs text-slate-400">No deck detail data available yet. Data appears after the server recomputes statistics.</p>
-                        ) : (
-                          <div className="grid gap-4 md:grid-cols-2">
-                            {expandedAvatarSites.length > 0 && (
-                              <div>
-                                <h4 className="text-xs font-semibold text-indigo-300 mb-2">
-                                  Most Used Sites
-                                </h4>
-                                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                                  <table className="min-w-full text-left text-xs text-slate-200">
-                                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                                      <tr>
-                                        <th className="px-3 py-1.5">Site</th>
-                                        <th className="px-3 py-1.5">Decks</th>
-                                        <th className="px-3 py-1.5">Win Rate</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {expandedAvatarSites.slice(0, 10).map((s) => (
-                                        <tr
-                                          key={s.siteName}
-                                          className="border-t border-slate-800/60 hover:bg-slate-800/40"
-                                        >
-                                          <td className="px-3 py-1.5 font-medium text-white">{s.siteName}</td>
-                                          <td className="px-3 py-1.5">{s.matches}</td>
-                                          <td className="px-3 py-1.5 text-indigo-300 font-medium">
-                                            {(s.winRate * 100).toFixed(1)}%
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            )}
-                            {expandedAvatarSpells.length > 0 && (
-                              <div>
-                                <h4 className="text-xs font-semibold text-indigo-300 mb-2">
-                                  Most Used Spells
-                                </h4>
-                                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                                  <table className="min-w-full text-left text-xs text-slate-200">
-                                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                                      <tr>
-                                        <th className="px-3 py-1.5">Spell</th>
-                                        <th className="px-3 py-1.5">Decks</th>
-                                        <th className="px-3 py-1.5">Win Rate</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {expandedAvatarSpells.slice(0, 10).map((s) => (
-                                        <tr
-                                          key={s.spellName}
-                                          className="border-t border-slate-800/60 hover:bg-slate-800/40"
-                                        >
-                                          <td className="px-3 py-1.5 font-medium text-white">{s.spellName}</td>
-                                          <td className="px-3 py-1.5">{s.matches}</td>
-                                          <td className="px-3 py-1.5 text-indigo-300 font-medium">
-                                            {(s.winRate * 100).toFixed(1)}%
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* Card Synergies — hidden until 100+ deck observations */}
-        {synergyTotalDecks >= 100 && (
-          <>
-            <section>
-              <h2 className="text-lg font-semibold text-white mb-1">
-                Top Card Synergies
-              </h2>
-              <p className="text-xs text-slate-400 mb-4">
-                Spellbook card pairs with the highest win rate when played together (min. 3 co-occurrences)
-              </p>
-              {synergiesLoading ? (
-                <p className="text-sm text-slate-400">Loading...</p>
-              ) : synergies.length === 0 ? (
-                <p className="text-sm text-slate-400">
-                  No synergy data available yet.
-                </p>
-              ) : (
-                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                  <table className="min-w-full text-left text-xs text-slate-200">
-                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                      <tr>
-                        <th className="px-3 py-2">Card A</th>
-                        <th className="px-3 py-2">Card B</th>
-                        <th className="px-3 py-2">Paired</th>
-                        <th className="px-3 py-2">Wins</th>
-                        <th className="px-3 py-2">Losses</th>
-                        <th className="px-3 py-2">Win Rate</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {synergies.slice(0, 20).map((pair) => (
-                        <tr
-                          key={`${pair.cardA}||${pair.cardB}`}
-                          className="border-t border-slate-800/60 hover:bg-slate-800/40"
-                        >
-                          <td className="px-3 py-2 font-medium text-emerald-200">{pair.cardA}</td>
-                          <td className="px-3 py-2 font-medium text-emerald-200">{pair.cardB}</td>
-                          <td className="px-3 py-2">{pair.coOccurrences}</td>
-                          <td className="px-3 py-2">{pair.wins}</td>
-                          <td className="px-3 py-2">{pair.losses}</td>
-                          <td className="px-3 py-2 text-emerald-300 font-medium">
-                            {(pair.winRate * 100).toFixed(1)}%
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-
-            <section>
-              <h2 className="text-lg font-semibold text-white mb-1">
-                Anti-Synergies
-              </h2>
-              <p className="text-xs text-slate-400 mb-4">
-                Card pairs with the lowest win rate when played together
-              </p>
-              {synergiesLoading ? (
-                <p className="text-sm text-slate-400">Loading...</p>
-              ) : antiSynergies.length === 0 ? (
-                <p className="text-sm text-slate-400">
-                  No anti-synergy data available yet.
-                </p>
-              ) : (
-                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                  <table className="min-w-full text-left text-xs text-slate-200">
-                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                      <tr>
-                        <th className="px-3 py-2">Card A</th>
-                        <th className="px-3 py-2">Card B</th>
-                        <th className="px-3 py-2">Paired</th>
-                        <th className="px-3 py-2">Wins</th>
-                        <th className="px-3 py-2">Losses</th>
-                        <th className="px-3 py-2">Win Rate</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {antiSynergies.slice(0, 20).map((pair) => (
-                        <tr
-                          key={`${pair.cardA}||${pair.cardB}`}
-                          className="border-t border-slate-800/60 hover:bg-slate-800/40"
-                        >
-                          <td className="px-3 py-2 font-medium text-rose-200">{pair.cardA}</td>
-                          <td className="px-3 py-2 font-medium text-rose-200">{pair.cardB}</td>
-                          <td className="px-3 py-2">{pair.coOccurrences}</td>
-                          <td className="px-3 py-2">{pair.wins}</td>
-                          <td className="px-3 py-2">{pair.losses}</td>
-                          <td className="px-3 py-2 text-rose-300 font-medium">
-                            {(pair.winRate * 100).toFixed(1)}%
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-          </>
-        )}
-
-        {/* Element Distribution */}
-        <section>
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Win Rate by Element
-          </h2>
-          {elementStatsLoading ? (
-            <p className="text-sm text-slate-400">Loading...</p>
-          ) : elementStats.length === 0 ? (
-            <p className="text-sm text-slate-400">No element data available.</p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {elementStats.map((e) => {
-                const style = getElementStyle(e.element);
-                const gradientStyle = getElementGradientStyle(e.element);
-                const hasGradient = Object.keys(gradientStyle).length > 0;
-                return (
+      {/* Avatar Win Rates */}
+      <section className="flex flex-col gap-4">
+        <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
+          Avatar Win Rates
+        </h2>
+        {avatarStatsLoading ? (
+          <p className="rc-hint">loading…</p>
+        ) : avatarStats.length === 0 ? (
+          <p className="rc-hint">no avatar data available</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {avatarStats.map((a) => {
+              const isAvatarExpanded = expandedAvatar === a.name;
+              return (
+                <React.Fragment key={a.cardId}>
                   <div
-                    key={e.element}
                     className={clsx(
-                      "rounded border px-4 py-3",
-                      !hasGradient && `${style.border} ${style.bg}`,
+                      "cursor-pointer rounded-rc-md border border-rc-line/12 bg-black/30 px-4 py-3 transition hover:border-rc-accent/45",
+                      isAvatarExpanded && "border-rc-accent/45 bg-rc-accent/6",
                     )}
-                    style={hasGradient ? gradientStyle : undefined}
+                    onClick={() => void handleAvatarClick(a.name)}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className={`font-medium ${style.text} inline-flex items-center gap-1.5`}>
-                        <ElementIcons element={e.element} size={16} />
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                        {a.name}
                       </span>
-                      <span className="text-xs text-slate-400">
-                        {e.plays.toLocaleString()} plays
+                      <span className="rc-stat text-sm">
+                        {(a.winRate * 100).toFixed(1)}%
                       </span>
                     </div>
-                    <WinRateBar winRate={e.winRate} barColor={style.bar} />
-                    <div className="text-xs text-slate-400 mt-1">
-                      {e.wins.toLocaleString()} wins of{" "}
-                      {e.plays.toLocaleString()} plays
+                    <WinRateBar winRate={a.winRate} barColor="bg-rc-accent" />
+                    <div className="mt-1.5 flex flex-wrap items-center gap-3 font-rc-mono text-[11px] text-rc-fg-subtle">
+                      <span>{a.plays} played</span>
+                      <span>{a.wins}W / {a.losses}L{a.draws > 0 ? ` / ${a.draws}D` : ""}</span>
+                      <span className="text-rc-fg-dim">#{a.cardId}</span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
+                  {isAvatarExpanded && (
+                    <div className="col-span-full rounded-rc-md border border-rc-line/12 bg-black/30 p-3">
+                      {expandedAvatarLoading ? (
+                        <p className="rc-hint">loading deck details…</p>
+                      ) : expandedAvatarSites.length === 0 && expandedAvatarSpells.length === 0 ? (
+                        <p className="rc-hint">no deck detail data yet — it appears after the server recomputes statistics</p>
+                      ) : (
+                        <div className="grid gap-4 md:grid-cols-2">
+                          {expandedAvatarSites.length > 0 && (
+                            <div>
+                              <h4 className="rc-eyebrow mb-2">Most Used Sites</h4>
+                              <div className="overflow-x-auto rounded-rc-md border border-rc-line/12">
+                                <table className="rc-table">
+                                  <thead>
+                                    <tr>
+                                      <th>Site</th>
+                                      <th>Decks</th>
+                                      <th>Win Rate</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {expandedAvatarSites.slice(0, 10).map((s) => (
+                                      <tr key={s.siteName}>
+                                        <td className="text-rc-fg-strong">{s.siteName}</td>
+                                        <td className="tabular-nums">{s.matches}</td>
+                                        <td className="rc-stat">
+                                          {(s.winRate * 100).toFixed(1)}%
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                          {expandedAvatarSpells.length > 0 && (
+                            <div>
+                              <h4 className="rc-eyebrow mb-2">Most Used Spells</h4>
+                              <div className="overflow-x-auto rounded-rc-md border border-rc-line/12">
+                                <table className="rc-table">
+                                  <thead>
+                                    <tr>
+                                      <th>Spell</th>
+                                      <th>Decks</th>
+                                      <th>Win Rate</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {expandedAvatarSpells.slice(0, 10).map((s) => (
+                                      <tr key={s.spellName}>
+                                        <td className="text-rc-fg-strong">{s.spellName}</td>
+                                        <td className="tabular-nums">{s.matches}</td>
+                                        <td className="rc-stat">
+                                          {(s.winRate * 100).toFixed(1)}%
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-        {/* Type Distribution */}
-        <section>
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Win Rate by Card Type
-          </h2>
-          {typeStatsLoading ? (
-            <p className="text-sm text-slate-400">Loading...</p>
-          ) : typeStats.length === 0 ? (
-            <p className="text-sm text-slate-400">No type data available.</p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {typeStats.map((t) => (
+      {/* Deck Composition */}
+      <section className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
+              Deck Composition
+            </h2>
+            <p className="rc-hint mt-1.5">
+              Avatar performance with spellbook element distribution ({format})
+              {deckArchetypes.length > 0 && (
+                <span className="ml-1">
+                  &middot; {deckArchetypes.reduce((sum, d) => sum + d.matches, 0)} decks analyzed
+                </span>
+              )}
+            </p>
+          </div>
+          <ElementLegend />
+        </div>
+        {deckArchetypesLoading ? (
+          <p className="rc-hint">loading…</p>
+        ) : deckArchetypes.length === 0 ? (
+          <p className="rc-hint">no deck composition data available</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {deckArchetypes.map((d) => {
+              const isAvatarExpanded = expandedAvatar === d.avatarName;
+              return (
+                <React.Fragment key={d.avatarCardId}>
+                  <div
+                    className={clsx(
+                      "cursor-pointer rounded-rc-md border border-rc-line/12 bg-black/30 px-4 py-3 transition hover:border-rc-accent/45",
+                      isAvatarExpanded && "border-rc-accent/45 bg-rc-accent/6",
+                    )}
+                    onClick={() => void handleAvatarClick(d.avatarName)}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                        {d.avatarName}
+                      </span>
+                      <span className="rc-stat text-sm">
+                        {(d.winRate * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    <ElementDistributionBar elements={d.elements} />
+                    <div className="mt-1 flex flex-wrap items-center gap-3 font-rc-mono text-[11px] text-rc-fg-subtle">
+                      <span>{d.matches} decks</span>
+                      <span>
+                        {d.wins}W / {d.losses}L
+                        {d.draws > 0 ? ` / ${d.draws}D` : ""}
+                      </span>
+                      <span>~{d.totalCards} spells</span>
+                      <span className="text-rc-fg-dim">#{d.avatarCardId}</span>
+                    </div>
+                  </div>
+                  {isAvatarExpanded && (
+                    <div className="col-span-full rounded-rc-md border border-rc-line/12 bg-black/30 p-3">
+                      {expandedAvatarLoading ? (
+                        <p className="rc-hint">loading deck details…</p>
+                      ) : expandedAvatarSites.length === 0 && expandedAvatarSpells.length === 0 ? (
+                        <p className="rc-hint">no deck detail data yet — it appears after the server recomputes statistics</p>
+                      ) : (
+                        <div className="grid gap-4 md:grid-cols-2">
+                          {expandedAvatarSites.length > 0 && (
+                            <div>
+                              <h4 className="rc-eyebrow mb-2">Most Used Sites</h4>
+                              <div className="overflow-x-auto rounded-rc-md border border-rc-line/12">
+                                <table className="rc-table">
+                                  <thead>
+                                    <tr>
+                                      <th>Site</th>
+                                      <th>Decks</th>
+                                      <th>Win Rate</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {expandedAvatarSites.slice(0, 10).map((s) => (
+                                      <tr key={s.siteName}>
+                                        <td className="text-rc-fg-strong">{s.siteName}</td>
+                                        <td className="tabular-nums">{s.matches}</td>
+                                        <td className="rc-stat">
+                                          {(s.winRate * 100).toFixed(1)}%
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                          {expandedAvatarSpells.length > 0 && (
+                            <div>
+                              <h4 className="rc-eyebrow mb-2">Most Used Spells</h4>
+                              <div className="overflow-x-auto rounded-rc-md border border-rc-line/12">
+                                <table className="rc-table">
+                                  <thead>
+                                    <tr>
+                                      <th>Spell</th>
+                                      <th>Decks</th>
+                                      <th>Win Rate</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {expandedAvatarSpells.slice(0, 10).map((s) => (
+                                      <tr key={s.spellName}>
+                                        <td className="text-rc-fg-strong">{s.spellName}</td>
+                                        <td className="tabular-nums">{s.matches}</td>
+                                        <td className="rc-stat">
+                                          {(s.winRate * 100).toFixed(1)}%
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* Card Synergies — hidden until 100+ deck observations */}
+      {synergyTotalDecks >= 100 && (
+        <>
+          <section className="rc-panel overflow-hidden">
+            <PanelHeader
+              title="Top Card Synergies"
+              meta="min. 3 co-occurrences"
+            />
+            <p className="px-[18px] py-3.5 font-rc-sans text-sm text-rc-fg-muted">
+              Spellbook card pairs with the highest win rate when played together
+            </p>
+            {synergiesLoading ? (
+              <p className="rc-hint px-[18px] pb-3.5">loading…</p>
+            ) : synergies.length === 0 ? (
+              <p className="rc-hint px-[18px] pb-3.5">no synergy data available yet</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="rc-table">
+                  <thead>
+                    <tr>
+                      <th>Card A</th>
+                      <th>Card B</th>
+                      <th>Paired</th>
+                      <th>Wins</th>
+                      <th>Losses</th>
+                      <th>Win Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {synergies.slice(0, 20).map((pair) => (
+                      <tr key={`${pair.cardA}||${pair.cardB}`}>
+                        <td className="text-rc-fg-strong">{pair.cardA}</td>
+                        <td className="text-rc-fg-strong">{pair.cardB}</td>
+                        <td className="tabular-nums">{pair.coOccurrences}</td>
+                        <td className="tabular-nums">{pair.wins}</td>
+                        <td className="tabular-nums">{pair.losses}</td>
+                        <td className="tabular-nums text-rc-success">
+                          {(pair.winRate * 100).toFixed(1)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <section className="rc-panel overflow-hidden">
+            <PanelHeader title="Anti-Synergies" />
+            <p className="px-[18px] py-3.5 font-rc-sans text-sm text-rc-fg-muted">
+              Card pairs with the lowest win rate when played together
+            </p>
+            {synergiesLoading ? (
+              <p className="rc-hint px-[18px] pb-3.5">loading…</p>
+            ) : antiSynergies.length === 0 ? (
+              <p className="rc-hint px-[18px] pb-3.5">no anti-synergy data available yet</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="rc-table">
+                  <thead>
+                    <tr>
+                      <th>Card A</th>
+                      <th>Card B</th>
+                      <th>Paired</th>
+                      <th>Wins</th>
+                      <th>Losses</th>
+                      <th>Win Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {antiSynergies.slice(0, 20).map((pair) => (
+                      <tr key={`${pair.cardA}||${pair.cardB}`}>
+                        <td className="text-rc-fg-strong">{pair.cardA}</td>
+                        <td className="text-rc-fg-strong">{pair.cardB}</td>
+                        <td className="tabular-nums">{pair.coOccurrences}</td>
+                        <td className="tabular-nums">{pair.wins}</td>
+                        <td className="tabular-nums">{pair.losses}</td>
+                        <td className="tabular-nums text-rc-danger">
+                          {(pair.winRate * 100).toFixed(1)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </>
+      )}
+
+      {/* Element Distribution */}
+      <section className="flex flex-col gap-4">
+        <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
+          Win Rate by Element
+        </h2>
+        {elementStatsLoading ? (
+          <p className="rc-hint">loading…</p>
+        ) : elementStats.length === 0 ? (
+          <p className="rc-hint">no element data available</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {elementStats.map((e) => {
+              const style = getElementStyle(e.element);
+              const gradientStyle = getElementGradientStyle(e.element);
+              const hasGradient = Object.keys(gradientStyle).length > 0;
+              return (
                 <div
-                  key={t.type}
-                  className="rounded border border-slate-700 bg-slate-900/60 px-4 py-3"
+                  key={e.element}
+                  className={clsx(
+                    "rounded-rc-md border px-4 py-3",
+                    !hasGradient && `${style.border} ${style.bg}`,
+                  )}
+                  style={hasGradient ? gradientStyle : undefined}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-white">{t.type}</span>
-                    <span className="text-xs text-slate-400">
-                      {t.plays.toLocaleString()} plays
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`inline-flex items-center gap-1.5 ${style.text}`}>
+                      <ElementIcons element={e.element} size={16} />
+                    </span>
+                    <span className="rc-hint">
+                      {e.plays.toLocaleString()} plays
                     </span>
                   </div>
-                  <WinRateBar winRate={t.winRate} barColor="bg-emerald-500" />
-                  <div className="text-xs text-slate-400 mt-1">
-                    {t.wins.toLocaleString()} wins of{" "}
-                    {t.plays.toLocaleString()} plays
+                  <WinRateBar winRate={e.winRate} barColor={style.bar} />
+                  <div className="rc-hint mt-1">
+                    {e.wins.toLocaleString()} wins of{" "}
+                    {e.plays.toLocaleString()} plays
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-        {/* Rarity Distribution */}
-        <section>
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Win Rate by Rarity
-          </h2>
-          {rarityStatsLoading ? (
-            <p className="text-sm text-slate-400">Loading...</p>
-          ) : rarityStats.length === 0 ? (
-            <p className="text-sm text-slate-400">No rarity data available.</p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {rarityStats.map((r) => {
-                const style = RARITY_STYLES[r.rarity] || RARITY_STYLES.Ordinary;
-                return (
-                  <div
-                    key={r.rarity}
-                    className={`rounded border ${style.border} ${style.bg} px-4 py-3`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className={`font-medium ${style.text}`}>
-                        {r.rarity}
-                      </span>
-                      <span className="text-xs text-slate-400">
-                        {r.plays.toLocaleString()} plays
-                      </span>
-                    </div>
-                    <WinRateBar winRate={r.winRate} barColor={style.bar} />
-                    <div className="text-xs text-slate-400 mt-1">
-                      {r.wins.toLocaleString()} wins of{" "}
+      {/* Type Distribution */}
+      <section className="flex flex-col gap-4">
+        <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
+          Win Rate by Card Type
+        </h2>
+        {typeStatsLoading ? (
+          <p className="rc-hint">loading…</p>
+        ) : typeStats.length === 0 ? (
+          <p className="rc-hint">no type data available</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {typeStats.map((t) => (
+              <div
+                key={t.type}
+                className="rounded-rc-md border border-rc-line/12 bg-black/30 px-4 py-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-rc-fg-strong">{t.type}</span>
+                  <span className="rc-hint">
+                    {t.plays.toLocaleString()} plays
+                  </span>
+                </div>
+                <WinRateBar winRate={t.winRate} barColor="bg-rc-accent" />
+                <div className="rc-hint mt-1">
+                  {t.wins.toLocaleString()} wins of{" "}
+                  {t.plays.toLocaleString()} plays
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Rarity Distribution */}
+      <section className="flex flex-col gap-4">
+        <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
+          Win Rate by Rarity
+        </h2>
+        {rarityStatsLoading ? (
+          <p className="rc-hint">loading…</p>
+        ) : rarityStats.length === 0 ? (
+          <p className="rc-hint">no rarity data available</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {rarityStats.map((r) => {
+              const style = RARITY_STYLES[r.rarity] || RARITY_STYLES.Ordinary;
+              return (
+                <div
+                  key={r.rarity}
+                  className={`rounded-rc-md border ${style.border} ${style.bg} px-4 py-3`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={style.text}>{r.rarity}</span>
+                    <span className="rc-hint">
                       {r.plays.toLocaleString()} plays
-                    </div>
+                    </span>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
+                  <WinRateBar winRate={r.winRate} barColor={style.bar} />
+                  <div className="rc-hint mt-1">
+                    {r.wins.toLocaleString()} wins of{" "}
+                    {r.plays.toLocaleString()} plays
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-        {/* Mana Curve */}
-        <section>
-          <h2 className="text-lg font-semibold text-white mb-4">
-            Win Rate by Mana Cost
-          </h2>
-          {costStatsLoading ? (
-            <p className="text-sm text-slate-400">Loading...</p>
-          ) : costStats.length === 0 ? (
-            <p className="text-sm text-slate-400">No cost data available.</p>
-          ) : (
-            <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-              <table className="min-w-full text-left text-sm text-slate-200">
-                <thead className="bg-slate-900/70 text-xs uppercase tracking-wide text-slate-400">
-                  <tr>
-                    <th className="px-3 py-2">Cost</th>
-                    <th className="px-3 py-2">Plays</th>
-                    <th className="px-3 py-2">Wins</th>
-                    <th className="px-3 py-2">Win Rate</th>
+      {/* Mana Curve */}
+      <section className="rc-panel overflow-hidden">
+        <PanelHeader title="Win Rate by Mana Cost" />
+        {costStatsLoading ? (
+          <p className="rc-hint px-[18px] py-3.5">loading…</p>
+        ) : costStats.length === 0 ? (
+          <p className="rc-hint px-[18px] py-3.5">no cost data available</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="rc-table">
+              <thead>
+                <tr>
+                  <th>Cost</th>
+                  <th>Plays</th>
+                  <th>Wins</th>
+                  <th>Win Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {costStats.map((c) => (
+                  <tr key={c.cost}>
+                    <td className="text-rc-fg-strong tabular-nums">{c.cost}</td>
+                    <td className="tabular-nums">{c.plays.toLocaleString()}</td>
+                    <td className="tabular-nums">{c.wins.toLocaleString()}</td>
+                    <td className="tabular-nums text-rc-success">
+                      {(c.winRate * 100).toFixed(1)}%
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {costStats.map((c) => (
-                    <tr key={c.cost} className="border-t border-slate-800/60">
-                      <td className="px-3 py-2 font-medium">{c.cost}</td>
-                      <td className="px-3 py-2">{c.plays.toLocaleString()}</td>
-                      <td className="px-3 py-2">{c.wins.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-emerald-300">
-                        {(c.winRate * 100).toFixed(1)}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
-        {/* Site Win Rates */}
-        <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold text-white">Site Win Rates</h2>
-          <CardStatsTable
-            stats={siteStats}
-            loading={siteStatsLoading}
-            error={siteStatsError}
-            order={siteStatsOrder}
-            setOrder={setSiteStatsOrder}
-            limit={siteStatsLimit}
-            setLimit={setSiteStatsLimit}
-            onRefresh={() => void refreshSiteStats()}
-            expandedCard={expandedCard}
-            expandedCardData={expandedCardData}
-            expandedCardLoading={expandedCardLoading}
-            onRowClick={handleCardClick}
-          />
-        </section>
+      {/* Site Win Rates */}
+      <section className="flex flex-col gap-3">
+        <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
+          Site Win Rates
+        </h2>
+        <CardStatsTable
+          stats={siteStats}
+          loading={siteStatsLoading}
+          error={siteStatsError}
+          order={siteStatsOrder}
+          setOrder={setSiteStatsOrder}
+          limit={siteStatsLimit}
+          setLimit={setSiteStatsLimit}
+          onRefresh={() => void refreshSiteStats()}
+          expandedCard={expandedCard}
+          expandedCardData={expandedCardData}
+          expandedCardLoading={expandedCardLoading}
+          onRowClick={handleCardClick}
+        />
+      </section>
 
-        {/* Spellbook Win Rates */}
-        <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold text-white">
+      {/* Spellbook Win Rates */}
+      <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
             Spellbook Win Rates
           </h2>
-          <p className="text-xs text-slate-400 -mt-2">
+          <p className="rc-hint mt-1.5">
             Minions, Auras, Artifacts, Magic, and other non-site cards
           </p>
-          <CardStatsTable
-            stats={spellbookStats}
-            loading={spellbookStatsLoading}
-            error={spellbookStatsError}
-            order={spellbookStatsOrder}
-            setOrder={setSpellbookStatsOrder}
-            limit={spellbookStatsLimit}
-            setLimit={setSpellbookStatsLimit}
-            onRefresh={() => void refreshSpellbookStats()}
-            showType
-            expandedCard={expandedCard}
-            expandedCardData={expandedCardData}
-            expandedCardLoading={expandedCardLoading}
-            onRowClick={handleCardClick}
-          />
-        </section>
-      </div>
+        </div>
+        <CardStatsTable
+          stats={spellbookStats}
+          loading={spellbookStatsLoading}
+          error={spellbookStatsError}
+          order={spellbookStatsOrder}
+          setOrder={setSpellbookStatsOrder}
+          limit={spellbookStatsLimit}
+          setLimit={setSpellbookStatsLimit}
+          onRefresh={() => void refreshSpellbookStats()}
+          showType
+          expandedCard={expandedCard}
+          expandedCardData={expandedCardData}
+          expandedCardLoading={expandedCardLoading}
+          onRowClick={handleCardClick}
+        />
+      </section>
     </div>
   );
 }

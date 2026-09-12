@@ -1,9 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState, useCallback } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useState } from "react";
 import { NumberBadge, type Digit } from "@/components/game/manacost";
+import { RcDialog } from "@/components/ui/rc-dialog";
 import type { CollectionCardResponse } from "@/lib/collection/types";
 
 interface CodexEntry {
@@ -30,15 +30,15 @@ interface CardDetailOverlayProps {
 function getElementColor(element: string): string {
   switch (element.toLowerCase()) {
     case "fire":
-      return "text-red-400";
+      return "text-rc-ember";
     case "water":
-      return "text-blue-400";
+      return "text-rc-info";
     case "earth":
-      return "text-green-400";
+      return "text-rc-success";
     case "air":
-      return "text-cyan-300";
+      return "text-rc-moonlight";
     default:
-      return "text-gray-300";
+      return "text-rc-fg-muted";
   }
 }
 
@@ -46,14 +46,14 @@ function getElementColor(element: string): string {
 function getRarityColor(rarity: string): string {
   switch (rarity.toLowerCase()) {
     case "unique":
-      return "text-purple-400";
+      return "text-rc-moonlight";
     case "elite":
-      return "text-yellow-400";
+      return "text-rc-accent-link";
     case "exceptional":
-      return "text-blue-400";
+      return "text-rc-info";
     case "ordinary":
     default:
-      return "text-gray-400";
+      return "text-rc-fg-subtle";
   }
 }
 
@@ -68,7 +68,7 @@ function formatCodexContent(content: string): string {
     .replace(/'/g, "&#039;");
   return escaped.replace(
     /\[\[([^\]]+)\]\]/g,
-    '<span class="text-amber-300 font-medium">$1</span>',
+    '<span class="text-rc-accent-link font-medium">$1</span>',
   );
 }
 
@@ -164,34 +164,13 @@ export default function CardDetailOverlay({
       });
   }, [card.cardId, setName]);
 
-  const handleBackdropClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) onClose();
-    },
-    [onClose],
-  );
-
-  const overlay = (
-    <div
-      className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4 overflow-y-auto"
-      onClick={handleBackdropClick}
-    >
-      {/* Close button */}
-      <button
-        className="fixed top-4 right-4 text-white text-2xl p-2 z-[201] hover:text-gray-300"
-        onClick={onClose}
-      >
-        ✕
-      </button>
-
-      <div
-        className="bg-gray-900 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-700"
-        onClick={(e) => e.stopPropagation()}
-      >
+  return (
+    <RcDialog title={cardName} eyebrow={setName} onClose={onClose} size="lg">
+      <div className="space-y-4">
         {/* Card Image */}
-        <div className="flex justify-center p-6 bg-gray-950 rounded-t-xl">
+        <div className="flex justify-center rounded-rc-md border border-rc-line/12 bg-black/30 p-6">
           <div
-            className={`relative rounded-lg ${
+            className={`relative rounded-rc-md ${
               isSite
                 ? "w-[420px] h-[300px] overflow-hidden"
                 : "w-[240px] h-[336px]"
@@ -201,7 +180,7 @@ export default function CardDetailOverlay({
               src={imageUrl}
               alt={cardName}
               fill
-              className={`rounded-lg ${
+              className={`rounded-rc-md ${
                 isSite
                   ? "object-contain rotate-90 scale-[1.4]"
                   : "object-contain"
@@ -210,213 +189,195 @@ export default function CardDetailOverlay({
               unoptimized
             />
             {card.finish === "Foil" && (
-              <div className="absolute top-2 right-2 bg-yellow-500 text-black text-xs px-2 py-0.5 rounded font-bold z-10">
-                FOIL
+              <div className="absolute right-2 top-2 z-10 rounded-rc-sm border border-rc-accent/35 bg-rc-accent/85 px-2 py-0.5 font-rc-mono text-[10px] uppercase tracking-[0.18em] text-rc-accent-fg">
+                Foil
               </div>
             )}
           </div>
         </div>
 
-        {/* Card Details */}
-        <div className="p-6 space-y-4">
-          {/* Header: Name, Set, Rarity */}
-          <div>
-            <h2 className="text-2xl font-bold text-white">{cardName}</h2>
-            <div className="flex items-center gap-2 mt-1 text-sm">
-              <span className="text-gray-400">{setName}</span>
-              {card.meta?.rarity && (
-                <span className={getRarityColor(card.meta.rarity)}>
-                  {card.meta.rarity}
-                </span>
-              )}
-              {card.meta?.type && (
-                <span className="text-gray-500">{card.meta.type}</span>
-              )}
-            </div>
-            {card.card.subTypes && (
-              <div className="text-xs text-gray-500 mt-0.5">
-                {card.card.subTypes}
-              </div>
+        {/* Header: Rarity, Type, Sub-types */}
+        <div>
+          <div className="flex flex-wrap items-center gap-2 font-rc-mono text-xs tracking-[0.1em]">
+            {card.meta?.rarity && (
+              <span className={getRarityColor(card.meta.rarity)}>
+                {card.meta.rarity}
+              </span>
+            )}
+            {card.meta?.type && (
+              <span className="text-rc-fg-subtle">{card.meta.type}</span>
             )}
           </div>
+          {card.card.subTypes && (
+            <div className="mt-0.5 rc-hint">{card.card.subTypes}</div>
+          )}
+        </div>
 
-          {/* Stats Row: Cost, Attack, Life, Elements */}
-          <div className="flex flex-wrap items-center gap-3">
-            {card.meta?.cost != null && (
-              <div className="bg-gray-800 rounded px-3 py-1.5 text-sm flex items-center gap-1.5">
-                <span className="text-gray-500">Cost</span>
-                {card.meta.cost >= 0 && card.meta.cost <= 9 ? (
-                  <NumberBadge
-                    value={card.meta.cost as Digit}
-                    size={20}
-                    strokeWidth={8}
-                  />
-                ) : (
-                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-black text-xs font-bold">
-                    {card.meta.cost}
+        {/* Stats Row: Cost, Attack, Life, Elements */}
+        <div className="flex flex-wrap items-center gap-3">
+          {card.meta?.cost != null && (
+            <div className="flex items-center gap-1.5 rounded-rc-sm border border-rc-line/22 bg-black/45 px-3 py-1.5 font-rc-mono text-xs tracking-[0.1em]">
+              <span className="text-rc-fg-dim">Cost</span>
+              {card.meta.cost >= 0 && card.meta.cost <= 9 ? (
+                <NumberBadge
+                  value={card.meta.cost as Digit}
+                  size={20}
+                  strokeWidth={8}
+                />
+              ) : (
+                <span className="rc-stat">{card.meta.cost}</span>
+              )}
+            </div>
+          )}
+          {card.meta?.attack != null && hasLifeStat(card.meta?.type) && (
+            <div className="rounded-rc-sm border border-rc-line/22 bg-black/45 px-3 py-1.5 font-rc-mono text-xs tracking-[0.1em]">
+              <span className="text-rc-fg-dim">ATK </span>
+              <span className="rc-stat text-rc-ember">{card.meta.attack}</span>
+            </div>
+          )}
+          {hasLifeStat(card.meta?.type) && card.meta?.attack != null && (
+            <div className="rounded-rc-sm border border-rc-line/22 bg-black/45 px-3 py-1.5 font-rc-mono text-xs tracking-[0.1em]">
+              <span className="text-rc-fg-dim">Health </span>
+              <span className="rc-stat text-rc-success">
+                {card.meta?.defence ?? card.meta.attack}
+              </span>
+            </div>
+          )}
+          {card.card.elements && (
+            <div className="rounded-rc-sm border border-rc-line/22 bg-black/45 px-3 py-1.5 font-rc-mono text-xs tracking-[0.1em]">
+              {card.card.elements.split(",").map((el) => (
+                <span
+                  key={el.trim()}
+                  className={`${getElementColor(el.trim())} mr-1`}
+                >
+                  {el.trim()}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Thresholds */}
+        {card.meta?.thresholds && (
+          <div className="flex items-center gap-2 font-rc-mono text-xs tracking-[0.1em]">
+            <span className="text-rc-fg-dim">Threshold:</span>
+            <div className="flex items-center gap-1.5">
+              {(["air", "water", "earth", "fire"] as const).map((element) => {
+                const count =
+                  (card.meta?.thresholds as Record<string, number>)?.[
+                    element
+                  ] ?? 0;
+                if (count <= 0) return null;
+                return (
+                  <span
+                    key={element}
+                    className="inline-flex items-center gap-0.5 rounded-rc-sm border border-rc-line/22 bg-black/45 px-1.5 py-0.5"
+                  >
+                    {Array.from({ length: count }).map((_, i) => (
+                      <Image
+                        key={i}
+                        src={`/api/assets/${element}.png`}
+                        alt={element}
+                        width={14}
+                        height={14}
+                        unoptimized
+                      />
+                    ))}
                   </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Rules Text */}
+        {card.meta?.rulesText && (
+          <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-4">
+            <p className="m-0 whitespace-pre-wrap font-rc-sans text-sm leading-relaxed text-rc-fg">
+              {card.meta.rulesText}
+            </p>
+          </div>
+        )}
+
+        {/* Notes */}
+        {card.notes && (
+          <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-3">
+            <div className="rc-eyebrow">Notes</div>
+            <p className="m-0 mt-1 font-rc-sans text-sm text-rc-fg">
+              {card.notes}
+            </p>
+          </div>
+        )}
+
+        {/* Prices */}
+        <div className="border-t border-rc-line/12 pt-4">
+          <div className="rc-eyebrow mb-2">Market prices</div>
+          <div className="flex flex-wrap gap-4">
+            <div className="rounded-rc-sm border border-rc-line/22 bg-black/45 px-4 py-2">
+              <div className="rc-hint">Standard</div>
+              <div className="rc-stat text-lg">
+                {prices?.standard?.marketPrice != null ? (
+                  <span className="text-rc-accent-link">
+                    ${prices.standard.marketPrice.toFixed(2)}
+                  </span>
+                ) : (
+                  <span className="text-rc-fg-dim">—</span>
                 )}
               </div>
-            )}
-            {card.meta?.attack != null && hasLifeStat(card.meta?.type) && (
-              <div className="bg-gray-800 rounded px-3 py-1.5 text-sm">
-                <span className="text-gray-500">ATK </span>
-                <span className="text-red-400 font-bold">
-                  {card.meta.attack}
-                </span>
+            </div>
+            <div className="rounded-rc-sm border border-rc-line/22 bg-black/45 px-4 py-2">
+              <div className="font-rc-mono text-[11px] tracking-[0.1em] text-rc-accent-link">
+                Foil
               </div>
-            )}
-            {hasLifeStat(card.meta?.type) && card.meta?.attack != null && (
-              <div className="bg-gray-800 rounded px-3 py-1.5 text-sm">
-                <span className="text-gray-500">Health </span>
-                <span className="text-green-400 font-bold">
-                  {card.meta?.defence ?? card.meta.attack}
-                </span>
-              </div>
-            )}
-            {card.card.elements && (
-              <div className="bg-gray-800 rounded px-3 py-1.5 text-sm">
-                {card.card.elements.split(",").map((el) => (
-                  <span
-                    key={el.trim()}
-                    className={`${getElementColor(el.trim())} font-medium mr-1`}
-                  >
-                    {el.trim()}
+              <div className="rc-stat text-lg">
+                {prices?.foil?.marketPrice != null ? (
+                  <span className="text-rc-accent-link">
+                    ${prices.foil.marketPrice.toFixed(2)}
                   </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Thresholds */}
-          {card.meta?.thresholds && (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500">Threshold:</span>
-              <div className="flex items-center gap-1.5">
-                {(["air", "water", "earth", "fire"] as const).map((element) => {
-                  const count =
-                    (card.meta?.thresholds as Record<string, number>)?.[
-                      element
-                    ] ?? 0;
-                  if (count <= 0) return null;
-                  return (
-                    <span
-                      key={element}
-                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gray-800"
-                    >
-                      {Array.from({ length: count }).map((_, i) => (
-                        <Image
-                          key={i}
-                          src={`/api/assets/${element}.png`}
-                          alt={element}
-                          width={14}
-                          height={14}
-                          unoptimized
-                        />
-                      ))}
-                    </span>
-                  );
-                })}
+                ) : (
+                  <span className="text-rc-fg-dim">—</span>
+                )}
               </div>
             </div>
-          )}
-
-          {/* Rules Text */}
-          {card.meta?.rulesText && (
-            <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
-              <p className="text-gray-200 text-sm whitespace-pre-wrap leading-relaxed">
-                {card.meta.rulesText}
-              </p>
-            </div>
-          )}
-
-          {/* Notes */}
-          {card.notes && (
-            <div className="bg-gray-800/30 rounded-lg p-3 border border-gray-700/50">
-              <span className="text-gray-500 text-xs uppercase tracking-wide">
-                Notes
-              </span>
-              <p className="text-gray-300 text-sm mt-1">{card.notes}</p>
-            </div>
-          )}
-
-          {/* Prices */}
-          <div className="border-t border-gray-800 pt-4">
-            <h3 className="text-sm font-medium text-gray-400 mb-2">
-              Market Prices
-            </h3>
-            <div className="flex gap-4">
-              <div className="bg-gray-800 rounded px-4 py-2">
-                <div className="text-xs text-gray-500">Standard</div>
-                <div className="text-lg font-bold">
-                  {prices?.standard?.marketPrice != null ? (
-                    <span className="text-green-400">
-                      ${prices.standard.marketPrice.toFixed(2)}
-                    </span>
-                  ) : (
-                    <span className="text-gray-600">—</span>
-                  )}
-                </div>
-              </div>
-              <div className="bg-gray-800 rounded px-4 py-2">
-                <div className="text-xs text-yellow-500">Foil</div>
-                <div className="text-lg font-bold">
-                  {prices?.foil?.marketPrice != null ? (
-                    <span className="text-green-400">
-                      ${prices.foil.marketPrice.toFixed(2)}
-                    </span>
-                  ) : (
-                    <span className="text-gray-600">—</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Codex Entries */}
-          {codexLoading && (
-            <div className="text-gray-500 text-sm animate-pulse">
-              Loading codex entries...
-            </div>
-          )}
-          {codexEntries && codexEntries.length > 0 && (
-            <div className="border-t border-gray-800 pt-4">
-              <h3 className="text-sm font-medium text-amber-400 mb-3">
-                Codex Entries
-              </h3>
-              <div className="space-y-3">
-                {codexEntries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="bg-gray-800/50 rounded-lg p-3 border border-gray-700"
-                  >
-                    <h4 className="font-bold text-amber-300 text-sm mb-1">
-                      {entry.title}
-                    </h4>
-                    <div
-                      className="text-gray-300 text-xs whitespace-pre-wrap leading-relaxed"
-                      dangerouslySetInnerHTML={{
-                        __html: formatCodexContent(entry.content),
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Quantity */}
-          <div className="text-center text-sm text-gray-500 pt-2 border-t border-gray-800">
-            {card.quantity}× in collection
-            {card.finish === "Foil" && (
-              <span className="ml-1 text-yellow-500">(Foil)</span>
-            )}
           </div>
         </div>
-      </div>
-    </div>
-  );
 
-  if (typeof document === "undefined") return null;
-  return createPortal(overlay, document.body);
+        {/* Codex Entries */}
+        {codexLoading && (
+          <div className="rc-hint animate-pulse">Loading codex entries…</div>
+        )}
+        {codexEntries && codexEntries.length > 0 && (
+          <div className="border-t border-rc-line/12 pt-4">
+            <div className="rc-eyebrow mb-3">Codex entries</div>
+            <div className="space-y-3">
+              {codexEntries.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="rounded-rc-md border border-rc-line/12 bg-black/30 p-3"
+                >
+                  <h4 className="m-0 mb-1 font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                    {entry.title}
+                  </h4>
+                  <div
+                    className="whitespace-pre-wrap font-rc-sans text-xs leading-relaxed text-rc-fg-muted"
+                    dangerouslySetInnerHTML={{
+                      __html: formatCodexContent(entry.content),
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Quantity */}
+        <div className="border-t border-rc-line/12 pt-2 text-center rc-hint">
+          {card.quantity}× in collection
+          {card.finish === "Foil" && (
+            <span className="ml-1 text-rc-accent-link">(Foil)</span>
+          )}
+        </div>
+      </div>
+    </RcDialog>
+  );
 }

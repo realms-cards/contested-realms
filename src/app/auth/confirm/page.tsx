@@ -2,6 +2,9 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import AppShell from "@/components/ui/AppShell";
+import { PageHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
 
 type ConfirmState = {
   nextUrl: string | null;
@@ -41,37 +44,31 @@ export default function ConfirmSignInPage() {
   }, [nextParam]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-xl">
-        <div className="mb-6">
-          <p className="text-sm uppercase tracking-[0.2em] text-slate-400">
-            Realms.cards
-          </p>
-          <h1 className="mt-2 text-2xl font-semibold text-slate-100">
-            Confirm sign-in
-          </h1>
-          <p className="mt-3 text-sm text-slate-300">
-            To protect against email scanners, please confirm before we finish
-            signing you in.
-          </p>
-        </div>
+    <AppShell width="narrow">
+      <section className="rc-panel mx-auto w-full max-w-md p-6">
+        <PageHeader
+          size="md"
+          eyebrow="realms.cards"
+          title="Confirm sign-in"
+          description="To protect against email scanners, please confirm before we finish signing you in."
+        />
 
         {emailParam ? (
-          <div className="mb-6 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-200">
-            Signing in as <span className="font-semibold">{emailParam}</span>
+          <div className="mt-5 rounded-rc-md border border-rc-line/18 bg-black/30 px-4 py-3 font-rc-mono text-xs tracking-[0.06em] text-rc-fg">
+            Signing in as{" "}
+            <span className="text-rc-fg-strong">{emailParam}</span>
           </div>
         ) : null}
 
         {state.error ? (
-          <div className="rounded-xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+          <div className="rc-alert mt-5" data-tone="danger">
             {state.error} Please request a new magic link.
           </div>
         ) : null}
 
         <div className="mt-6 flex flex-col gap-3">
-          <button
-            type="button"
-            className="w-full rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+          <RcButton
+            className="w-full"
             onClick={() => {
               if (state.nextUrl) {
                 window.location.assign(state.nextUrl);
@@ -80,15 +77,12 @@ export default function ConfirmSignInPage() {
             disabled={!state.nextUrl}
           >
             Continue to sign in
-          </button>
-          <a
-            href="/auth/signin"
-            className="text-center text-sm text-slate-300 hover:text-slate-100"
-          >
+          </RcButton>
+          <a href="/auth/signin" className="rc-link text-center text-sm">
             Back to sign in
           </a>
         </div>
-      </div>
-    </div>
+      </section>
+    </AppShell>
   );
 }

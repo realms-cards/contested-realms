@@ -3,13 +3,25 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import AppShell from "@/components/ui/AppShell";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import {
   type BoosterCard,
   type Rarity,
   weightForRarity,
   choiceWeighted,
 } from "@/lib/game/cardSorting";
+
+/** Rarity pill tone: Unique reads gold, Elite reads as a highlight. */
+function rarityTone(rarity: Rarity): BadgeTone {
+  if (rarity === "Unique") return "gold";
+  if (rarity === "Elite") return "ok";
+  return "default";
+}
 
 export default function DraftPage() {
   const router = useRouter();
@@ -196,193 +208,208 @@ export default function DraftPage() {
     }
   }
 
-  return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <h1 className="text-2xl font-semibold">Draft Mode</h1>
-
-      <div className="flex flex-wrap items-end gap-4">
-        <label className="flex flex-col gap-1">
-          <span className="text-sm opacity-80">Set</span>
-          <CustomSelect
-            value={setName}
-            onChange={(v) => setSetName(v)}
-            options={[
-              { value: "Alpha", label: "Alpha" },
-              { value: "Beta", label: "Beta" },
-              { value: "Arthurian Legends", label: "Arthurian Legends" },
-            ]}
-          />
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-sm opacity-80">Players</span>
-          <input
-            type="number"
-            min={2}
-            max={12}
-            value={players}
-            onChange={(e) =>
-              setPlayers(Math.max(2, Math.min(12, Number(e.target.value))))
-            }
-            className="border rounded px-3 py-2 bg-transparent w-28"
-          />
-        </label>
-
-        <button
-          onClick={startDraft}
-          disabled={starting}
-          className="h-10 px-4 rounded bg-foreground text-background disabled:opacity-50"
-        >
-          {starting ? "Starting..." : "Start Draft"}
-        </button>
+  const renderPickable = (c: BoosterCard, idx: number, site: boolean) => (
+    <button
+      key={`${c.variantId}-${idx}`}
+      type="button"
+      onClick={() => makeHumanPick(idx)}
+      disabled={isPicking}
+      className="rounded-rc-md border border-rc-line/12 bg-black/30 p-2 text-left transition-colors hover:border-rc-accent/50 hover:bg-rc-accent/6 disabled:opacity-50"
+    >
+      <div
+        className={`relative mb-2 w-full overflow-hidden rounded-rc-sm bg-black/40 ${
+          site ? "aspect-[4/3]" : "aspect-[3/4]"
+        }`}
+      >
+        <Image
+          src={`/api/images/${c.slug}`}
+          alt={c.cardName}
+          fill
+          sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
+          className={
+            site ? "object-contain rotate-90 origin-center" : "object-cover"
+          }
+          unoptimized
+        />
       </div>
+      <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+        {c.cardName}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        <Badge tone={rarityTone(c.rarity)}>{c.rarity}</Badge>
+        <Badge>{c.finish}</Badge>
+      </div>
+      <div className="rc-hint mt-1.5 truncate">{c.slug}</div>
+    </button>
+  );
 
-      {error && <div className="text-red-500">Error: {error}</div>}
+  const pack = currentPacks[0] || [];
+  const entries = pack.map((c, idx) => ({ c, idx }));
+  const sites = entries.filter((e) =>
+    (e.c.type || "").toLowerCase().includes("site")
+  );
+  const spells = entries.filter(
+    (e) => !(e.c.type || "").toLowerCase().includes("site")
+  );
+
+  return (
+    <AppShell width="wide">
+      <PageHeader
+        eyebrow="limited"
+        title="Draft"
+        description="Draft three packs against bot seats, then save what you picked as a deck."
+      />
+
+      <section className="rc-panel">
+        <PanelHeader title="Table setup" meta={setName} />
+        <div className="flex flex-wrap items-end gap-4 px-[18px] py-3.5">
+          <label className="flex flex-col gap-1.5">
+            <span className="rc-eyebrow">Set</span>
+            <CustomSelect
+              value={setName}
+              onChange={(v) => setSetName(v)}
+              options={[
+                { value: "Alpha", label: "Alpha" },
+                { value: "Beta", label: "Beta" },
+                { value: "Arthurian Legends", label: "Arthurian Legends" },
+              ]}
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="rc-eyebrow">Players</span>
+            <input
+              type="number"
+              min={2}
+              max={12}
+              value={players}
+              onChange={(e) =>
+                setPlayers(Math.max(2, Math.min(12, Number(e.target.value))))
+              }
+              className="rc-input h-9 w-28"
+            />
+          </label>
+
+          <RcButton onClick={startDraft} disabled={starting}>
+            {starting ? "Starting…" : "Start draft"}
+          </RcButton>
+        </div>
+      </section>
+
+      {error && (
+        <div className="rc-alert" data-tone="danger">
+          Error: {error}
+        </div>
+      )}
 
       {inProgress ? (
         <div className="grid grid-cols-12 gap-6">
           <div className="col-span-12 lg:col-span-8">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-sm opacity-80">
-                Pack {packIndex + 1} / 3 • Pick {pickNumber} / 15 • Passing{" "}
-                {dir === 1 ? "Left" : "Right"}
-              </div>
-              <div className="text-sm">Your picks: {yourPicks.length}</div>
-            </div>
-            {(() => {
-              const pack = currentPacks[0] || [];
-              const entries = pack.map((c, idx) => ({ c, idx }));
-              const sites = entries.filter((e) =>
-                (e.c.type || "").toLowerCase().includes("site")
-              );
-              const spells = entries.filter(
-                (e) => !(e.c.type || "").toLowerCase().includes("site")
-              );
-              return (
-                <div className="space-y-4 text-sm">
-                  {!!spells.length && (
-                    <div>
-                      <div className="text-xs uppercase opacity-70 mb-2">
-                        Spellbook
-                      </div>
-                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                        {spells.map(({ c, idx }) => (
-                          <button
-                            key={`${c.variantId}-${idx}`}
-                            onClick={() => makeHumanPick(idx)}
-                            disabled={isPicking}
-                            className="text-left border rounded p-2 hover:bg-muted disabled:opacity-50"
-                          >
-                            <div className="relative aspect-[3/4] w-full overflow-hidden rounded bg-muted/40 mb-2">
-                              <Image
-                                src={`/api/images/${c.slug}`}
-                                alt={c.cardName}
-                                fill
-                                sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
-                                className="object-cover"
-                                unoptimized
-                              />
-                            </div>
-                            <div className="font-semibold">{c.cardName}</div>
-                            <div className="opacity-80">
-                              {c.rarity} • {c.finish}
-                            </div>
-                            <div className="opacity-70 text-xs">{c.slug}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {!!sites.length && (
-                    <div>
-                      <div className="text-xs uppercase opacity-70 mb-2">
-                        Sites
-                      </div>
-                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                        {sites.map(({ c, idx }) => (
-                          <button
-                            key={`${c.variantId}-${idx}`}
-                            onClick={() => makeHumanPick(idx)}
-                            disabled={isPicking}
-                            className="text-left border rounded p-2 hover:bg-muted disabled:opacity-50"
-                          >
-                            <div className="relative aspect-[4/3] w-full overflow-hidden rounded bg-muted/40 mb-2">
-                              <Image
-                                src={`/api/images/${c.slug}`}
-                                alt={c.cardName}
-                                fill
-                                sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
-                                className="object-contain rotate-90 origin-center"
-                                unoptimized
-                              />
-                            </div>
-                            <div className="font-semibold">{c.cardName}</div>
-                            <div className="opacity-80">
-                              {c.rarity} • {c.finish}
-                            </div>
-                            <div className="opacity-70 text-xs">{c.slug}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+            <section className="rc-panel">
+              <div className="rc-panel-head">
+                <div>
+                  <div className="rc-hint uppercase">Pack</div>
+                  <div className="rc-stat text-xl">{packIndex + 1} / 3</div>
                 </div>
-              );
-            })()}
+                <div>
+                  <div className="rc-hint uppercase">Pick</div>
+                  <div className="rc-stat text-xl">{pickNumber} / 15</div>
+                </div>
+                <div>
+                  <div className="rc-hint uppercase">Passing</div>
+                  <div className="font-rc-mono text-sm text-rc-fg">
+                    {dir === 1 ? "Left" : "Right"}
+                  </div>
+                </div>
+                <div className="flex-1" />
+                <div className="text-right">
+                  <div className="rc-hint uppercase">Your picks</div>
+                  <div className="rc-stat text-xl">{yourPicks.length}</div>
+                </div>
+              </div>
+              <div className="space-y-4 px-[18px] py-3.5">
+                {!!spells.length && (
+                  <div>
+                    <div className="rc-eyebrow mb-2">Spellbook</div>
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {spells.map(({ c, idx }) => renderPickable(c, idx, false))}
+                    </div>
+                  </div>
+                )}
+                {!!sites.length && (
+                  <div>
+                    <div className="rc-eyebrow mb-2">Sites</div>
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {sites.map(({ c, idx }) => renderPickable(c, idx, true))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
 
           <div className="col-span-12 lg:col-span-4">
-            <div className="border rounded p-3">
-              <div className="font-medium mb-2">
-                Your Picks ({yourPicks.length})
-              </div>
-              <div className="grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-2 text-sm">
+            <section className="rc-panel">
+              <PanelHeader
+                title="Your picks"
+                meta={<span className="rc-stat text-sm">{yourPicks.length}</span>}
+              />
+              <div className="grid gap-2 px-[18px] py-3.5 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-1">
                 {yourCounts.map((it) => (
                   <div
                     key={it.cardId}
-                    className="border rounded p-2 flex justify-between"
+                    className="flex items-center justify-between gap-3 rounded-rc-md border border-rc-line/12 bg-black/30 p-2"
                   >
-                    <div>
-                      <div className="font-semibold">{it.name}</div>
-                      <div className="opacity-80 text-xs">{it.rarity}</div>
+                    <div className="min-w-0">
+                      <div className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                        {it.name}
+                      </div>
+                      <div className="mt-1">
+                        <Badge tone={rarityTone(it.rarity)}>{it.rarity}</Badge>
+                      </div>
                     </div>
-                    <div className="text-right">x{it.count}</div>
+                    <div className="rc-stat shrink-0 text-right">
+                      ×{it.count}
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           </div>
         </div>
       ) : (
-        <div className="text-sm opacity-80">
-          Click <i>Start Draft</i> to begin. You will draft 3 packs, passing
+        <RcEmpty title="No draft in progress.">
+          Start a draft to begin. You will draft 3 packs, passing
           Left-Right-Left. Seat 1 is you; other seats are bots.
-        </div>
+        </RcEmpty>
       )}
 
       {!inProgress && yourPicks.length > 0 && (
-        <div className="border rounded p-4">
-          <div className="font-medium mb-2">Save Drafted Deck</div>
-          <div className="flex items-end gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="text-sm opacity-80">Deck name</span>
+        <section className="rc-panel">
+          <PanelHeader
+            title="Save drafted deck"
+            meta={<span className="rc-stat text-sm">{yourPicks.length} cards</span>}
+          />
+          <div className="flex flex-wrap items-end gap-3 px-[18px] py-3.5">
+            <label className="flex flex-col gap-1.5">
+              <span className="rc-eyebrow">Deck name</span>
               <input
                 value={deckName}
                 onChange={(e) => setDeckName(e.target.value)}
-                className="border rounded px-3 py-2 bg-transparent"
+                className="rc-input h-10"
               />
             </label>
-            <button
-              onClick={saveDeck}
-              disabled={saving}
-              className="h-10 px-4 rounded bg-foreground text-background disabled:opacity-50"
-            >
-              {saving ? "Saving..." : "Save Deck"}
-            </button>
-            {saveMsg && <div className="text-sm">{saveMsg}</div>}
+            <RcButton onClick={saveDeck} disabled={saving} className="h-10">
+              {saving ? "Saving…" : "Save deck"}
+            </RcButton>
+            {saveMsg && (
+              <div className="rc-alert" data-tone="success">
+                {saveMsg}
+              </div>
+            )}
           </div>
-        </div>
+        </section>
       )}
-    </div>
+    </AppShell>
   );
 }

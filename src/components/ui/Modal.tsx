@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { cn } from "@/lib/utils";
 
 interface ModalProps {
   children: ReactNode;
@@ -59,13 +60,16 @@ export function Modal({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4 ${backdropClassName}`}
+      className={cn(
+        "fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4",
+        backdropClassName,
+      )}
       onClick={handleBackdropClick}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className={`relative ${className}`}
+        className={cn("relative", className)}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

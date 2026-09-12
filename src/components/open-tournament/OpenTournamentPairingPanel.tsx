@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { PanelHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
 
 interface Standing {
   playerId: string;
@@ -48,7 +50,9 @@ export function OpenTournamentPairingPanel({
 
   const activePlayers = registrations
     .filter((r) => r.seatStatus === "active")
-    .filter((r) => !standings.find((s) => s.playerId === r.playerId)?.isEliminated);
+    .filter(
+      (r) => !standings.find((s) => s.playerId === r.playerId)?.isEliminated,
+    );
 
   const handleCreateRound = async () => {
     setLoading(true);
@@ -136,147 +140,152 @@ export function OpenTournamentPairingPanel({
   );
 
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
-      <h3 className="text-sm font-medium text-slate-300 mb-3">
-        Round Management
-      </h3>
-
-      {error && (
-        <div className="bg-red-900/50 border border-red-700 text-red-300 px-3 py-2 rounded text-xs mb-3">
-          {error}
-        </div>
-      )}
-
-      {/* No active round — create one */}
-      {!activeRound && (
-        <button
-          onClick={handleCreateRound}
-          disabled={loading || activePlayers.length < 2}
-          className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-2 rounded text-sm font-medium"
-        >
-          {loading ? "Creating..." : "Create Next Round"}
-        </button>
-      )}
-
-      {/* Active round — generate pairings or end round */}
-      {activeRound && (
-        <div className="space-y-4">
-          {/* Mode toggle */}
-          <div className="flex gap-2">
-            <button
-              className={`px-3 py-1.5 rounded text-sm ${
-                mode === "swiss"
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-              }`}
-              onClick={() => setMode("swiss")}
-            >
-              Swiss (auto)
-            </button>
-            <button
-              className={`px-3 py-1.5 rounded text-sm ${
-                mode === "manual"
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-              }`}
-              onClick={() => setMode("manual")}
-            >
-              Manual
-            </button>
+    <section className="rc-panel">
+      <PanelHeader
+        title="Round Management"
+        meta={
+          activeRound ? `round ${activeRound.roundNumber}` : "no active round"
+        }
+      />
+      <div className="px-[18px] py-3.5">
+        {error && (
+          <div className="rc-alert mb-3" data-tone="danger">
+            {error}
           </div>
+        )}
 
-          {/* Manual pairing UI */}
-          {mode === "manual" && (
-            <div className="space-y-2">
-              {manualPairs.map((pair, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <select
-                    value={pair.player1Id}
-                    onChange={(e) => updateManualPair(i, "player1Id", e.target.value)}
-                    className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm text-white"
-                  >
-                    <option value="">Player 1</option>
-                    {activePlayers
-                      .filter(
-                        (p) =>
-                          p.playerId === pair.player1Id ||
-                          !assignedPlayerIds.has(p.playerId),
-                      )
-                      .map((p) => (
-                        <option key={p.playerId} value={p.playerId}>
-                          {p.player.name ?? "Unknown"}
-                        </option>
-                      ))}
-                  </select>
-                  <span className="text-slate-500 text-sm">vs</span>
-                  <select
-                    value={pair.player2Id}
-                    onChange={(e) => updateManualPair(i, "player2Id", e.target.value)}
-                    className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm text-white"
-                  >
-                    <option value="">Player 2</option>
-                    {activePlayers
-                      .filter(
-                        (p) =>
-                          p.playerId === pair.player2Id ||
-                          !assignedPlayerIds.has(p.playerId),
-                      )
-                      .map((p) => (
-                        <option key={p.playerId} value={p.playerId}>
-                          {p.player.name ?? "Unknown"}
-                        </option>
-                      ))}
-                  </select>
-                  <button
-                    onClick={() => removeManualPair(i)}
-                    className="text-red-400 hover:text-red-300 text-sm px-2"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
+        {/* No active round — create one */}
+        {!activeRound && (
+          <RcButton
+            onClick={handleCreateRound}
+            disabled={loading || activePlayers.length < 2}
+            className="w-full"
+          >
+            {loading ? "Creating..." : "Create Next Round"}
+          </RcButton>
+        )}
+
+        {/* Active round — generate pairings or end round */}
+        {activeRound && (
+          <div className="space-y-4">
+            {/* Mode toggle */}
+            <div className="rc-segment">
               <button
-                onClick={addManualPair}
-                className="text-sm text-blue-400 hover:text-blue-300"
+                type="button"
+                aria-pressed={mode === "swiss"}
+                onClick={() => setMode("swiss")}
               >
-                + Add pairing
+                Swiss (auto)
+              </button>
+              <button
+                type="button"
+                aria-pressed={mode === "manual"}
+                onClick={() => setMode("manual")}
+              >
+                Manual
               </button>
             </div>
-          )}
 
-          {/* Generate / End buttons */}
-          <div className="flex gap-2">
-            <button
-              onClick={handleGeneratePairings}
-              disabled={
-                loading ||
-                (mode === "manual" &&
-                  manualPairs.some((p) => !p.player1Id || !p.player2Id))
-              }
-              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded text-sm font-medium"
-            >
-              {loading
-                ? "Generating..."
-                : mode === "swiss"
-                  ? "Generate Swiss Pairings"
-                  : "Apply Manual Pairings"}
-            </button>
-            <button
-              onClick={handleEndRound}
-              disabled={loading}
-              className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded text-sm"
-            >
-              End Round
-            </button>
+            {/* Manual pairing UI */}
+            {mode === "manual" && (
+              <div className="space-y-2">
+                {manualPairs.map((pair, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <select
+                      value={pair.player1Id}
+                      onChange={(e) =>
+                        updateManualPair(i, "player1Id", e.target.value)
+                      }
+                      className="rc-select h-9 min-w-0 flex-1"
+                    >
+                      <option value="">Player 1</option>
+                      {activePlayers
+                        .filter(
+                          (p) =>
+                            p.playerId === pair.player1Id ||
+                            !assignedPlayerIds.has(p.playerId),
+                        )
+                        .map((p) => (
+                          <option key={p.playerId} value={p.playerId}>
+                            {p.player.name ?? "Unknown"}
+                          </option>
+                        ))}
+                    </select>
+                    <span className="font-rc-mono text-[11px] tracking-[0.14em] text-rc-fg-dim">
+                      vs
+                    </span>
+                    <select
+                      value={pair.player2Id}
+                      onChange={(e) =>
+                        updateManualPair(i, "player2Id", e.target.value)
+                      }
+                      className="rc-select h-9 min-w-0 flex-1"
+                    >
+                      <option value="">Player 2</option>
+                      {activePlayers
+                        .filter(
+                          (p) =>
+                            p.playerId === pair.player2Id ||
+                            !assignedPlayerIds.has(p.playerId),
+                        )
+                        .map((p) => (
+                          <option key={p.playerId} value={p.playerId}>
+                            {p.player.name ?? "Unknown"}
+                          </option>
+                        ))}
+                    </select>
+                    <RcButton
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeManualPair(i)}
+                      aria-label="Remove pairing"
+                      title="Remove pairing"
+                      className="text-rc-danger hover:text-rc-danger-hover"
+                    >
+                      ×
+                    </RcButton>
+                  </div>
+                ))}
+                <RcButton variant="outline" size="sm" onClick={addManualPair}>
+                  Add pairing
+                </RcButton>
+              </div>
+            )}
+
+            {/* Generate / End buttons */}
+            <div className="flex flex-wrap gap-2">
+              <RcButton
+                onClick={handleGeneratePairings}
+                disabled={
+                  loading ||
+                  (mode === "manual" &&
+                    manualPairs.some((p) => !p.player1Id || !p.player2Id))
+                }
+                className="flex-1"
+              >
+                {loading
+                  ? "Generating..."
+                  : mode === "swiss"
+                    ? "Generate Swiss Pairings"
+                    : "Apply Manual Pairings"}
+              </RcButton>
+              <RcButton
+                variant="outline"
+                onClick={handleEndRound}
+                disabled={loading}
+              >
+                End Round
+              </RcButton>
+            </div>
+
+            {activePlayers.length > 0 && (
+              <p className="rc-hint">
+                {activePlayers.length} active players available for pairing
+              </p>
+            )}
           </div>
-
-          {activePlayers.length > 0 && (
-            <p className="text-xs text-slate-500">
-              {activePlayers.length} active players available for pairing
-            </p>
-          )}
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </section>
   );
 }

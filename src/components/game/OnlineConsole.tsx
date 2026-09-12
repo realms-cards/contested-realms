@@ -265,7 +265,7 @@ export default function OnlineConsole({
         <span
           key={key++}
           style={{ color: PLAYER_COLORS[playerKey], fontWeight: 500 }}
-          className={isCard ? "font-fantaisie" : undefined}
+          className={isCard ? "font-rc-display" : undefined}
         >
           {displayText}
         </span>,
@@ -369,23 +369,23 @@ export default function OnlineConsole({
     <div
       className={`${mobileExpanded ? "fixed inset-x-0 bottom-0 z-30" : `absolute ${positionClasses} z-10`} ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
-      } text-white ${toastOnly ? "w-80" : mobileExpanded ? "w-full" : containerWidth} transition-all`}
+      } text-rc-fg ${toastOnly ? "w-80" : mobileExpanded ? "w-full" : containerWidth} transition-all`}
     >
       {/* Main console UI - hidden when toastOnly */}
       {!toastOnly && (
         <div
-          className={`bg-black/60 backdrop-blur ring-1 ring-white/10 shadow transition-all ${mobileExpanded ? "rounded-t-2xl max-h-[50vh] pb-4" : "rounded-xl"}`}
+          className={`bg-[rgba(9,13,25,0.82)] backdrop-blur ring-1 ring-rc-line/18 shadow-rc-panel transition-all ${mobileExpanded ? "rounded-t-2xl max-h-[50vh] pb-4" : "rounded-rc-lg"}`}
         >
           {/* Header - compact icon-only when collapsed, filter toggles when expanded */}
           <div
-            className={`flex items-center justify-between ${headerPadding} text-sm ${!collapsed ? "border-b border-white/10" : ""} select-none`}
+            className={`flex items-center justify-between ${headerPadding} text-sm ${!collapsed ? "border-b border-rc-line/18" : ""} select-none`}
             onContextMenu={(e) => e.preventDefault()}
           >
             {/* Collapsed: compact icon buttons with badges */}
             {collapsed ? (
               <div className="flex items-center gap-0.5">
                 <button
-                  className={`rounded bg-white/10 hover:bg-white/20 ${isMobile ? "p-1" : "p-1.5"} transition-colors relative`}
+                  className={`rounded-rc-sm bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent ${isMobile ? "p-1" : "p-1.5"} transition-colors relative`}
                   onClick={() => {
                     setConsoleOpen(true);
                     lastOpenReasonRef.current = "manual";
@@ -397,7 +397,7 @@ export default function OnlineConsole({
                   <ScrollText className={isMobile ? "w-3 h-3" : "w-4 h-4"} />
                   {events.length > 0 && (
                     <span
-                      className={`absolute -top-1 -right-1 bg-blue-500 text-white flex items-center justify-center rounded-full ${isMobile ? "text-[7px] min-w-[12px] h-[12px]" : "text-[9px] min-w-[14px] h-[14px]"}`}
+                      className={`absolute -top-1 -right-1 bg-rc-info text-rc-fg-strong font-rc-mono tabular-nums flex items-center justify-center rounded-full ${isMobile ? "text-[7px] min-w-[12px] h-[12px]" : "text-[9px] min-w-[14px] h-[14px]"}`}
                     >
                       {events.length > 99 ? "99+" : events.length}
                     </span>
@@ -405,7 +405,7 @@ export default function OnlineConsole({
                 </button>
                 {!hideChat && matchChat.length > 0 && (
                   <button
-                    className={`rounded bg-white/10 hover:bg-white/20 ${isMobile ? "p-1" : "p-1.5"} transition-colors relative`}
+                    className={`rounded-rc-sm bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent ${isMobile ? "p-1" : "p-1.5"} transition-colors relative`}
                     onClick={() => {
                       setConsoleOpen(true);
                       setShowChat(true);
@@ -419,14 +419,14 @@ export default function OnlineConsole({
                       className={isMobile ? "w-3 h-3" : "w-4 h-4"}
                     />
                     <span
-                      className={`absolute -top-1 -right-1 bg-green-500 text-white flex items-center justify-center rounded-full ${isMobile ? "text-[7px] min-w-[12px] h-[12px]" : "text-[9px] min-w-[14px] h-[14px]"}`}
+                      className={`absolute -top-1 -right-1 bg-rc-success text-rc-fg-strong font-rc-mono tabular-nums flex items-center justify-center rounded-full ${isMobile ? "text-[7px] min-w-[12px] h-[12px]" : "text-[9px] min-w-[14px] h-[14px]"}`}
                     >
                       {matchChat.length > 99 ? "99+" : matchChat.length}
                     </span>
                   </button>
                 )}
                 <button
-                  className={`rounded bg-white/10 hover:bg-white/20 ${isMobile ? "p-0.5" : "p-1"} transition-colors`}
+                  className={`rounded-rc-sm bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent ${isMobile ? "p-0.5" : "p-1"} transition-colors`}
                   onClick={() => {
                     setConsoleOpen(true);
                     lastOpenReasonRef.current = "manual";
@@ -443,10 +443,10 @@ export default function OnlineConsole({
               <>
                 <div className="flex items-center gap-1">
                   <button
-                    className={`flex items-center gap-1 ${filterBtnPadding} rounded text-xs transition-colors ${
+                    className={`flex items-center gap-1 ${filterBtnPadding} rounded-rc-sm font-rc-mono tracking-[0.08em] text-[11px] transition-colors ${
                       showEvents
-                        ? "bg-white/20 text-white"
-                        : "bg-white/5 opacity-40"
+                        ? "text-rc-info"
+                        : "text-rc-fg-dim hover:text-rc-fg-muted"
                     }`}
                     onClick={() => setShowEvents((v) => !v)}
                     onContextMenu={(e) => e.preventDefault()}
@@ -455,17 +455,17 @@ export default function OnlineConsole({
                     <ScrollText className="w-3 h-3" />
                     Events
                     {events.length > 0 && (
-                      <span className="bg-blue-500 text-white text-xs px-1 rounded-full">
+                      <span className="tabular-nums text-[11px] opacity-70">
                         {events.length}
                       </span>
                     )}
                   </button>
                   {!hideChat && (
                     <button
-                      className={`flex items-center gap-1 ${filterBtnPadding} rounded text-xs transition-colors ${
+                      className={`flex items-center gap-1 ${filterBtnPadding} rounded-rc-sm font-rc-mono tracking-[0.08em] text-[11px] transition-colors ${
                         showChat
-                          ? "bg-white/20 text-white"
-                          : "bg-white/5 opacity-40"
+                          ? "text-rc-success"
+                          : "text-rc-fg-dim hover:text-rc-fg-muted"
                       }`}
                       onClick={() => setShowChat((v) => !v)}
                       onContextMenu={(e) => e.preventDefault()}
@@ -474,7 +474,7 @@ export default function OnlineConsole({
                       <MessageCircle className="w-3 h-3" />
                       Chat
                       {matchChat.length > 0 && (
-                        <span className="bg-green-500 text-white text-xs px-1 rounded-full">
+                        <span className="tabular-nums text-[11px] opacity-70">
                           {matchChat.length}
                         </span>
                       )}
@@ -485,7 +485,7 @@ export default function OnlineConsole({
                 <div className="flex items-center gap-1">
                   {!hideLeaveButton && (
                     <button
-                      className="rounded bg-red-600/80 hover:bg-red-600 px-2 py-0.5 text-xs flex items-center gap-1 transition-colors"
+                      className="rounded-rc-sm bg-rc-danger/85 hover:bg-rc-danger-hover text-rc-fg-strong font-rc-mono tracking-[0.08em] px-2 py-0.5 text-[11px] flex items-center gap-1 transition-colors"
                       onClick={handleLeaveMatch}
                       title="Leave match and return to lobby"
                       onContextMenu={(e) => e.preventDefault()}
@@ -495,7 +495,7 @@ export default function OnlineConsole({
                     </button>
                   )}
                   <button
-                    className="rounded bg-white/10 hover:bg-white/20 px-2 py-0.5 text-xs transition-colors"
+                    className="rounded-rc-sm text-rc-fg-dim hover:text-rc-accent-ring px-2 py-0.5 text-[11px] transition-colors"
                     onClick={() => {
                       setConsoleOpen(false);
                       lastOpenReasonRef.current = "manual";
@@ -518,11 +518,11 @@ export default function OnlineConsole({
               <div
                 ref={streamRef}
                 data-allow-wheel="true"
-                className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 space-y-1 min-h-0"
+                className="flex-1 overflow-y-scroll thin-scrollbar px-3 py-3 space-y-1 min-h-0 font-rc-mono leading-[1.5]"
                 style={fontStyle}
               >
                 {filteredStream.length === 0 && (
-                  <div className="opacity-60">No events yet</div>
+                  <div className="text-rc-fg-dim">No events yet</div>
                 )}
                 {filteredStream.slice(-100).map((item) => {
                   if (item.kind === "match") {
@@ -542,12 +542,12 @@ export default function OnlineConsole({
                     return (
                       <div
                         key={item.id}
-                        className="opacity-90 border-l-2 border-green-500/50 pl-2 py-0.5"
+                        className="border-l-2 border-rc-success/50 pl-2 py-0.5"
                       >
-                        <span className="font-bold text-green-300/90">
+                        <span className="font-semibold text-rc-success">
                           {m.from?.displayName ?? "System"}
                         </span>
-                        <span className="opacity-80">: {m.content}</span>
+                        <span className="text-rc-fg">: {m.content}</span>
                       </div>
                     );
                   } else {
@@ -579,17 +579,17 @@ export default function OnlineConsole({
                     return (
                       <div
                         key={item.id}
-                        className={`opacity-70 ${
+                        className={`${
                           isWarn
-                            ? "text-yellow-400"
+                            ? "text-rc-warning"
                             : isSearch
-                              ? "text-blue-400"
-                              : ""
+                              ? "text-rc-info"
+                              : "text-rc-fg-muted"
                         }`}
                       >
                         {turnPrefix && (
                           <span
-                            className="opacity-70"
+                            className="tabular-nums text-rc-fg-dim"
                             style={turnColor ? { color: turnColor } : undefined}
                           >
                             {turnPrefix}
@@ -605,11 +605,11 @@ export default function OnlineConsole({
               {/* Chat input - always visible when expanded and chat not hidden */}
               {!hideChat && (
                 <div
-                  className="px-3 pb-3 pt-2 border-t border-white/10 flex gap-2 select-none"
+                  className="px-3 pb-3 pt-2 border-t border-rc-line/18 flex gap-2 select-none"
                   onContextMenu={(e) => e.preventDefault()}
                 >
                   <input
-                    className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1"
+                    className="flex-1 bg-black/45 ring-1 ring-rc-line/22 rounded-rc-md px-2 py-1 font-rc-mono text-rc-fg placeholder:text-rc-fg-dim outline-none focus:ring-rc-accent-ring"
                     style={fontStyle}
                     placeholder="Type a message..."
                     value={chatInput}
@@ -623,7 +623,7 @@ export default function OnlineConsole({
                     onContextMenu={(e) => e.preventDefault()}
                   />
                   <button
-                    className="rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 transition-colors"
+                    className="rounded-rc-md ring-1 ring-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent text-rc-accent-fg font-rc-mono uppercase tracking-[0.14em] disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 transition-[background-color,transform] hover:-translate-y-px hover:from-rc-accent-ring hover:to-rc-accent-hover"
                     style={fontStyle}
                     onClick={handleSendChat}
                     disabled={!connected || !chatInput.trim()}
@@ -641,7 +641,7 @@ export default function OnlineConsole({
       {/* Toast notification for chat messages - always shown (even in toastOnly mode) */}
       {showToast && (toastOnly || !consoleOpen) && (
         <div
-          className={`absolute ${toastOnly ? "top-0" : "top-[-70px]"} left-0 right-0 bg-black/70 rounded-lg px-4 py-3 text-sm text-white shadow-xl cursor-pointer transform transition-all duration-300 ease-out z-20`}
+          className={`absolute ${toastOnly ? "top-0" : "top-[-70px]"} left-0 right-0 bg-[rgba(9,13,25,0.9)] ring-1 ring-rc-line/18 rounded-rc-lg px-4 py-3 text-sm text-rc-fg shadow-rc-panel cursor-pointer transform transition-all duration-300 ease-out z-20`}
           style={{
             animation: "slideInUp 0.4s ease-out",
           }}
@@ -657,8 +657,12 @@ export default function OnlineConsole({
         >
           <div className="flex items-center gap-2">
             <span className="text-lg">💬</span>
-            <span className="font-medium truncate">{toastMessage}</span>
-            <span className="text-xs opacity-75 ml-auto">Click to view</span>
+            <span className="font-medium truncate text-rc-fg-strong">
+              {toastMessage}
+            </span>
+            <span className="text-xs font-rc-mono tracking-[0.08em] text-rc-fg-dim ml-auto">
+              Click to view
+            </span>
           </div>
         </div>
       )}

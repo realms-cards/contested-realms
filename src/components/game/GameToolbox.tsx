@@ -27,6 +27,17 @@ import {
   type InteractionRequestKind,
 } from "@/lib/net/interactions";
 
+/** Quiet toolbox control: hairline border on an inked ground, gold on hover. */
+const QUIET_BTN =
+  "border border-rc-line/22 bg-black/35 text-rc-fg-muted transition-colors hover:border-rc-accent hover:text-rc-accent-ring";
+/** The single gold control per surface (the confirm action). */
+const GOLD_BTN =
+  "border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent text-rc-accent-fg transition-transform hover:-translate-y-px";
+/** Inset group inside the toolbox panel. */
+const GROUP_BOX = "rounded-rc-md border border-rc-line/12 bg-black/30 p-2";
+/** Short mono status label (uppercase, letter-spaced). */
+const MONO_LABEL = "font-rc-mono uppercase tracking-[0.14em]";
+
 export type GameToolboxProps = {
   myPlayerId: string | null;
   mySeat: PlayerKey | null;
@@ -1150,11 +1161,11 @@ export default function GameToolbox({
     ? "Restore the Realm"
     : "Archive the Realm (Kairos)";
   const realmBtnClass = isRealmArmed
-    ? "w-full rounded bg-amber-600/90 hover:bg-amber-500 py-1"
-    : "w-full rounded bg-purple-600/90 hover:bg-purple-500 py-1";
+    ? "w-full rounded-rc-sm border border-rc-warning/45 bg-black/35 py-1 text-rc-warning transition-colors hover:border-rc-warning hover:bg-rc-warning/12"
+    : `w-full rounded-rc-sm ${QUIET_BTN} py-1`;
 
   return (
-    <div className="text-white">
+    <div className="text-rc-fg">
       {/* Instant permission indicator */}
       {(() => {
         // Compute active instant permission and its remaining time
@@ -1195,7 +1206,9 @@ export default function GameToolbox({
           : null;
         return (
           <div className="flex justify-end mb-2 pr-1">
-            <div className="rounded-full bg-purple-600/90 px-3 py-1 text-[11px] font-medium shadow ring-1 ring-white/10">
+            <div
+              className={`rounded-full border border-rc-accent/45 bg-rc-accent/12 px-3 py-1 text-[10px] tabular-nums text-rc-accent-link shadow-rc-sm ${MONO_LABEL}`}
+            >
               Instant permission active
               {hasExpiry && seconds !== null ? ` · ${seconds}s` : ""}
             </div>
@@ -1204,7 +1217,7 @@ export default function GameToolbox({
       })()}
       {!open ? (
         <button
-          className="rounded bg-white/10 hover:bg-white/20 p-1.5 ring-1 ring-white/10 shadow-lg transition-colors"
+          className={`rounded-rc-sm p-1.5 shadow-rc-md ${QUIET_BTN}`}
           onClick={() => setOpen(true)}
           aria-label="Show toolbox"
           title="Toolbox"
@@ -1213,21 +1226,21 @@ export default function GameToolbox({
         </button>
       ) : (
         <div
-          className={`bg-black/60 backdrop-blur ring-1 ring-white/10 shadow-lg ${containerWidthClass} overflow-y-auto transition-all ${
+          className={`border border-rc-line/18 bg-[rgba(9,13,25,0.82)] backdrop-blur shadow-rc-panel ${containerWidthClass} overflow-y-auto transition-all ${
             isMobileScreen
               ? "fixed right-0 bottom-0 z-50 rounded-tl-2xl max-h-[70vh] pb-6"
               : "rounded-xl max-h-[85vh]"
           }`}
         >
           <div
-            className={`flex items-center justify-between ${headerPaddingClass} border-b border-white/10`}
+            className={`flex items-center justify-between ${headerPaddingClass} border-b border-rc-line/14`}
           >
             <div className="flex items-center gap-2">
-              <span className="font-semibold" style={fontStyle}>
+              <span className="font-rc-display text-[20px] leading-none text-rc-fg-strong">
                 Toolbox
               </span>
               <button
-                className="p-1 rounded bg-amber-600/80 hover:bg-amber-500 text-white"
+                className="p-1 rounded-rc-sm border border-rc-line/22 bg-black/35 text-rc-warning transition-colors hover:border-rc-warning hover:bg-rc-warning/12"
                 onClick={() => setBugReportOpen(true)}
                 aria-label="Report bug"
                 title="Report Bug"
@@ -1236,7 +1249,7 @@ export default function GameToolbox({
               </button>
             </div>
             <button
-              className={`rounded bg-white/10 hover:bg-white/20 ${toggleBtnPaddingClass}`}
+              className={`rounded-rc-sm ${QUIET_BTN} ${MONO_LABEL} ${toggleBtnPaddingClass}`}
               style={fontStyle}
               onClick={() => setOpen(false)}
               aria-label="Hide toolbox"
@@ -1250,7 +1263,7 @@ export default function GameToolbox({
             {showInstantRequest && (
               <div>
                 <button
-                  className="w-full rounded bg-purple-600/90 hover:bg-purple-500 py-1"
+                  className={`w-full rounded-rc-sm ${QUIET_BTN} py-1`}
                   onClick={handleRequestInstantSpell}
                   title="Sends a consent request to the acting player"
                 >
@@ -1259,7 +1272,7 @@ export default function GameToolbox({
               </div>
             )}
             {/* Combined pile action: Draw / Peek / Scry */}
-            <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+            <div className={GROUP_BOX}>
               <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5 sm:gap-2 mb-2">
                 <CustomSelect
                   value={actionType}
@@ -1327,16 +1340,14 @@ export default function GameToolbox({
                       setRevealCount(n);
                       setScryCount(n);
                     }}
-                    className="w-14 bg-white/10 rounded px-2 py-2 sm:py-1 text-sm text-center"
+                    className="rc-input w-14 px-2 py-2 sm:py-1 text-sm text-center tabular-nums"
                   />
                 </div>
               </div>
               <button
-                className={`w-full rounded ${
-                  actionType === "draw"
-                    ? "bg-emerald-600/90 hover:bg-emerald-500"
-                    : "bg-white/15 hover:bg-white/25"
-                } py-1 disabled:opacity-40`}
+                className={`w-full rounded-rc-sm ${
+                  actionType === "draw" ? GOLD_BTN : QUIET_BTN
+                } py-1 disabled:opacity-50`}
                 onClick={() => {
                   if (actionType === "draw") return handleDraw();
                   if (actionType === "peek") return handlePeekPile();
@@ -1355,8 +1366,8 @@ export default function GameToolbox({
               </button>
 
               {scryOpen && (
-                <div className="mt-2 rounded-xl bg-black/30 ring-1 ring-white/10 p-2">
-                  <div className="text-xs opacity-80 mb-2">
+                <div className="mt-2 rounded-rc-md border border-rc-line/12 bg-black/45 p-2">
+                  <div className="rc-hint mb-2">
                     Click to mark cards to put on bottom
                   </div>
                   <div className="flex gap-2 overflow-x-auto pb-1">
@@ -1370,9 +1381,9 @@ export default function GameToolbox({
                           key={i}
                           className={`relative flex-shrink-0 ${
                             onBottom
-                              ? "ring-2 ring-red-400"
-                              : "ring-1 ring-white/20"
-                          } rounded overflow-hidden`}
+                              ? "ring-2 ring-rc-danger"
+                              : "ring-1 ring-rc-line/20"
+                          } rounded-rc-sm overflow-hidden`}
                           onClick={() => toggleScryIndex(i)}
                           onMouseEnter={() => setScryPreviewCard(c)}
                           onMouseLeave={() => setScryPreviewCard(null)}
@@ -1396,7 +1407,9 @@ export default function GameToolbox({
                             />
                           </div>
                           {onBottom && (
-                            <div className="absolute inset-0 bg-red-500/30 flex items-center justify-center text-[10px] font-bold">
+                            <div
+                              className={`absolute inset-0 bg-rc-danger/35 flex items-center justify-center text-[10px] text-rc-fg-strong ${MONO_LABEL}`}
+                            >
                               BOTTOM
                             </div>
                           )}
@@ -1406,13 +1419,13 @@ export default function GameToolbox({
                   </div>
                   <div className="flex gap-2 mt-2">
                     <button
-                      className="flex-1 rounded bg-emerald-600/90 hover:bg-emerald-500 py-1"
+                      className="flex-1 rounded-rc-sm border border-rc-accent/45 bg-black/35 py-1 text-rc-accent-link transition-colors hover:border-rc-accent hover:bg-rc-accent/12"
                       onClick={applyScry}
                     >
                       Apply
                     </button>
                     <button
-                      className="flex-1 rounded bg-white/10 hover:bg-white/20 py-1"
+                      className={`flex-1 rounded-rc-sm ${QUIET_BTN} py-1`}
                       onClick={() => setScryOpen(false)}
                     >
                       Cancel
@@ -1425,7 +1438,7 @@ export default function GameToolbox({
             {/* Inspect Hand + D20 + D6 row */}
             <div className="grid grid-cols-5 sm:flex gap-1.5">
               <button
-                className="col-span-2 sm:flex-1 rounded bg-blue-600/90 hover:bg-blue-500 active:bg-blue-400 px-2 py-2.5 sm:py-1.5 inline-flex items-center justify-center gap-1.5"
+                className={`col-span-2 sm:flex-1 rounded-rc-sm ${QUIET_BTN} px-2 py-2.5 sm:py-1.5 inline-flex items-center justify-center gap-1.5`}
                 onClick={handleInspectOpponentHand}
                 title={
                   isOnline
@@ -1434,12 +1447,14 @@ export default function GameToolbox({
                 }
               >
                 <Eye className="w-5 h-5 sm:w-4 sm:h-4 flex-shrink-0" />
-                <span className="text-xs whitespace-nowrap hidden sm:inline">
+                <span
+                  className={`text-[11px] whitespace-nowrap hidden sm:inline ${MONO_LABEL}`}
+                >
                   Inspect
                 </span>
               </button>
               <button
-                className="rounded bg-blue-600/90 hover:bg-blue-500 active:bg-blue-400 px-3 py-2.5 sm:py-1.5 flex items-center justify-center"
+                className={`rounded-rc-sm ${QUIET_BTN} px-3 py-2.5 sm:py-1.5 flex items-center justify-center`}
                 onClick={startToolboxRoll}
                 aria-label="Roll D20"
                 title="Roll D20"
@@ -1453,7 +1468,7 @@ export default function GameToolbox({
                 />
               </button>
               <button
-                className="rounded bg-blue-600/90 hover:bg-blue-500 active:bg-blue-400 px-3 py-2.5 sm:py-1.5 flex items-center justify-center"
+                className={`rounded-rc-sm ${QUIET_BTN} px-3 py-2.5 sm:py-1.5 flex items-center justify-center`}
                 onClick={startD6Roll}
                 aria-label="Roll D6"
                 title="Roll D6"
@@ -1467,7 +1482,11 @@ export default function GameToolbox({
                 />
               </button>
               <button
-                className="rounded bg-amber-600/90 hover:bg-amber-500 active:bg-amber-400 px-3 py-2.5 sm:py-1.5 flex items-center justify-center relative"
+                className={`rounded-rc-sm ${
+                  gemColorPickerOpen
+                    ? "border border-rc-accent bg-rc-accent text-rc-accent-fg"
+                    : QUIET_BTN
+                } px-3 py-2.5 sm:py-1.5 flex items-center justify-center relative`}
                 onClick={() => setGemColorPickerOpen(!gemColorPickerOpen)}
                 aria-label="Spawn Gem Token"
                 title="Spawn Gem Token"
@@ -1475,7 +1494,7 @@ export default function GameToolbox({
                 <Circle className="w-5 h-5 sm:w-4 sm:h-4" />
               </button>
               <button
-                className="rounded bg-violet-600/90 hover:bg-violet-500 active:bg-violet-400 px-2.5 py-2.5 sm:py-1.5 flex items-center justify-center text-xs font-semibold"
+                className={`rounded-rc-sm ${QUIET_BTN} px-2.5 py-2.5 sm:py-1.5 flex items-center justify-center text-[11px] ${MONO_LABEL}`}
                 onClick={() => {
                   setRndResult(null);
                   setRndReceived(false);
@@ -1490,13 +1509,13 @@ export default function GameToolbox({
 
             {/* Gem Token Color Picker */}
             {gemColorPickerOpen && (
-              <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
-                <div className="text-xs opacity-70 mb-2">Pick a gem color:</div>
+              <div className={GROUP_BOX}>
+                <div className="rc-hint mb-2">Pick a gem color:</div>
                 <div className="grid grid-cols-5 gap-1.5">
                   {GEM_COLORS.map((color) => (
                     <button
                       key={color.id}
-                      className="w-8 h-8 rounded-full ring-2 ring-white/20 hover:ring-white/50 transition-all hover:scale-110"
+                      className="w-8 h-8 rounded-full ring-2 ring-rc-line/20 hover:ring-rc-accent transition-all hover:scale-110"
                       style={{ backgroundColor: color.hex }}
                       onClick={() => {
                         if (mySeat) {
@@ -1513,24 +1532,24 @@ export default function GameToolbox({
             )}
 
             {/* Force Burrow/Submerge (moved under Inspect/D20) */}
-            <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+            <div className={GROUP_BOX}>
               <div className="grid grid-cols-3 gap-2">
                 <button
-                  className="rounded bg-white/15 hover:bg-white/25 py-1 disabled:opacity-40"
+                  className={`rounded-rc-sm ${QUIET_BTN} py-1 disabled:opacity-50`}
                   onClick={() => handleForcePosition("burrowed")}
                   disabled={!selectedPermanent}
                 >
                   Burrow
                 </button>
                 <button
-                  className="rounded bg-white/15 hover:bg-white/25 py-1 disabled:opacity-40"
+                  className={`rounded-rc-sm ${QUIET_BTN} py-1 disabled:opacity-50`}
                   onClick={() => handleForcePosition("submerged")}
                   disabled={!selectedPermanent}
                 >
                   Submerge
                 </button>
                 <button
-                  className="rounded bg-white/15 hover:bg-white/25 py-1 disabled:opacity-40"
+                  className={`rounded-rc-sm ${QUIET_BTN} py-1 disabled:opacity-50`}
                   onClick={() => handleForcePosition("surface")}
                   disabled={!selectedPermanent}
                 >
@@ -1538,74 +1557,78 @@ export default function GameToolbox({
                 </button>
               </div>
               {!selectedPermanent && (
-                <div className="text-xs opacity-70 mt-1">
+                <div className="rc-hint mt-1">
                   Tip: select a permanent on the board first
                 </div>
               )}
             </div>
 
             {/* Board Toggles */}
-            <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2 space-y-2">
-              <label className="flex items-center gap-2 cursor-pointer">
+            <div className={`${GROUP_BOX} space-y-2`}>
+              <label className="rc-check flex">
                 <input
                   type="checkbox"
                   checked={tapControlsMode}
                   onChange={toggleTapControlsMode}
-                  className="w-4 h-4 rounded bg-white/10 border-white/20 text-orange-500 focus:ring-orange-500/50"
+                  className="w-4 h-4 rounded-rc-sm"
                 />
                 <span className="text-xs">Tap controls (single tap: select+preview, double tap: menu)</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="rc-check flex">
                 <input
                   type="checkbox"
                   checked={allowSiteDrag}
                   onChange={toggleAllowSiteDrag}
-                  className="w-4 h-4 rounded bg-white/10 border-white/20 text-amber-500 focus:ring-amber-500/50"
+                  className="w-4 h-4 rounded-rc-sm"
                 />
                 <span className="text-xs">Allow dragging sites on board</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="rc-check flex">
                 <input
                   type="checkbox"
                   checked={showOwnershipOverlay}
                   onChange={toggleOwnershipOverlay}
-                  className="w-4 h-4 rounded bg-white/10 border-white/20 text-sky-500 focus:ring-sky-500/50"
+                  className="w-4 h-4 rounded-rc-sm"
                 />
                 <span className="text-xs">Show ownership highlight</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="rc-check flex">
                 <input
                   type="checkbox"
                   checked={resolversDisabled}
                   onChange={(e) => setResolversDisabled(e.target.checked)}
-                  className="w-4 h-4 rounded bg-white/10 border-white/20 text-red-500 focus:ring-red-500/50"
+                  className="w-4 h-4 rounded-rc-sm"
                 />
                 <span className="text-xs">Disable all card resolvers</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="rc-check flex">
                 <input
                   type="checkbox"
                   checked={graphicsSettings.showResolverGlow}
                   onChange={() => setGraphicsSettings({ showResolverGlow: !graphicsSettings.showResolverGlow })}
-                  className="w-4 h-4 rounded bg-white/10 border-white/20 text-violet-500 focus:ring-violet-500/50"
+                  className="w-4 h-4 rounded-rc-sm"
                 />
                 <span className="text-xs">Show purple outline on auto-resolver cards</span>
               </label>
               {/* Goldfish Mode (hotseat only) */}
               {!isOnline && (
-                <div className="border-t border-white/10 pt-2 mt-1">
-                  <label className="flex items-center gap-2 cursor-pointer">
+                <div className="border-t border-rc-line/12 pt-2 mt-1">
+                  <label className="rc-check flex">
                     <input
                       type="checkbox"
                       checked={goldfishMode}
                       onChange={(e) => setGoldfishMode(e.target.checked)}
-                      className="w-4 h-4 rounded bg-white/10 border-white/20 text-amber-500 focus:ring-amber-500/50"
+                      className="w-4 h-4 rounded-rc-sm"
                     />
                     <span className="text-xs">Goldfish Mode</span>
                   </label>
                   {goldfishMode && (
                     <div className="flex items-center gap-2 mt-1 ml-6">
-                      <span className="text-xs opacity-70">Hand size:</span>
+                      <span
+                        className={`text-[11px] text-rc-fg-muted ${MONO_LABEL}`}
+                      >
+                        Hand size:
+                      </span>
                       <input
                         type="number"
                         min={1}
@@ -1614,18 +1637,22 @@ export default function GameToolbox({
                         onChange={(e) =>
                           setGoldfishHandSize(parseInt(e.target.value) || 5)
                         }
-                        className="w-12 bg-white/10 rounded px-1 py-0.5 text-xs text-center"
+                        className="rc-input w-12 px-1 py-0.5 text-xs text-center tabular-nums"
                       />
                     </div>
                   )}
-                  <div className="text-xs opacity-50 mt-1 ml-6">
+                  <div className="rc-hint mt-1 ml-6">
                     Shuffles hands back at turn start
                   </div>
                 </div>
               )}
               {/* Card Scale slider */}
               <div className="flex items-center gap-2">
-                <span className="text-xs whitespace-nowrap">Card Size</span>
+                <span
+                  className={`text-[11px] whitespace-nowrap text-rc-fg-muted ${MONO_LABEL}`}
+                >
+                  Card Size
+                </span>
                 <input
                   type="range"
                   min={0.25}
@@ -1633,18 +1660,22 @@ export default function GameToolbox({
                   step={0.05}
                   value={cardScale}
                   onChange={(e) => setCardScale(parseFloat(e.target.value))}
-                  className="flex-1 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                  className="flex-1 h-1.5 rounded-lg border border-rc-line/12 bg-black/45 appearance-none cursor-pointer accent-rc-accent"
                 />
-                <span className="text-xs w-8 text-right">
+                <span className="w-8 text-right font-rc-mono text-[11px] tabular-nums text-rc-fg-strong">
                   {Math.round(cardScale * 100)}%
                 </span>
               </div>
             </div>
 
             {/* Fix Game State subview */}
-            <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+            <div className="rounded-rc-md border border-rc-line/12 bg-black/45 p-2 font-rc-mono">
               <button
-                className="w-full rounded bg-white/15 hover:bg-white/25 py-1"
+                className={`w-full rounded-rc-sm ${
+                  fixOpen
+                    ? "border border-rc-accent bg-rc-accent text-rc-accent-fg"
+                    : QUIET_BTN
+                } py-1 text-[11px] ${MONO_LABEL}`}
                 onClick={() => setFixOpen((v) => !v)}
                 aria-expanded={fixOpen}
               >
@@ -1653,7 +1684,7 @@ export default function GameToolbox({
               {fixOpen && (
                 <div className="mt-2 space-y-2">
                   {/* Return from Banished */}
-                  <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+                  <div className={GROUP_BOX}>
                     <div className="flex gap-2 mb-1">
                       <CustomSelect
                         value={unbanishSeat}
@@ -1675,7 +1706,7 @@ export default function GameToolbox({
                       />
                     </div>
                     <button
-                      className="w-full rounded bg-emerald-600/90 hover:bg-emerald-500 py-1"
+                      className={`w-full rounded-rc-sm ${QUIET_BTN} py-1`}
                       onClick={handleUnbanish}
                     >
                       Return banished card
@@ -1683,9 +1714,9 @@ export default function GameToolbox({
                   </div>
 
                   {/* Draw Random Spell */}
-                  <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2 space-y-2">
+                  <div className={`${GROUP_BOX} space-y-2`}>
                     <button
-                      className="w-full rounded bg-purple-600/90 hover:bg-purple-500 py-1 disabled:opacity-40"
+                      className={`w-full rounded-rc-sm ${QUIET_BTN} py-1 disabled:opacity-50`}
                       onClick={handleDrawRandomSpell}
                       disabled={randomSpellLoading || !mySeat}
                       title="Draw a random spell from the entire card pool to hand"
@@ -1693,7 +1724,7 @@ export default function GameToolbox({
                       {randomSpellLoading ? "Drawing..." : "Draw Random Spell"}
                     </button>
                     <button
-                      className="w-full rounded bg-cyan-600/90 hover:bg-cyan-500 py-1 disabled:opacity-40 flex items-center justify-center gap-1.5"
+                      className={`w-full rounded-rc-sm ${QUIET_BTN} py-1 disabled:opacity-50 flex items-center justify-center gap-1.5`}
                       onClick={() => setCardSearchOpen(true)}
                       disabled={!mySeat}
                       title="Search and draw any card from the database"
@@ -1704,7 +1735,7 @@ export default function GameToolbox({
                   </div>
 
                   {/* Realm (single version: archive if none, otherwise restore board + cemetery) */}
-                  <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+                  <div className={GROUP_BOX}>
                     <button
                       className={realmBtnClass}
                       onClick={handleArchiveOrRestoreRealm}
@@ -1715,9 +1746,9 @@ export default function GameToolbox({
                   </div>
 
                   {/* Banish Entire Cemetery */}
-                  <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+                  <div className={GROUP_BOX}>
                     <button
-                      className="w-full rounded bg-red-600/90 hover:bg-red-500 py-1 disabled:opacity-40"
+                      className="w-full rounded-rc-sm border border-rc-danger/55 bg-rc-danger/15 py-1 tabular-nums text-rc-danger transition-colors hover:border-rc-danger-hover hover:bg-rc-danger/28 hover:text-rc-fg-strong disabled:opacity-50"
                       onClick={() => {
                         if (mySeat) banishEntireGraveyard(mySeat);
                       }}
@@ -1732,7 +1763,7 @@ export default function GameToolbox({
                   </div>
 
                   {/* Snapshots */}
-                  <div className="rounded-lg bg-white/5 ring-1 ring-white/10 p-2">
+                  <div className={GROUP_BOX}>
                     {autoSnapshots.length > 0 && (
                       <CustomSelect
                         className="w-full mb-1"
@@ -1747,7 +1778,7 @@ export default function GameToolbox({
                       />
                     )}
                     <button
-                      className="w-full rounded bg-emerald-600/90 hover:bg-emerald-500 py-1 disabled:opacity-40"
+                      className={`w-full rounded-rc-sm ${QUIET_BTN} py-1 disabled:opacity-50`}
                       onClick={handleRestoreSnapshot}
                       disabled={autoSnapshots.length === 0}
                       title="Emergency recovery: restores entire game state"
@@ -1755,7 +1786,7 @@ export default function GameToolbox({
                       Restore snapshot
                     </button>
                     {autoSnapshots.length > 0 && selectedAutoId && (
-                      <div className="mt-1 text-xs opacity-70">
+                      <div className="rc-hint mt-1 tabular-nums">
                         {(() => {
                           const pool = autoSnapshots.slice(
                             Math.max(autoSnapshots.length - 10, 0),
@@ -1791,15 +1822,15 @@ export default function GameToolbox({
           onContextMenu={(e) => e.preventDefault()}
         >
           <div
-            className="relative w-[92vw] sm:w-full max-w-md bg-zinc-900/90 rounded-2xl ring-1 ring-white/10 shadow-2xl p-4 sm:p-6 text-white"
+            className="relative w-[92vw] sm:w-full max-w-md rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.92)] shadow-rc-panel p-4 sm:p-6 text-rc-fg"
             onContextMenu={(e) => e.preventDefault()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base sm:text-lg font-semibold">
+              <h3 className="font-rc-display text-[20px] leading-none text-rc-fg-strong">
                 Toolbox D20 Roll
               </h3>
               <button
-                className="text-sm text-zinc-400 hover:text-white"
+                className="text-sm text-rc-fg-muted transition-colors hover:text-rc-accent-ring"
                 onClick={() => {
                   setD20Open(false);
                   setD20Rolling(false);
@@ -1809,7 +1840,7 @@ export default function GameToolbox({
                 ✕
               </button>
             </div>
-            <div className="bg-black/40 rounded-xl ring-1 ring-white/10 h-[42vh] min-h-[240px] sm:h-[260px]">
+            <div className="rounded-rc-md border border-rc-line/12 bg-black/45 h-[42vh] min-h-[240px] sm:h-[260px]">
               <ClientCanvas camera={{ position: [0, 5, 0], fov: 50, up: [0, 0, -1] }}>
                 <ambientLight intensity={0.6} />
                 <directionalLight position={[2, 5, 2]} intensity={0.8} />
@@ -1839,15 +1870,15 @@ export default function GameToolbox({
           onContextMenu={(e) => e.preventDefault()}
         >
           <div
-            className="relative w-[92vw] sm:w-full max-w-md bg-zinc-900/90 rounded-2xl ring-1 ring-white/10 shadow-2xl p-4 sm:p-6 text-white"
+            className="relative w-[92vw] sm:w-full max-w-md rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.92)] shadow-rc-panel p-4 sm:p-6 text-rc-fg"
             onContextMenu={(e) => e.preventDefault()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base sm:text-lg font-semibold">
+              <h3 className="font-rc-display text-[20px] leading-none text-rc-fg-strong">
                 Toolbox D6 Roll
               </h3>
               <button
-                className="text-sm text-zinc-400 hover:text-white"
+                className="text-sm text-rc-fg-muted transition-colors hover:text-rc-accent-ring"
                 onClick={() => {
                   setD6Open(false);
                   setD6Rolling(false);
@@ -1857,7 +1888,7 @@ export default function GameToolbox({
                 ✕
               </button>
             </div>
-            <div className="bg-black/40 rounded-xl ring-1 ring-white/10 h-[42vh] min-h-[240px] sm:h-[260px]">
+            <div className="rounded-rc-md border border-rc-line/12 bg-black/45 h-[42vh] min-h-[240px] sm:h-[260px]">
               <ClientCanvas camera={{ position: [0, 5, 0], fov: 50, up: [0, 0, -1] }}>
                 <ambientLight intensity={0.6} />
                 <directionalLight position={[2, 5, 2]} intensity={0.8} />
@@ -1887,15 +1918,15 @@ export default function GameToolbox({
           onClick={() => setRndOpen(false)}
         >
           <div
-            className="relative w-[92vw] sm:w-full max-w-xs bg-zinc-900/90 rounded-2xl ring-1 ring-white/10 shadow-2xl p-4 sm:p-6 text-white"
+            className="relative w-[92vw] sm:w-full max-w-xs rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.92)] shadow-rc-panel p-4 sm:p-6 text-rc-fg"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base sm:text-lg font-semibold">
+              <h3 className="font-rc-display text-[20px] leading-none text-rc-fg-strong">
                 Random Number
               </h3>
               <button
-                className="text-sm text-zinc-400 hover:text-white"
+                className="text-sm text-rc-fg-muted transition-colors hover:text-rc-accent-ring"
                 onClick={() => setRndOpen(false)}
               >
                 ✕
@@ -1904,11 +1935,11 @@ export default function GameToolbox({
             <div className="space-y-4">
               {rndReceived ? (
                 /* Received from opponent - show only result */
-                <div className="text-center py-6 bg-white/5 rounded-xl">
-                  <div className="text-5xl font-bold text-violet-300">
+                <div className="text-center py-6 rounded-rc-md border border-rc-line/12 bg-black/45">
+                  <div className="font-rc-mono text-5xl font-semibold tabular-nums text-rc-accent">
                     {rndResult}
                   </div>
-                  <div className="text-sm text-zinc-400 mt-2">
+                  <div className="rc-hint mt-2 text-center tabular-nums">
                     (1-{Math.max(1, Math.floor(rndMax))})
                   </div>
                 </div>
@@ -1916,14 +1947,16 @@ export default function GameToolbox({
                 /* Generating - show full controls */
                 <>
                   <div className="flex items-center gap-3">
-                    <span className="text-sm whitespace-nowrap">1 to</span>
+                    <span className="font-rc-mono text-sm uppercase tracking-[0.14em] whitespace-nowrap text-rc-fg-muted">
+                      1 to
+                    </span>
                     <input
                       type="number"
                       min={1}
                       max={1000}
                       value={rndMax}
                       onChange={(e) => setRndMax(Number(e.target.value) || 1)}
-                      className="flex-1 bg-white/10 rounded px-3 py-2 text-center text-lg"
+                      className="rc-input flex-1 px-3 py-2 text-center text-lg tabular-nums"
                       autoFocus
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleRndGenerate();
@@ -1931,17 +1964,17 @@ export default function GameToolbox({
                     />
                   </div>
                   <button
-                    className="w-full rounded bg-violet-600/90 hover:bg-violet-500 py-2 font-semibold"
+                    className="w-full rounded-rc-sm border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent py-2 font-rc-mono uppercase tracking-[0.14em] text-rc-accent-fg transition-transform hover:-translate-y-px"
                     onClick={handleRndGenerate}
                   >
                     Generate
                   </button>
                   {rndResult !== null && (
-                    <div className="text-center py-4 bg-white/5 rounded-xl">
-                      <div className="text-4xl font-bold text-violet-300">
+                    <div className="text-center py-4 rounded-rc-md border border-rc-line/12 bg-black/45">
+                      <div className="font-rc-mono text-4xl font-semibold tabular-nums text-rc-accent">
                         {rndResult}
                       </div>
-                      <div className="text-xs text-zinc-400 mt-1">
+                      <div className="rc-hint mt-1 text-center tabular-nums">
                         (1-{Math.max(1, Math.floor(rndMax))})
                       </div>
                     </div>

@@ -5,6 +5,8 @@ import { useSession } from "next-auth/react";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import AuthButton from "@/components/auth/AuthButton";
 import OnlinePageShell from "@/components/online/OnlinePageShell";
+import { PageHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
 
 // ---------------------------------------------------------------------------
 // Base64url helpers
@@ -160,10 +162,10 @@ function ExternalImportInner() {
   if (!listParam) {
     return (
       <Panel title={`${sourceLabel} Import`}>
-        <p className="text-amber-400">
+        <div className="rc-alert" data-tone="warning">
           No card list provided. The URL must include a <code>list</code>{" "}
           parameter with a base64url-encoded card list.
-        </p>
+        </div>
       </Panel>
     );
   }
@@ -172,10 +174,10 @@ function ExternalImportInner() {
   if (decodedText === null) {
     return (
       <Panel title={`${sourceLabel} Import`}>
-        <p className="text-amber-400">
+        <div className="rc-alert" data-tone="warning">
           Failed to decode the card list. The <code>list</code> parameter
           contains invalid base64url data.
-        </p>
+        </div>
       </Panel>
     );
   }
@@ -184,9 +186,9 @@ function ExternalImportInner() {
   if (decodedText.length > 10_000) {
     return (
       <Panel title={`${sourceLabel} Import`}>
-        <p className="text-amber-400">
+        <div className="rc-alert" data-tone="warning">
           Card list is too large (max 10 KB).
-        </p>
+        </div>
       </Panel>
     );
   }
@@ -195,7 +197,7 @@ function ExternalImportInner() {
   if (authStatus === "loading") {
     return (
       <Panel title={`${sourceLabel} Import`}>
-        <p className="text-slate-400">Checking authentication...</p>
+        <p className="rc-hint">Checking authentication...</p>
         <CardListPreview text={decodedText} />
       </Panel>
     );
@@ -204,7 +206,7 @@ function ExternalImportInner() {
   if (!session) {
     return (
       <Panel title={`${sourceLabel} Import`}>
-        <p className="text-slate-200">
+        <p className="font-rc-sans text-sm text-rc-fg">
           Sign in to import this deck{nameParam ? ` ("${nameParam}")` : ""}.
         </p>
         <div className="flex justify-center pt-2">
@@ -219,8 +221,8 @@ function ExternalImportInner() {
   if (importing) {
     return (
       <Panel title={`${sourceLabel} Import`}>
-        <div className="flex items-center gap-2 text-slate-300">
-          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
+        <div className="flex items-center gap-2 font-rc-sans text-sm text-rc-fg">
+          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-rc-accent border-t-transparent" />
           Importing deck...
         </div>
         <CardListPreview text={decodedText} />
@@ -232,10 +234,12 @@ function ExternalImportInner() {
   if (error) {
     return (
       <Panel title={`${sourceLabel} Import`}>
-        <p className="text-red-400">{error}</p>
+        <div className="rc-alert" data-tone="danger">
+          {error}
+        </div>
         {unresolved && unresolved.length > 0 && (
-          <div className="mt-2 text-sm text-slate-400">
-            <p className="font-medium text-slate-300">Unresolved cards:</p>
+          <div className="rc-alert mt-2" data-tone="warning">
+            <p className="mb-1">Unresolved cards:</p>
             <ul className="mt-1 list-disc pl-5 space-y-0.5">
               {unresolved.map((u) => (
                 <li key={u.name}>
@@ -245,16 +249,16 @@ function ExternalImportInner() {
             </ul>
           </div>
         )}
-        <button
+        <RcButton
+          className="mt-3"
           onClick={() => {
             setError(null);
             setUnresolved(null);
             setImportedOnce(false);
           }}
-          className="mt-3 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
         >
           Retry
-        </button>
+        </RcButton>
         <CardListPreview text={decodedText} />
       </Panel>
     );
@@ -264,12 +268,12 @@ function ExternalImportInner() {
   if (success) {
     return (
       <Panel title={`${sourceLabel} Import`}>
-        <p className="text-emerald-400 font-medium">
+        <div className="rc-alert" data-tone="success">
           Deck imported successfully! Redirecting to editor...
-        </p>
+        </div>
         {warnings?.fuzzyMatches && warnings.fuzzyMatches.length > 0 && (
-          <div className="mt-2 text-sm text-amber-400/80">
-            <p className="font-medium">Some cards were fuzzy-matched:</p>
+          <div className="rc-alert mt-2" data-tone="warning">
+            <p className="mb-1">Some cards were fuzzy-matched:</p>
             <ul className="mt-1 list-disc pl-5 space-y-0.5">
               {warnings.fuzzyMatches.map((w) => (
                 <li key={w.original}>
@@ -283,8 +287,8 @@ function ExternalImportInner() {
         {warnings?.unresolved &&
           (warnings.unresolved as { name: string; count: number }[]).length >
             0 && (
-            <div className="mt-2 text-sm text-amber-400/80">
-              <p className="font-medium">
+            <div className="rc-alert mt-2" data-tone="warning">
+              <p className="mb-1">
                 Some cards could not be resolved and were skipped:
               </p>
               <ul className="mt-1 list-disc pl-5 space-y-0.5">
@@ -322,14 +326,10 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="pt-2">
-      <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-6 space-y-4">
-        <h1 className="text-xl font-semibold font-fantaisie text-slate-50">
-          {title}
-        </h1>
-        {children}
-      </div>
-    </div>
+    <>
+      <PageHeader eyebrow="deck import" title={title} size="md" />
+      <section className="rc-panel space-y-4 p-6">{children}</section>
+    </>
   );
 }
 
@@ -340,10 +340,10 @@ function CardListPreview({ text }: { text: string }) {
 
   return (
     <div className="mt-4">
-      <p className="text-xs font-medium text-slate-400 mb-1">
+      <p className="rc-hint mb-1">
         Card list preview ({lines.length} lines):
       </p>
-      <pre className="max-h-60 overflow-auto rounded-md bg-slate-950/50 p-3 text-xs text-slate-300 font-mono leading-relaxed">
+      <pre className="max-h-60 overflow-auto rounded-rc-md border border-rc-line/12 bg-black/45 p-3 font-rc-mono text-xs leading-relaxed text-rc-fg">
         {displayLines.join("\n")}
         {remaining > 0 && `\n... and ${remaining} more`}
       </pre>
@@ -359,13 +359,7 @@ export default function ExternalImportPage() {
   return (
     <OnlinePageShell>
       <Suspense
-        fallback={
-          <div className="pt-2">
-            <div className="rounded-xl bg-slate-900/70 ring-1 ring-slate-800/80 p-6">
-              <p className="text-slate-400">Loading...</p>
-            </div>
-          </div>
-        }
+        fallback={<div className="rc-hint py-6 text-center">loading…</div>}
       >
         <ExternalImportInner />
       </Suspense>

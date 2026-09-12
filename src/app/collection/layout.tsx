@@ -8,6 +8,8 @@ import {
   PresenceProvider,
   usePresence,
 } from "@/components/providers/PresenceProvider";
+import AppShell from "@/components/ui/AppShell";
+import { PageHeader } from "@/components/ui/page-header";
 // TODO: These components are available for future use
 // import ChangelogOverlay from "@/components/ui/ChangelogOverlay";
 // import PatreonMarquee from "@/components/ui/PatreonMarquee";
@@ -34,22 +36,31 @@ export default function CollectionLayout({
   // Show auth prompt for unauthenticated users
   if (status === "loading") {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white flex items-center justify-center">
-        <div className="animate-pulse">Loading...</div>
-      </div>
+      <AppShell width="narrow">
+        <section className="rc-panel px-[18px] py-10">
+          <div className="rc-hint text-center">loading…</div>
+        </section>
+      </AppShell>
     );
   }
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white flex flex-col items-center justify-center gap-6 p-4">
-        <h1 className="text-2xl font-bold">Collection Tracker</h1>
-        <p className="text-gray-400 text-center max-w-md">
-          Sign in to track your physical card collection, see set completion,
-          and build decks from cards you own.
-        </p>
-        <AuthButton />
-      </div>
+      <AppShell width="narrow">
+        <section className="rc-panel px-[18px] py-10 text-center">
+          <div className="rc-eyebrow mb-2">collection</div>
+          <h1 className="m-0 font-rc-display text-[clamp(26px,2.4vw,34px)] leading-none text-rc-fg-strong">
+            Collection Tracker
+          </h1>
+          <p className="mx-auto mt-3 max-w-md font-rc-sans text-sm leading-relaxed text-rc-fg-muted">
+            Sign in to track your physical card collection, see set completion,
+            and build decks from cards you own.
+          </p>
+          <div className="mt-6 flex justify-center">
+            <AuthButton />
+          </div>
+        </section>
+      </AppShell>
     );
   }
 
@@ -85,93 +96,57 @@ function CollectionLayoutContent({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white">
-      {/* Header */}
-      <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link
-                href="/"
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                ← Home
-              </Link>
-              <h1 className="text-xl font-fantaisie">
-                {userName}&apos;s Collection
-              </h1>
-              {/* Online indicator */}
-              {connected && (
-                <span className="flex items-center gap-1 text-xs text-green-400">
-                  <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                  Online
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {/* Import/Export */}
-              <CollectionImportExport onImported={handleCollectionRefresh} />
-
-              {/* Create Cube */}
-              <CreateCubeFromCollection />
-
-              {/* Notes toggle */}
+    <AppShell width="wide">
+      <PageHeader
+        eyebrow={connected ? "collection · online" : "collection"}
+        title={`${userName}'s Collection`}
+        actions={
+          <>
+            <CollectionImportExport onImported={handleCollectionRefresh} />
+            <CreateCubeFromCollection />
+            <div className="rc-segment">
               <button
+                type="button"
+                aria-pressed={showNotes}
                 onClick={() => setShowNotes(!showNotes)}
-                className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors ${
-                  showNotes
-                    ? "bg-cyan-600/30 text-cyan-300 border border-cyan-500/50"
-                    : "text-gray-400 hover:text-cyan-300 hover:bg-gray-800"
-                }`}
                 title="Show/hide notes on cards"
               >
-                <span>📝</span>
-                <span className="hidden sm:inline">Notes</span>
+                Notes
               </button>
-
-              {/* Codex toggle */}
               <button
+                type="button"
+                aria-pressed={showCodex}
                 onClick={() => setShowCodex(!showCodex)}
-                className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors ${
-                  showCodex
-                    ? "bg-amber-600/30 text-amber-300 border border-amber-500/50"
-                    : "text-gray-400 hover:text-amber-300 hover:bg-gray-800"
-                }`}
                 title="Show codex/errata info for cards"
               >
-                <span>📜</span>
-                <span className="hidden sm:inline">Codex</span>
+                Codex
               </button>
             </div>
-          </div>
+          </>
+        }
+      />
 
-          {/* Navigation Tabs */}
-          <nav className="flex gap-1 mt-4 -mb-px overflow-x-auto">
-            {tabs.map((tab) => {
-              const isActive = tab.exact
-                ? pathname === tab.href
-                : pathname?.startsWith(tab.href);
+      {/* Navigation Tabs */}
+      <nav className="rc-tabs thin-scrollbar">
+        {tabs.map((tab) => {
+          const isActive = tab.exact
+            ? pathname === tab.href
+            : pathname?.startsWith(tab.href);
 
-              return (
-                <Link
-                  key={tab.href}
-                  href={tab.href}
-                  className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                    isActive
-                      ? "bg-gray-800 text-white border-b-2 border-blue-500"
-                      : "text-gray-400 hover:text-white hover:bg-gray-800/50"
-                  }`}
-                >
-                  {tab.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-      </header>
+          return (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              className="rc-tab"
+              aria-current={isActive ? "page" : undefined}
+            >
+              {tab.label}
+            </Link>
+          );
+        })}
+      </nav>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-6">{children}</main>
-    </div>
+      {children}
+    </AppShell>
   );
 }

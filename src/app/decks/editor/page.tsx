@@ -4,7 +4,12 @@ import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TournamentControls } from "@/components/deck-editor";
+import AppShell from "@/components/ui/AppShell";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import {
   formatValidationErrors,
   normalizeFormat,
@@ -86,7 +91,7 @@ export default function DeckEditorPage() {
   const [tournamentControlsVisible, setTournamentControlsVisible] =
     useState(false);
   const [spellslingerCard, setSpellslingerCard] = useState<SearchResult | null>(
-    null
+    null,
   );
 
   // DnD hover states for visual feedback
@@ -121,7 +126,7 @@ export default function DeckEditorPage() {
   useEffect(() => {
     try {
       const sp = new URLSearchParams(
-        typeof window !== "undefined" ? window.location.search : ""
+        typeof window !== "undefined" ? window.location.search : "",
       );
       const id = sp.get("id");
       if (id) {
@@ -139,12 +144,12 @@ export default function DeckEditorPage() {
           STANDARD_SITE_NAMES.map(async (name) => {
             const res = await fetch(
               `/api/cards/search?q=${encodeURIComponent(
-                name
-              )}&set=${encodeURIComponent(setName)}&type=site`
+                name,
+              )}&set=${encodeURIComponent(setName)}&type=site`,
             );
             const data = (await res.json()) as SearchResult[];
             return [name, res.ok && data[0] ? data[0] : null] as const;
-          })
+          }),
         );
         if (!cancelled) {
           const next: Record<StandardSiteName, SearchResult | null> = {
@@ -182,8 +187,8 @@ export default function DeckEditorPage() {
         try {
           const resSet = await fetch(
             `/api/cards/search?q=spellslinger&set=${encodeURIComponent(
-              setName
-            )}&type=avatar`
+              setName,
+            )}&type=avatar`,
           );
           const dataSet = (await resSet.json()) as SearchResult[];
           hit = resSet.ok ? dataSet[0] || null : null;
@@ -193,7 +198,7 @@ export default function DeckEditorPage() {
         if (!hit) {
           try {
             const resAny = await fetch(
-              `/api/cards/search?q=spellslinger&type=avatar`
+              `/api/cards/search?q=spellslinger&type=avatar`,
             );
             const dataAny = (await resAny.json()) as SearchResult[];
             hit = resAny.ok ? dataAny[0] || null : null;
@@ -383,8 +388,8 @@ export default function DeckEditorPage() {
     try {
       const res = await fetch(
         `/api/cards/search?q=${encodeURIComponent(
-          name
-        )}&set=${encodeURIComponent(setName)}&type=site`
+          name,
+        )}&set=${encodeURIComponent(setName)}&type=site`,
       );
       const data = (await res.json()) as SearchResult[];
       const r = res.ok && data[0] ? data[0] : null;
@@ -440,9 +445,9 @@ export default function DeckEditorPage() {
           avatarCount,
         },
         normalizeFormat(deckFormat),
-        avatarName
+        avatarName,
       ),
-    [avatarCount, zoneCounts, spellbookNonAvatar, deckFormat, avatarName]
+    [avatarCount, zoneCounts, spellbookNonAvatar, deckFormat, avatarName],
   );
 
   const validation = useMemo(() => {
@@ -557,7 +562,9 @@ export default function DeckEditorPage() {
       setSaveMsg(null);
 
       if (!deckValidation.isValid) {
-        throw new Error(`Deck invalid. ${formatValidationErrors(deckValidation)}`);
+        throw new Error(
+          `Deck invalid. ${formatValidationErrors(deckValidation)}`,
+        );
       }
 
       const cards = Object.values(picks).map((p) => ({
@@ -622,13 +629,13 @@ export default function DeckEditorPage() {
   const deckEntries = entries.filter(([, it]) => it.zone !== "Sideboard");
   const sideEntries = entries.filter(([, it]) => it.zone === "Sideboard");
   const avatars = deckEntries.filter(([, it]) =>
-    (it.type || "").toLowerCase().includes("avatar")
+    (it.type || "").toLowerCase().includes("avatar"),
   );
   const atlasCards = deckEntries.filter(([, it]) => it.zone === "Atlas");
   const spellbookCards = deckEntries.filter(
     ([, it]) =>
       it.zone === "Spellbook" &&
-      !(it.type || "").toLowerCase().includes("avatar")
+      !(it.type || "").toLowerCase().includes("avatar"),
   );
 
   const CardThumb: React.FC<
@@ -640,7 +647,7 @@ export default function DeckEditorPage() {
   > = ({ slug, alt, isSite, className = "", ...rest }) => (
     <div
       className={
-        "relative overflow-hidden rounded bg-muted/40 " +
+        "relative overflow-hidden rounded-rc-sm bg-black/40 " +
         (isSite ? "aspect-[4/3]" : "aspect-[3/4]") +
         (className ? " " + className : "")
       }
@@ -661,114 +668,220 @@ export default function DeckEditorPage() {
     </div>
   );
 
-  return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4">
-      <h1 className="text-2xl font-semibold">Deck Editor</h1>
+  /** Mono 10px column label above a zone group. */
+  const ZoneLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <div className="mb-2 font-rc-mono text-[10px] uppercase tracking-[0.22em] text-rc-fg-dim">
+      {children}
+    </div>
+  );
 
-      {error && <div className="text-red-500">Error: {error}</div>}
-
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1">
-          <span className="text-xs uppercase opacity-70">Deck</span>
-          <div className="flex gap-2">
-            <CustomSelect
-              value={deckId || ""}
-              onChange={(v) => {
-                if (v) loadDeck(v);
-                else clearEditor();
-              }}
-              disabled={loadingDecks}
-              className="min-w-56"
-              placeholder="— New Deck —"
-              options={decks.map((d) => ({
-                value: d.id,
-                label: `${d.name} • ${d.format}`,
-              }))}
-            />
-            <button
-              onClick={clearEditor}
-              disabled={loadingDecks}
-              className="h-10 px-3 border rounded disabled:opacity-60"
+  /** A single card tile inside the Deck / Sideboard columns. */
+  const PickTile: React.FC<{
+    pickKey: PickKey;
+    it: PickItem;
+    isSite: boolean;
+    from: "deck" | "sideboard";
+    /** Restricted (Draft/Sealed) pools hide the +/- quantity controls */
+    showQuantity: boolean;
+    moveLabel: string;
+    onMove: (key: PickKey) => void;
+  }> = ({ pickKey, it, isSite, from, showQuantity, moveLabel, onMove }) => (
+    <div className="relative rounded-rc-md border border-rc-line/12 bg-black/30 p-2">
+      <CardThumb
+        slug={it.slug}
+        alt={it.name}
+        isSite={isSite}
+        className="w-full"
+        draggable
+        onDragStart={onDragStartFromPick(pickKey, it, from)}
+      />
+      <div className="mt-1.5 line-clamp-1 font-rc-display text-[15px] leading-tight text-rc-fg-strong">
+        {it.name}
+      </div>
+      <div className="rc-stat absolute right-1.5 top-1.5 rounded-rc-sm bg-black/70 px-1.5 py-0.5 text-[11px]">
+        x{it.count}
+      </div>
+      <div className="mt-2 flex items-center gap-1">
+        {showQuantity && (
+          <>
+            <RcButton
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              aria-label={`Remove one ${it.name}`}
+              onClick={() => removeOne(pickKey)}
             >
-              New
-            </button>
-            {loadingDecks && (
-              <div className="self-center text-xs opacity-70">Loading...</div>
-            )}
-          </div>
-        </label>
+              -
+            </RcButton>
+            <RcButton
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              aria-label={`Add one ${it.name}`}
+              onClick={() => increment(pickKey)}
+            >
+              +
+            </RcButton>
+          </>
+        )}
+        <RcButton
+          variant="ghost"
+          size="sm"
+          className="ml-auto"
+          onClick={() => onMove(pickKey)}
+        >
+          {moveLabel}
+        </RcButton>
+      </div>
+    </div>
+  );
 
-        <label className="flex flex-col gap-1">
-          <span className="text-xs uppercase opacity-70">Name</span>
-          <input
-            value={deckName}
-            onChange={(e) => setDeckName(e.target.value)}
-            className="border rounded px-3 py-2 bg-transparent"
-          />
-        </label>
+  const fieldLabelClass =
+    "font-rc-mono text-[10px] uppercase tracking-[0.22em] text-rc-fg-dim";
 
-        <label className="flex flex-col gap-1">
-          <span className="text-xs uppercase opacity-70">Set</span>
-          <CustomSelect
-            value={setName}
-            onChange={(v) => setSetName(v)}
-            options={[
-              { value: "Alpha", label: "Alpha" },
-              { value: "Beta", label: "Beta" },
-              { value: "Arthurian Legends", label: "Arthurian Legends" },
-              { value: "Dragonlord", label: "Dragonlord" },
-              { value: "Promotional", label: "Promotional" },
-            ]}
-          />
-        </label>
+  return (
+    <AppShell width="wide">
+      <PageHeader
+        eyebrow="deck editor"
+        title={deckName.trim() ? deckName : "Deck Editor"}
+        actions={
+          <RcButton onClick={saveDeck} disabled={saving}>
+            {saving ? "Saving..." : deckId ? "Update Deck" : "Save Deck"}
+          </RcButton>
+        }
+      />
 
-        <div className="ml-auto flex items-center gap-3 text-sm">
-          <div
-            className={validation.avatar ? "text-green-600" : "text-red-600"}
+      {error && (
+        <div className="rc-alert" data-tone="danger">
+          Error: {error}
+        </div>
+      )}
+
+      {saveMsg && (
+        <div className="rc-alert" data-tone="success">
+          {saveMsg}
+        </div>
+      )}
+
+      <section className="rc-panel">
+        <PanelHeader title="Deck Setup" meta={deckFormat}>
+          {/* Format indicator and tournament-legal quick actions */}
+          <RcButton
+            variant={tournamentControlsVisible ? "default" : "outline"}
+            size="sm"
+            aria-pressed={tournamentControlsVisible}
+            onClick={() =>
+              setTournamentControlsVisible(!tournamentControlsVisible)
+            }
+            title="Show tournament legal cards (Spellslinger + Standard Sites)"
           >
-            Avatar: {avatarCount} / 1
-          </div>
-          <div className={validation.atlas ? "text-green-600" : "text-red-600"}>
-            Atlas: {zoneCounts.Atlas} / 12+
-          </div>
-          <div
-            className={validation.spellbook ? "text-green-600" : "text-red-600"}
-          >
-            Spellbook: {spellbookNonAvatar} / 24+
+            Add Standard Cards
+          </RcButton>
+        </PanelHeader>
+
+        <div className="flex flex-wrap items-end gap-4 px-[18px] py-3.5">
+          <label className="flex flex-col gap-1.5">
+            <span className={fieldLabelClass}>Deck</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <CustomSelect
+                value={deckId || ""}
+                onChange={(v) => {
+                  if (v) loadDeck(v);
+                  else clearEditor();
+                }}
+                disabled={loadingDecks}
+                className="min-w-56"
+                placeholder="— New Deck —"
+                options={decks.map((d) => ({
+                  value: d.id,
+                  label: `${d.name} • ${d.format}`,
+                }))}
+              />
+              <RcButton
+                variant="outline"
+                className="h-9"
+                onClick={clearEditor}
+                disabled={loadingDecks}
+              >
+                New
+              </RcButton>
+              {loadingDecks && <span className="rc-hint">loading…</span>}
+            </div>
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className={fieldLabelClass}>Name</span>
+            <input
+              value={deckName}
+              onChange={(e) => setDeckName(e.target.value)}
+              className="rc-input h-9"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className={fieldLabelClass}>Set</span>
+            <CustomSelect
+              value={setName}
+              onChange={(v) => setSetName(v)}
+              options={[
+                { value: "Alpha", label: "Alpha" },
+                { value: "Beta", label: "Beta" },
+                { value: "Arthurian Legends", label: "Arthurian Legends" },
+                { value: "Dragonlord", label: "Dragonlord" },
+                { value: "Promotional", label: "Promotional" },
+              ]}
+            />
+          </label>
+
+          <div className="ml-auto flex flex-wrap items-center gap-4 font-rc-mono text-[10px] uppercase tracking-[0.18em]">
+            <div
+              className={
+                validation.avatar ? "text-rc-success" : "text-rc-danger"
+              }
+            >
+              Avatar{" "}
+              <span className="rc-stat text-[13px]">{avatarCount} / 1</span>
+            </div>
+            <div
+              className={
+                validation.atlas ? "text-rc-success" : "text-rc-danger"
+              }
+            >
+              Atlas{" "}
+              <span className="rc-stat text-[13px]">
+                {zoneCounts.Atlas} / 12+
+              </span>
+            </div>
+            <div
+              className={
+                validation.spellbook ? "text-rc-success" : "text-rc-danger"
+              }
+            >
+              Spellbook{" "}
+              <span className="rc-stat text-[13px]">
+                {spellbookNonAvatar} / 24+
+              </span>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Format indicator and tournament-legal quick actions */}
-      <div className="flex flex-wrap items-center gap-3">
         {isRestrictedMode && (
-          <div className="px-3 py-2 bg-amber-100 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded text-sm text-amber-800 dark:text-amber-200">
-            📋 {deckFormat} Mode - Card pool is locked (cannot add/remove
-            drafted cards, but can set avatar and add standard sites)
+          <div className="px-[18px] pb-3.5">
+            <div className="rc-alert" data-tone="warning">
+              {deckFormat} Mode - Card pool is locked (cannot add/remove drafted
+              cards, but can set avatar and add standard sites)
+            </div>
           </div>
         )}
-        <button
-          onClick={() =>
-            setTournamentControlsVisible(!tournamentControlsVisible)
-          }
-          className={`px-3 py-2 rounded text-sm transition-colors ${
-            tournamentControlsVisible
-              ? "bg-yellow-600 text-white hover:bg-yellow-500"
-              : "border hover:bg-white/10"
-          }`}
-          title="Show tournament legal cards (Spellslinger + Standard Sites)"
-        >
-          Add Standard Cards
-        </button>
-      </div>
+      </section>
 
       {/* Main two zones */}
       <div className="grid grid-cols-12 gap-4">
         {/* Deck zone */}
-        <div
+        <section
           className={
-            "col-span-12 lg:col-span-8 border rounded p-3 min-h-64 " +
-            (isOverDeck ? "ring-2 ring-foreground/60" : "")
+            "rc-panel col-span-12 min-h-64 lg:col-span-8 " +
+            (isOverDeck ? "ring-1 ring-rc-accent-ring" : "")
           }
           onDragOver={(ev) => {
             preventDefault(ev);
@@ -777,60 +890,28 @@ export default function DeckEditorPage() {
           onDragLeave={() => setIsOverDeck(false)}
           onDrop={handleDropOnDeck}
         >
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-medium">Deck</div>
-            <div className="text-xs opacity-70">
-              Spellbook: {zoneCounts.Spellbook} • Atlas: {zoneCounts.Atlas}
-            </div>
-          </div>
+          <PanelHeader
+            title="Deck"
+            meta={`Spellbook ${zoneCounts.Spellbook} · Atlas ${zoneCounts.Atlas}`}
+          />
 
           {/* Avatar */}
-          <div className="space-y-2">
+          <div className="space-y-5 px-[18px] py-3.5">
             {!!avatars.length && (
               <div>
-                <div className="text-xs uppercase opacity-70 mb-2">Avatar</div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                <ZoneLabel>Avatar</ZoneLabel>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                   {avatars.map(([key, it]) => (
-                    <div key={key} className="relative border rounded p-2">
-                      <CardThumb
-                        slug={it.slug}
-                        alt={it.name}
-                        isSite={false}
-                        className="w-full"
-                        draggable
-                        onDragStart={onDragStartFromPick(key, it, "deck")}
-                      />
-                      <div className="mt-1 text-xs font-medium line-clamp-1">
-                        {it.name}
-                      </div>
-                      <div className="absolute top-1 right-1 text-[11px] bg-background/80 px-1 rounded">
-                        x{it.count}
-                      </div>
-                      <div className="mt-2 flex gap-1 text-xs">
-                        {!isRestrictedMode && (
-                          <>
-                            <button
-                              className="px-2 py-1 border rounded"
-                              onClick={() => removeOne(key)}
-                            >
-                              -
-                            </button>
-                            <button
-                              className="px-2 py-1 border rounded"
-                              onClick={() => increment(key)}
-                            >
-                              +
-                            </button>
-                          </>
-                        )}
-                        <button
-                          className="ml-auto px-2 py-1 border rounded"
-                          onClick={() => moveOneToSideboard(key)}
-                        >
-                          → Side
-                        </button>
-                      </div>
-                    </div>
+                    <PickTile
+                      key={key}
+                      pickKey={key}
+                      it={it}
+                      isSite={false}
+                      from="deck"
+                      showQuantity={!isRestrictedMode}
+                      moveLabel="→ Side"
+                      onMove={moveOneToSideboard}
+                    />
                   ))}
                 </div>
               </div>
@@ -839,51 +920,19 @@ export default function DeckEditorPage() {
             {/* Spellbook */}
             {!!spellbookCards.length && (
               <div>
-                <div className="text-xs uppercase opacity-70 mb-2">
-                  Spellbook
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                <ZoneLabel>Spellbook</ZoneLabel>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                   {spellbookCards.map(([key, it]) => (
-                    <div key={key} className="relative border rounded p-2">
-                      <CardThumb
-                        slug={it.slug}
-                        alt={it.name}
-                        isSite={false}
-                        className="w-full"
-                        draggable
-                        onDragStart={onDragStartFromPick(key, it, "deck")}
-                      />
-                      <div className="mt-1 text-xs font-medium line-clamp-1">
-                        {it.name}
-                      </div>
-                      <div className="absolute top-1 right-1 text-[11px] bg-background/80 px-1 rounded">
-                        x{it.count}
-                      </div>
-                      <div className="mt-2 flex gap-1 text-xs">
-                        {!isRestrictedMode && (
-                          <>
-                            <button
-                              className="px-2 py-1 border rounded"
-                              onClick={() => removeOne(key)}
-                            >
-                              -
-                            </button>
-                            <button
-                              className="px-2 py-1 border rounded"
-                              onClick={() => increment(key)}
-                            >
-                              +
-                            </button>
-                          </>
-                        )}
-                        <button
-                          className="ml-auto px-2 py-1 border rounded"
-                          onClick={() => moveOneToSideboard(key)}
-                        >
-                          → Side
-                        </button>
-                      </div>
-                    </div>
+                    <PickTile
+                      key={key}
+                      pickKey={key}
+                      it={it}
+                      isSite={false}
+                      from="deck"
+                      showQuantity={!isRestrictedMode}
+                      moveLabel="→ Side"
+                      onMove={moveOneToSideboard}
+                    />
                   ))}
                 </div>
               </div>
@@ -892,57 +941,39 @@ export default function DeckEditorPage() {
             {/* Atlas */}
             {!!atlasCards.length && (
               <div>
-                <div className="text-xs uppercase opacity-70 mb-2">Atlas</div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                <ZoneLabel>Atlas</ZoneLabel>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                   {atlasCards.map(([key, it]) => (
-                    <div key={key} className="relative border rounded p-2">
-                      <CardThumb
-                        slug={it.slug}
-                        alt={it.name}
-                        isSite={true}
-                        className="w-full"
-                        draggable
-                        onDragStart={onDragStartFromPick(key, it, "deck")}
-                      />
-                      <div className="mt-1 text-xs font-medium line-clamp-1">
-                        {it.name}
-                      </div>
-                      <div className="absolute top-1 right-1 text-[11px] bg-background/80 px-1 rounded">
-                        x{it.count}
-                      </div>
-                      <div className="mt-2 flex gap-1 text-xs">
-                        <button
-                          className="px-2 py-1 border rounded"
-                          onClick={() => removeOne(key)}
-                        >
-                          -
-                        </button>
-                        <button
-                          className="px-2 py-1 border rounded"
-                          onClick={() => increment(key)}
-                        >
-                          +
-                        </button>
-                        <button
-                          className="ml-auto px-2 py-1 border rounded"
-                          onClick={() => moveOneToSideboard(key)}
-                        >
-                          → Side
-                        </button>
-                      </div>
-                    </div>
+                    <PickTile
+                      key={key}
+                      pickKey={key}
+                      it={it}
+                      isSite={true}
+                      from="deck"
+                      showQuantity
+                      moveLabel="→ Side"
+                      onMove={moveOneToSideboard}
+                    />
                   ))}
                 </div>
               </div>
             )}
+
+            {!avatars.length &&
+              !spellbookCards.length &&
+              !atlasCards.length && (
+                <RcEmpty title="No cards in this deck yet.">
+                  drag cards here or use the search
+                </RcEmpty>
+              )}
           </div>
-        </div>
+        </section>
 
         {/* Sideboard zone */}
-        <div
+        <section
           className={
-            "col-span-12 lg:col-span-4 border rounded p-3 min-h-64 " +
-            (isOverSideboard ? "ring-2 ring-foreground/60" : "")
+            "rc-panel col-span-12 min-h-64 lg:col-span-4 " +
+            (isOverSideboard ? "ring-1 ring-rc-accent-ring" : "")
           }
           onDragOver={(ev) => {
             preventDefault(ev);
@@ -951,155 +982,127 @@ export default function DeckEditorPage() {
           onDragLeave={() => setIsOverSideboard(false)}
           onDrop={handleDropOnSideboard}
         >
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-medium">Sideboard</div>
-            <div className="text-xs opacity-70">
-              {zoneCounts.Sideboard} cards
-            </div>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {sideEntries.map(([key, it]) => (
-              <div key={key} className="relative border rounded p-2">
-                <CardThumb
-                  slug={it.slug}
-                  alt={it.name}
-                  isSite={(it.type || "").toLowerCase().includes("site")}
-                  className="w-full"
-                  draggable
-                  onDragStart={onDragStartFromPick(key, it, "sideboard")}
-                />
-                <div className="mt-1 text-xs font-medium line-clamp-1">
-                  {it.name}
-                </div>
-                <div className="absolute top-1 right-1 text-[11px] bg-background/80 px-1 rounded">
-                  x{it.count}
-                </div>
-                <div className="mt-2 flex gap-1 text-xs">
-                  {!isRestrictedMode && (
-                    <>
-                      <button
-                        className="px-2 py-1 border rounded"
-                        onClick={() => removeOne(key)}
-                      >
-                        -
-                      </button>
-                      <button
-                        className="px-2 py-1 border rounded"
-                        onClick={() => increment(key)}
-                      >
-                        +
-                      </button>
-                    </>
-                  )}
-                  <button
-                    className="ml-auto px-2 py-1 border rounded"
-                    onClick={() => moveOneFromSideboardToDeck(key)}
+          <PanelHeader
+            title="Sideboard"
+            meta={`${zoneCounts.Sideboard} cards`}
+          />
+          <div className="px-[18px] py-3.5">
+            {sideEntries.length === 0 ? (
+              <RcEmpty title="Sideboard is empty.">
+                drag cards here to set them aside
+              </RcEmpty>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {sideEntries.map(([key, it]) => (
+                  <PickTile
+                    key={key}
+                    pickKey={key}
+                    it={it}
+                    isSite={(it.type || "").toLowerCase().includes("site")}
+                    from="sideboard"
+                    showQuantity={!isRestrictedMode}
+                    moveLabel="→ Deck"
+                    onMove={moveOneFromSideboardToDeck}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Search within sideboard column for compactness */}
+            {!isRestrictedMode && (
+              <div className="mt-4 border-t border-rc-line/12 pt-3.5">
+                <ZoneLabel>Search</ZoneLabel>
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <input
+                    type="search"
+                    name="q"
+                    autoComplete="off"
+                    role="searchbox"
+                    inputMode="search"
+                    data-1p-ignore
+                    data-lpignore="true"
+                    data-bwignore="true"
+                    data-dashlane-ignore="true"
+                    data-np-ignore="true"
+                    data-keeper-lock="true"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    className="rc-input h-9 w-48"
+                    placeholder="Name contains..."
+                  />
+                  <CustomSelect
+                    value={typeFilter}
+                    onChange={(v) => setTypeFilter(v as SearchType)}
+                    options={[
+                      { value: "all", label: "All" },
+                      { value: "avatar", label: "Avatar" },
+                      { value: "site", label: "Sites" },
+                      { value: "spell", label: "Spellbook" },
+                    ]}
+                  />
+                  <RcButton
+                    variant="outline"
+                    className="h-9"
+                    onClick={doSearch}
+                    disabled={searching}
                   >
-                    → Deck
-                  </button>
+                    {searching ? "Searching..." : "Search"}
+                  </RcButton>
                 </div>
+                {searching && (
+                  <div className="rc-hint py-6 text-center">searching…</div>
+                )}
+                {!!results.length && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {results.map((c) => {
+                      const isSite = (c.type || "")
+                        .toLowerCase()
+                        .includes("site");
+                      return (
+                        <div
+                          key={c.variantId}
+                          className="rounded-rc-md border border-rc-line/12 bg-black/30 p-2"
+                          draggable
+                          onDragStart={onDragStartFromSearch(c)}
+                        >
+                          <CardThumb
+                            slug={c.slug}
+                            alt={c.cardName}
+                            isSite={isSite}
+                            className="mb-2 w-full"
+                          />
+                          <div className="line-clamp-1 font-rc-display text-[15px] leading-tight text-rc-fg-strong">
+                            {c.cardName}
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                            {c.type && <Badge>{c.type}</Badge>}
+                            {c.rarity && <Badge tone="gold">{c.rarity}</Badge>}
+                          </div>
+                          <div className="mt-2 flex gap-1">
+                            <RcButton
+                              variant="outline"
+                              size="sm"
+                              onClick={() => addCardAuto(c)}
+                            >
+                              + Deck
+                            </RcButton>
+                            <RcButton
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => addToSideboardFromSearch(c)}
+                            >
+                              + Side
+                            </RcButton>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            ))}
+            )}
           </div>
-
-          {/* Search within sideboard column for compactness */}
-          {!isRestrictedMode && (
-            <div className="mt-4 border-t pt-3">
-              <div className="font-medium mb-2">Search</div>
-              <div className="flex flex-wrap items-end gap-2 mb-2">
-                <input
-                  type="search"
-                  name="q"
-                  autoComplete="off"
-                  role="searchbox"
-                  inputMode="search"
-                  data-1p-ignore
-                  data-lpignore="true"
-                  data-bwignore="true"
-                  data-dashlane-ignore="true"
-                  data-np-ignore="true"
-                  data-keeper-lock="true"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  className="border rounded px-3 py-2 bg-transparent w-48"
-                  placeholder="Name contains..."
-                />
-                <CustomSelect
-                  value={typeFilter}
-                  onChange={(v) => setTypeFilter(v as SearchType)}
-                  options={[
-                    { value: "all", label: "All" },
-                    { value: "avatar", label: "Avatar" },
-                    { value: "site", label: "Sites" },
-                    { value: "spell", label: "Spellbook" },
-                  ]}
-                />
-                <button
-                  onClick={doSearch}
-                  disabled={searching}
-                  className="h-10 px-3 rounded bg-foreground text-background disabled:opacity-50"
-                >
-                  {searching ? "Searching..." : "Search"}
-                </button>
-              </div>
-              {!!results.length && (
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {results.map((c) => {
-                    const isSite = (c.type || "")
-                      .toLowerCase()
-                      .includes("site");
-                    return (
-                      <div
-                        key={c.variantId}
-                        className="border rounded p-2"
-                        draggable
-                        onDragStart={onDragStartFromSearch(c)}
-                      >
-                        <CardThumb
-                          slug={c.slug}
-                          alt={c.cardName}
-                          isSite={isSite}
-                          className="w-full mb-2"
-                        />
-                        <div className="font-semibold line-clamp-1">
-                          {c.cardName}
-                        </div>
-                        <div className="opacity-80 line-clamp-1">
-                          {c.type || ""}
-                        </div>
-                        <div className="mt-1 flex gap-1">
-                          <button
-                            className="px-2 py-1 border rounded"
-                            onClick={() => addCardAuto(c)}
-                          >
-                            + Deck
-                          </button>
-                          <button
-                            className="px-2 py-1 border rounded"
-                            onClick={() => addToSideboardFromSearch(c)}
-                          >
-                            + Side
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-end gap-3">
-        <button
-          onClick={saveDeck}
-          disabled={saving}
-          className="h-10 px-4 rounded bg-foreground text-background disabled:opacity-50"
-        >
-          {saving ? "Saving..." : deckId ? "Update Deck" : "Save Deck"}
-        </button>
-        {saveMsg && <div className="text-green-600 text-sm">{saveMsg}</div>}
+        </section>
       </div>
 
       {/* Tournament Legal Controls overlay */}
@@ -1132,6 +1135,6 @@ export default function DeckEditorPage() {
         }}
         onAddStandardSite={addStandardSiteByName}
       />
-    </div>
+    </AppShell>
   );
 }

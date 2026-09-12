@@ -1,9 +1,13 @@
 "use client";
 
 import clsx from "clsx";
-import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import type {
   ActiveMatchInfo,
   AdminActionResult,
@@ -601,11 +605,17 @@ export default function AdminDashboard({
     return connections.map((conn) => {
       const statusClass =
         conn.status === "ok"
-          ? "bg-emerald-500/10 border-emerald-400/50 text-emerald-200"
+          ? "border-rc-success/35 bg-rc-success/10"
           : conn.status === "skipped"
-          ? "bg-slate-700/40 border-slate-500/50 text-slate-200"
-          : "bg-rose-500/10 border-rose-400/60 text-rose-200";
-      return { ...conn, statusClass };
+          ? "border-rc-line/18 bg-black/30"
+          : "border-rc-danger/40 bg-rc-danger/10";
+      const statusTone =
+        conn.status === "ok"
+          ? "text-rc-success"
+          : conn.status === "skipped"
+          ? "text-rc-fg-muted"
+          : "text-rc-danger";
+      return { ...conn, statusClass, statusTone };
     });
   }, [connections]);
 
@@ -617,558 +627,520 @@ export default function AdminDashboard({
   }, [actions, actionResults]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto flex max-w-6xl flex-col gap-10 px-6 py-10">
-        <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-white">
-              Admin Control Room
-            </h1>
-            <p className="text-sm text-slate-400">
-              Signed in as {adminName || "admin"} • Last refresh{" "}
-              {formatTimestamp(statusTimestamp)}
-            </p>
-          </div>
-          <button
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        eyebrow="admin"
+        title="Control Room"
+        description={`Signed in as ${adminName || "admin"} · Last refresh ${formatTimestamp(statusTimestamp)}`}
+        actions={
+          <RcButton
             onClick={() => {
               void runConnectionRefresh();
             }}
             disabled={refreshingStatus}
-            className={clsx(
-              "inline-flex items-center justify-center rounded border px-4 py-2 text-sm font-medium transition",
-              refreshingStatus
-                ? "border-slate-500 bg-slate-800 text-slate-300"
-                : "border-emerald-400 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20"
-            )}
           >
             {refreshingStatus ? "Refreshing…" : "Run diagnostics"}
-          </button>
-        </header>
+          </RcButton>
+        }
+      />
 
-        {statusError && (
-          <div className="rounded border border-rose-500/60 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-            Diagnostics refresh failed: {statusError}
-          </div>
-        )}
+      {statusError && (
+        <div className="rc-alert" data-tone="danger">
+          Diagnostics refresh failed: {statusError}
+        </div>
+      )}
 
-        <section>
-          <h2 className="text-lg font-semibold text-white">
+      <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
             Snapshot statistics
           </h2>
-          <p className="text-xs text-slate-400">
-            Numbers are aggregated live from the database.
+          <p className="rc-hint mt-1.5">
+            numbers are aggregated live from the database
           </p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <StatCard label="Registered users" value={stats.totals.users} />
-            <StatCard
-              label="Tournaments stored"
-              value={stats.totals.tournaments}
-              sublabel={`${formatNumber(
-                stats.totals.activeTournaments
-              )} active`}
-            />
-            <StatCard label="Matches recorded" value={stats.totals.matches} />
-            <StatCard
-              label="Replay sessions"
-              value={stats.totals.replaySessions}
-            />
-            <StatCard
-              label="Leaderboard entries"
-              value={stats.totals.leaderboardEntries}
-            />
-            <StatCard
-              label="Updated at"
-              valueLabel={formatTimestamp(stats.updatedAt)}
-            />
-          </div>
-        </section>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <StatCard label="Registered users" value={stats.totals.users} />
+          <StatCard
+            label="Tournaments stored"
+            value={stats.totals.tournaments}
+            sublabel={`${formatNumber(stats.totals.activeTournaments)} active`}
+          />
+          <StatCard label="Matches recorded" value={stats.totals.matches} />
+          <StatCard
+            label="Replay sessions"
+            value={stats.totals.replaySessions}
+          />
+          <StatCard
+            label="Leaderboard entries"
+            value={stats.totals.leaderboardEntries}
+          />
+          <StatCard
+            label="Updated at"
+            valueLabel={formatTimestamp(stats.updatedAt)}
+          />
+        </div>
+      </section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-white">Live Matches</h2>
-              <p className="text-xs text-slate-400">
-                Currently active matches on the server. Click to spectate.
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                void refreshActiveMatches();
-              }}
-              className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
-              disabled={activeMatchesLoading}
-            >
-              {activeMatchesLoading ? "Refreshing…" : "Refresh"}
-            </button>
+      <section className="rc-panel overflow-hidden">
+        <PanelHeader
+          title="Live Matches"
+          meta="currently active on the server"
+        >
+          <RcButton
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void refreshActiveMatches();
+            }}
+            disabled={activeMatchesLoading}
+          >
+            {activeMatchesLoading ? "Refreshing…" : "Refresh"}
+          </RcButton>
+        </PanelHeader>
+        {(activeMatchesError || activeMatches.length === 0) && (
+          <div className="flex flex-col gap-3 px-[18px] py-3.5">
+            {activeMatchesError && (
+              <div className="rc-alert" data-tone="danger">
+                {activeMatchesError}
+              </div>
+            )}
+            {activeMatchesLoading && activeMatches.length === 0 && (
+              <div className="rc-hint py-6 text-center">
+                loading active matches…
+              </div>
+            )}
+            {!activeMatchesLoading && activeMatches.length === 0 && (
+              <RcEmpty title="No active matches">
+                nothing is running right now
+              </RcEmpty>
+            )}
           </div>
-          {activeMatchesError && (
-            <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
-              {activeMatchesError}
-            </div>
-          )}
-          {activeMatchesLoading && activeMatches.length === 0 && (
-            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-4 text-center text-xs text-slate-300">
-              Loading active matches…
-            </div>
-          )}
-          {!activeMatchesLoading && activeMatches.length === 0 && (
-            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
-              No active matches at the moment.
-            </div>
-          )}
-          {activeMatches.length > 0 && (
-            <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-              <table className="min-w-full text-left text-xs text-slate-200">
-                <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                  <tr>
-                    <th className="px-3 py-2">Match ID</th>
-                    <th className="px-3 py-2">Players</th>
-                    <th className="px-3 py-2">Type</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Started</th>
-                    <th className="px-3 py-2">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeMatches.map((match) => {
-                    const startedStr = match.startedAt
-                      ? formatTimestamp(new Date(match.startedAt).toISOString())
-                      : "—";
-                    return (
-                      <tr
-                        key={match.matchId}
-                        className="border-t border-slate-800/60 hover:bg-slate-800/30"
-                      >
-                        <td className="px-3 py-2">
-                          <button
-                            onClick={() => copyMatchId(match.matchId)}
-                            className="font-mono text-[10px] hover:text-blue-300 cursor-pointer transition-colors"
-                            title="Click to copy full match ID"
-                          >
-                            {copiedMatchId === match.matchId ? (
-                              <span className="text-emerald-400">Copied!</span>
-                            ) : (
-                              <>{match.matchId.slice(0, 8)}…</>
-                            )}
-                          </button>
-                        </td>
-                        <td className="px-3 py-2">
-                          <div
-                            className="max-w-xs truncate"
-                            title={match.playerNames.join(" vs ")}
-                          >
-                            {match.playerNames.join(" vs ")}
-                          </div>
-                          {match.lobbyName && (
-                            <div className="text-[10px] text-slate-400">
-                              {match.lobbyName}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] uppercase">
-                            {match.matchType}
-                          </span>
-                          {match.tournamentId && (
-                            <span className="ml-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-200">
-                              Tournament
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2">
-                          <span
-                            className={clsx(
-                              "rounded px-1.5 py-0.5 text-[10px]",
-                              match.status === "playing"
-                                ? "bg-emerald-500/20 text-emerald-200"
-                                : match.status === "waiting"
-                                ? "bg-amber-500/20 text-amber-200"
-                                : "bg-slate-700/50 text-slate-300"
-                            )}
-                          >
-                            {match.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-[10px] text-slate-400">
-                          {startedStr}
-                        </td>
-                        <td className="px-3 py-2 flex gap-1">
-                          <Link
-                            href={`/online/play/${match.matchId}?watch=true`}
-                            className="rounded bg-blue-600/20 px-2 py-1 text-[10px] text-blue-200 hover:bg-blue-600/30"
-                          >
-                            Spectate
-                          </Link>
-                          <button
-                            onClick={() => cleanupMatch(match.matchId)}
-                            disabled={cleaningUpMatch === match.matchId}
-                            className={clsx(
-                              "rounded px-2 py-1 text-[10px]",
-                              cleaningUpMatch === match.matchId
-                                ? "bg-slate-700/50 text-slate-400 cursor-wait"
-                                : "bg-rose-600/20 text-rose-200 hover:bg-rose-600/30"
-                            )}
-                            title="End this match (players will be notified)"
-                          >
-                            {cleaningUpMatch === match.matchId
-                              ? "Ending…"
-                              : "End Match"}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        <section className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-white">
-                Recent Matches
-              </h2>
-              <p className="text-xs text-slate-400">
-                Recently completed matches from the database. Click to view
-                replay.
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                void refreshRecentMatches();
-              }}
-              className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
-              disabled={recentMatchesLoading}
-            >
-              {recentMatchesLoading ? "Refreshing…" : "Refresh"}
-            </button>
-          </div>
-          {recentMatchesError && (
-            <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
-              {recentMatchesError}
-            </div>
-          )}
-          {recentMatchesLoading && recentMatches.length === 0 && (
-            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-4 text-center text-xs text-slate-300">
-              Loading recent matches…
-            </div>
-          )}
-          {!recentMatchesLoading && recentMatches.length === 0 && (
-            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
-              No completed matches found.
-            </div>
-          )}
-          {recentMatches.length > 0 && (
-            <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-              <table className="min-w-full text-left text-xs text-slate-200">
-                <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                  <tr>
-                    <th className="px-3 py-2">Match ID</th>
-                    <th className="px-3 py-2">Players</th>
-                    <th className="px-3 py-2">Type</th>
-                    <th className="px-3 py-2">Winner</th>
-                    <th className="px-3 py-2">Completed</th>
-                    <th className="px-3 py-2">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentMatches.map((match) => (
-                    <tr
-                      key={match.matchId}
-                      className="border-t border-slate-800/60 hover:bg-slate-800/30"
-                    >
-                      <td className="px-3 py-2">
+        )}
+        {activeMatches.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="rc-table">
+              <thead>
+                <tr>
+                  <th>Match ID</th>
+                  <th>Players</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Started</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeMatches.map((match) => {
+                  const startedStr = match.startedAt
+                    ? formatTimestamp(new Date(match.startedAt).toISOString())
+                    : "—";
+                  return (
+                    <tr key={match.matchId}>
+                      <td>
                         <button
                           onClick={() => copyMatchId(match.matchId)}
-                          className="font-mono text-[10px] hover:text-blue-300 cursor-pointer transition-colors"
+                          className="cursor-pointer font-rc-mono text-[11px] text-rc-fg-muted transition-colors hover:text-rc-accent-ring"
                           title="Click to copy full match ID"
                         >
                           {copiedMatchId === match.matchId ? (
-                            <span className="text-emerald-400">Copied!</span>
+                            <span className="text-rc-success">Copied!</span>
                           ) : (
                             <>{match.matchId.slice(0, 8)}…</>
                           )}
                         </button>
                       </td>
-                      <td className="px-3 py-2">
+                      <td>
                         <div
-                          className="max-w-xs truncate"
+                          className="max-w-xs truncate text-rc-fg-strong"
                           title={match.playerNames.join(" vs ")}
                         >
                           {match.playerNames.join(" vs ")}
                         </div>
-                      </td>
-                      <td className="px-3 py-2">
-                        <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] uppercase">
-                          {match.matchType}
-                        </span>
-                        {match.tournamentId && (
-                          <span className="ml-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-200">
-                            Tournament
-                          </span>
+                        {match.lobbyName && (
+                          <div className="rc-hint mt-0.5">
+                            {match.lobbyName}
+                          </div>
                         )}
                       </td>
-                      <td className="px-3 py-2">
-                        {match.winnerName ? (
-                          <span className="text-emerald-300">
-                            {match.winnerName}
-                          </span>
-                        ) : (
-                          <span className="text-slate-500">Draw/Unknown</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-[10px] text-slate-400">
-                        {formatTimestamp(match.completedAt)}
-                      </td>
-                      <td className="px-3 py-2">
-                        <Link
-                          href={`/replay/${match.matchId}`}
-                          className="rounded bg-blue-600/20 px-2 py-1 text-[10px] text-blue-200 hover:bg-blue-600/30"
-                        >
-                          View Replay
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        <section className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-white">
-                Active Tournaments
-              </h2>
-              <p className="text-xs text-slate-400">
-                Tournaments that are currently running. Close to end them
-                immediately.
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                void refreshTournaments();
-              }}
-              className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
-              disabled={tournamentsLoading}
-            >
-              {tournamentsLoading ? "Refreshing…" : "Refresh"}
-            </button>
-          </div>
-          {tournamentsError && (
-            <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
-              {tournamentsError}
-            </div>
-          )}
-          {tournamentsLoading && tournaments.length === 0 && (
-            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-4 text-center text-xs text-slate-300">
-              Loading tournaments…
-            </div>
-          )}
-          {!tournamentsLoading && tournaments.length === 0 && (
-            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
-              No active tournaments at the moment.
-            </div>
-          )}
-          {tournaments.length > 0 && (
-            <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-              <table className="min-w-full text-left text-xs text-slate-200">
-                <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                  <tr>
-                    <th className="px-3 py-2">Name</th>
-                    <th className="px-3 py-2">Format</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Round</th>
-                    <th className="px-3 py-2">Players</th>
-                    <th className="px-3 py-2">Creator</th>
-                    <th className="px-3 py-2">Started</th>
-                    <th className="px-3 py-2">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tournaments.map((tournament) => (
-                    <tr
-                      key={tournament.id}
-                      className="border-t border-slate-800/60 hover:bg-slate-800/30"
-                    >
-                      <td className="px-3 py-2">
-                        <div
-                          className="max-w-xs truncate font-medium"
-                          title={tournament.name}
-                        >
-                          {tournament.name}
+                      <td>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge>{match.matchType}</Badge>
+                          {match.tournamentId && (
+                            <Badge tone="gold">Tournament</Badge>
+                          )}
                         </div>
                       </td>
-                      <td className="px-3 py-2">
-                        <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] uppercase">
-                          {tournament.format}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">
+                      <td>
                         <span
                           className={clsx(
-                            "rounded px-1.5 py-0.5 text-[10px]",
-                            tournament.status === "active" ||
-                              tournament.status === "in_progress"
-                              ? "bg-emerald-500/20 text-emerald-200"
-                              : tournament.status === "registering"
-                              ? "bg-blue-500/20 text-blue-200"
-                              : tournament.status === "drafting"
-                              ? "bg-purple-500/20 text-purple-200"
-                              : "bg-amber-500/20 text-amber-200"
+                            "flex items-center gap-2 text-[11px] uppercase tracking-[0.14em]",
+                            match.status === "playing"
+                              ? "text-rc-success"
+                              : match.status === "waiting"
+                              ? "text-rc-warning"
+                              : "text-rc-fg-muted"
                           )}
                         >
-                          {tournament.status}
+                          <span className="rc-dot" />
+                          {match.status}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-center">
-                        {tournament.currentRound}/{tournament.maxRounds}
+                      <td className="text-[11px] text-rc-fg-subtle">
+                        {startedStr}
                       </td>
-                      <td className="px-3 py-2 text-center">
-                        {tournament.playerCount}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div
-                          className="max-w-[100px] truncate text-[10px] text-slate-400"
-                          title={tournament.creatorName ?? "Unknown"}
-                        >
-                          {tournament.creatorName ?? "Unknown"}
+                      <td>
+                        <div className="flex gap-2">
+                          <RcLinkButton
+                            variant="outline"
+                            size="sm"
+                            href={`/online/play/${match.matchId}?watch=true`}
+                          >
+                            Spectate
+                          </RcLinkButton>
+                          <RcButton
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => cleanupMatch(match.matchId)}
+                            disabled={cleaningUpMatch === match.matchId}
+                            title="End this match (players will be notified)"
+                          >
+                            {cleaningUpMatch === match.matchId
+                              ? "Ending…"
+                              : "End Match"}
+                          </RcButton>
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-[10px] text-slate-400">
-                        {tournament.startedAt
-                          ? formatTimestamp(tournament.startedAt)
-                          : "Not started"}
-                      </td>
-                      <td className="px-3 py-2 flex gap-1">
-                        <Link
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="rc-panel overflow-hidden">
+        <PanelHeader
+          title="Recent Matches"
+          meta="recently completed, click to view replay"
+        >
+          <RcButton
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void refreshRecentMatches();
+            }}
+            disabled={recentMatchesLoading}
+          >
+            {recentMatchesLoading ? "Refreshing…" : "Refresh"}
+          </RcButton>
+        </PanelHeader>
+        {(recentMatchesError || recentMatches.length === 0) && (
+          <div className="flex flex-col gap-3 px-[18px] py-3.5">
+            {recentMatchesError && (
+              <div className="rc-alert" data-tone="danger">
+                {recentMatchesError}
+              </div>
+            )}
+            {recentMatchesLoading && recentMatches.length === 0 && (
+              <div className="rc-hint py-6 text-center">
+                loading recent matches…
+              </div>
+            )}
+            {!recentMatchesLoading && recentMatches.length === 0 && (
+              <RcEmpty title="No completed matches">
+                nothing has finished yet
+              </RcEmpty>
+            )}
+          </div>
+        )}
+        {recentMatches.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="rc-table">
+              <thead>
+                <tr>
+                  <th>Match ID</th>
+                  <th>Players</th>
+                  <th>Type</th>
+                  <th>Winner</th>
+                  <th>Completed</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentMatches.map((match) => (
+                  <tr key={match.matchId}>
+                    <td>
+                      <button
+                        onClick={() => copyMatchId(match.matchId)}
+                        className="cursor-pointer font-rc-mono text-[11px] text-rc-fg-muted transition-colors hover:text-rc-accent-ring"
+                        title="Click to copy full match ID"
+                      >
+                        {copiedMatchId === match.matchId ? (
+                          <span className="text-rc-success">Copied!</span>
+                        ) : (
+                          <>{match.matchId.slice(0, 8)}…</>
+                        )}
+                      </button>
+                    </td>
+                    <td>
+                      <div
+                        className="max-w-xs truncate text-rc-fg-strong"
+                        title={match.playerNames.join(" vs ")}
+                      >
+                        {match.playerNames.join(" vs ")}
+                      </div>
+                    </td>
+                    <td>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge>{match.matchType}</Badge>
+                        {match.tournamentId && (
+                          <Badge tone="gold">Tournament</Badge>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      {match.winnerName ? (
+                        <span className="text-rc-success">
+                          {match.winnerName}
+                        </span>
+                      ) : (
+                        <span className="text-rc-fg-dim">Draw/Unknown</span>
+                      )}
+                    </td>
+                    <td className="text-[11px] text-rc-fg-subtle">
+                      {formatTimestamp(match.completedAt)}
+                    </td>
+                    <td>
+                      <RcLinkButton
+                        variant="outline"
+                        size="sm"
+                        href={`/replay/${match.matchId}`}
+                      >
+                        View Replay
+                      </RcLinkButton>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="rc-panel overflow-hidden">
+        <PanelHeader
+          title="Active Tournaments"
+          meta="close to end them immediately"
+        >
+          <RcButton
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void refreshTournaments();
+            }}
+            disabled={tournamentsLoading}
+          >
+            {tournamentsLoading ? "Refreshing…" : "Refresh"}
+          </RcButton>
+        </PanelHeader>
+        {(tournamentsError || tournaments.length === 0) && (
+          <div className="flex flex-col gap-3 px-[18px] py-3.5">
+            {tournamentsError && (
+              <div className="rc-alert" data-tone="danger">
+                {tournamentsError}
+              </div>
+            )}
+            {tournamentsLoading && tournaments.length === 0 && (
+              <div className="rc-hint py-6 text-center">
+                loading tournaments…
+              </div>
+            )}
+            {!tournamentsLoading && tournaments.length === 0 && (
+              <RcEmpty title="No active tournaments">
+                nothing is running right now
+              </RcEmpty>
+            )}
+          </div>
+        )}
+        {tournaments.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="rc-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Format</th>
+                  <th>Status</th>
+                  <th>Round</th>
+                  <th>Players</th>
+                  <th>Creator</th>
+                  <th>Started</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tournaments.map((tournament) => (
+                  <tr key={tournament.id}>
+                    <td>
+                      <div
+                        className="max-w-xs truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong"
+                        title={tournament.name}
+                      >
+                        {tournament.name}
+                      </div>
+                    </td>
+                    <td>
+                      <Badge>{tournament.format}</Badge>
+                    </td>
+                    <td>
+                      <span
+                        className={clsx(
+                          "flex items-center gap-2 text-[11px] uppercase tracking-[0.14em]",
+                          tournament.status === "active" ||
+                            tournament.status === "in_progress"
+                            ? "text-rc-success"
+                            : tournament.status === "registering"
+                            ? "text-rc-info"
+                            : tournament.status === "drafting"
+                            ? "text-rc-moonlight"
+                            : "text-rc-warning"
+                        )}
+                      >
+                        <span className="rc-dot" />
+                        {tournament.status}
+                      </span>
+                    </td>
+                    <td className="text-center tabular-nums">
+                      {tournament.currentRound}/{tournament.maxRounds}
+                    </td>
+                    <td className="text-center tabular-nums">
+                      {tournament.playerCount}
+                    </td>
+                    <td>
+                      <div
+                        className="max-w-[100px] truncate text-[11px] text-rc-fg-subtle"
+                        title={tournament.creatorName ?? "Unknown"}
+                      >
+                        {tournament.creatorName ?? "Unknown"}
+                      </div>
+                    </td>
+                    <td className="text-[11px] text-rc-fg-subtle">
+                      {tournament.startedAt
+                        ? formatTimestamp(tournament.startedAt)
+                        : "Not started"}
+                    </td>
+                    <td>
+                      <div className="flex gap-2">
+                        <RcLinkButton
+                          variant="outline"
+                          size="sm"
                           href={`/tournaments/${tournament.id}`}
-                          className="rounded bg-blue-600/20 px-2 py-1 text-[10px] text-blue-200 hover:bg-blue-600/30"
                         >
                           View
-                        </Link>
-                        <button
+                        </RcLinkButton>
+                        <RcButton
+                          variant="destructive"
+                          size="sm"
                           onClick={() =>
                             closeTournament(tournament.id, tournament.name)
                           }
                           disabled={closingTournament === tournament.id}
-                          className={clsx(
-                            "rounded px-2 py-1 text-[10px]",
-                            closingTournament === tournament.id
-                              ? "bg-slate-700/50 text-slate-400 cursor-wait"
-                              : "bg-rose-600/20 text-rose-200 hover:bg-rose-600/30"
-                          )}
                           title="Close this tournament (all matches will be ended)"
                         >
                           {closingTournament === tournament.id
                             ? "Closing…"
                             : "Close"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        <section className="rounded border border-slate-700 bg-slate-900/60 px-6 py-5">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-white">
-                Meta Statistics
-              </h2>
-              <p className="text-sm text-slate-400">
-                Card win rates, element distribution, mana curves, and more
-              </p>
-            </div>
-            <Link
-              href="/admin/meta"
-              className="inline-flex items-center justify-center rounded border border-emerald-400 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20"
-            >
-              View Meta Dashboard →
-            </Link>
+                        </RcButton>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </section>
+        )}
+      </section>
 
-        <section className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold text-white">
-            Connection diagnostics
-          </h2>
-          <div className="grid gap-4 md:grid-cols-2">
-            {connectionStatusSummaries.map((connection) => (
-              <div
-                key={connection.id}
-                className={clsx(
-                  "rounded border px-4 py-4 shadow-sm",
-                  connection.statusClass
-                )}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-medium">{connection.label}</div>
-                  <span
-                    className={clsx(
-                      "inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
-                      connection.status === "ok"
-                        ? "bg-emerald-400/20 text-emerald-100"
-                        : connection.status === "skipped"
-                        ? "bg-slate-500/30 text-slate-200"
-                        : "bg-rose-500/30 text-rose-100"
-                    )}
-                  >
-                    {connection.status}
-                  </span>
+      <section className="rc-panel">
+        <PanelHeader title="Meta Statistics">
+          <RcLinkButton variant="outline" size="sm" href="/admin/meta">
+            View Meta Dashboard
+          </RcLinkButton>
+        </PanelHeader>
+        <p className="px-[18px] py-3.5 font-rc-sans text-sm text-rc-fg-muted">
+          Card win rates, element distribution, mana curves, and more
+        </p>
+      </section>
+
+      <section className="flex flex-col gap-4">
+        <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
+          Connection diagnostics
+        </h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          {connectionStatusSummaries.map((connection) => (
+            <div
+              key={connection.id}
+              className={clsx(
+                "rounded-rc-lg border px-4 py-4 shadow-rc-sm",
+                connection.statusClass
+              )}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-rc-sans text-sm text-rc-fg-strong">
+                  {connection.label}
                 </div>
-                {typeof connection.latencyMs === "number" && (
-                  <div className="mt-1 text-xs text-slate-200">
-                    {connection.latencyMs.toFixed(1)} ms
-                  </div>
-                )}
-                {connection.details && (
-                  <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-black/40 p-2 text-[11px] text-slate-200">
-                    {connection.details}
-                  </pre>
-                )}
+                <span
+                  className={clsx(
+                    "inline-flex items-center gap-2 font-rc-mono text-[11px] uppercase tracking-[0.14em]",
+                    connection.statusTone
+                  )}
+                >
+                  <span className="rc-dot" />
+                  {connection.status}
+                </span>
               </div>
-            ))}
-          </div>
-        </section>
+              {typeof connection.latencyMs === "number" && (
+                <div className="rc-stat mt-1.5 text-sm">
+                  {connection.latencyMs.toFixed(1)} ms
+                </div>
+              )}
+              {connection.details && (
+                <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-rc-md border border-rc-line/12 bg-black/45 p-2 font-rc-mono text-[11px] text-rc-fg-muted">
+                  {connection.details}
+                </pre>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-lg font-semibold text-white">
-              System health timeline
-            </h2>
-            <button
-              onClick={() => {
-                void refreshHealthHistory();
-              }}
-              className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
-              disabled={loadingHealthHistory}
-            >
-              {loadingHealthHistory ? "Refreshing…" : "Refresh"}
-            </button>
-          </div>
+      <section className="rc-panel">
+        <PanelHeader title="System health timeline">
+          <RcButton
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void refreshHealthHistory();
+            }}
+            disabled={loadingHealthHistory}
+          >
+            {loadingHealthHistory ? "Refreshing…" : "Refresh"}
+          </RcButton>
+        </PanelHeader>
+        <div className="flex flex-col gap-3 px-[18px] py-3.5">
           {healthHistoryError && (
-            <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+            <div className="rc-alert" data-tone="danger">
               {healthHistoryError}
             </div>
           )}
           {!loadingHealthHistory && healthHistory.length === 0 && (
-            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
-              No health snapshots recorded yet. Run diagnostics to capture the
-              first sample.
-            </div>
+            <RcEmpty title="No health snapshots yet">
+              run diagnostics to capture the first sample
+            </RcEmpty>
           )}
           {loadingHealthHistory && (
-            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-4 text-center text-xs text-slate-300">
-              Loading timeline…
-            </div>
+            <div className="rc-hint py-6 text-center">loading timeline…</div>
           )}
           {!loadingHealthHistory && healthHistory.length > 0 && (
             <div className="grid gap-3 md:grid-cols-2">
@@ -1185,29 +1157,31 @@ export default function AdminDashboard({
                 return (
                   <div
                     key={snapshot.id}
-                    className="rounded border border-slate-800 bg-slate-900/60 px-4 py-3"
+                    className="rounded-rc-md border border-rc-line/12 bg-black/30 px-4 py-3"
                   >
-                    <div className="text-sm font-semibold text-white">
+                    <div className="font-rc-mono text-xs text-rc-fg-strong">
                       {formatTimestamp(snapshot.timestamp)}
                     </div>
-                    <div className="mt-1 text-[11px] text-slate-400">
-                      Users: {formatNumber(snapshot.stats.totals.users)} •
+                    <div className="rc-hint mt-1">
+                      Users: {formatNumber(snapshot.stats.totals.users)} ·
                       Matches: {formatNumber(snapshot.stats.totals.matches)}
                     </div>
-                    <div className="mt-2 flex items-center gap-3 text-xs text-slate-200">
-                      <span className="text-emerald-300">OK {ok}</span>
-                      <span className="text-rose-300">Errors {errors}</span>
-                      <span className="text-slate-300">Skipped {skipped}</span>
+                    <div className="mt-2 flex items-center gap-3 font-rc-mono text-[11px] uppercase tracking-[0.14em]">
+                      <span className="text-rc-success">OK {ok}</span>
+                      <span className="text-rc-danger">Errors {errors}</span>
+                      <span className="text-rc-fg-muted">
+                        Skipped {skipped}
+                      </span>
                     </div>
-                    <ul className="mt-2 space-y-1 text-[11px] text-slate-300">
+                    <ul className="mt-2 space-y-1 font-rc-mono text-[11px] text-rc-fg-muted">
                       {snapshot.connections.map((conn) => (
                         <li key={`${snapshot.id}-${conn.id}`}>
-                          <span className="font-semibold text-slate-100">
+                          <span className="text-rc-fg-strong">
                             {conn.label}:
                           </span>{" "}
                           {conn.status}
                           {typeof conn.latencyMs === "number"
-                            ? ` • ${conn.latencyMs.toFixed(1)} ms`
+                            ? ` · ${conn.latencyMs.toFixed(1)} ms`
                             : ""}
                         </li>
                       ))}
@@ -1217,156 +1191,159 @@ export default function AdminDashboard({
               })}
             </div>
           )}
-        </section>
+        </div>
+      </section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <button
-              onClick={() => setErrorsExpanded((prev) => !prev)}
-              className="flex items-center gap-2 text-left"
-            >
-              <span
-                className={clsx(
-                  "inline-block transition-transform",
-                  errorsExpanded ? "rotate-90" : ""
-                )}
-              >
-                ▶
-              </span>
-              <h2 className="text-lg font-semibold text-white">
-                Recent errors
-              </h2>
-              {errorsData.length > 0 && (
-                <span className="rounded bg-rose-500/20 px-2 py-0.5 text-xs text-rose-200">
-                  {errorsData.length}
-                </span>
+      <section className="rc-panel overflow-hidden">
+        <div className="rc-panel-head">
+          <button
+            onClick={() => setErrorsExpanded((prev) => !prev)}
+            className="flex items-center gap-2 text-left"
+            aria-expanded={errorsExpanded}
+          >
+            <ChevronRight
+              className={clsx(
+                "h-4 w-4 text-rc-fg-muted transition-transform",
+                errorsExpanded ? "rotate-90" : ""
               )}
-            </button>
-            <button
-              onClick={() => {
-                void refreshErrors();
-              }}
-              className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
-            >
-              Refresh
-            </button>
-          </div>
-          {errorsExpanded && (
-            <>
-              {errorsError && (
-                <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
-                  {errorsError}
-                </div>
-              )}
-              {errorsData.length === 0 ? (
-                <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
-                  No error events recorded in the last 50 entries.
-                </div>
-              ) : (
-                <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-                  <table className="min-w-full text-left text-xs text-slate-200">
-                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                      <tr>
-                        <th className="px-3 py-2">Timestamp</th>
-                        <th className="px-3 py-2">Event</th>
-                        <th className="px-3 py-2">Status</th>
-                        <th className="px-3 py-2">Message</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {errorsData.map((record) => (
-                        <tr
-                          key={record.id}
-                          className="border-t border-slate-800/60"
-                        >
-                          <td className="px-3 py-2">
-                            {formatTimestamp(record.timestamp)}
-                          </td>
-                          <td className="px-3 py-2">
-                            <span className="font-medium text-white">
-                              {record.eventType}
-                            </span>
-                            <div className="text-[10px] text-slate-400">
-                              {record.targetUrl}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2">
-                            {record.statusCode ?? "—"}{" "}
-                            {!record.success ? (
-                              <span className="ml-1 rounded bg-rose-500/30 px-1 py-0.5 text-[10px] text-rose-100">
-                                failed
-                              </span>
-                            ) : (
-                              <span className="ml-1 rounded bg-emerald-500/20 px-1 py-0.5 text-[10px] text-emerald-100">
-                                ok
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-[11px] text-slate-300">
-                            {record.errorMessage ?? "—"}{" "}
-                            {record.retryCount > 0 && (
-                              <span className="ml-2 text-slate-400">
-                                (retries: {record.retryCount})
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
+            />
+            <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
+              Recent errors
+            </h2>
+          </button>
+          {errorsData.length > 0 && (
+            <Badge tone="warn">{errorsData.length}</Badge>
           )}
-        </section>
+          <div className="flex-1" />
+          <RcButton
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void refreshErrors();
+            }}
+          >
+            Refresh
+          </RcButton>
+        </div>
+        {errorsExpanded && (
+          <>
+            {(errorsError || errorsData.length === 0) && (
+              <div className="flex flex-col gap-3 px-[18px] py-3.5">
+                {errorsError && (
+                  <div className="rc-alert" data-tone="danger">
+                    {errorsError}
+                  </div>
+                )}
+                {errorsData.length === 0 && (
+                  <RcEmpty title="No error events">
+                    nothing in the last 50 entries
+                  </RcEmpty>
+                )}
+              </div>
+            )}
+            {errorsData.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="rc-table">
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Event</th>
+                      <th>Status</th>
+                      <th>Message</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {errorsData.map((record) => (
+                      <tr key={record.id}>
+                        <td className="text-[11px] text-rc-fg-subtle">
+                          {formatTimestamp(record.timestamp)}
+                        </td>
+                        <td>
+                          <span className="text-rc-fg-strong">
+                            {record.eventType}
+                          </span>
+                          <div className="rc-hint mt-0.5">
+                            {record.targetUrl}
+                          </div>
+                        </td>
+                        <td>
+                          <span className="tabular-nums">
+                            {record.statusCode ?? "—"}
+                          </span>{" "}
+                          {!record.success ? (
+                            <span className="ml-1 text-[11px] uppercase tracking-[0.14em] text-rc-danger">
+                              failed
+                            </span>
+                          ) : (
+                            <span className="ml-1 text-[11px] uppercase tracking-[0.14em] text-rc-success">
+                              ok
+                            </span>
+                          )}
+                        </td>
+                        <td className="text-[11px] text-rc-fg-muted">
+                          {record.errorMessage ?? "—"}{" "}
+                          {record.retryCount > 0 && (
+                            <span className="ml-2 text-rc-fg-dim">
+                              (retries: {record.retryCount})
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-lg font-semibold text-white">Queue status</h2>
-            <button
-              onClick={() => {
-                void refreshJobs();
-              }}
-              className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
-            >
-              Refresh
-            </button>
-          </div>
+      <section className="rc-panel">
+        <PanelHeader title="Queue status">
+          <RcButton
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void refreshJobs();
+            }}
+          >
+            Refresh
+          </RcButton>
+        </PanelHeader>
+        <div className="flex flex-col gap-3 px-[18px] py-3.5">
           {jobsError && (
-            <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+            <div className="rc-alert" data-tone="danger">
               {jobsError}
             </div>
           )}
           {jobsData.length === 0 ? (
-            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
-              No active jobs detected.
-            </div>
+            <RcEmpty title="No active jobs">nothing queued</RcEmpty>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {jobsData.map((job) => (
                 <div
                   key={job.id}
-                  className="rounded border border-slate-800 bg-slate-900/60 px-4 py-3"
+                  className="rounded-rc-md border border-rc-line/12 bg-black/30 px-4 py-3"
                 >
-                  <div className="text-sm font-semibold text-white">
+                  <div className="font-rc-sans text-sm text-rc-fg-strong">
                     {job.label}
                   </div>
-                  <div className="mt-1 text-[11px] text-slate-400">
+                  <div className="rc-hint mt-1">
                     Updated {formatTimestamp(job.updatedAt)}
                   </div>
-                  <div className="mt-2 flex items-center gap-3 text-xs">
-                    <span className="text-amber-200">
+                  <div className="mt-2 flex flex-wrap items-center gap-3 font-rc-mono text-[11px] uppercase tracking-[0.14em]">
+                    <span className="text-rc-warning">
                       Queued: {formatNumber(job.queued)}
                     </span>
-                    <span className="text-emerald-200">
+                    <span className="text-rc-success">
                       Active: {formatNumber(job.inProgress)}
                     </span>
-                    <span className="text-rose-200">
+                    <span className="text-rc-danger">
                       Failed: {formatNumber(job.failed)}
                     </span>
                   </div>
                   {job.details && (
-                    <div className="mt-2 text-[11px] text-slate-300">
+                    <div className="mt-2 font-rc-mono text-[11px] text-rc-fg-muted">
                       {job.details}
                     </div>
                   )}
@@ -1374,102 +1351,97 @@ export default function AdminDashboard({
               ))}
             </div>
           )}
-        </section>
+        </div>
+      </section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-lg font-semibold text-white">
-              Active sessions
-            </h2>
-            <button
-              onClick={() => {
-                void refreshSessions();
-              }}
-              className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
-            >
-              Refresh
-            </button>
-          </div>
+      <section className="rc-panel">
+        <PanelHeader title="Active sessions">
+          <RcButton
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void refreshSessions();
+            }}
+          >
+            Refresh
+          </RcButton>
+        </PanelHeader>
+        <div className="flex flex-col gap-3 px-[18px] py-3.5">
           {sessionsError && (
-            <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+            <div className="rc-alert" data-tone="danger">
               {sessionsError}
             </div>
           )}
           {sessionsData.length === 0 ? (
-            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
-              No live sessions detected.
-            </div>
+            <RcEmpty title="No live sessions">nothing connected</RcEmpty>
           ) : (
             <div className="grid gap-3">
               {sessionsData.map((session) => (
                 <div
                   key={session.id}
-                  className="rounded border border-slate-800 bg-slate-900/60 px-4 py-3"
+                  className="rounded-rc-md border border-rc-line/12 bg-black/30 px-4 py-3"
                 >
                   <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <div className="text-sm font-semibold text-white">
-                        {session.type.toUpperCase()} • {session.status}
+                      <div className="font-rc-mono text-xs uppercase tracking-[0.14em] text-rc-fg-strong">
+                        {session.type.toUpperCase()} · {session.status}
                       </div>
-                      <div className="text-xs text-slate-300">
+                      <div className="mt-1 font-rc-sans text-sm text-rc-fg-muted">
                         {session.description}
                       </div>
                     </div>
-                    <div className="text-xs text-slate-400">
+                    <div className="font-rc-mono text-xs text-rc-fg-subtle">
                       Players: {formatNumber(session.playerCount)}
                     </div>
                   </div>
-                  <div className="mt-2 text-[11px] text-slate-400">
-                    Started {formatTimestamp(session.startedAt)} • Updated{" "}
+                  <div className="rc-hint mt-2">
+                    Started {formatTimestamp(session.startedAt)} · Updated{" "}
                     {formatTimestamp(session.updatedAt)}
                   </div>
                 </div>
               ))}
             </div>
           )}
-        </section>
+        </div>
+      </section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-lg font-semibold text-white">
-              Usage snapshots
-            </h2>
-            <button
-              onClick={() => {
-                void refreshUsage();
-              }}
-              className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
-            >
-              Refresh
-            </button>
-          </div>
+      <section className="rc-panel">
+        <PanelHeader title="Usage snapshots">
+          <RcButton
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void refreshUsage();
+            }}
+          >
+            Refresh
+          </RcButton>
+        </PanelHeader>
+        <div className="flex flex-col gap-3 px-[18px] py-3.5">
           {usageError && (
-            <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+            <div className="rc-alert" data-tone="danger">
               {usageError}
             </div>
           )}
           {usageData.length === 0 ? (
-            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
-              Usage data unavailable.
-            </div>
+            <RcEmpty title="Usage data unavailable">
+              no snapshots returned
+            </RcEmpty>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {usageData.map((snapshot) => (
                 <div
                   key={snapshot.period}
-                  className="rounded border border-slate-800 bg-slate-900/60 px-4 py-3"
+                  className="rounded-rc-md border border-rc-line/12 bg-black/30 px-4 py-3"
                 >
-                  <div className="text-sm font-semibold text-white">
-                    Last {snapshot.period}
-                  </div>
-                  <div className="mt-1 text-[11px] text-slate-400">
+                  <div className="rc-eyebrow">Last {snapshot.period}</div>
+                  <div className="rc-hint mt-1">
                     Updated {formatTimestamp(snapshot.generatedAt)}
                   </div>
-                  <ul className="mt-2 space-y-1 text-xs text-slate-200">
+                  <ul className="mt-2 space-y-1 font-rc-mono text-xs text-rc-fg">
                     <li>New users: {formatNumber(snapshot.newUsers)}</li>
                     <li>
-                      Matches completed:{" "}
-                      {formatNumber(snapshot.matchesCompleted)}
+                      Matches completed: {formatNumber(snapshot.matchesCompleted)}
                     </li>
                     <li>
                       Tournaments started:{" "}
@@ -1484,203 +1456,194 @@ export default function AdminDashboard({
               ))}
             </div>
           )}
-        </section>
+        </div>
+      </section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-lg font-semibold text-white">User directory</h2>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Search by name or email..."
-                value={userSearchQuery}
-                onChange={(e) => {
-                  setUserSearchQuery(e.target.value);
-                  userSearchRef.current = e.target.value;
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    void loadUsers("initial", userSearchQuery);
-                  }
-                }}
-                className="rounded border border-slate-600 bg-slate-800 px-3 py-1 text-xs text-slate-200 placeholder:text-slate-500 focus:border-slate-500 focus:outline-none w-48"
-              />
-              <button
-                onClick={() => {
-                  void loadUsers("initial", userSearchQuery);
-                }}
-                disabled={usersLoading}
-                className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-60"
-              >
-                {users ? "Search" : "Load users"}
-              </button>
-              <button
-                onClick={() => {
-                  void loadUsers("more");
-                }}
-                disabled={usersLoading || !usersNextCursor}
-                className="inline-flex items-center justify-center rounded border border-slate-600 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-60"
-              >
-                Load more
-              </button>
-            </div>
+      <section className="rc-panel overflow-hidden">
+        <PanelHeader title="User directory">
+          <input
+            type="text"
+            placeholder="Search by name or email..."
+            value={userSearchQuery}
+            onChange={(e) => {
+              setUserSearchQuery(e.target.value);
+              userSearchRef.current = e.target.value;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                void loadUsers("initial", userSearchQuery);
+              }
+            }}
+            className="rc-input h-9 w-48"
+          />
+          <RcButton
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void loadUsers("initial", userSearchQuery);
+            }}
+            disabled={usersLoading}
+          >
+            {users ? "Search" : "Load users"}
+          </RcButton>
+          <RcButton
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void loadUsers("more");
+            }}
+            disabled={usersLoading || !usersNextCursor}
+          >
+            Load more
+          </RcButton>
+        </PanelHeader>
+        {(usersError || usersLoading || users) && (
+          <div className="flex flex-col gap-3 px-[18px] py-3.5">
+            {usersError && (
+              <div className="rc-alert" data-tone="danger">
+                {usersError}
+              </div>
+            )}
+            {users && users.length > 0 && (
+              <div className="rc-hint">
+                Loaded {users.length} users · Updated{" "}
+                {formatTimestamp(usersFetchedAt)}
+              </div>
+            )}
+            {usersLoading && (
+              <div className="rc-hint py-6 text-center">loading users…</div>
+            )}
+            {users && users.length === 0 && !usersLoading && (
+              <RcEmpty title="No users match">
+                adjust the current filters
+              </RcEmpty>
+            )}
           </div>
-          {usersError && (
-            <div className="rounded border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
-              {usersError}
-            </div>
-          )}
-          {users && users.length > 0 && (
-            <div className="text-[11px] text-slate-400">
-              Loaded {users.length} users • Updated{" "}
-              {formatTimestamp(usersFetchedAt)}
-            </div>
-          )}
-          {usersLoading && (
-            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-4 text-center text-xs text-slate-300">
-              Loading users…
-            </div>
-          )}
-          {users && users.length > 0 && (
-            <div className="overflow-auto rounded border border-slate-800 bg-slate-900/40">
-              <table className="min-w-full text-left text-xs text-slate-200">
-                <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
-                  <tr>
-                    <th className="px-3 py-2">Name</th>
-                    <th className="px-3 py-2">Created</th>
-                    <th className="px-3 py-2">Last seen</th>
-                    <th className="px-3 py-2">Matches</th>
-                    <th className="px-3 py-2">Tournaments</th>
-                    <th className="px-3 py-2">Patron Tier</th>
+        )}
+        {users && users.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="rc-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Created</th>
+                  <th>Last seen</th>
+                  <th>Matches</th>
+                  <th>Tournaments</th>
+                  <th>Patron Tier</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id}>
+                    <td>
+                      <div className="text-rc-fg-strong">
+                        {user.name || "—"}
+                      </div>
+                      <div className="rc-hint mt-0.5">{user.id}</div>
+                    </td>
+                    <td className="text-[11px] text-rc-fg-subtle">
+                      {formatTimestamp(user.createdAt)}
+                    </td>
+                    <td className="text-[11px] text-rc-fg-subtle">
+                      {formatTimestamp(user.lastSeenAt)}
+                    </td>
+                    <td className="tabular-nums">
+                      {formatNumber(user.matchCount)}
+                    </td>
+                    <td className="tabular-nums">
+                      {formatNumber(user.tournamentRegistrations)}
+                    </td>
+                    <td>
+                      <CustomSelect
+                        value={user.patronTier ?? ""}
+                        onChange={(v) => {
+                          const value = v || null;
+                          updatePatronTier(user.id, value);
+                        }}
+                        disabled={updatingPatronTier === user.id}
+                        placeholder="None"
+                        options={[
+                          { value: "", label: "None" },
+                          { value: "apprentice", label: "Apprentice" },
+                          { value: "grandmaster", label: "Grandmaster" },
+                          { value: "kingofthe", label: "KingOfThe" },
+                        ]}
+                      />
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {users.map((user) => (
-                    <tr
-                      key={user.id}
-                      className="border-t border-slate-800/60 text-[11px]"
-                    >
-                      <td className="px-3 py-2">
-                        <div className="font-semibold text-white">
-                          {user.name || "—"}
-                        </div>
-                        <div className="text-[10px] text-slate-400">
-                          {user.id}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2">
-                        {formatTimestamp(user.createdAt)}
-                      </td>
-                      <td className="px-3 py-2">
-                        {formatTimestamp(user.lastSeenAt)}
-                      </td>
-                      <td className="px-3 py-2 text-slate-200">
-                        {formatNumber(user.matchCount)}
-                      </td>
-                      <td className="px-3 py-2 text-slate-200">
-                        {formatNumber(user.tournamentRegistrations)}
-                      </td>
-                      <td className="px-3 py-2">
-                        <CustomSelect
-                          value={user.patronTier ?? ""}
-                          onChange={(v) => {
-                            const value = v || null;
-                            updatePatronTier(user.id, value);
-                          }}
-                          disabled={updatingPatronTier === user.id}
-                          placeholder="None"
-                          options={[
-                            { value: "", label: "None" },
-                            { value: "apprentice", label: "Apprentice" },
-                            { value: "grandmaster", label: "Grandmaster" },
-                            { value: "kingofthe", label: "KingOfThe" },
-                          ]}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {users && users.length === 0 && !usersLoading && (
-            <div className="rounded border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
-              No users match the current filters.
-            </div>
-          )}
-        </section>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
-        <section className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold text-white">
+      <section className="flex flex-col gap-4">
+        <div>
+          <h2 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">
             Maintenance actions
           </h2>
-          <p className="text-xs text-slate-400">
+          <p className="mt-1.5 max-w-[68ch] font-rc-sans text-sm text-rc-fg-muted">
             Run administrative maintenance jobs. Dangerous actions are marked
             and should only be executed in controlled environments.
           </p>
-          <div className="grid gap-4">
-            {actionDescriptors.map((action) => {
-              const result = action.result;
-              const isLoading = actionBusy === action.id;
-              return (
-                <div
-                  key={action.id}
-                  className={clsx(
-                    "rounded border px-5 py-4",
-                    action.dangerous
-                      ? "border-amber-500/60 bg-amber-500/10"
-                      : "border-slate-700/60 bg-slate-800/40"
-                  )}
-                >
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <div className="text-sm font-semibold text-white">
+        </div>
+        <div className="grid gap-4">
+          {actionDescriptors.map((action) => {
+            const result = action.result;
+            const isLoading = actionBusy === action.id;
+            return (
+              <div
+                key={action.id}
+                className={clsx(
+                  "rounded-rc-lg border px-5 py-4",
+                  action.dangerous
+                    ? "border-rc-warning/45 bg-[rgba(112,65,22,0.35)]"
+                    : "border-rc-line/18 bg-black/30"
+                )}
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-rc-sans text-sm text-rc-fg-strong">
                         {action.label}
-                      </div>
-                      <p className="mt-1 text-xs text-slate-300">
-                        {action.description}
-                      </p>
+                      </span>
+                      {action.dangerous && <Badge tone="warn">dangerous</Badge>}
                     </div>
-                    <button
-                      onClick={() => {
-                        void runAdminAction(action.id);
-                      }}
-                      disabled={isLoading}
-                      className={clsx(
-                        "inline-flex items-center justify-center rounded px-3 py-1.5 text-xs font-medium transition",
-                        isLoading
-                          ? "bg-slate-700 text-slate-300"
-                          : action.dangerous
-                          ? "bg-rose-600 text-white hover:bg-rose-500"
-                          : "bg-emerald-600 text-white hover:bg-emerald-500"
-                      )}
-                    >
-                      {isLoading ? "Running…" : "Run"}
-                    </button>
+                    <p className="mt-1 font-rc-sans text-sm text-rc-fg-muted">
+                      {action.description}
+                    </p>
                   </div>
-                  {result && (
-                    <div
-                      className={clsx(
-                        "mt-3 rounded px-3 py-2 text-xs",
-                        result.status === "ok"
-                          ? "bg-emerald-500/10 text-emerald-100"
-                          : "bg-rose-500/10 text-rose-100"
-                      )}
-                    >
-                      <div className="font-semibold">{result.message}</div>
-                      {result.details && (
-                        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[11px]">
-                          {JSON.stringify(result.details, null, 2)}
-                        </pre>
-                      )}
-                    </div>
-                  )}
+                  <RcButton
+                    variant={action.dangerous ? "destructive" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      void runAdminAction(action.id);
+                    }}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? "Running…" : "Run"}
+                  </RcButton>
                 </div>
-              );
-            })}
-          </div>
-        </section>
-      </div>
+                {result && (
+                  <div
+                    className="rc-alert mt-3"
+                    data-tone={result.status === "ok" ? "success" : "danger"}
+                  >
+                    <div>{result.message}</div>
+                    {result.details && (
+                      <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-rc-md border border-rc-line/12 bg-black/45 p-2 text-[11px]">
+                        {JSON.stringify(result.details, null, 2)}
+                      </pre>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }
@@ -1697,16 +1660,12 @@ function StatCard({
   valueLabel?: string;
 }) {
   return (
-    <div className="rounded border border-slate-800 bg-slate-900/60 px-5 py-4">
-      <div className="text-xs uppercase tracking-wide text-slate-400">
-        {label}
-      </div>
-      <div className="mt-2 text-2xl font-semibold text-white">
+    <div className="rc-panel px-5 py-4">
+      <div className="rc-eyebrow">{label}</div>
+      <div className="rc-stat mt-2 text-2xl">
         {typeof value === "number" ? formatNumber(value) : valueLabel ?? "—"}
       </div>
-      {sublabel && (
-        <div className="mt-1 text-[11px] text-slate-400">{sublabel}</div>
-      )}
+      {sublabel && <div className="rc-hint mt-1">{sublabel}</div>}
     </div>
   );
 }

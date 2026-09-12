@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useSession, signOut, getProviders } from "next-auth/react";
 import type { LiteralUnion, ClientSafeProvider } from "next-auth/react";
 import { useEffect, useState } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 
 type ProvidersType = Record<
   LiteralUnion<string, string>,
@@ -109,7 +110,7 @@ export default function AuthButton({
     return (
       <div
         className={clsx(
-          "h-9 animate-pulse rounded bg-slate-800/80",
+          "h-8 animate-pulse rounded-rc-md border border-rc-line/14 bg-rc-line/8",
           variant === "floating" ? "w-[7.5rem]" : "w-24",
           className
         )}
@@ -119,26 +120,29 @@ export default function AuthButton({
 
   if (session?.user?.id) {
     return (
-      <div className="flex items-center gap-3">
+      <div
+        className={clsx(
+          "flex items-center gap-3",
+          variant === "floating" && "justify-end",
+          className
+        )}
+      >
         {profileImage && (
           <Image
             src={profileImage}
             alt={profileName || "User avatar"}
             width={32}
             height={32}
-            className="rounded-full"
+            className="rounded-full ring-1 ring-rc-line/22"
             unoptimized
           />
         )}
-        <span className="text-sm font-medium text-slate-200">
+        <span className="font-rc-mono text-[13px] tracking-[0.04em] text-rc-fg">
           {profileName || session.user.name || "User"}
         </span>
-        <button
-          onClick={handleSignOut}
-          className="px-3 py-1.5 text-sm font-medium text-slate-300 bg-slate-800 rounded-md hover:bg-slate-700 transition-colors"
-        >
+        <RcButton variant="outline" size="sm" onClick={handleSignOut}>
           Sign Out
-        </button>
+        </RcButton>
       </div>
     );
   }
@@ -148,20 +152,19 @@ export default function AuthButton({
     variant === "floating" && "justify-end",
     className
   );
-  const buttonClasses = clsx(
-    "inline-flex items-center gap-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30",
-    variant === "floating"
-      ? "rounded-full px-4 py-1.5 bg-slate-900/80 text-slate-100 ring-1 ring-white/15 shadow-lg shadow-black/40 backdrop-blur-sm hover:bg-slate-800/80"
-      : "rounded-md px-3 py-1.5 bg-indigo-600 text-white hover:bg-indigo-500"
-  );
 
   return (
     <div className={containerClasses}>
-      <button onClick={handleSignIn} className={buttonClasses}>
+      <RcButton
+        variant="default"
+        size="sm"
+        onClick={handleSignIn}
+        className={clsx(variant === "floating" && "shadow-rc-md")}
+      >
         Sign In
-      </button>
+      </RcButton>
       {providers?.["2fa"] && process.env.NODE_ENV === "development" && (
-        <span className="text-xs text-gray-400">(2FA Test Available)</span>
+        <span className="rc-hint">2fa test available</span>
       )}
     </div>
   );

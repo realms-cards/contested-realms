@@ -2,6 +2,7 @@
 
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMemo, useRef, useState, useEffect } from "react";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import type { CollectionCardResponse } from "@/lib/collection/types";
 import CollectionCard from "./CollectionCard";
 
@@ -318,7 +319,7 @@ export default function VirtualizedCollectionGrid({
         {Array.from({ length: 12 }).map((_, i) => (
           <div
             key={i}
-            className="aspect-[2.5/3.5] bg-gray-800 rounded-lg animate-pulse"
+            className="aspect-[2.5/3.5] animate-pulse rounded-rc-md border border-rc-line/12 bg-black/30"
           />
         ))}
       </div>
@@ -327,9 +328,9 @@ export default function VirtualizedCollectionGrid({
 
   if (cards.length === 0) {
     return (
-      <div className="text-center py-12 text-gray-400">
-        No cards found matching your filters.
-      </div>
+      <RcEmpty title="No cards found.">
+        no cards match your filters
+      </RcEmpty>
     );
   }
 

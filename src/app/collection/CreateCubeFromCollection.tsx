@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { RcButton } from "@/components/ui/rc-button";
+import { RcDialog } from "@/components/ui/rc-dialog";
 
 interface CreateCubeFromCollectionProps {
   onClose?: () => void;
@@ -160,137 +161,106 @@ export default function CreateCubeFromCollection({
 
   return (
     <>
-      <button
+      <RcButton
+        variant="outline"
+        size="sm"
         onClick={handleOpen}
-        className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-gray-400 hover:text-purple-300 hover:bg-gray-800 transition-colors"
         title="Create or update a cube from your collection"
       >
-        <span>🎲</span>
-        <span className="hidden sm:inline">Cube</span>
-      </button>
+        Cube
+      </RcButton>
 
-      {isOpen &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div
-            className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4"
-            onClick={handleClose}
-          >
-            <div
-              className="bg-gray-900 rounded-xl max-w-md w-full overflow-hidden shadow-2xl border border-gray-700"
-              onClick={(e) => e.stopPropagation()}
+      {isOpen && (
+        <RcDialog
+          title="Collection → Cube"
+          eyebrow="collection"
+          onClose={handleClose}
+          size="sm"
+        >
+          {/* Mode toggle */}
+          <div className="rc-segment">
+            <button
+              type="button"
+              aria-pressed={mode === "create"}
+              onClick={() => setMode("create")}
             >
-              {/* Header */}
-              <div className="p-4 border-b border-gray-800 flex items-center justify-between">
-                <h3 className="text-lg font-bold">Collection → Cube</h3>
-                <button
-                  onClick={handleClose}
-                  className="text-gray-400 hover:text-white"
-                >
-                  ✕
-                </button>
-              </div>
+              Create New
+            </button>
+            <button
+              type="button"
+              aria-pressed={mode === "update"}
+              onClick={() => setMode("update")}
+            >
+              Update Existing
+            </button>
+          </div>
 
-              {/* Mode toggle */}
-              <div className="flex border-b border-gray-800">
-                <button
-                  onClick={() => setMode("create")}
-                  className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                    mode === "create"
-                      ? "bg-gray-800 text-white"
-                      : "text-gray-400 hover:text-white"
-                  }`}
+          <div className="mt-4 space-y-4">
+            {mode === "create" ? (
+              <>
+                <p className="text-sm text-rc-fg-muted">
+                  Create a new cube containing all cards from your collection.
+                </p>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Cube name (e.g. My Collection Cube)"
+                  className="rc-input h-10 w-full"
+                />
+                <RcButton
+                  className="w-full"
+                  onClick={handleCreate}
+                  disabled={loading || !name.trim()}
                 >
-                  Create New
-                </button>
-                <button
-                  onClick={() => setMode("update")}
-                  className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                    mode === "update"
-                      ? "bg-gray-800 text-white"
-                      : "text-gray-400 hover:text-white"
-                  }`}
-                >
-                  Update Existing
-                </button>
-              </div>
-
-              <div className="p-4 space-y-4">
-                {mode === "create" ? (
-                  <>
-                    <p className="text-sm text-gray-400">
-                      Create a new cube containing all cards from your
-                      collection.
-                    </p>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Cube name (e.g. My Collection Cube)"
-                      className="w-full bg-gray-800 rounded px-3 py-2 text-sm"
-                    />
-                    <button
-                      onClick={handleCreate}
-                      disabled={loading || !name.trim()}
-                      className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded font-medium disabled:opacity-50"
-                    >
-                      {loading ? "Creating..." : "Create Cube from Collection"}
-                    </button>
-                  </>
+                  {loading ? "Creating..." : "Create Cube from Collection"}
+                </RcButton>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-rc-fg-muted">
+                  Replace an existing cube&apos;s cards with your current
+                  collection.
+                </p>
+                {existingCubes.length === 0 ? (
+                  <div className="rc-alert" data-tone="warning">
+                    No cubes found. Create one first!
+                  </div>
                 ) : (
                   <>
-                    <p className="text-sm text-gray-400">
-                      Replace an existing cube&apos;s cards with your current
-                      collection.
-                    </p>
-                    {existingCubes.length === 0 ? (
-                      <p className="text-sm text-yellow-400">
-                        No cubes found. Create one first!
-                      </p>
-                    ) : (
-                      <>
-                        <CustomSelect
-                          value={selectedCubeId ? String(selectedCubeId) : ""}
-                          onChange={(v) =>
-                            setSelectedCubeId(v ? Number(v) : null)
-                          }
-                          placeholder="Select a cube..."
-                          className="w-full"
-                          options={existingCubes.map((cube) => ({
-                            value: String(cube.id),
-                            label: `${cube.name} (${cube.cardCount} cards)`,
-                          }))}
-                        />
-                        <button
-                          onClick={handleUpdate}
-                          disabled={loading || !selectedCubeId}
-                          className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded font-medium disabled:opacity-50"
-                        >
-                          {loading
-                            ? "Updating..."
-                            : "Update Cube with Collection"}
-                        </button>
-                      </>
-                    )}
+                    <CustomSelect
+                      value={selectedCubeId ? String(selectedCubeId) : ""}
+                      onChange={(v) => setSelectedCubeId(v ? Number(v) : null)}
+                      placeholder="Select a cube..."
+                      className="w-full"
+                      options={existingCubes.map((cube) => ({
+                        value: String(cube.id),
+                        label: `${cube.name} (${cube.cardCount} cards)`,
+                      }))}
+                    />
+                    <RcButton
+                      className="w-full"
+                      onClick={handleUpdate}
+                      disabled={loading || !selectedCubeId}
+                    >
+                      {loading ? "Updating..." : "Update Cube with Collection"}
+                    </RcButton>
                   </>
                 )}
+              </>
+            )}
 
-                {result && (
-                  <div
-                    className={`text-sm px-3 py-2 rounded ${
-                      result.type === "success"
-                        ? "bg-green-900/30 text-green-400"
-                        : "bg-red-900/30 text-red-400"
-                    }`}
-                  >
-                    {result.message}
-                  </div>
-                )}
+            {result && (
+              <div
+                className="rc-alert"
+                data-tone={result.type === "success" ? "success" : "danger"}
+              >
+                {result.message}
               </div>
-            </div>
-          </div>,
-          document.body
-        )}
+            )}
+          </div>
+        </RcDialog>
+      )}
     </>
   );
 }

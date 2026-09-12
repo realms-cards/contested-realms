@@ -4,6 +4,9 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 import { cookies } from "next/headers";
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader, PanelHeader } from "@/components/ui/page-header";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
 import { requireAdminSession } from "@/lib/admin/auth";
 
 type TrendPoint = { t: number; v: number };
@@ -84,6 +87,15 @@ async function getBotReplays(): Promise<BotReplaysResponse | null> {
   }
 }
 
+const RUN_FIELDS: Array<{ name: string; label: string; defaultValue: number; min?: number; step?: string }> = [
+  { name: "minutes", label: "Minutes", defaultValue: 2, min: 1 },
+  { name: "beam", label: "Beam", defaultValue: 8, min: 1 },
+  { name: "depth", label: "Depth", defaultValue: 3, min: 1 },
+  { name: "budget", label: "Budget", defaultValue: 60, min: 1 },
+  { name: "epsilon", label: "Epsilon", defaultValue: 0, step: "0.05" },
+  { name: "gamma", label: "Gamma", defaultValue: 0.6, step: "0.05" },
+];
+
 export default async function AdminTrainingPage() {
   await requireAdminSession();
   const [metrics, botReplaysData] = await Promise.all([getMetrics(), getBotReplays()]);
@@ -93,138 +105,173 @@ export default async function AdminTrainingPage() {
   const botReplays: BotReplay[] = botReplaysData?.recordings ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8">
-      <div className="mb-4">
-        <h1 className="text-2xl font-semibold text-white">Admin: CPU Training</h1>
-        <p className="text-sm text-slate-400">Monitor training runs and launch self-play simulations.</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="admin"
+        title="CPU Training"
+        description="Monitor training runs and launch self-play simulations."
+      />
 
-      <div className="mb-6 grid gap-3 md:grid-cols-3">
-        <form action="/api/admin/training/start" method="post" className="rounded border border-slate-800 bg-slate-900/60 p-4">
-          <div className="text-sm font-semibold text-white">Start self-play</div>
-          <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-200">
-            <label className="flex items-center gap-2"><span className="w-20 text-slate-400">Minutes</span><input name="minutes" defaultValue={2} type="number" min={1} className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1" /></label>
-            <label className="flex items-center gap-2"><span className="w-20 text-slate-400">Beam</span><input name="beam" defaultValue={8} type="number" min={1} className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1" /></label>
-            <label className="flex items-center gap-2"><span className="w-20 text-slate-400">Depth</span><input name="depth" defaultValue={3} type="number" min={1} className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1" /></label>
-            <label className="flex items-center gap-2"><span className="w-20 text-slate-400">Budget</span><input name="budget" defaultValue={60} type="number" min={1} className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1" /></label>
-            <label className="flex items-center gap-2"><span className="w-20 text-slate-400">Epsilon</span><input name="epsilon" defaultValue={0} step="0.05" type="number" className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1" /></label>
-            <label className="flex items-center gap-2"><span className="w-20 text-slate-400">Gamma</span><input name="gamma" defaultValue={0.6} step="0.05" type="number" className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1" /></label>
-          </div>
-          <div className="mt-3 flex items-center gap-2">
-            <button className="text-xs px-3 py-1 rounded border border-emerald-400 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20" type="submit">Run</button>
-            <Link className="text-xs px-3 py-1 rounded border border-slate-700 text-slate-200 hover:bg-slate-800" href="/api/admin/training/metrics">Raw JSON</Link>
+      <div className="grid gap-4 md:grid-cols-3">
+        <form action="/api/admin/training/start" method="post" className="rc-panel">
+          <PanelHeader title="Start self-play" />
+          <div className="px-[18px] py-3.5">
+            <div className="grid grid-cols-2 gap-3">
+              {RUN_FIELDS.map((f) => (
+                <label key={f.name} className="block">
+                  <span className="rc-eyebrow">{f.label}</span>
+                  <input
+                    name={f.name}
+                    defaultValue={f.defaultValue}
+                    type="number"
+                    min={f.min}
+                    step={f.step}
+                    className="rc-input mt-1 h-9 w-full"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <RcButton type="submit" size="sm">Run</RcButton>
+              <RcLinkButton variant="outline" size="sm" href="/api/admin/training/metrics">Raw JSON</RcLinkButton>
+            </div>
           </div>
         </form>
         {metrics && (
-          <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
-            <div className="text-sm font-semibold text-white">Summary</div>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-200">
-              <div><div className="text-slate-400">Runs</div><div className="text-base font-semibold text-white">{metrics.runs}</div></div>
-              <div><div className="text-slate-400">Files</div><div className="text-base font-semibold text-white">{metrics.files}</div></div>
-              <div><div className="text-slate-400">Entries</div><div className="text-base font-semibold text-white">{metrics.entries}</div></div>
-              <div><div className="text-slate-400">Avg time (ms)</div><div className="text-base font-semibold text-white">{metrics.avgTimeMs?.toFixed?.(1) ?? "-"}</div></div>
+          <section className="rc-panel">
+            <PanelHeader title="Summary" />
+            <div className="grid grid-cols-2 gap-4 px-[18px] py-3.5">
+              <div>
+                <div className="rc-eyebrow">Runs</div>
+                <div className="rc-stat mt-1 text-2xl">{metrics.runs}</div>
+              </div>
+              <div>
+                <div className="rc-eyebrow">Files</div>
+                <div className="rc-stat mt-1 text-2xl">{metrics.files}</div>
+              </div>
+              <div>
+                <div className="rc-eyebrow">Entries</div>
+                <div className="rc-stat mt-1 text-2xl">{metrics.entries}</div>
+              </div>
+              <div>
+                <div className="rc-eyebrow">Avg time (ms)</div>
+                <div className="rc-stat mt-1 text-2xl">{metrics.avgTimeMs?.toFixed?.(1) ?? "-"}</div>
+              </div>
             </div>
-          </div>
+          </section>
         )}
         {metrics && (
-          <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
-            <div className="text-sm font-semibold text-white">Averages</div>
-            <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-slate-200">
-              <div><div className="text-slate-400">Avg nodes</div><div className="text-base font-semibold text-white">{metrics.avgNodes?.toFixed?.(1) ?? "-"}</div></div>
-              <div><div className="text-slate-400">Avg depth</div><div className="text-base font-semibold text-white">{metrics.avgDepth?.toFixed?.(2) ?? "-"}</div></div>
-              <div><div className="text-slate-400">Avg eval</div><div className="text-base font-semibold text-white">{metrics.avgEval?.toFixed?.(2) ?? "-"}</div></div>
+          <section className="rc-panel">
+            <PanelHeader title="Averages" />
+            <div className="grid grid-cols-3 gap-4 px-[18px] py-3.5">
+              <div>
+                <div className="rc-eyebrow">Avg nodes</div>
+                <div className="rc-stat mt-1 text-2xl">{metrics.avgNodes?.toFixed?.(1) ?? "-"}</div>
+              </div>
+              <div>
+                <div className="rc-eyebrow">Avg depth</div>
+                <div className="rc-stat mt-1 text-2xl">{metrics.avgDepth?.toFixed?.(2) ?? "-"}</div>
+              </div>
+              <div>
+                <div className="rc-eyebrow">Avg eval</div>
+                <div className="rc-stat mt-1 text-2xl">{metrics.avgEval?.toFixed?.(2) ?? "-"}</div>
+              </div>
             </div>
-          </div>
+          </section>
         )}
       </div>
 
-      <div className="rounded border border-slate-800 bg-slate-900/40 p-4">
-        <h2 className="mb-3 text-lg font-semibold text-white">Trends</h2>
-        {!metrics && <div className="text-sm text-slate-400">No data yet.</div>}
-        {metrics && (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {renderSpark("Eval", metrics.trends?.rootEval)}
-            {renderSpark("Nodes", metrics.trends?.nodes)}
-            {renderSpark("Depth", metrics.trends?.depth)}
-            {renderSpark("Time (ms)", metrics.trends?.timeMs)}
-          </div>
-        )}
-      </div>
-
-      <div className="mt-6 grid gap-6 md:grid-cols-2">
-        <div className="rounded border border-slate-800 bg-slate-900/40 p-4">
-          <h2 className="mb-2 text-lg font-semibold text-white">Per-card influence</h2>
-          {!metrics && <div className="text-sm text-slate-400">No data.</div>}
+      <section className="rc-panel">
+        <PanelHeader title="Trends" />
+        <div className="px-[18px] py-3.5">
+          {!metrics && <div className="rc-hint">no data yet</div>}
           {metrics && (
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <div className="text-xs uppercase tracking-wide text-emerald-300">Top gainers</div>
-                <div className="mt-2 overflow-auto rounded border border-slate-800 bg-slate-900/50">
-                  <table className="min-w-full text-left text-xs text-slate-200">
-                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Card</th><th className="px-3 py-2">Count</th><th className="px-3 py-2">Avg Δ</th></tr></thead>
-                    <tbody>
-                      {topGainers.length > 0 ? topGainers.map((c: PerCardEntry) => (
-                        <tr key={c.key} className="border-t border-slate-800/60"><td className="px-3 py-2">{c.name || c.key}</td><td className="px-3 py-2">{c.count}</td><td className="px-3 py-2">{(c.avgDelta as number).toFixed(3)}</td></tr>
-                      )) : (<tr><td className="px-3 py-2 text-slate-400" colSpan={3}>No data</td></tr>)}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-wide text-rose-300">Top losers</div>
-                <div className="mt-2 overflow-auto rounded border border-slate-800 bg-slate-900/50">
-                  <table className="min-w-full text-left text-xs text-slate-200">
-                    <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Card</th><th className="px-3 py-2">Count</th><th className="px-3 py-2">Avg Δ</th></tr></thead>
-                    <tbody>
-                      {topLosers.length > 0 ? topLosers.map((c: PerCardEntry) => (
-                        <tr key={c.key} className="border-t border-slate-800/60"><td className="px-3 py-2">{c.name || c.key}</td><td className="px-3 py-2">{c.count}</td><td className="px-3 py-2">{(c.avgDelta as number).toFixed(3)}</td></tr>
-                      )) : (<tr><td className="px-3 py-2 text-slate-400" colSpan={3}>No data</td></tr>)}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {renderSpark("Eval", metrics.trends?.rootEval)}
+              {renderSpark("Nodes", metrics.trends?.nodes)}
+              {renderSpark("Depth", metrics.trends?.depth)}
+              {renderSpark("Time (ms)", metrics.trends?.timeMs)}
             </div>
           )}
         </div>
-        <div className="rounded border border-slate-800 bg-slate-900/40 p-4">
-          <h2 className="mb-2 text-lg font-semibold text-white">Elo ratings</h2>
-          {!metrics && <div className="text-sm text-slate-400">No data.</div>}
+      </section>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <section className="rc-panel overflow-hidden">
+          <PanelHeader title="Per-card influence" />
+          <div className="px-[18px] py-3.5">
+            {!metrics && <div className="rc-hint">no data</div>}
+            {metrics && (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <div className="rc-eyebrow text-rc-success">Top gainers</div>
+                  <div className="mt-2 overflow-x-auto">
+                    <table className="rc-table">
+                      <thead><tr><th>Card</th><th>Count</th><th>Avg Δ</th></tr></thead>
+                      <tbody>
+                        {topGainers.length > 0 ? topGainers.map((c: PerCardEntry) => (
+                          <tr key={c.key}><td className="text-rc-fg-strong">{c.name || c.key}</td><td className="tabular-nums">{c.count}</td><td className="tabular-nums">{(c.avgDelta as number).toFixed(3)}</td></tr>
+                        )) : (<tr><td className="text-rc-fg-subtle" colSpan={3}>No data</td></tr>)}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div>
+                  <div className="rc-eyebrow text-rc-danger">Top losers</div>
+                  <div className="mt-2 overflow-x-auto">
+                    <table className="rc-table">
+                      <thead><tr><th>Card</th><th>Count</th><th>Avg Δ</th></tr></thead>
+                      <tbody>
+                        {topLosers.length > 0 ? topLosers.map((c: PerCardEntry) => (
+                          <tr key={c.key}><td className="text-rc-fg-strong">{c.name || c.key}</td><td className="tabular-nums">{c.count}</td><td className="tabular-nums">{(c.avgDelta as number).toFixed(3)}</td></tr>
+                        )) : (<tr><td className="text-rc-fg-subtle" colSpan={3}>No data</td></tr>)}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+        <section className="rc-panel overflow-hidden">
+          <PanelHeader title="Elo ratings" meta={`${eloRatings.length} thetas`} />
+          {!metrics && <div className="rc-hint px-[18px] py-3.5">no data</div>}
           {metrics && (
-            <div className="overflow-auto rounded border border-slate-800 bg-slate-900/50">
-              <table className="min-w-full text-left text-xs text-slate-200">
-                <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Theta</th><th className="px-3 py-2">Rating</th><th className="px-3 py-2">Games</th></tr></thead>
+            <div className="overflow-x-auto">
+              <table className="rc-table">
+                <thead><tr><th>Theta</th><th>Rating</th><th>Games</th></tr></thead>
                 <tbody>
                   {eloRatings.length > 0 ? eloRatings.map((r: EloRating) => (
-                    <tr key={r.thetaId} className="border-t border-slate-800/60"><td className="px-3 py-2">{r.thetaId}</td><td className="px-3 py-2">{r.rating}</td><td className="px-3 py-2">{r.games}</td></tr>
-                  )) : (<tr><td className="px-3 py-2 text-slate-400" colSpan={3}>No ratings</td></tr>)}
+                    <tr key={r.thetaId}><td className="text-rc-fg-strong">{r.thetaId}</td><td className="rc-stat">{r.rating}</td><td className="tabular-nums">{r.games}</td></tr>
+                  )) : (<tr><td className="text-rc-fg-subtle" colSpan={3}>No ratings</td></tr>)}
                 </tbody>
               </table>
             </div>
           )}
-        </div>
+        </section>
       </div>
 
-      <div className="mt-6 rounded border border-slate-800 bg-slate-900/40 p-4">
-        <h2 className="mb-3 text-lg font-semibold text-white">Bot Match Replays</h2>
-        <p className="mb-3 text-sm text-slate-400">
-          Recent bot training matches. Click a match to view the full replay.
-        </p>
-        {!botReplaysData && <div className="text-sm text-slate-400">No bot replays found.</div>}
+      <section className="rc-panel overflow-hidden">
+        <PanelHeader
+          title="Bot Match Replays"
+          meta="recent bot training matches"
+        />
+        {!botReplaysData && <div className="rc-hint px-[18px] py-3.5">no bot replays found</div>}
         {botReplaysData && botReplays.length === 0 && (
-          <div className="text-sm text-slate-400">No bot matches recorded yet.</div>
+          <div className="rc-hint px-[18px] py-3.5">no bot matches recorded yet</div>
         )}
         {botReplays.length > 0 && (
-          <div className="overflow-auto rounded border border-slate-800 bg-slate-900/50">
-            <table className="min-w-full text-left text-xs text-slate-200">
-              <thead className="bg-slate-900/70 text-[11px] uppercase tracking-wide text-slate-400">
+          <div className="overflow-x-auto">
+            <table className="rc-table">
+              <thead>
                 <tr>
-                  <th className="px-3 py-2">Match ID</th>
-                  <th className="px-3 py-2">Players</th>
-                  <th className="px-3 py-2">Type</th>
-                  <th className="px-3 py-2">Duration</th>
-                  <th className="px-3 py-2">Actions</th>
-                  <th className="px-3 py-2">Time</th>
-                  <th className="px-3 py-2">View</th>
+                  <th>Match ID</th>
+                  <th>Players</th>
+                  <th>Type</th>
+                  <th>Duration</th>
+                  <th>Actions</th>
+                  <th>Time</th>
+                  <th>View</th>
                 </tr>
               </thead>
               <tbody>
@@ -238,32 +285,30 @@ export default async function AdminTrainingPage() {
                     : new Date(replay.startTime).toLocaleString();
 
                   return (
-                    <tr key={replay.matchId} className="border-t border-slate-800/60 hover:bg-slate-800/30">
-                      <td className="px-3 py-2 font-mono text-[10px]">{replay.matchId.slice(0, 8)}</td>
-                      <td className="px-3 py-2">
-                        <div className="max-w-xs truncate" title={replay.playerNames.join(' vs ')}>
+                    <tr key={replay.matchId}>
+                      <td className="text-[11px] text-rc-fg-muted">{replay.matchId.slice(0, 8)}</td>
+                      <td>
+                        <div className="max-w-xs truncate text-rc-fg-strong" title={replay.playerNames.join(' vs ')}>
                           {replay.playerNames.join(' vs ')}
                         </div>
                       </td>
-                      <td className="px-3 py-2">
-                        <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] uppercase">
-                          {replay.matchType}
-                        </span>
+                      <td>
+                        <Badge>{replay.matchType}</Badge>
                       </td>
-                      <td className="px-3 py-2">{durationStr}</td>
-                      <td className="px-3 py-2">{replay.actionCount}</td>
-                      <td className="px-3 py-2 text-[10px] text-slate-400">{timeStr}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex gap-1">
+                      <td className="tabular-nums">{durationStr}</td>
+                      <td className="tabular-nums">{replay.actionCount}</td>
+                      <td className="text-[11px] text-rc-fg-subtle">{timeStr}</td>
+                      <td>
+                        <div className="flex gap-2">
                           <Link
                             href={`/admin/replays/${replay.matchId}`}
-                            className="rounded bg-blue-600/20 px-2 py-1 text-[10px] text-blue-200 hover:bg-blue-600/30"
+                            className="rc-link text-[11px] uppercase tracking-[0.14em]"
                           >
                             Watch
                           </Link>
                           <Link
                             href={`/api/admin/replays/bots/${replay.matchId}`}
-                            className="rounded bg-slate-700/50 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-600/50"
+                            className="text-[11px] uppercase tracking-[0.14em] text-rc-fg-muted hover:text-rc-accent-ring"
                             target="_blank"
                           >
                             JSON
@@ -278,14 +323,14 @@ export default async function AdminTrainingPage() {
           </div>
         )}
         {botReplays.length > 20 && (
-          <div className="mt-3 text-xs text-slate-400">
+          <div className="rc-hint px-[18px] py-3.5">
             Showing 20 of {botReplays.length} bot replays.
-            <Link href="/api/admin/replays/bots" className="ml-2 text-blue-400 hover:text-blue-300">
+            <Link href="/api/admin/replays/bots" className="rc-link ml-2">
               View all (JSON)
             </Link>
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }
@@ -293,9 +338,9 @@ export default async function AdminTrainingPage() {
 function renderSpark(title: string, data?: Array<{ t: number; v: number }>) {
   if (!Array.isArray(data) || data.length === 0) {
     return (
-      <div className="rounded border border-slate-800 bg-slate-900/60 p-3">
-        <div className="text-xs text-slate-400">{title}</div>
-        <div className="mt-2 text-xs text-slate-500">No data</div>
+      <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-3">
+        <div className="font-rc-mono text-[10px] uppercase tracking-[0.22em] text-rc-fg-dim">{title}</div>
+        <div className="rc-hint mt-2">no data</div>
       </div>
     );
   }
@@ -310,8 +355,11 @@ function renderSpark(title: string, data?: Array<{ t: number; v: number }>) {
   const pts = xs.map((x, i) => `${x},${ys[i]}`).join(" ");
   const last = vals[vals.length - 1];
   return (
-    <div className="rounded border border-slate-800 bg-slate-900/60 p-3">
-      <div className="flex items-center justify-between"><div className="text-xs text-slate-400">{title}</div><div className="text-xs font-semibold text-slate-200">{Number.isFinite(last) ? last.toFixed(2) : "-"}</div></div>
+    <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="font-rc-mono text-[10px] uppercase tracking-[0.22em] text-rc-fg-dim">{title}</div>
+        <div className="rc-stat text-sm">{Number.isFinite(last) ? last.toFixed(2) : "-"}</div>
+      </div>
       <svg viewBox={`0 0 ${w} ${h}`} width="100%" height="60" className="mt-1">
         <polyline fill="none" stroke="rgb(16,185,129)" strokeWidth="1.5" points={pts} />
       </svg>

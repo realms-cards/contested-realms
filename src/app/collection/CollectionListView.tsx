@@ -4,6 +4,8 @@ import Image from "next/image";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { RcButton } from "@/components/ui/rc-button";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import type {
   CollectionCardResponse,
   CollectionSortField,
@@ -23,14 +25,14 @@ interface CollectionListViewProps {
 function getRarityColor(rarity: string): string {
   switch (rarity.toLowerCase()) {
     case "unique":
-      return "text-purple-400";
+      return "text-rc-moonlight";
     case "elite":
-      return "text-yellow-400";
+      return "text-rc-accent-link";
     case "exceptional":
-      return "text-blue-400";
+      return "text-rc-info";
     case "ordinary":
     default:
-      return "text-gray-400";
+      return "text-rc-fg-subtle";
   }
 }
 
@@ -64,19 +66,17 @@ function SortableHeader({
 
   return (
     <th
-      className={`px-3 py-3 text-sm font-medium ${
-        center ? "text-center" : "text-left"
-      } ${
+      className={`${center ? "text-center" : "text-left"} ${
         disabled
-          ? "text-gray-500 cursor-default"
-          : "text-gray-400 cursor-pointer hover:text-white transition-colors"
+          ? "cursor-default"
+          : "cursor-pointer transition-colors hover:text-rc-accent-ring"
       } ${className}`}
       onClick={handleClick}
     >
       <span className="inline-flex items-center gap-1">
         {label}
         {!disabled && isActive && (
-          <span className="text-blue-400">
+          <span className="text-rc-accent-link">
             {currentOrder === "asc" ? "↑" : "↓"}
           </span>
         )}
@@ -330,7 +330,10 @@ export default function CollectionListView({
     return (
       <div className="space-y-2">
         {Array.from({ length: 10 }).map((_, i) => (
-          <div key={i} className="h-16 bg-gray-800 rounded-lg animate-pulse" />
+          <div
+            key={i}
+            className="h-16 animate-pulse rounded-rc-md border border-rc-line/12 bg-black/30"
+          />
         ))}
       </div>
     );
@@ -338,9 +341,9 @@ export default function CollectionListView({
 
   if (cards.length === 0) {
     return (
-      <div className="text-center py-12 text-gray-400">
-        No cards found matching your filters.
-      </div>
+      <RcEmpty title="No cards found.">
+        no cards match your filters
+      </RcEmpty>
     );
   }
 
@@ -354,9 +357,9 @@ export default function CollectionListView({
             const isSite =
               previewCard.type?.toLowerCase().includes("site") ?? false;
             return (
-              <div className="fixed top-20 right-4 z-[9999] pointer-events-none">
+              <div className="pointer-events-none fixed right-4 top-20 z-[9999]">
                 <div
-                  className={`rounded-xl overflow-hidden bg-black/80 shadow-2xl ring-1 ring-white/10 ${
+                  className={`overflow-hidden rounded-rc-lg border border-rc-line/18 bg-black/60 shadow-rc-md ${
                     isSite ? "w-96 aspect-[4/3]" : "w-72 aspect-[2.5/3.5]"
                   }`}
                 >
@@ -370,12 +373,12 @@ export default function CollectionListView({
                     }`}
                   />
                 </div>
-                <div className="mt-2 text-center text-sm text-white">
-                  <div className="font-medium">{previewCard.name}</div>
+                <div className="mt-2 text-center">
+                  <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
+                    {previewCard.name}
+                  </div>
                   {previewCard.type && (
-                    <div className="text-xs text-gray-400">
-                      {previewCard.type}
-                    </div>
+                    <div className="rc-hint">{previewCard.type}</div>
                   )}
                 </div>
               </div>
@@ -385,8 +388,8 @@ export default function CollectionListView({
         )}
 
       {/* Bulk Actions Bar */}
-      <div className="flex items-center gap-4 bg-gray-800 rounded-lg p-3">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-4 rounded-rc-md border border-rc-line/12 bg-black/30 p-3">
+        <label className="rc-check">
           <input
             type="checkbox"
             checked={
@@ -400,14 +403,11 @@ export default function CollectionListView({
                 selectAll();
               }
             }}
-            className="w-4 h-4 rounded bg-gray-700 border-gray-600"
           />
-          <span className="text-sm text-gray-400">
-            {selectedIds.size > 0
-              ? `${selectedIds.size} selected`
-              : "Select all"}
-          </span>
-        </div>
+          {selectedIds.size > 0
+            ? `${selectedIds.size} selected`
+            : "Select all"}
+        </label>
 
         {selectedIds.size > 0 && (
           <>
@@ -423,31 +423,28 @@ export default function CollectionListView({
               ]}
             />
 
-            <button
+            <RcButton
+              size="sm"
               onClick={handleBulkAction}
               disabled={!bulkAction || isProcessing}
-              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:opacity-50 rounded text-sm font-medium transition-colors"
             >
               {isProcessing ? "Processing..." : "Apply"}
-            </button>
+            </RcButton>
 
-            <button
-              onClick={clearSelection}
-              className="text-gray-400 hover:text-white text-sm"
-            >
+            <RcButton variant="ghost" size="sm" onClick={clearSelection}>
               Clear
-            </button>
+            </RcButton>
           </>
         )}
       </div>
 
       {/* Table */}
-      <div className="bg-gray-800 rounded-lg overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-900">
+      <div className="overflow-x-auto rounded-rc-md border border-rc-line/12">
+        <table className="rc-table">
+          <thead>
             <tr>
-              <th className="w-10 px-3 py-3" />
-              <th className="w-16 px-3 py-3" />
+              <th className="w-10" />
+              <th className="w-16" />
               <SortableHeader
                 label="Name"
                 field="name"
@@ -472,9 +469,7 @@ export default function CollectionListView({
                 onSort={onSortChange}
                 className="hidden lg:table-cell"
               />
-              <th className="px-3 py-3 text-left text-sm font-medium text-gray-400 hidden sm:table-cell">
-                Finish
-              </th>
+              <th className="hidden text-left sm:table-cell">Finish</th>
               <SortableHeader
                 label="Qty"
                 field="quantity"
@@ -484,12 +479,10 @@ export default function CollectionListView({
                 className="w-28"
                 center
               />
-              <th className="px-3 py-3 text-center text-sm font-medium text-gray-400 w-20">
-                Actions
-              </th>
+              <th className="w-24 text-center">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-700">
+          <tbody>
             {visibleCards.map((card) => {
               const imageSlug = card.variant?.slug;
               const imageUrl = imageSlug
@@ -499,22 +492,24 @@ export default function CollectionListView({
               return (
                 <tr
                   key={card.id}
-                  className={`hover:bg-gray-700/50 transition-colors ${
-                    selectedIds.has(card.id) ? "bg-blue-900/30" : ""
-                  }`}
+                  className={
+                    selectedIds.has(card.id)
+                      ? "bg-rc-accent/10 shadow-[inset_2px_0_0_#d4a94a]"
+                      : ""
+                  }
                   onMouseEnter={() => handleRowHover(card)}
                   onMouseLeave={() => handleRowHover(null)}
                 >
-                  <td className="px-3 py-2">
+                  <td>
                     <input
                       type="checkbox"
                       checked={selectedIds.has(card.id)}
                       onChange={() => toggleSelect(card.id)}
-                      className="w-4 h-4 rounded bg-gray-700 border-gray-600"
+                      className="h-4 w-4 accent-rc-accent"
                     />
                   </td>
-                  <td className="px-3 py-2">
-                    <div className="w-10 h-14 relative rounded overflow-hidden">
+                  <td>
+                    <div className="relative h-14 w-10 overflow-hidden rounded-rc-sm border border-rc-line/12 bg-black/30">
                       <Image
                         src={imageUrl}
                         alt={card.card.name}
@@ -525,69 +520,77 @@ export default function CollectionListView({
                       />
                     </div>
                   </td>
-                  <td className="px-3 py-2">
-                    <div className="font-medium text-white">
+                  <td>
+                    <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
                       {card.card.name}
                     </div>
                     {card.notes && (
-                      <div className="text-xs text-gray-500 truncate max-w-xs">
-                        📝 {card.notes}
+                      <div className="max-w-xs truncate rc-hint">
+                        {card.notes}
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-sm text-gray-400 hidden md:table-cell">
+                  <td className="hidden text-rc-fg-muted md:table-cell">
                     {card.set?.name || "—"}
                   </td>
                   <td
-                    className={`px-3 py-2 text-sm hidden lg:table-cell ${getRarityColor(
+                    className={`hidden lg:table-cell ${getRarityColor(
                       card.meta?.rarity || "",
                     )}`}
                   >
                     {card.meta?.rarity || "—"}
                   </td>
-                  <td className="px-3 py-2 text-sm hidden sm:table-cell">
+                  <td className="hidden sm:table-cell">
                     {card.finish === "Foil" ? (
-                      <span className="text-yellow-400">✨ Foil</span>
+                      <span className="text-rc-accent-link">Foil</span>
                     ) : (
-                      <span className="text-gray-400">Normal</span>
+                      <span className="text-rc-fg-muted">Normal</span>
                     )}
                   </td>
-                  <td className="px-3 py-2">
+                  <td>
                     <div className="flex items-center justify-center gap-1">
-                      <button
+                      <RcButton
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        aria-label="Decrease quantity"
                         onClick={() =>
                           handleQuantityUpdate(card.id, card.quantity - 1)
                         }
                         disabled={card.quantity <= 1}
-                        className="w-7 h-7 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50 text-sm"
                       >
                         −
-                      </button>
-                      <span className="w-8 text-center font-medium">
+                      </RcButton>
+                      <span className="w-8 text-center rc-stat">
                         {card.quantity}
                       </span>
-                      <button
+                      <RcButton
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        aria-label="Increase quantity"
                         onClick={() =>
                           handleQuantityUpdate(card.id, card.quantity + 1)
                         }
                         disabled={card.quantity >= 99}
-                        className="w-7 h-7 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50 text-sm"
                       >
                         +
-                      </button>
+                      </RcButton>
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-center">
-                    <button
+                  <td className="text-center">
+                    <RcButton
+                      variant="ghost"
+                      size="sm"
+                      className="text-rc-danger hover:text-rc-danger-hover"
                       onClick={() => {
                         if (confirm("Remove this card from your collection?")) {
                           handleDelete(card.id);
                         }
                       }}
-                      className="text-red-400 hover:text-red-300 text-sm"
                     >
-                      🗑️
-                    </button>
+                      Remove
+                    </RcButton>
                   </td>
                 </tr>
               );

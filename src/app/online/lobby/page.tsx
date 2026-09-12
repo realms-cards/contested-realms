@@ -10,13 +10,15 @@ import GuestGate from "@/components/auth/GuestGate";
 import LobbyChatConsole from "@/components/chat/LobbyChatConsole";
 import InviteOverlay from "@/components/online/InviteOverlay";
 import LobbiesCentral from "@/components/online/LobbiesCentral";
-import MatchmakingPanel from "@/components/online/MatchmakingPanel";
-import OnlinePageShell from "@/components/online/OnlinePageShell";
 import PlayersInvitePanel from "@/components/online/PlayersInvitePanel";
 import { SoatcLeagueCheckbox } from "@/components/online/SoatcLeagueBadge";
+import LobbyActionStrip from "@/components/online/lobby/LobbyActionStrip";
+import LobbyHero from "@/components/online/lobby/LobbyHero";
+import LobbyPageFooter from "@/components/online/lobby/LobbyPageFooter";
+import AppShell from "@/components/ui/AppShell";
 import CustomSelect from "@/components/ui/CustomSelect";
-import LobbyFooter from "@/components/ui/LobbyFooter";
 import Modal from "@/components/ui/Modal";
+import { RcButton } from "@/components/ui/rc-button";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import { tournamentFeatures } from "@/lib/config/features";
 import {
@@ -39,7 +41,6 @@ import {
   LOBBY_INVITE_QUERY_PARAM,
   buildLobbyInvitePath,
   buildLobbyInviteUrl,
-  createInviteLobbyId,
   getLobbyJoinId,
   parseInviteFormat,
 } from "@/lib/lobby-links";
@@ -502,19 +503,19 @@ function LobbyPageContent({
   }, [outgoingVoiceRequest, voice?.rtc.state]);
 
   const outgoingVoiceTone = useMemo(() => {
-    if (!outgoingVoiceRequest) return "text-slate-200";
+    if (!outgoingVoiceRequest) return "text-rc-fg";
     switch (outgoingVoiceRequest.status) {
       case "sending":
       case "pending":
-        return "text-sky-300";
+        return "text-rc-info";
       case "accepted":
-        return "text-emerald-300";
+        return "text-rc-success";
       case "declined":
-        return "text-amber-300";
+        return "text-rc-warning";
       case "cancelled":
-        return "text-slate-400";
+        return "text-rc-fg-subtle";
       default:
-        return "text-slate-200";
+        return "text-rc-fg";
     }
   }, [outgoingVoiceRequest]);
 
@@ -831,7 +832,7 @@ function LobbyPageContent({
   // automatically; the pulsing button is the interrupt (it leaves the match).
   const [autoJoinIn, setAutoJoinIn] = useState<number | null>(null);
   const [autoJoinCancelled, setAutoJoinCancelled] = useState(false);
-  // Create match overlay state (shared between MatchmakingPanel and LobbiesCentral)
+  // Create match overlay state (shared between LobbyActionStrip and LobbiesCentral)
   const [createMatchOverlayOpen, setCreateMatchOverlayOpen] = useState(false);
 
   // Track whether the host has confirmed setup at least once for this lobby.
@@ -1443,11 +1444,24 @@ function LobbyPageContent({
     )} • Time: ${sealedConfig.timeLimit}m`;
   }, [isHost, matchType, sealedConfig, draftConfig]);
 
+  // Lobbies with a match in progress, for the hero's LIVE counter
+  const liveCount = useMemo(
+    () => lobbies.filter((l) => l.status === "started").length,
+    [lobbies],
+  );
+
   // removed startSealedMatch helper; start is confirmed via modal action
 
   return (
-    <OnlinePageShell>
-      <div className="space-y-6">
+    <AppShell width="full" onlineCount={players.length}>
+      <LobbyHero
+        queueSize={matchmaking.queueSize ?? 0}
+        estimatedWait={
+          matchmaking.status === "searching" ? matchmaking.estimatedWait : null
+        }
+        liveCount={liveCount}
+      />
+      <div className="flex flex-col gap-7">
         {/* Invite link without an account: pick a name or sign in */}
         {showGuestGate && (
           <GuestGate
@@ -1456,19 +1470,22 @@ function LobbyPageContent({
             }
             description="Sign in to play with your saved decks and matchmaking, or continue as a guest: join open games or invite links and play with a precon or a deck loaded from sorcerytcg.com."
             returnTo={invitePath}
+            variant="realms"
           />
         )}
 
         {isGuest && (
-          <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 px-4 py-3 text-sm flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="rc-panel flex flex-col gap-2 px-[18px] py-3 font-rc-mono text-[13px] text-rc-fg sm:flex-row sm:items-center sm:justify-between">
             <div>
               Playing as guest{" "}
-              <span className="font-semibold">{me?.displayName}</span>. Guest
-              matches are unrated.
+              <span className="font-semibold text-rc-fg-strong">
+                {me?.displayName}
+              </span>
+              . Guest matches are unrated.
             </div>
             <Link
               href={signInHref}
-              className="text-xs underline text-slate-300/80 hover:text-slate-100"
+              className="text-xs tracking-[0.06em] text-rc-accent-link underline-offset-4 hover:text-rc-accent-ring hover:underline"
             >
               Sign in to use matchmaking and save decks
             </Link>
@@ -1477,65 +1494,70 @@ function LobbyPageContent({
 
         {/* Quick Play / Matchmaking - show when not in a lobby, and either no match or user is not a player in the match (spectators should still see this) */}
         {!lobby && (!match || !isPlayerInMatch) && (
-          <MatchmakingPanel
+          <LobbyActionStrip
             onCreateMatch={() => setCreateMatchOverlayOpen(true)}
-            onInviteFriend={() =>
-              router.push(buildLobbyInvitePath(createInviteLobbyId()))
-            }
           />
         )}
 
         {/* Shareable invite link for the current lobby */}
         {showLobbyInvite && (
-          <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-2">
-            <div className="text-sm font-semibold">Invite link</div>
-            <div className="text-xs opacity-70">
+          <div className="rounded-rc-lg border border-dashed border-rc-info/60 bg-rc-info/6 px-7 py-[22px]">
+            <div className="font-rc-mono text-[11px] uppercase tracking-[0.24em] text-rc-info">
+              private
+            </div>
+            <div className="mt-1.5 font-rc-display text-[28px] leading-none text-rc-fg-strong">
+              Invite link
+            </div>
+            <div className="mt-2 font-rc-mono text-xs tracking-[0.06em] text-rc-fg-subtle">
               Anyone with this link can join this lobby - no account needed.
             </div>
-            <div className="flex gap-2">
+            <div className="mt-2.5 flex gap-2.5">
               <input
                 readOnly
-                className="flex-1 min-w-0 rounded-lg bg-slate-800/80 ring-1 ring-slate-700 px-3 py-2 text-xs font-mono"
+                className="rc-input h-10 min-w-0 flex-1"
                 value={lobbyInviteUrl}
                 onFocus={(e) => e.currentTarget.select()}
+                aria-label="Invite link"
               />
-              <button
-                className="rounded-lg bg-sky-600/90 hover:bg-sky-600 px-4 py-2 text-xs font-semibold shrink-0"
+              <RcButton
+                className="h-10 shrink-0"
                 onClick={() => void copyLobbyInvite()}
                 disabled={!lobbyInviteUrl}
               >
-                {inviteCopied ? "Copied!" : "Copy"}
-              </button>
+                {inviteCopied ? "Copied" : "Copy"}
+              </RcButton>
             </div>
           </div>
         )}
 
         {/* Match Controls - show only when user is actually a player in the match (not spectator) */}
         {match && isPlayerInMatch && (
-          <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm font-semibold opacity-90">
-              Match Controls
+          <div className="rc-panel flex flex-col gap-3 px-[18px] py-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="font-rc-display text-[22px] leading-none text-rc-fg-strong">
+                Match Controls
+              </div>
+              <div className="mt-1.5 font-rc-mono text-[11px] uppercase tracking-[0.14em] text-rc-fg-subtle">
+                {match.matchType} · {match.status.replaceAll("_", " ")}
+                {match.lobbyName ? ` · ${match.lobbyName}` : ""}
+              </div>
             </div>
             <div className="flex items-center gap-2">
-              <div className="hidden sm:block text-xs opacity-70">
-                {match.matchType?.toUpperCase()} • Status:{" "}
-                {match.status.replaceAll("_", " ")}
-                {match.lobbyName ? ` • ${match.lobbyName}` : ""}
-              </div>
               {/* Single toggle: it is ON ("Joining") by default and auto-enters
                   the match; clicking it interrupts and leaves the match. */}
-              <button
-                className={`rounded-lg px-4 py-2 text-sm font-semibold shadow transition-colors ${
+              <RcButton
+                variant={
                   matchCta.disabled
-                    ? "bg-slate-700/80 text-slate-300 cursor-not-allowed"
-                    : autoJoinIn !== null
-                    ? "bg-emerald-600 hover:bg-red-600 text-white ring-2 ring-emerald-400/70 shadow-lg shadow-emerald-500/30 animate-pulse"
-                    : autoJoinCancelled
-                    ? "bg-blue-600/90 hover:bg-blue-600"
-                    : matchCta.pulse
-                    ? "bg-emerald-600 hover:bg-emerald-500 text-white ring-2 ring-emerald-400/70 shadow-lg shadow-emerald-500/30 animate-pulse"
-                    : "bg-blue-600/90 hover:bg-blue-600"
-                }`}
+                    ? "secondary"
+                    : autoJoinCancelled && autoJoinIn === null
+                      ? "outline"
+                      : "default"
+                }
+                className={
+                  !matchCta.disabled && (autoJoinIn !== null || matchCta.pulse)
+                    ? "animate-pulse"
+                    : ""
+                }
                 onClick={() => {
                   if (matchCta.disabled) return;
                   if (autoJoinIn !== null) {
@@ -1554,46 +1576,49 @@ function LobbyPageContent({
                   matchCta.disabled
                     ? "Match has ended"
                     : autoJoinIn !== null
-                    ? "You are joining automatically - click to interrupt and leave the match"
-                    : `Go to match ${match.id}`
+                      ? "You are joining automatically - click to interrupt and leave the match"
+                      : `Go to match ${match.id}`
                 }
               >
                 {autoJoinIn !== null
                   ? `Joining in ${autoJoinIn}… — click to leave`
                   : autoJoinCancelled
-                  ? "Enter Match"
-                  : matchCta.label}
-              </button>
+                    ? "Enter Match"
+                    : matchCta.label}
+              </RcButton>
               {/* Once the auto-join has been interrupted the toggle turns into
                   an enter action, so keep a compact way back out. */}
               {autoJoinIn === null && !matchCta.disabled && (
-                <button
-                  className="rounded px-2 py-2 text-xs text-red-300/80 hover:text-red-200 underline underline-offset-2"
+                <RcButton
+                  variant="ghost"
+                  size="sm"
+                  className="text-rc-danger hover:text-rc-danger-hover"
                   onClick={() => setLeaveConfirmOpen(true)}
                   title="Leave current match"
                 >
                   Leave
-                </button>
+                </RcButton>
               )}
             </div>
           </div>
         )}
         {/* SOATC League Match indicator */}
         {lobby?.soatcLeagueMatch?.isLeagueMatch && (
-          <div className="rounded-xl bg-gradient-to-r from-amber-900/40 to-amber-800/20 ring-1 ring-amber-500/40 p-4 flex items-center gap-3">
-            <Trophy className="w-5 h-5 text-amber-400 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-amber-200">
-                SATC League Match
+          <div className="flex items-center gap-3.5 rounded-rc-lg border border-rc-warning/45 bg-gradient-to-br from-rc-warning/16 to-[rgba(9,13,25,0.85)] to-60% px-[18px] py-3.5 shadow-rc-panel">
+            <div className="min-w-0 flex-1">
+              <div className="font-rc-mono text-[11px] uppercase tracking-[0.24em] text-rc-warning">
+                SATC league match
               </div>
-              <div className="text-xs text-amber-300/70 truncate">
+              <div className="mt-1 truncate font-rc-display text-[22px] leading-none text-rc-fg-strong">
                 {lobby.soatcLeagueMatch.tournamentName}
               </div>
             </div>
             {lobby.players &&
               lobby.players.length < (lobby.maxPlayers || 2) && (
-                <button
-                  className="rounded-lg bg-amber-600/20 hover:bg-amber-600/30 ring-1 ring-amber-500/50 px-3 py-1.5 text-xs font-medium text-amber-200 transition-colors shrink-0"
+                <RcButton
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
                   onClick={() => {
                     if (lobby?.soatcLeagueMatch?.tournamentId) {
                       const inviteUrl = buildLobbyInviteUrl(
@@ -1612,40 +1637,44 @@ function LobbyPageContent({
                   title="Copy invite link for tournament participants"
                 >
                   Copy Invite Link
-                </button>
+                </RcButton>
               )}
           </div>
         )}
         {/* Host-only match start/config controls, only when lobby is open, all players ready, and no active match exists */}
         {isHost && !match && lobby?.status === "open" && allReady && (
-          <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm font-semibold opacity-90">
-              Host Controls
+          <div className="rc-panel flex flex-col gap-3 px-[18px] py-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="font-rc-mono text-[11px] uppercase tracking-[0.24em] text-rc-success">
+                everyone is ready
+              </div>
+              <div className="mt-1 font-rc-display text-[22px] leading-none text-rc-fg-strong">
+                Host Controls
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2 items-center">
-              <button
-                className="rounded-lg bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-5 py-2.5 text-base font-semibold shadow"
-                onClick={() => setConfigOpen(true)}
-                title="Set up match and start when all players are ready"
-              >
-                Set up and Start
-              </button>
-            </div>
+            <RcButton
+              size="lg"
+              className="animate-pulse"
+              onClick={() => setConfigOpen(true)}
+              title="Set up match and start when all players are ready"
+            >
+              Set up and Start
+            </RcButton>
           </div>
         )}
         {voiceEnabled && (incomingVoiceRequest || outgoingVoiceRequest) && (
-          <div className="rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3">
+          <div className="rc-panel space-y-3 px-[18px] py-3.5 font-rc-mono text-[13px] text-rc-fg">
             {incomingVoiceRequest && voice && (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <span className="font-semibold">
+                  <span className="font-semibold text-rc-fg-strong">
                     {incomingVoiceDisplayName || incomingVoiceRequest.from.id}
                   </span>{" "}
                   wants to start a voice chat.
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    className="rounded bg-emerald-600/80 hover:bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white"
+                  <RcButton
+                    size="sm"
                     onClick={() =>
                       voice.respondToRequest(
                         incomingVoiceRequest.requestId,
@@ -1655,9 +1684,10 @@ function LobbyPageContent({
                     }
                   >
                     Accept
-                  </button>
-                  <button
-                    className="rounded bg-rose-600/80 hover:bg-rose-600 px-4 py-1.5 text-xs font-semibold text-white"
+                  </RcButton>
+                  <RcButton
+                    variant="destructive"
+                    size="sm"
                     onClick={() =>
                       voice.respondToRequest(
                         incomingVoiceRequest.requestId,
@@ -1667,15 +1697,15 @@ function LobbyPageContent({
                     }
                   >
                     Decline
-                  </button>
+                  </RcButton>
                 </div>
               </div>
             )}
             {outgoingVoiceRequest && outgoingVoiceStatus && (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   Voice request to{" "}
-                  <span className="font-semibold">
+                  <span className="font-semibold text-rc-fg-strong">
                     {outgoingVoiceTargetName || outgoingVoiceRequest.targetId}
                   </span>
                   :{" "}
@@ -1687,12 +1717,14 @@ function LobbyPageContent({
                   ["declined", "cancelled"].includes(
                     outgoingVoiceRequest.status,
                   ) && (
-                    <button
-                      className="self-start rounded bg-slate-700/80 hover:bg-slate-700 px-3 py-1 text-xs text-slate-200"
+                    <RcButton
+                      variant="ghost"
+                      size="sm"
+                      className="self-start"
                       onClick={voice.dismissOutgoingRequest}
                     >
                       Dismiss
-                    </button>
+                    </RcButton>
                   )}
               </div>
             )}
@@ -1864,25 +1896,27 @@ function LobbyPageContent({
 
         {/* Leave Match confirmation dialog */}
         {leaveConfirmOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div
               className="absolute inset-0 bg-black/60"
               onClick={() => setLeaveConfirmOpen(false)}
             />
-            <div className="relative bg-slate-900/95 ring-1 ring-slate-800 rounded-xl shadow-xl w-full max-w-md p-5">
-              <div className="text-base font-semibold">Leave match</div>
-              <div className="mt-2 text-sm text-slate-300">
+            <div className="rc-panel relative w-full max-w-md p-5">
+              <div className="font-rc-display text-[26px] leading-none text-rc-fg-strong">
+                Leave match
+              </div>
+              <div className="mt-3 font-rc-mono text-[13px] text-rc-fg-muted">
                 Are you sure you want to leave the match?
               </div>
-              <div className="mt-4 flex flex-col sm:flex-row gap-2 justify-end">
-                <button
-                  className="px-4 py-2 text-sm rounded bg-slate-700/70 hover:bg-slate-600/70"
+              <div className="mt-5 flex flex-col justify-end gap-2 sm:flex-row">
+                <RcButton
+                  variant="outline"
                   onClick={() => setLeaveConfirmOpen(false)}
                 >
                   Cancel
-                </button>
-                <button
-                  className="px-4 py-2 text-sm rounded bg-red-600/90 hover:bg-red-600 text-white"
+                </RcButton>
+                <RcButton
+                  variant="destructive"
                   onClick={() => {
                     try {
                       leaveMatch();
@@ -1896,58 +1930,41 @@ function LobbyPageContent({
                   }}
                 >
                   Leave Match
-                </button>
+                </RcButton>
               </div>
             </div>
           </div>
         )}
 
         {/* Social and Chat row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:items-stretch">
-          {/* Friends + Invites Panel */}
-          <div
-            className={`rounded-xl bg-slate-900/60 ring-1 ring-slate-800 p-4 space-y-3 h-full`}
-          >
-            {/* Invites count indicator */}
-            {invites && invites.length > 0 && (
-              <div className="text-xs text-indigo-300">
-                {invites.length} pending invite{invites.length > 1 ? "s" : ""}
-              </div>
-            )}
-
-            {/* Friends browser */}
-            <div id="players-invite-panel">
-              <PlayersInvitePanel
-                players={players}
-                available={availablePlayers}
-                loading={availablePlayersLoading}
-                nextCursor={availablePlayersNextCursor}
-                requestPlayers={requestPlayers}
-                error={playersError}
-                me={me}
-                lobby={lobby}
-                onInvite={(pid, lid) => inviteToLobby(pid, lid)}
-              />
-            </div>
-          </div>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,460px),1fr))] items-start gap-7">
+          <PlayersInvitePanel
+            players={players}
+            available={availablePlayers}
+            loading={availablePlayersLoading}
+            nextCursor={availablePlayersNextCursor}
+            requestPlayers={requestPlayers}
+            error={playersError}
+            me={me}
+            lobby={lobby}
+            onInvite={(pid, lid) => inviteToLobby(pid, lid)}
+            pendingInvites={invites?.length ?? 0}
+          />
 
           {/* Inline lobby chat console (global + lobby scopes) */}
-          <div className="h-full min-h-[20rem] max-h-[28rem]">
-            <LobbyChatConsole
-              connected={connected}
-              chatLog={chatLog}
-              chatTab={chatTab}
-              setChatTab={setChatTab}
-              chatInput={chatInput}
-              setChatInput={setChatInput}
-              onSendChat={(message, scope) => sendChat(message, scope)}
-              myPlayerId={me?.id ?? null}
-              chatHasMore={chatHasMore}
-              chatLoading={chatLoading}
-              onRequestMoreHistory={requestMoreChatHistory}
-              inline
-            />
-          </div>
+          <LobbyChatConsole
+            connected={connected}
+            chatLog={chatLog}
+            chatTab={chatTab}
+            setChatTab={setChatTab}
+            chatInput={chatInput}
+            setChatInput={setChatInput}
+            onSendChat={(message, scope) => sendChat(message, scope)}
+            myPlayerId={me?.id ?? null}
+            chatHasMore={chatHasMore}
+            chatLoading={chatLoading}
+            onRequestMoreHistory={requestMoreChatHistory}
+          />
         </div>
         {/* Match Configuration Overlay (Host) */}
         {isHost && configOpen && (
@@ -1956,7 +1973,7 @@ function LobbyPageContent({
               className="absolute inset-0 bg-black/60"
               onClick={() => setConfigOpen(false)}
             />
-            <div className="relative bg-slate-900/95 ring-1 ring-slate-800 rounded-xl shadow-xl w-full max-w-xl p-5">
+            <div className="relative rc-panel w-full max-w-xl p-5">
               <div className="flex items-center justify-between">
                 <div className="text-base font-semibold">
                   Match Configuration
@@ -2981,7 +2998,7 @@ function LobbyPageContent({
         {/* end Social and Chat row */}
 
         {/* Footer links */}
-        <LobbyFooter />
+        <LobbyPageFooter />
       </div>
 
       {/* Invite Overlay - shows first pending invite */}
@@ -3121,7 +3138,7 @@ function LobbyPageContent({
       {/* SOATC Tournament Invite Ineligibility Modal */}
       {showIneligibleModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 rounded-xl ring-1 ring-slate-700 max-w-md w-full p-6 shadow-2xl">
+          <div className="rc-panel w-full max-w-md p-6">
             <div className="flex items-start gap-3 mb-4">
               <AlertCircle className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
               <div>
@@ -3198,7 +3215,7 @@ function LobbyPageContent({
           </div>
         </div>
       )}
-    </OnlinePageShell>
+    </AppShell>
   );
 }
 

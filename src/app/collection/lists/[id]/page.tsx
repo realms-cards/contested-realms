@@ -4,6 +4,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
+import { RcDialog } from "@/components/ui/rc-dialog";
+import { RcEmpty } from "@/components/ui/rc-empty";
 import { getImageSlug } from "@/lib/utils/cardSlug";
 
 interface ListCard {
@@ -245,12 +249,12 @@ export default function ListDetailPage() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="h-8 w-64 bg-gray-800 rounded animate-pulse" />
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="h-8 w-64 animate-pulse rounded-rc-md border border-rc-line/12 bg-black/30" />
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {Array.from({ length: 10 }).map((_, i) => (
             <div
               key={i}
-              className="aspect-[2.5/3.5] bg-gray-800 rounded-lg animate-pulse"
+              className="aspect-[2.5/3.5] animate-pulse rounded-rc-md border border-rc-line/12 bg-black/30"
             />
           ))}
         </div>
@@ -260,12 +264,11 @@ export default function ListDetailPage() {
 
   if (error || !list) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-4">
-        <div className="text-red-400 text-xl">{error || "List not found"}</div>
-        <Link
-          href="/collection/lists"
-          className="text-blue-400 hover:underline"
-        >
+      <div className="space-y-4">
+        <div className="rc-alert" data-tone="danger">
+          {error || "List not found"}
+        </div>
+        <Link href="/collection/lists" className="rc-link text-sm">
           ← Back to Lists
         </Link>
       </div>
@@ -274,23 +277,19 @@ export default function ListDetailPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="space-y-1">
-          <Link
-            href="/collection/lists"
-            className="text-sm text-gray-400 hover:text-white"
-          >
-            ← Back to Lists
-          </Link>
+      <Link href="/collection/lists" className="rc-link text-sm">
+        ← Back to Lists
+      </Link>
 
-          {editingName && list.isOwner ? (
-            <div className="flex items-center gap-2">
+      <section className="rc-panel">
+        <div className="rc-panel-head">
+          <div className="min-w-0">
+            {editingName && list.isOwner ? (
               <input
                 type="text"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                className="text-2xl font-bold bg-gray-800 border border-gray-600 rounded px-2 py-1"
+                className="rc-input h-10 w-full max-w-sm"
                 autoFocus
                 onBlur={handleUpdateName}
                 onKeyDown={(e) => {
@@ -301,136 +300,135 @@ export default function ListDetailPage() {
                   }
                 }}
               />
-            </div>
-          ) : (
-            <h1
-              className={`text-2xl font-bold ${
-                list.isOwner ? "cursor-pointer hover:text-blue-400" : ""
-              }`}
-              onClick={() => list.isOwner && setEditingName(true)}
-              title={list.isOwner ? "Click to edit" : undefined}
-            >
-              {list.name}
-            </h1>
-          )}
+            ) : (
+              <h2
+                className={`m-0 truncate font-rc-display text-[26px] leading-none text-rc-fg-strong ${
+                  list.isOwner ? "cursor-pointer hover:text-rc-accent-ring" : ""
+                }`}
+                onClick={() => list.isOwner && setEditingName(true)}
+                title={list.isOwner ? "Click to edit" : undefined}
+              >
+                {list.name}
+              </h2>
+            )}
+          </div>
+          <div className="flex-1" />
 
-          {list.description && (
-            <p className="text-gray-400">{list.description}</p>
-          )}
-
-          <div className="flex items-center gap-3 text-sm text-gray-500">
-            <span>{list.cards.length} cards</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Share button - always visible for public lists */}
             {list.isPublic && (
-              <span className="px-2 py-0.5 bg-green-600/20 text-green-400 rounded">
-                Public
-              </span>
+              <RcButton variant="outline" size="sm" onClick={handleShare}>
+                Share
+              </RcButton>
             )}
-            {!list.isOwner && list.ownerName && (
-              <span>by {list.ownerName}</span>
+
+            {/* Add Cards - owner only */}
+            {list.isOwner && (
+              <>
+                <RcLinkButton
+                  variant="outline"
+                  size="sm"
+                  href={`/collection/lists/${listId}/scan`}
+                >
+                  Scan
+                </RcLinkButton>
+                <RcButton size="sm" onClick={() => setShowAddCard(true)}>
+                  Add Cards
+                </RcButton>
+              </>
             )}
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          {/* Share button - always visible for public lists */}
-          {list.isPublic && (
-            <button
-              onClick={handleShare}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium transition-colors"
-            >
-              🔗 Share
-            </button>
-          )}
-
-          {/* Add Cards - owner only */}
-          {list.isOwner && (
-            <>
-              <Link
-                href={`/collection/lists/${listId}/scan`}
-                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-sm font-medium transition-colors"
-              >
-                📷 Scan
-              </Link>
-              <button
-                onClick={() => setShowAddCard(true)}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors"
-              >
-                + Add Cards
-              </button>
-            </>
-          )}
-
-          {/* Export dropdown - available to everyone */}
-          <div className="relative group">
-            <button className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors">
-              📤 Export
-            </button>
-            <div className="absolute right-0 top-full mt-1 bg-gray-800 rounded-lg shadow-lg py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 min-w-[120px]">
-              <button
-                onClick={handleCopyToClipboard}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700"
-              >
-                📋 Copy
-              </button>
-              <button
-                onClick={() => handleExport("text")}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700"
-              >
-                📄 Text
-              </button>
-              <button
-                onClick={() => handleExport("csv")}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700"
-              >
-                📊 CSV
-              </button>
-              <button
-                onClick={() => handleExport("json")}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700"
-              >
-                🔧 JSON
-              </button>
+            {/* Export dropdown - available to everyone */}
+            <div className="group relative">
+              <RcButton variant="outline" size="sm">
+                Export
+              </RcButton>
+              <div className="rc-panel invisible absolute right-0 top-full z-10 mt-1 min-w-[140px] py-1 opacity-0 transition-all group-hover:visible group-hover:opacity-100">
+                <button
+                  type="button"
+                  onClick={handleCopyToClipboard}
+                  className="w-full cursor-pointer px-4 py-2 text-left font-rc-mono text-xs tracking-[0.1em] text-rc-fg-muted transition-colors hover:bg-rc-accent/6 hover:text-rc-fg-strong"
+                >
+                  Copy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExport("text")}
+                  className="w-full cursor-pointer px-4 py-2 text-left font-rc-mono text-xs tracking-[0.1em] text-rc-fg-muted transition-colors hover:bg-rc-accent/6 hover:text-rc-fg-strong"
+                >
+                  Text
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExport("csv")}
+                  className="w-full cursor-pointer px-4 py-2 text-left font-rc-mono text-xs tracking-[0.1em] text-rc-fg-muted transition-colors hover:bg-rc-accent/6 hover:text-rc-fg-strong"
+                >
+                  CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExport("json")}
+                  className="w-full cursor-pointer px-4 py-2 text-left font-rc-mono text-xs tracking-[0.1em] text-rc-fg-muted transition-colors hover:bg-rc-accent/6 hover:text-rc-fg-strong"
+                >
+                  JSON
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* Add to Collection button - owner only, when list has cards */}
-          {list.isOwner && list.cards.length > 0 && (
-            <button
-              onClick={handleAddAllToCollection}
-              disabled={addingToCollection}
-              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
-              title="Add all cards from this list to your collection"
-            >
-              {addingToCollection ? "Adding..." : "📦 Add to Collection"}
-            </button>
-          )}
+            {/* Add to Collection button - owner only, when list has cards */}
+            {list.isOwner && list.cards.length > 0 && (
+              <RcButton
+                variant="outline"
+                size="sm"
+                onClick={handleAddAllToCollection}
+                disabled={addingToCollection}
+                title="Add all cards from this list to your collection"
+              >
+                {addingToCollection ? "Adding..." : "Add to Collection"}
+              </RcButton>
+            )}
+          </div>
         </div>
-      </div>
+
+        <div className="space-y-2 px-[18px] py-3.5">
+          {list.description && (
+            <p className="m-0 max-w-[68ch] text-sm leading-relaxed text-rc-fg-muted">
+              {list.description}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="rc-hint">
+              <span className="rc-stat">{list.cards.length}</span> cards
+            </span>
+            {list.isPublic && <Badge tone="ok">Public</Badge>}
+            {!list.isOwner && list.ownerName && (
+              <span className="rc-hint">by {list.ownerName}</span>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* Empty State */}
       {list.cards.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-          <div className="text-5xl">📋</div>
-          <h3 className="text-xl font-bold">This list is empty</h3>
-          {list.isOwner && (
-            <>
-              <p className="text-gray-400 max-w-md">
-                Add cards from the card browser, or paste a list to import.
-              </p>
-              <button
-                onClick={() => setShowAddCard(true)}
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
-              >
+        <RcEmpty
+          title="This list is empty."
+          action={
+            list.isOwner ? (
+              <RcButton onClick={() => setShowAddCard(true)}>
                 Add Cards
-              </button>
-            </>
-          )}
-        </div>
+              </RcButton>
+            ) : undefined
+          }
+        >
+          {list.isOwner
+            ? "add cards from the card browser, or paste a list to import"
+            : "no cards in this list"}
+        </RcEmpty>
       )}
 
       {/* Cards Grid */}
       {list.cards.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {list.cards.map((card) => (
             <ListCardItem
               key={card.id}
@@ -479,7 +477,7 @@ function ListCardItem({
 
   return (
     <div
-      className={`relative group rounded-lg overflow-hidden bg-gray-800 ${
+      className={`group relative overflow-hidden rounded-rc-md border border-rc-line/12 bg-black/30 transition-colors hover:border-rc-accent/40 ${
         isSite ? "col-span-2" : ""
       } ${isFoil ? "foil-card" : ""}`}
       style={
@@ -516,68 +514,76 @@ function ListCardItem({
 
         {/* Foil Indicator */}
         {isFoil && (
-          <div className="absolute top-2 right-2 bg-yellow-500 text-black text-xs px-2 py-0.5 rounded font-bold">
-            FOIL
+          <div className="absolute right-2 top-2 rounded-rc-sm border border-rc-accent/35 bg-rc-accent/85 px-2 py-0.5 font-rc-mono text-[10px] uppercase tracking-[0.18em] text-rc-accent-fg">
+            Foil
           </div>
         )}
 
         {/* Quantity Badge */}
-        <div className="absolute bottom-2 right-2 bg-black/80 text-white px-2 py-1 rounded-full text-sm font-bold min-w-[2rem] text-center">
+        <div className="absolute bottom-2 right-2 min-w-[2rem] rounded-rc-sm border border-rc-line/22 bg-black/60 px-2 py-1 text-center font-rc-mono text-[12px] tabular-nums text-rc-fg-strong">
           ×{card.quantity}
         </div>
       </div>
 
       {/* Card Info */}
       <div className="p-2">
-        <div className="text-sm font-medium truncate" title={card.card.name}>
+        <div
+          className="truncate font-rc-display text-[15px] leading-[1.15] text-rc-fg-strong"
+          title={card.card.name}
+        >
           {card.card.name}
         </div>
-        <div className="text-xs text-gray-400 flex items-center gap-1">
+        <div className="flex items-center gap-1 truncate font-rc-mono text-[11px] tracking-[0.1em] text-rc-fg-subtle">
           {card.set?.name || "Unknown Set"}
           {card.meta?.rarity && (
             <span className={`ml-1 ${getRarityColor(card.meta.rarity)}`}>
-              • {card.meta.rarity}
+              · {card.meta.rarity}
             </span>
           )}
         </div>
         {card.notes && (
-          <div
-            className="text-xs text-gray-500 mt-1 truncate"
-            title={card.notes}
-          >
-            📝 {card.notes}
+          <div className="mt-1 truncate rc-hint" title={card.notes}>
+            {card.notes}
           </div>
         )}
       </div>
 
       {/* Hover Actions */}
       {isOwner && (
-        <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 p-2 opacity-0 transition-opacity group-hover:opacity-100">
           <div className="flex items-center gap-2">
-            <button
+            <RcButton
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              aria-label="Decrease quantity"
               onClick={() => onUpdateQuantity(card.quantity - 1)}
               disabled={card.quantity <= 1}
-              className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded-full font-bold disabled:opacity-50"
             >
               −
-            </button>
-            <span className="text-xl font-bold w-8 text-center">
+            </RcButton>
+            <span className="w-8 text-center rc-stat text-lg">
               {card.quantity}
             </span>
-            <button
+            <RcButton
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              aria-label="Increase quantity"
               onClick={() => onUpdateQuantity(card.quantity + 1)}
               disabled={card.quantity >= 99}
-              className="w-8 h-8 bg-gray-700 hover:bg-gray-600 rounded-full font-bold disabled:opacity-50"
             >
               +
-            </button>
+            </RcButton>
           </div>
-          <button
+          <RcButton
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-[11px] text-rc-danger hover:text-rc-danger-hover"
             onClick={onRemove}
-            className="text-red-400 hover:text-red-300 text-xs underline"
           >
             Remove
-          </button>
+          </RcButton>
         </div>
       )}
     </div>
@@ -587,14 +593,14 @@ function ListCardItem({
 function getRarityColor(rarity: string): string {
   switch (rarity.toLowerCase()) {
     case "unique":
-      return "text-purple-400";
+      return "text-rc-moonlight";
     case "elite":
-      return "text-yellow-400";
+      return "text-rc-accent-link";
     case "exceptional":
-      return "text-blue-400";
+      return "text-rc-info";
     case "ordinary":
     default:
-      return "text-gray-400";
+      return "text-rc-fg-subtle";
   }
 }
 
@@ -732,56 +738,55 @@ function AddCardModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-lg p-6 max-w-lg w-full">
-        <h2 className="text-xl font-bold mb-4">Add Cards to List</h2>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Card List</label>
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={`Enter cards, one per line:\n4 Lightning Bolt\n2x Fireball\nBlack Lotus`}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 h-48 resize-none font-mono text-sm"
-              autoFocus
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Format: &quot;quantity card name&quot; or just &quot;card
-              name&quot;
-            </p>
-          </div>
-
-          {error && <div className="text-red-400 text-sm">{error}</div>}
-
-          {result && (
-            <div className="bg-gray-800 rounded-lg p-3 text-sm">
-              <p className="text-green-400">
-                ✓ Added {result.added}, updated {result.updated}
-              </p>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+    <RcDialog
+      title="Add Cards to List"
+      eyebrow="card lists"
+      onClose={onClose}
+      size="md"
+      actions={
+        <>
+          <RcButton variant="outline" onClick={onClose}>
+            {result ? "Close" : "Cancel"}
+          </RcButton>
+          {!result && (
+            <RcButton
+              type="submit"
+              form="add-cards-form"
+              disabled={submitting || !text.trim()}
             >
-              {result ? "Close" : "Cancel"}
-            </button>
-            {!result && (
-              <button
-                type="submit"
-                disabled={submitting || !text.trim()}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {submitting ? "Adding..." : "Add Cards"}
-              </button>
-            )}
+              {submitting ? "Adding..." : "Add Cards"}
+            </RcButton>
+          )}
+        </>
+      }
+    >
+      <form id="add-cards-form" onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="rc-eyebrow mb-1 block">Card List</label>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={`Enter cards, one per line:\n4 Lightning Bolt\n2x Fireball\nBlack Lotus`}
+            className="rc-textarea h-48 w-full resize-none"
+            autoFocus
+          />
+          <p className="m-0 mt-1 rc-hint">
+            format: &quot;quantity card name&quot; or just &quot;card name&quot;
+          </p>
+        </div>
+
+        {error && (
+          <div className="rc-alert" data-tone="danger">
+            {error}
           </div>
-        </form>
-      </div>
-    </div>
+        )}
+
+        {result && (
+          <div className="rc-alert" data-tone="success">
+            Added {result.added}, updated {result.updated}
+          </div>
+        )}
+      </form>
+    </RcDialog>
   );
 }

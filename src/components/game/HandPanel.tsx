@@ -22,7 +22,7 @@ export default function HandPanel({ dragFromHand }: HandPanelProps) {
       <div
         className={`${
           dragFromHand ? "pointer-events-none" : "pointer-events-auto"
-        } mx-auto max-w-5xl px-3 py-2 text-sm text-white overflow-visible`}
+        } mx-auto max-w-5xl px-3 py-2 text-sm text-rc-fg overflow-visible`}
         onClick={() => {
           // Clear hand card selection but preserve avatar selection
           useGameStore.setState({
@@ -52,12 +52,12 @@ export default function HandPanel({ dragFromHand }: HandPanelProps) {
             return (
               <button
                 key={`${c.cardId}-${i}`}
-                className={`relative shrink-0 rounded border transition-transform duration-150 origin-bottom hover:scale-[1.5] hover:-translate-y-6 hover:z-50 ${
+                className={`relative shrink-0 rounded-rc-md border transition-transform duration-150 origin-bottom hover:scale-[1.5] hover:-translate-y-6 hover:z-50 ${
                   isSite ? "px-1 py-0.5" : "p-1"
                 } ${
                   isSel
-                    ? "border-emerald-400 bg-emerald-500/20"
-                    : "border-white/15 bg-white/10 hover:bg-white/20"
+                    ? "border-rc-accent-ring bg-rc-accent/20"
+                    : "border-rc-line/18 bg-black/35 hover:border-rc-accent/50 hover:bg-black/45"
                 }`}
                 title={c.name}
                 onClick={(e) => {
@@ -90,7 +90,7 @@ export default function HandPanel({ dragFromHand }: HandPanelProps) {
                   <div
                     className={`relative ${
                       isSite ? "aspect-[4/3] w-28" : "aspect-[3/4] h-28"
-                    } rounded overflow-visible bg-muted/40`}
+                    } rounded-rc-sm overflow-visible bg-black/30`}
                   >
                     <Image
                       src={`/api/images/${c.slug}`}
@@ -105,18 +105,20 @@ export default function HandPanel({ dragFromHand }: HandPanelProps) {
                     />
                   </div>
                 ) : (
-                  <div className="w-24 h-32 grid place-items-center rounded bg-white/10 text-xs opacity-80">
+                  <div className="w-24 h-32 grid place-items-center rounded-rc-sm bg-black/35 text-xs text-rc-fg-muted">
                     {c.name}
                   </div>
                 )}
-                <div className="text-[10px] mt-1 max-w-24 truncate opacity-90">
+                <div className="text-[10px] mt-1 max-w-24 truncate text-rc-fg-muted">
                   {c.name}
                 </div>
               </button>
             );
           })}
           {zones.p1.hand.length === 0 && (
-            <div className="opacity-60">Hand is empty</div>
+            <div className="font-rc-mono tracking-[0.1em] text-rc-fg-dim">
+              Hand is empty
+            </div>
           )}
         </div>
       </div>
