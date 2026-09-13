@@ -191,3 +191,49 @@ export function isEvilCard(card: CardRef | null | undefined): boolean {
   if (!card) return false;
   return isEvilSubtypes(card.subTypes);
 }
+
+type TransformedSiteForm = {
+  subTypes: string;
+  attack: number;
+  defence: number;
+};
+
+/**
+ * Sites that may transform into a minion on the board, keyed by lowercase name.
+ * Both names exist only as Site cards, so the name alone identifies them.
+ */
+const TRANSFORMED_SITE_FORMS = new Map<string, TransformedSiteForm>([
+  ["island leviathan", { subTypes: "Monster", attack: 8, defence: 8 }],
+  ["horns of behemoth", { subTypes: "Demon", attack: 6, defence: 6 }],
+]);
+
+function transformedSiteForm(
+  name: string | null | undefined,
+): TransformedSiteForm | undefined {
+  return TRANSFORMED_SITE_FORMS.get((name || "").trim().toLowerCase());
+}
+
+/** True for Island Leviathan / Horns of Behemoth (landscape art, site identity off the board). */
+export function isTransformableSiteName(
+  name: string | null | undefined,
+): boolean {
+  return transformedSiteForm(name) !== undefined;
+}
+
+/**
+ * The minion form of a transformed site: a real Minion (Monster/Demon) with its
+ * printed power, so every minion check (attach, copy, target, combat) applies.
+ * Cost stays null so no mana is charged for the transform.
+ */
+export function toTransformedSiteMinionCard(card: CardRef): CardRef {
+  const form = transformedSiteForm(card.name);
+  if (!form) return card;
+  return { ...card, type: "Minion", ...form };
+}
+
+/** Restores a transformed site's Site identity when it leaves the realm. */
+export function restoreTransformedSiteCard(card: CardRef): CardRef {
+  if (!isTransformableSiteName(card.name)) return card;
+  if ((card.type || "").toLowerCase().includes("site")) return card;
+  return { ...card, type: "Site", subTypes: "" };
+}

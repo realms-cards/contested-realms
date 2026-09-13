@@ -183,6 +183,7 @@ function TutorialLessonContent() {
         onSkip={() => router.push("/tutorial")}
         hint={session.hint}
         onDismissHint={session.dismissHint}
+        avoidLeftHud={!!visibleHud.lifeCounters}
       />
     </main>
   );

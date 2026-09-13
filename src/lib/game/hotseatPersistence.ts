@@ -7,6 +7,7 @@
  */
 
 import type { GameState } from "./store/types";
+import { toTransformedSiteMinionCard } from "./store/utils/cardHelpers";
 
 const DB_NAME = "sorcery-hotseat";
 const DB_VERSION = 1;
@@ -535,13 +536,14 @@ export function applyLoadedGame(
         };
       }
       return {
-        card: {
+        // Compact saves drop subtypes/stats, so rebuild transformed sites' minion form
+        card: toTransformedSiteMinionCard({
           slug: p.slug,
           name: p.name || "",
           cardId: p.cardId || 0,
           instanceId: p.instanceId,
           type: p.type || null, // Preserve original type for proper rendering
-        },
+        }),
         owner: p.owner, // Preserve owner for correct assignment
         instanceId: p.instanceId,
         tapped: p.tapped || false,

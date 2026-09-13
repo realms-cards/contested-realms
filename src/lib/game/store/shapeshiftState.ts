@@ -8,6 +8,7 @@ import type {
   ServerPatchT,
   Zones,
 } from "./types";
+import { restoreTransformedSiteCard } from "./utils/cardHelpers";
 import {
   createPermanentDeltaPatch,
   type PermanentDeltaUpdate,
@@ -287,7 +288,7 @@ export const createShapeshiftSlice: StateCreator<
         transformedMessage = `${oldCard.name} transforms into ${selectedCard.name}!`;
 
         // The original minion card goes to graveyard
-        graveyard.push(oldCard);
+        graveyard.push(restoreTransformedSiteCard(oldCard));
       }
     } else {
       transformedMessage = `${pending.targetMinion.card.name} fails to find a new form`;

@@ -14,6 +14,7 @@ import type {
   Permanents,
   PlayerKey,
 } from "@/lib/game/store/types";
+import { isTransformableSiteName } from "@/lib/game/store/utils/cardHelpers";
 
 type UseBoardDropManagerOptions = {
   board: BoardState;
@@ -159,7 +160,10 @@ export function useBoardDropManager({
         if (overP1Atlas || overP2Atlas || overP1Spell || overP2Spell) {
           const draggedCard = permanents[d.from]?.[d.index]?.card;
           const cardType = (draggedCard?.type || "").toLowerCase();
-          const isSite = cardType.includes("site");
+          // Transformed sites return to the atlas as their Site card
+          const isSite =
+            cardType.includes("site") ||
+            isTransformableSiteName(draggedCard?.name);
           const isToken = cardType.includes("token");
           const isAvatar = cardType.includes("avatar");
 
@@ -228,7 +232,9 @@ export function useBoardDropManager({
           const draggedCard = permanents[d.from]?.[d.index]?.card;
           const cardType = (draggedCard?.type || "").toLowerCase();
           // Only allow returning spellbook cards (not sites, avatars, or tokens)
-          const isSite = cardType.includes("site");
+          const isSite =
+            cardType.includes("site") ||
+            isTransformableSiteName(draggedCard?.name);
           const isAvatar = cardType.includes("avatar");
           const isToken = cardType.includes("token");
           const canReturnToHand = !isAvatar && !isToken && !isSite;

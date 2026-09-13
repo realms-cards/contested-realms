@@ -1540,10 +1540,11 @@ export default function Board({
             ? playmatUrls[activePlaymatOwner]
             : playmatUrl
         }
-        // The grid overlay is always mounted and hidden under the playmat via
-        // depth, so game views can never show a bare table without a grid;
-        // only editors/drafts opt out by passing suppressGrid.
+        // The grid overlay is always mounted and hidden only while the playmat
+        // is on screen, so game views can never show a bare table without a
+        // grid; only editors/drafts opt out by passing suppressGrid.
         showTable={graphicsSettings.showTable}
+        gridSize={board.size}
       />
 
       {/* Interactive tiles */}

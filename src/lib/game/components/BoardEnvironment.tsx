@@ -1,7 +1,7 @@
 import { Environment, useEnvironment, useGLTF, useTexture } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
-import { Suspense, useEffect, useMemo } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 import {
   SRGBColorSpace,
@@ -118,12 +118,15 @@ type BoardEnvironmentProps = {
   playmatUrl?: string | null;
   /**
    * Opt-out for scenes that must never show the grid (deck editor, drafts).
-   * Game views leave this unset: the grid overlay is always mounted and simply
-   * hidden underneath the playmat, so a bare table can never appear without a
-   * grid — including while the playmat texture is still loading or has failed.
+   * Game views leave this unset: the grid overlay is always mounted and hidden
+   * only while the playmat is actually on screen, so a bare table can never
+   * appear without a grid — including while the playmat texture is still
+   * loading or has failed.
    */
   suppressGrid?: boolean;
   showTable?: boolean;
+  /** Board size in tiles, used to line the default playmat art up with tiles. */
+  gridSize?: { w: number; h: number };
 };
 
 function noopRaycast(
@@ -207,15 +210,24 @@ const markPlaymatReady = () => markBoardAssetReady("playmat");
 // Playmat component moved to SafePlaymat.tsx for better error handling
 
 // The grid overlay sits just below the playmat's top surface (y=0) and just
-// above the bare tabletop (y=-0.002 when the playmat is hidden). Because the
-// playmat box is opaque and depth-tested, a rendered playmat automatically
-// occludes the grid — no flag juggling — while any state where the playmat
-// isn't actually on screen (hidden, texture still loading, load failed)
-// reveals the grid underneath. This is what guarantees "never a bare table
-// without a grid" in game views.
+// above the bare tabletop (y=-0.004 when the playmat is hidden). While the
+// playmat mesh is actually on screen it reports so and the grid is hidden
+// outright: 0.0005 under the mat is only a few depth-buffer steps when zoomed
+// out, so depth alone could let the grid flicker through the mat. Any state
+// where the playmat isn't on screen (hidden, texture still loading, load
+// failed, hidden by Suspense) reports false and reveals the grid. This is what
+// guarantees "never a bare table without a grid" in game views.
 const GRID_OVERLAY_Y = -0.0005;
 
-function PlaymatOverlay({ matW, matH }: { matW: number; matH: number }) {
+function PlaymatOverlay({
+  matW,
+  matH,
+  visible,
+}: {
+  matW: number;
+  matH: number;
+  visible: boolean;
+}) {
   const tex = useTexture(PLAYMAT_OVERLAY_URL);
   tex.colorSpace = SRGBColorSpace;
 
@@ -226,6 +238,7 @@ function PlaymatOverlay({ matW, matH }: { matW: number; matH: number }) {
     <mesh
       rotation-x={-Math.PI / 2}
       position={[0, GRID_OVERLAY_Y, 0]}
+      visible={visible}
       raycast={noopRaycast}
       renderOrder={-100}
     >
@@ -248,6 +261,7 @@ export function BoardEnvironment({
   playmatUrl,
   suppressGrid = false,
   showTable = true,
+  gridSize,
 }: BoardEnvironmentProps) {
   // frameloop="demand": the HDRI environment, table GLB, and their material
   // tweaks land asynchronously outside React props, so nothing requests a
@@ -263,6 +277,9 @@ export function BoardEnvironment({
 
   // Memoize the URL to prevent unnecessary texture reloads
   const stableUrl = useMemo(() => playmatUrl ?? null, [playmatUrl]);
+
+  // Whether the playmat mesh is really on screen right now (see GRID_OVERLAY_Y)
+  const [playmatOnScreen, setPlaymatOnScreen] = useState(false);
 
   // Parts this scene does not show count as loaded for the match reveal
   useEffect(() => {
@@ -286,12 +303,14 @@ export function BoardEnvironment({
       {/* Mahogany table underneath the playmat. With the playmat visible the
           tabletop tucks flush under it (slightly embedded to avoid a seam);
           with the playmat hidden it rises to just under the y=0 card plane so
-          cards rest on the wood instead of floating a mat-thickness above it. */}
+          cards rest on the wood instead of floating a mat-thickness above it.
+          The 0.004 gap keeps enough depth precision between the wood and the
+          grid overlay (GRID_OVERLAY_Y) at long replay zoom. */}
       {showTable && (
         <Suspense fallback={null}>
           <MahoganyTable
             scale={0.95}
-            topY={showPlaymat ? -PLAYMAT_THICKNESS + 0.001 : -0.002}
+            topY={showPlaymat ? -PLAYMAT_THICKNESS + 0.001 : -0.004}
           />
         </Suspense>
       )}
@@ -316,15 +335,21 @@ export function BoardEnvironment({
               matH={matH}
               url={stableUrl}
               onReady={markPlaymatReady}
+              onVisibleChange={setPlaymatOnScreen}
+              gridSize={gridSize}
             />
           </TextureErrorBoundary>
         </Suspense>
       )}
-      {/* Grid overlay — always mounted in game views; the opaque playmat
-          occludes it whenever the mat is actually rendered (see GRID_OVERLAY_Y). */}
+      {/* Grid overlay — always mounted in game views and hidden while the
+          playmat is actually on screen (see GRID_OVERLAY_Y). */}
       {!suppressGrid && (
         <Suspense fallback={null}>
-          <PlaymatOverlay matW={matW} matH={matH} />
+          <PlaymatOverlay
+            matW={matW}
+            matH={matH}
+            visible={!(showPlaymat && playmatOnScreen)}
+          />
         </Suspense>
       )}
       <RigidBody type="fixed" colliders={false} position={[0, 0, 0]}>

@@ -20,7 +20,10 @@ import {
   seatFromOwner,
   toCellKey,
 } from "./utils/boardHelpers";
-import { prepareCardForSeat } from "./utils/cardHelpers";
+import {
+  prepareCardForSeat,
+  toTransformedSiteMinionCard,
+} from "./utils/cardHelpers";
 import { newPermanentInstanceId } from "./utils/idHelpers";
 import { bumpPermanentVersion, randomTilt } from "./utils/permanentHelpers";
 import {
@@ -391,7 +394,8 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
     }),
 
   // Transform a site into a minion permanent (Island Leviathan, Horns of Behemoth)
-  // Removes the site, places the site card as a permanent, and places Rubble underneath.
+  // Removes the site, places it as a Minion permanent (Monster/Demon), and places Rubble underneath.
+  // The Site identity is restored when it leaves the realm (restoreTransformedSiteCard).
   // The permanent still provides affinity threshold but no mana (handled via THRESHOLD_GRANT_BY_NAME).
   transformSite: (x: number, y: number) =>
     set((state) => {
@@ -424,7 +428,9 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       const boardNext = { ...state.board, sites } as GameState["board"];
 
       // Place the site card as a permanent (minion) on the same tile
-      const minionCard = prepareCardForSeat(site.card, owner);
+      const minionCard = toTransformedSiteMinionCard(
+        prepareCardForSeat(site.card, owner),
+      );
       const permanentsNext = { ...state.permanents };
       const arr = [...(permanentsNext[key] || [])];
 
@@ -474,11 +480,13 @@ export const createBoardSlice: StateCreator<GameState, [], [], BoardSlice> = (
       // Send patch in online mode
       const tr = get().transport;
       if (tr) {
-        // Explicitly set deleted site to null for proper sync
-        const sitesPatch: Record<string, unknown> = { [key]: null };
+        // Only the transformed cell: null the deleted site and send that tile's
+        // permanents — full maps would clobber concurrent changes on other tiles
         const patch: ServerPatchT = {
-          board: { ...boardNext, sites: sitesPatch as typeof boardNext.sites },
-          permanents: permanentsNext,
+          board: {
+            sites: { [key]: null },
+          } as unknown as ServerPatchT["board"],
+          permanents: { [key]: arr },
         };
         get().trySendPatch(patch);
 

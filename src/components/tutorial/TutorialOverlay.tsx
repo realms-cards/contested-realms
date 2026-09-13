@@ -20,6 +20,11 @@ interface TutorialOverlayProps {
   onSkip: () => void;
   hint: string | null;
   onDismissHint: () => void;
+  /**
+   * The life counters are shown on the left edge. On landscape phones the
+   * panel shifts right so it does not cover them.
+   */
+  avoidLeftHud?: boolean;
 }
 
 export function TutorialOverlay({
@@ -32,6 +37,7 @@ export function TutorialOverlay({
   onSkip,
   hint,
   onDismissHint,
+  avoidLeftHud = false,
 }: TutorialOverlayProps) {
   const [visible, setVisible] = useState(false);
 
@@ -85,30 +91,16 @@ export function TutorialOverlay({
 
   return (
     <>
-      {/* Progress bar */}
-      <div className="fixed top-0 left-0 right-0 z-[60] h-1 bg-slate-800/80">
-        <div
-          className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all duration-500"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
+      {/*
+       * Progress, step counter and Skip live inside the panel header below.
+       * They used to be fixed at the very top of the screen, which is covered
+       * by the site header (the lesson renders inside the AppShell column).
+       */}
 
-      {/* Skip button — positioned below nav bar to avoid UserBadge overlap */}
-      <button
-        onClick={onSkip}
-        className="fixed top-3 right-16 z-[61] rounded bg-slate-800/80 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
-      >
-        Skip Lesson
-      </button>
-
-      {/* Step counter */}
-      <div className="fixed top-3 left-3 z-[61] text-xs text-slate-400">
-        Step {stepIndex + 1} / {stepCount}
-      </div>
-
-      {/* Hint toast */}
+      {/* Hint toast — just below the site header; right-aligned on phones so
+          it does not land on the narration panel */}
       {hint && (
-        <div className="fixed top-12 left-1/2 -translate-x-1/2 z-[62] max-w-sm">
+        <div className="fixed top-[calc(var(--rc-nav-h,0px)+0.5rem)] left-1/2 -translate-x-1/2 z-[62] w-max max-w-[min(24rem,calc(100vw-1.5rem))] max-lg:landscape:left-auto max-lg:landscape:right-[max(0.75rem,env(safe-area-inset-right))] max-lg:landscape:translate-x-0">
           <div className="bg-amber-600/90 text-white rounded-lg px-4 py-3 shadow-lg text-sm flex items-start gap-3">
             <span className="shrink-0 text-lg">💡</span>
             <div className="flex-1">
@@ -164,31 +156,59 @@ export function TutorialOverlay({
         </div>
       )}
 
-      {/* Main narration panel — positioned top-left to avoid obstructing the hand */}
+      {/*
+       * Main narration panel.
+       * - Desktop and landscape phones: top-left, just below the site header,
+       *   clear of the hand at the bottom. On landscape phones it also steps
+       *   right of the life counters when they are visible.
+       * - Portrait phones: the board sits mid-screen and the HUD sits above
+       *   it, so the panel docks full-width above the hand instead.
+       * Slightly translucent with a stronger blur so the board stays readable
+       * behind it.
+       */}
       <div
-        className={`fixed top-8 left-3 z-[60] w-80 max-w-[calc(100vw-1.5rem)] transition-all duration-300 ${
-          visible ? "translate-x-0 opacity-100" : "-translate-x-4 opacity-0"
-        }`}
+        className={`fixed z-[60] w-80 max-w-[calc(100vw-1.5rem)] transition-all duration-300 top-[calc(var(--rc-nav-h,0px)+0.5rem)] left-[max(0.75rem,env(safe-area-inset-left))] max-lg:portrait:top-auto max-lg:portrait:bottom-[calc(env(safe-area-inset-bottom,0px)+4.5rem)] max-lg:portrait:left-3 max-lg:portrait:right-3 max-lg:portrait:w-auto max-lg:portrait:max-w-none ${
+          avoidLeftHud
+            ? "max-lg:landscape:left-[calc(max(0.75rem,env(safe-area-inset-left))+3.75rem)]"
+            : ""
+        } ${visible ? "translate-x-0 opacity-100" : "-translate-x-4 opacity-0"}`}
       >
-        <div className="rounded-xl bg-slate-900/95 ring-1 ring-slate-700/80 shadow-2xl backdrop-blur-sm max-h-[60vh] flex flex-col">
-          {/* Title */}
-          {step.title && (
-            <div className="border-b border-slate-700/50 px-4 py-2.5 shrink-0">
-              <h3 className="text-sm font-semibold text-white">
-                {step.title}
-              </h3>
+        <div className="flex max-h-[60vh] flex-col overflow-hidden rounded-xl bg-slate-900/80 shadow-2xl ring-1 ring-slate-600/60 backdrop-blur-md max-lg:landscape:max-h-[calc(100dvh-var(--rc-nav-h,0px)-4.5rem)] max-lg:portrait:max-h-[45dvh]">
+          {/* Progress */}
+          <div className="h-1 shrink-0 bg-slate-800/70">
+            <div
+              className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all duration-500"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+
+          {/* Title row with step counter and skip */}
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-700/50 px-4 py-2 max-lg:px-3">
+            <h3 className="min-w-0 pt-0.5 text-sm font-semibold text-white">
+              {step.title ?? ""}
+            </h3>
+            <div className="flex shrink-0 items-center gap-1 text-xs">
+              <span className="tabular-nums text-slate-400">
+                Step {stepIndex + 1} / {stepCount}
+              </span>
+              <button
+                onClick={onSkip}
+                className="rounded px-2 py-1 text-slate-400 transition-colors hover:bg-slate-700/60 hover:text-white"
+              >
+                Skip Lesson
+              </button>
             </div>
-          )}
+          </div>
 
           {/* Body text — scrollable */}
           {step.text && (
-            <div className="px-4 py-3 overflow-y-auto">
+            <div className="overflow-y-auto px-4 py-3 max-lg:px-3 max-lg:py-2">
               <TutorialText text={step.text} />
             </div>
           )}
 
           {/* Action bar */}
-          <div className="flex items-center justify-between border-t border-slate-700/50 px-4 py-2.5 shrink-0">
+          <div className="flex items-center justify-between border-t border-slate-700/50 px-4 py-2.5 shrink-0 max-lg:px-3 max-lg:py-2">
             <div className="flex items-center gap-2">
               <StepTypeIndicator type={step.type} />
               {canGoBack && (

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { createGameStore } from "@/lib/game/store";
 import type { PermanentItem } from "@/lib/game/store";
+import type { SiteTile } from "@/lib/game/store/types";
+import { normalizePermanentItem } from "@/lib/game/store/utils/permanentHelpers";
 
 describe("permanentState slices", () => {
   it("setTapPermanent toggles tapped state", () => {
@@ -203,5 +205,122 @@ describe("permanentState slices", () => {
     // Token should be in banished
     expect(state.zones.p1.banished).toHaveLength(1);
     expect(state.zones.p1.banished[0].name).toBe("Damage Token");
+  });
+});
+
+describe("transformed sites (Island Leviathan, Horns of Behemoth)", () => {
+  const emptyZones = () => ({
+    hand: [],
+    spellbook: [],
+    atlas: [],
+    graveyard: [],
+    banished: [],
+    collection: [],
+    battlefield: [],
+  });
+
+  it("transformSite places a real Minion so attach and copy effects see it", () => {
+    const store = createGameStore();
+    store.setState({
+      board: {
+        size: { w: 5, h: 4 },
+        sites: {
+          "2,3": {
+            owner: 1,
+            tapped: false,
+            card: {
+              cardId: 9,
+              name: "Island Leviathan",
+              type: "Site",
+              subTypes: "",
+              thresholds: { water: 1 },
+              instanceId: "leviathan-1",
+            },
+          } as SiteTile,
+        },
+      },
+      permanents: {},
+    });
+
+    store.getState().transformSite(2, 3);
+
+    const state = store.getState();
+    expect(state.board.sites["2,3"]).toBeUndefined();
+    const stack = state.permanents["2,3"];
+    expect(stack).toHaveLength(2);
+    expect(stack[0].card.type).toBe("Token");
+    expect(stack[1].card).toMatchObject({
+      name: "Island Leviathan",
+      type: "Minion",
+      subTypes: "Monster",
+      attack: 8,
+      defence: 8,
+    });
+    // No mana cost: the transform must not be charged as a summon
+    expect(stack[1].card.cost ?? null).toBeNull();
+  });
+
+  it("movePermanentToZone sends a transformed site to the cemetery as its Site card", () => {
+    const store = createGameStore();
+    store.setState({
+      zones: { p1: emptyZones(), p2: emptyZones() },
+      permanents: {
+        "2,0": [
+          {
+            owner: 2,
+            card: {
+              cardId: 10,
+              name: "Horns of Behemoth",
+              type: "Minion",
+              subTypes: "Demon",
+              attack: 6,
+              defence: 6,
+              instanceId: "horns-1",
+            },
+            instanceId: "horns-1",
+            version: 0,
+          } as PermanentItem,
+        ],
+      },
+      board: { size: { w: 5, h: 4 }, sites: {} },
+    });
+
+    store.getState().movePermanentToZone("2,0", 0, "graveyard");
+
+    const graveyard = store.getState().zones.p2.graveyard;
+    expect(graveyard).toHaveLength(1);
+    expect(graveyard[0]).toMatchObject({
+      name: "Horns of Behemoth",
+      type: "Site",
+      subTypes: "",
+    });
+  });
+
+  it("normalizePermanentItem upgrades legacy Site-typed transformed permanents only", () => {
+    const legacy = normalizePermanentItem({
+      owner: 1,
+      card: {
+        cardId: 9,
+        name: "Island Leviathan",
+        type: "Site",
+        instanceId: "leviathan-1",
+      },
+      instanceId: "leviathan-1",
+      version: 0,
+    } as PermanentItem);
+    expect(legacy?.card).toMatchObject({
+      type: "Minion",
+      subTypes: "Monster",
+      attack: 8,
+      defence: 8,
+    });
+
+    const otherSite = normalizePermanentItem({
+      owner: 1,
+      card: { cardId: 11, name: "Spire", type: "Site", instanceId: "spire-1" },
+      instanceId: "spire-1",
+      version: 0,
+    } as PermanentItem);
+    expect(otherSite?.card.type).toBe("Site");
   });
 });

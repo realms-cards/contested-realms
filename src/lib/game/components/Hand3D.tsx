@@ -832,6 +832,8 @@ export default function Hand3D({
 
     // Check sort direction for site positioning
     const sitesFirst = graphicsSettings.handSortOrder !== "spellsFirst";
+    // Depth gap per stacking rank for depth-tested card backs (see backsDepth)
+    const backsDepthStep = 0.004;
 
     return new Array(n).fill(0).map((_, i) => {
       // Map sorted index back to original hand index
@@ -891,18 +893,36 @@ export default function Hand3D({
       const siteCollapsedLift = isSite
         ? (CARD_LONG - CARD_SHORT) * 0.5 * (1 - revealAmount)
         : 0;
+
+      // Card backs (opponent hand, spectators without hand access) are depth
+      // tested, so every card needs its own depth. Stacking by distance from
+      // the centre alone gave the two middle cards of an even hand the same
+      // depth; their overlapping faces were coplanar and z-fought, which showed
+      // as flicker where atlas and spell backs meet in a 3 + 3 hand. Centre
+      // cards stay on top, the tie breaks toward the spell side (spells over
+      // sites, like the face-up hand), and the step leaves ~10 depth-buffer
+      // steps even at max zoom. Upright backs stack along z, flat backs along y.
+      const half = (n - 1) / 2;
+      const onSpellSide = sitesFirst ? i > half : i < half;
+      const backsDepth = showCardBacks
+        ? (n - Math.abs(i - half) + (onSpellSide ? 0.5 : 0)) * backsDepthStep
+        : 0;
+
       const y =
         arcY +
         liftFromFocus +
         CARD_LONG * 0.08 * hoverWeight +
-        siteCollapsedLift;
+        siteCollapsedLift +
+        (flatCards ? backsDepth : 0);
 
       // Z position: hovered card on top, stacking down from it on both sides
       // When a card is hovered, it's on top (highest Z)
       // Cards further from the hovered card are lower in the stack
       const currentHoverIndex = hoverLerp >= 0 ? Math.round(hoverLerp) : -1;
       let stackZ: number;
-      if (currentHoverIndex >= 0) {
+      if (showCardBacks && !flatCards) {
+        stackZ = backsDepth;
+      } else if (currentHoverIndex >= 0) {
         // Distance from hovered card determines depth
         const distFromHover = Math.abs(i - currentHoverIndex);
         // Hovered card at max Z, others decrease based on distance
@@ -939,6 +959,8 @@ export default function Hand3D({
     hand,
     selected,
     owner,
+    showCardBacks,
+    flatCards,
     focusLerp,
     hoverLerp,
     graphicsSettings.handSortOrder,

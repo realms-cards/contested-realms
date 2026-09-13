@@ -21,7 +21,10 @@ import {
   seatFromOwner,
   toCellKey,
 } from "../utils/boardHelpers";
-import { prepareCardForSeat } from "../utils/cardHelpers";
+import {
+  prepareCardForSeat,
+  restoreTransformedSiteCard,
+} from "../utils/cardHelpers";
 import { newPermanentInstanceId } from "../utils/idHelpers";
 import {
   createPermanentDeltaPatch,
@@ -525,7 +528,11 @@ export const createPermanentMovementSlice: StateCreator<
         collection: [...state.zones[owner].collection],
         banished: [...(state.zones[owner].banished || [])],
       };
-      const movedCard = prepareCardForSeat(item.card, owner);
+      // A transformed site (Island Leviathan, Horns of Behemoth) leaves the realm as its Site card
+      const movedCard = prepareCardForSeat(
+        restoreTransformedSiteCard(item.card),
+        owner,
+      );
       const isToken = String(item.card?.type || "")
         .toLowerCase()
         .includes("token");

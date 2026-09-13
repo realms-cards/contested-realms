@@ -8,6 +8,7 @@ import {
   getGraphicsSettings,
 } from "@/hooks/useGraphicsSettings";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
+import { isTransformableSiteName } from "@/lib/game/store/utils/cardHelpers";
 import { TOKEN_BY_KEY, tokenTextureUrl } from "@/lib/game/tokens";
 
 const SITE_SIZE_MULTIPLIER = 1.5;
@@ -141,7 +142,10 @@ export default function CardPreview({
   const slug = card?.slug ?? "";
 
   // Check if this is a site or a token that should be displayed like a site (e.g., Rubble)
-  const isRegularSite = (card?.type || "").toLowerCase().includes("site");
+  // Transformed sites (Island Leviathan, Horns of Behemoth) are minions but keep landscape art
+  const isRegularSite =
+    (card?.type || "").toLowerCase().includes("site") ||
+    isTransformableSiteName(card?.name);
   const isToken = slug.startsWith("token:");
   let isSiteReplacementToken = false;
 

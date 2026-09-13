@@ -1,5 +1,8 @@
 import type { CellKey, Permanents, PermanentItem } from "../types";
-import { ensureCardInstanceId } from "./cardHelpers";
+import {
+  ensureCardInstanceId,
+  toTransformedSiteMinionCard,
+} from "./cardHelpers";
 import { newPermanentInstanceId } from "./idHelpers";
 
 export const randomTilt = (): number => Math.random() * 0.1 - 0.05;
@@ -244,8 +247,12 @@ export function normalizePermanentItem(
     );
     return null;
   }
-  const card = ensureCardInstanceId(item.card);
-  if (!card) return null; // Card normalization failed
+  const ensuredCard = ensureCardInstanceId(item.card);
+  if (!ensuredCard) return null; // Card normalization failed
+  // Legacy transformed sites were stored as type "Site"; upgrade them to their minion form
+  const card = (ensuredCard.type || "").toLowerCase().includes("site")
+    ? toTransformedSiteMinionCard(ensuredCard)
+    : ensuredCard;
   let instanceId = item.instanceId;
   if (!instanceId || instanceId.length === 0) {
     instanceId = card.instanceId ?? newPermanentInstanceId();

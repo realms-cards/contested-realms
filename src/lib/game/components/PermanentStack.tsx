@@ -39,6 +39,7 @@ import type {
   PlayerKey,
 } from "@/lib/game/store/types";
 import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
+import { isTransformableSiteName } from "@/lib/game/store/utils/cardHelpers";
 import {
   buildProjectileTarget,
   isMagicCasterCandidate,
@@ -543,8 +544,10 @@ export function PermanentStack({
         const tokenName = (p.card.name || "").toLowerCase();
         const tokenDef = isToken ? TOKEN_BY_NAME[tokenName] : undefined;
         const tokenSiteReplace = !!tokenDef?.siteReplacement;
-        // Transformed sites (e.g. Island Leviathan, Horns of Behemoth) keep landscape orientation
         const isSiteCard = cardType.includes("site") && !isToken;
+        // Transformed sites (Island Leviathan, Horns of Behemoth) are minions but keep landscape orientation
+        const isLandscapeArt =
+          isSiteCard || (!isToken && isTransformableSiteName(p.card.name));
         // Silenced tokens use the Silence spell card art
         const isSilencedToken = isToken && tokenName === "silenced";
         // Disabled tokens use the Disabled token texture
@@ -553,7 +556,7 @@ export function PermanentStack({
         const zBase = tokenSiteReplace ? 0 : getPermanentOwnerBaseZ(owner);
         const rotZ =
           (owner === 1 ? 0 : Math.PI) +
-          (tokenSiteReplace || isSiteCard ? -Math.PI / 2 : 0) +
+          (tokenSiteReplace || isLandscapeArt ? -Math.PI / 2 : 0) +
           (p.tapped ? -Math.PI / 2 : 0) +
           (p.tilt || 0);
         const baseOffX = p.offset?.[0] ?? 0;
