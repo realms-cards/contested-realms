@@ -39,21 +39,23 @@ export default function RestoreUiButton({
   }
 
   return (
-    <div className="fixed top-2 left-2 z-50 flex items-center gap-1">
+    <div className="fixed top-[max(0.5rem,env(safe-area-inset-top))] left-[max(0.5rem,env(safe-area-inset-left))] z-50 flex items-center gap-1">
       <button
-        className="p-1 transition-all hover:scale-110"
+        className="p-2.5 transition-all hover:scale-110"
         onClick={() => setUiHidden(false)}
         title="Show UI (U)"
+        aria-label="Show UI"
       >
-        <Eye className={`w-3 h-3 ${iconClass}`} />
+        <Eye className={`w-4 h-4 ${iconClass}`} />
       </button>
       {canEndTurn && (
         <button
-          className="p-1 transition-all hover:scale-110"
+          className="p-2.5 transition-all hover:scale-110"
           onClick={() => requestEndTurn()}
           title="End Turn (Enter)"
+          aria-label="End Turn"
         >
-          <CornerDownLeft className={`w-3 h-3 ${iconClass}`} />
+          <CornerDownLeft className={`w-4 h-4 ${iconClass}`} />
         </button>
       )}
     </div>

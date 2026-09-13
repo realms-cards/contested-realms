@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, X } from "lucide-react";
+import { Eye, Search, X } from "lucide-react";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import CardPreview from "@/components/game/CardPreview";
@@ -137,7 +137,7 @@ export default function CardSearchDialog({
     >
       <div
         ref={dialogRef}
-        className="bg-zinc-900/95 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-2xl p-6 w-[420px] max-h-[80vh] text-white flex flex-col"
+        className="bg-zinc-900/95 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-2xl p-4 sm:p-6 w-[min(95vw,420px)] max-h-[85vh] text-white flex flex-col"
         onContextMenu={(e) => e.preventDefault()}
       >
         <div className="flex items-center justify-between mb-4">
@@ -292,6 +292,28 @@ export default function CardSearchDialog({
                         </div>
                       )}
                     </div>
+                    {isMobile && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          // Touch has no hover, and tapping the row draws the
+                          // card, so give phones an explicit preview button.
+                          e.stopPropagation();
+                          if (card.slug) {
+                            showCardPreview({
+                              slug: card.slug,
+                              name: card.name,
+                              type: card.type,
+                            });
+                          }
+                        }}
+                        className="flex-shrink-0 text-xs bg-white/10 hover:bg-white/20 rounded px-2 py-1.5 transition-colors"
+                        aria-label={`Preview ${card.name}`}
+                        title="Preview"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

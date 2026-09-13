@@ -179,7 +179,7 @@ function LifeCounter({
               onContextMenu={(e) => e.preventDefault()}
             >
               <button
-                className="w-4 h-4 flex items-center justify-center rounded-rc-sm bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 transition-colors hover:text-rc-accent-ring hover:ring-rc-accent disabled:opacity-30 text-[8px] font-bold"
+                className="w-6 h-6 flex items-center justify-center rounded-rc-sm bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 transition-colors hover:text-rc-accent-ring hover:ring-rc-accent disabled:opacity-30 text-[10px] font-bold"
                 onClick={() => addLife(player, +1)}
                 disabled={dragFromHand || !canIncrease || !canModify}
                 onContextMenu={(e) => e.preventDefault()}
@@ -187,7 +187,7 @@ function LifeCounter({
                 +
               </button>
               <button
-                className="w-4 h-4 flex items-center justify-center rounded-rc-sm bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 transition-colors hover:text-rc-accent-ring hover:ring-rc-accent disabled:opacity-30 text-[8px] font-bold"
+                className="w-6 h-6 flex items-center justify-center rounded-rc-sm bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 transition-colors hover:text-rc-accent-ring hover:ring-rc-accent disabled:opacity-30 text-[10px] font-bold"
                 onClick={() => {
                   if (lifeState === "dd") {
                     setShowDeathConfirm(true);
@@ -438,7 +438,14 @@ export default function OnlineLifeCounters({
 
   return (
     <div
-      className={`absolute ${leftPosition} top-1/2 -translate-y-1/2 z-10 flex flex-col ${isMobileScreen ? "gap-1" : "gap-4"} ${
+      className={`absolute ${leftPosition} top-1/2 -translate-y-1/2 z-10 flex flex-col ${
+        isMobileScreen
+          ? // Portrait phones: the board only spans the middle of the screen,
+            // so park the counters in the free space above it instead of on
+            // top of the outer columns.
+            "gap-1 portrait:top-[calc(env(safe-area-inset-top,0px)+3.5rem)] portrait:translate-y-0"
+          : "gap-4"
+      } ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
       } text-rc-fg select-none`}
       onContextMenu={(e) => e.preventDefault()}

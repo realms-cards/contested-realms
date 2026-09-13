@@ -228,7 +228,7 @@ function ManaRow({
           <button
             type="button"
             onClick={onDecrement}
-            className={`${compact ? "w-3 h-3 text-[7px]" : "w-4 h-4 text-[10px]"} flex items-center justify-center rounded-full bg-rose-600/80 hover:bg-rose-500 text-white font-bold transition-colors`}
+            className={`${compact ? "w-5 h-5 text-[9px]" : "w-4 h-4 text-[10px]"} flex items-center justify-center rounded-full bg-rose-600/80 hover:bg-rose-500 text-white font-bold transition-colors`}
             title="Decrease mana"
           >
             −
@@ -236,7 +236,7 @@ function ManaRow({
           <button
             type="button"
             onClick={onIncrement}
-            className={`${compact ? "w-3 h-3 text-[7px]" : "w-4 h-4 text-[10px]"} flex items-center justify-center rounded-full bg-emerald-600/80 hover:bg-emerald-500 text-white font-bold transition-colors`}
+            className={`${compact ? "w-5 h-5 text-[9px]" : "w-4 h-4 text-[10px]"} flex items-center justify-center rounded-full bg-emerald-600/80 hover:bg-emerald-500 text-white font-bold transition-colors`}
             title="Increase mana"
           >
             +
@@ -451,7 +451,12 @@ export default function PlayerResourcePanels({
 
   return (
     <div
-      className={`absolute ${isMobileScreen ? "right-0.5" : "right-3"} top-1/2 -translate-y-1/2 z-10 flex flex-col ${isMobileScreen ? "gap-1" : "gap-6"} ${
+      className={`absolute ${isMobileScreen ? "right-[max(0.125rem,env(safe-area-inset-right))]" : "right-3"} top-1/2 -translate-y-1/2 z-10 flex flex-col ${
+        isMobileScreen
+          ? // Portrait phones: move above the board (see OnlineLifeCounters).
+            "gap-1 portrait:top-[calc(env(safe-area-inset-top,0px)+3.5rem)] portrait:translate-y-0"
+          : "gap-6"
+      } ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
       } text-white select-none`}
     >

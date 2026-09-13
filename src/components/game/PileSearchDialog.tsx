@@ -171,6 +171,16 @@ export default function PileSearchDialog({
                   onMouseLeave={() => {
                     hideCardPreview();
                   }}
+                  onClick={() => {
+                    // Touch has no hover: tapping the row previews the card.
+                    if (card.slug) {
+                      showCardPreview({
+                        slug: card.slug,
+                        name: card.name,
+                        type: card.type || null,
+                      });
+                    }
+                  }}
                 >
                   {/* Card thumbnail */}
                   <div className="flex-shrink-0 w-12 h-[67px] rounded overflow-hidden bg-zinc-700/50">

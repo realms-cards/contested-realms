@@ -34,13 +34,13 @@ export default function CpuAbilityChoices() {
   const [key,setKey] = useState("");
   const [selectionSession,setSelectionSession] = useState(0);
   if (!actorKey || matchEnded) return null;
-  if (triggers.length) return <div className="absolute bottom-24 left-1/2 z-50 w-[min(92vw,38rem)] -translate-x-1/2 rounded-xl border border-amber-200/25 bg-slate-950/95 p-3 text-white pointer-events-auto">
+  if (triggers.length) return <div className="absolute bottom-14 lg:bottom-24 left-1/2 max-h-[60vh] overflow-y-auto z-50 w-[min(92vw,38rem)] -translate-x-1/2 rounded-xl border border-amber-200/25 bg-slate-950/95 p-3 text-white pointer-events-auto">
     <p className="font-fantaisie text-lg text-amber-100">Choose your next trigger to resolve</p>
     {triggers.map(option => <button key={option.id} onClick={() => chooseCpuTrigger(option.id)} className="mt-2 block w-full rounded bg-indigo-700 p-2 text-left text-sm">{option.label}</button>)}
   </div>;
   if (!choices.length) return null;
   const selected = choices.find(choice => choice.key === key);
-  return <div className="absolute bottom-24 left-1/2 z-40 w-[min(92vw,38rem)] -translate-x-1/2 rounded-xl border border-amber-200/25 bg-slate-950/95 p-3 text-white pointer-events-auto">
+  return <div className="absolute bottom-14 lg:bottom-24 left-1/2 max-h-[60vh] overflow-y-auto z-40 w-[min(92vw,38rem)] -translate-x-1/2 rounded-xl border border-amber-200/25 bg-slate-950/95 p-3 text-white pointer-events-auto">
     <label htmlFor="cpu-ability" className="font-fantaisie text-lg text-amber-100">Activated abilities</label>
     <CpuFieldChoices key={selectionSession} manual id="cpu-ability" request={`${matchId}:ability:${turn}:${currentPlayer}`} choices={choices} value={selected?.key || ""} onChange={setKey} />
     <button disabled={!selected} onClick={() => { if (selected) activateCpuAbility(selected.key); setKey(""); setSelectionSession(value => value+1); }} className="rounded bg-indigo-600 px-3 py-2 text-sm disabled:opacity-40">Pay costs and resolve</button>

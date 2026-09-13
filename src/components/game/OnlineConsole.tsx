@@ -352,7 +352,7 @@ export default function OnlineConsole({
       case "top-left":
         return "left-3 top-2";
       default:
-        return "left-3 bottom-2";
+        return "left-[max(0.75rem,env(safe-area-inset-left))] bottom-[max(0.5rem,env(safe-area-inset-bottom))]";
     }
   })();
 
@@ -374,7 +374,7 @@ export default function OnlineConsole({
       {/* Main console UI - hidden when toastOnly */}
       {!toastOnly && (
         <div
-          className={`bg-[rgba(9,13,25,0.82)] backdrop-blur ring-1 ring-rc-line/18 shadow-rc-panel transition-all ${mobileExpanded ? "rounded-t-2xl max-h-[50vh] pb-4" : "rounded-rc-lg"}`}
+          className={`bg-[rgba(9,13,25,0.82)] backdrop-blur ring-1 ring-rc-line/18 shadow-rc-panel transition-all ${mobileExpanded ? "rounded-t-2xl max-h-[50vh] pb-[max(1rem,env(safe-area-inset-bottom))]" : "rounded-rc-lg"}`}
         >
           {/* Header - compact icon-only when collapsed, filter toggles when expanded */}
           <div

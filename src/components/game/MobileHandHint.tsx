@@ -44,7 +44,7 @@ export default function MobileHandHint() {
   }
 
   return (
-    <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 pointer-events-auto">
+    <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 pointer-events-auto max-w-[92vw]">
       <div className="bg-slate-900/95 border border-cyan-500/50 rounded-lg px-4 py-3 shadow-lg max-w-xs text-center">
         <p className="text-cyan-200 text-sm font-medium mb-1">
           📱 Touch Controls

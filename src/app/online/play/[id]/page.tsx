@@ -135,6 +135,10 @@ import {
   detectHarbingerSeats,
   hasAnyHarbinger,
 } from "@/lib/game/avatarAbilities";
+import {
+  computeTopdownFitDistance,
+  phoneHudInsets,
+} from "@/lib/game/cameraFit";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { getStoredCardPreviewsEnabled } from "@/lib/game/store/uiState";
@@ -143,6 +147,7 @@ import {
   MAT_PIXEL_H,
   BASE_TILE_SIZE,
   MAT_RATIO,
+  TILE_SIZE,
 } from "@/lib/game/constants";
 import { useCardHover } from "@/lib/game/hooks/useCardHover";
 import { Physics } from "@/lib/game/physics";
@@ -168,7 +173,7 @@ import { preloadBoardEnvironment } from "@/lib/game/components/BoardEnvironment"
 import { prefetchCardImages } from "@/lib/game/textures/prefetchCardImages";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { useSoatcPlayers } from "@/lib/hooks/useSoatcStatus";
-import { useSmallScreen } from "@/lib/hooks/useTouchDevice";
+import { useSmallScreen, useViewportSize } from "@/lib/hooks/useTouchDevice";
 import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 import { LegacySeatVideo3D } from "@/lib/rtc/SeatVideo3D";
 import { generateClientLeagueMatchResult } from "@/lib/soatc/clientResult";
@@ -2540,8 +2545,27 @@ export default function OnlineMatchPage() {
     matH = baseGridH;
     matW = baseGridH * MAT_RATIO;
   }
+  // Phones: frame the grid to the actual viewport (landscape is height-bound,
+  // portrait is width-bound) instead of the desktop "1.1 × mat" heuristic.
+  const viewport = useViewportSize();
+  const mobileFitDist = useMemo(() => {
+    if (!isMobile || viewport.width === 0) return null;
+    return computeTopdownFitDistance({
+      gridW: boardSize.w * TILE_SIZE,
+      gridH: boardSize.h * TILE_SIZE,
+      viewportW: viewport.width,
+      viewportH: viewport.height,
+      fovDeg: 50,
+      insets: phoneHudInsets(viewport.width, viewport.height),
+    });
+  }, [isMobile, viewport.width, viewport.height, boardSize.w, boardSize.h]);
   const minDist = Math.max(2, Math.min(matW, matH) * 0.25);
-  const maxDist = Math.max(14, Math.hypot(matW, matH) * 1.3);
+  // Portrait phones need a farther camera than the desktop clamp allows.
+  const maxDist = Math.max(
+    14,
+    Math.hypot(matW, matH) * 1.3,
+    (mobileFitDist ?? 0) * 1.15,
+  );
   // Extract store-derived dependencies for effects to satisfy ESLint
   const playersState = useGameStore((s) => s.players);
   const currentPlayerState = useGameStore((s) => s.currentPlayer);
@@ -2659,7 +2683,7 @@ export default function OnlineMatchPage() {
       if (mode === "topdown") {
         // Natural 2D view: almost top-down from the player's side, slightly tilted
         // Keep altitude high enough to see the whole mat, but offset slightly in Z
-        const dist = Math.max(matW, matH) * 1.1;
+        const dist = mobileFitDist ?? Math.max(matW, matH) * 1.1;
         const tilt = naturalTiltAngle;
         const sign = viewPlayerNumber === 2 ? -1 : 1;
         cam.position.set(
@@ -2680,7 +2704,7 @@ export default function OnlineMatchPage() {
       cam.lookAt(0, 0, 0);
       c.update();
     },
-    [viewPlayerNumber, matW, matH, naturalTiltAngle],
+    [viewPlayerNumber, matW, matH, naturalTiltAngle, mobileFitDist],
   );
 
   const resetCamera = useCallback(() => {
@@ -2694,14 +2718,21 @@ export default function OnlineMatchPage() {
 
   // When switching camera mode or when board extents change, rebase the camera
   useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      if (!controlsRef.current) {
-        setTimeout(() => gotoBaseline(cameraMode), 0);
-      } else {
+    // The canvas is loaded dynamically, so the controls may not exist yet on
+    // the first run. Keep polling per frame (bounded) until they do; otherwise
+    // the camera would stay at its initial position, which on phones is far
+    // from the fitted framing.
+    let frame = 0;
+    let tries = 0;
+    const attempt = () => {
+      if (controlsRef.current) {
         gotoBaseline(cameraMode);
+        return;
       }
-    });
-    return () => cancelAnimationFrame(id);
+      if (tries++ < 600) frame = requestAnimationFrame(attempt);
+    };
+    frame = requestAnimationFrame(attempt);
+    return () => cancelAnimationFrame(frame);
   }, [cameraMode, gotoBaseline, matW, matH, viewPlayerNumber]);
 
   useEffect(() => {
@@ -3242,7 +3273,7 @@ export default function OnlineMatchPage() {
       {/* Camera controls - left: reset icon + 2D/3D buttons (hidden when uiHidden) */}
       {!uiHidden && (
         <div
-          className={`absolute ${isMobile ? "left-0.5" : "top-2 left-2"} z-30`}
+          className={`absolute ${isMobile ? "left-[max(0.125rem,env(safe-area-inset-left))]" : "top-2 left-2"} z-30`}
           style={
             isMobile
               ? { top: "max(0.125rem, env(safe-area-inset-top, 0.125rem))" }
@@ -3716,7 +3747,7 @@ export default function OnlineMatchPage() {
 
           {/* Toolbox and Collection buttons (bottom-right) */}
           {showToolbox && (
-            <div className="absolute bottom-3 right-3 z-20 flex items-end gap-2">
+            <div className="absolute bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-[max(0.75rem,env(safe-area-inset-right))] z-20 flex flex-wrap justify-end items-end gap-2 max-w-[60vw]">
               {opponentPlayerId?.startsWith("cpu_") && <AttackHereButton />}
               {!isSpectatorView && !matchEnded && !tournamentId && opponentPlayerId?.startsWith("cpu_") && match?.matchType === "constructed" && <GoldfishTestControls
                 paused={pausedGoldfishMatchId === matchId}

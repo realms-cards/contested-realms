@@ -157,8 +157,8 @@ export default function DefensePanel() {
   if (isIntercept && askIntercept) {
     const tnum = tileNumber ? `#${tileNumber}` : "";
     return (
-      <div className="fixed left-1/2 -translate-x-1/2 bottom-4 z-40 pointer-events-auto">
-        <div className="rounded-xl bg-black/70 backdrop-blur text-white ring-1 ring-white/10 px-4 py-3 w-[min(92vw,560px)]">
+      <div className="fixed left-1/2 -translate-x-1/2 bottom-14 lg:bottom-4 z-40 pointer-events-auto">
+        <div className="rounded-xl bg-black/70 backdrop-blur text-white ring-1 ring-white/10 px-4 py-3 w-[min(92vw,560px)] max-h-[60vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-1">
             <div className="text-sm font-semibold">Tile {tnum}</div>
           </div>
@@ -172,13 +172,13 @@ export default function DefensePanel() {
           </div>
           <div className="flex justify-end gap-2 mt-3">
             <button
-              className="text-xs rounded bg-white/15 hover:bg-white/25 px-3 py-1"
+              className="text-xs rounded bg-white/15 hover:bg-white/25 px-3 py-1 pointer-coarse:px-4 pointer-coarse:py-2"
               onClick={() => cancelCombat()}
             >
               No
             </button>
             <button
-              className="text-xs rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1"
+              className="text-xs rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1 pointer-coarse:px-4 pointer-coarse:py-2"
               onClick={() => setAskIntercept(false)}
             >
               Yes
@@ -190,8 +190,8 @@ export default function DefensePanel() {
   }
 
   return (
-    <div className="fixed left-1/2 -translate-x-1/2 bottom-4 z-40 pointer-events-auto">
-      <div className="rounded-xl bg-black/70 backdrop-blur text-white ring-1 ring-white/10 px-4 py-3 w-[min(92vw,560px)]">
+    <div className="fixed left-1/2 -translate-x-1/2 bottom-14 lg:bottom-4 z-40 pointer-events-auto">
+      <div className="rounded-xl bg-black/70 backdrop-blur text-white ring-1 ring-white/10 px-4 py-3 w-[min(92vw,560px)] max-h-[60vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-1">
           <div className="text-sm font-semibold">
             {isIntercept ? "Intercept" : "Defend"} Tile{" "}
@@ -232,7 +232,7 @@ export default function DefensePanel() {
               return (
                 <button
                   key={key}
-                  className={`text-xs rounded px-2 py-1 ring-1 ${
+                  className={`text-xs rounded px-2 py-1 pointer-coarse:py-2 ring-1 ${
                     active
                       ? "bg-emerald-600/90 ring-emerald-400"
                       : "bg-white/10 hover:bg-white/20 ring-white/20"
@@ -249,13 +249,13 @@ export default function DefensePanel() {
         )}
         <div className="flex justify-end gap-2">
           <button
-            className="text-xs rounded bg-white/15 hover:bg-white/25 px-3 py-1"
+            className="text-xs rounded bg-white/15 hover:bg-white/25 px-3 py-1 pointer-coarse:px-4 pointer-coarse:py-2"
             onClick={() => cancelCombat()}
           >
             Cancel
           </button>
           <button
-            className="text-xs rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1"
+            className="text-xs rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1 pointer-coarse:px-4 pointer-coarse:py-2"
             onClick={onDone}
           >
             {isIntercept && selected.size === 0 ? "Pass" : "Done"}

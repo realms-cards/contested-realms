@@ -43,7 +43,8 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
 
   const p2RollClass = colorBlindEnabled ? "text-rc-warning" : "text-rc-danger";
   const iconSize = isMobileScreen ? "w-3 h-3" : "w-4 h-4";
-  const btnPad = isMobileScreen ? "p-1" : "p-1.5";
+  // Keep a usable tap target on phones even though the icons shrink.
+  const btnPad = "p-1.5";
 
   return (
     <div

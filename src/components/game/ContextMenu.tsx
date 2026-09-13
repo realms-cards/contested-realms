@@ -121,7 +121,7 @@ function MenuBtn({
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className={`w-full text-left rounded ${className} px-3 py-1 text-sm disabled:opacity-40 disabled:cursor-not-allowed`}
+      className={`w-full text-left rounded ${className} px-3 py-1 pointer-coarse:py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed`}
     >
       {label}
     </button>
@@ -2080,7 +2080,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       : "Banish dead minion, become copy until next turn.";
                   return (
                     <button
-                      className={`w-full text-left rounded px-3 py-1 ${
+                      className={`w-full text-left rounded px-3 py-1 pointer-coarse:py-2 ${
                         canActivate
                           ? "bg-purple-600/30 hover:bg-purple-600/50"
                           : "bg-gray-600/20 text-white/40 cursor-not-allowed"
@@ -2125,7 +2125,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   if (!transform) return null;
                   return (
                     <button
-                      className="w-full text-left rounded bg-purple-600/30 hover:bg-purple-600/50 px-3 py-1"
+                      className="w-full text-left rounded bg-purple-600/30 hover:bg-purple-600/50 px-3 py-1 pointer-coarse:py-2"
                       title="Revert this copy back to Assimilator Snail"
                       onClick={() => {
                         revertAssimilatorSnailTransforms(transform.ownerSeat);
@@ -2224,7 +2224,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     buttons.push(
                       <button
                         key={`carry-pick-${target.index}`}
-                        className="w-full text-left rounded bg-green-600/30 hover:bg-green-600/50 px-3 py-1"
+                        className="w-full text-left rounded bg-green-600/30 hover:bg-green-600/50 px-3 py-1 pointer-coarse:py-2"
                         title={`Pick up ${target.name}`}
                         onClick={() => {
                           carryPickUp(t.at, t.index, target.index);
@@ -2267,7 +2267,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     buttons.push(
                       <button
                         key={`carry-pick-avatar-${target.seat}`}
-                        className="w-full text-left rounded bg-green-600/30 hover:bg-green-600/50 px-3 py-1"
+                        className="w-full text-left rounded bg-green-600/30 hover:bg-green-600/50 px-3 py-1 pointer-coarse:py-2"
                         title={`Pick up ${target.name}`}
                         onClick={() => {
                           carryPickUpAvatar(t.at, t.index, target.seat);
@@ -2284,7 +2284,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     buttons.push(
                       <button
                         key={`carry-drop-${c.instanceId}`}
-                        className="w-full text-left rounded bg-yellow-600/30 hover:bg-yellow-600/50 px-3 py-1"
+                        className="w-full text-left rounded bg-yellow-600/30 hover:bg-yellow-600/50 px-3 py-1 pointer-coarse:py-2"
                         title={`Drop ${c.name}`}
                         onClick={() => {
                           if (!carrierInstanceId) return;
@@ -2335,7 +2335,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     buttons.push(
                       <button
                         key={`carry-drop-avatar-${c.seat}`}
-                        className="w-full text-left rounded bg-yellow-600/30 hover:bg-yellow-600/50 px-3 py-1"
+                        className="w-full text-left rounded bg-yellow-600/30 hover:bg-yellow-600/50 px-3 py-1 pointer-coarse:py-2"
                         title={`Drop ${c.name}`}
                         onClick={() => {
                           if (!carrierInstanceId) return;
@@ -2826,7 +2826,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   return true;
                 })() && (
                   <button
-                    className={`w-full text-left rounded px-3 py-1 ${
+                    className={`w-full text-left rounded px-3 py-1 pointer-coarse:py-2 ${
                       (() => {
                         const arr = permanents[t.at] || [];
                         const attachedTokens = arr.filter(
@@ -3086,7 +3086,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 attachedTokens.length > 0 &&
                 (t.kind === "permanent" || t.kind === "avatar") && (
                   <div className="space-y-2">
-                    <div className="text-xs text-white/70 px-3 py-1">
+                    <div className="text-xs text-white/70 px-3 py-1 pointer-coarse:py-2">
                       Attached Items:
                     </div>
                     {attachedTokens.map((token) => {
@@ -3120,7 +3120,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           return (
                             <div
                               key={token.index}
-                              className="w-full text-left text-xs text-white/50 px-3 py-1"
+                              className="w-full text-left text-xs text-white/50 px-3 py-1 pointer-coarse:py-2"
                             >
                               {token.name} (opponent&apos;s)
                             </div>
@@ -3158,7 +3158,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           return (
                             <div key={token.index} className="space-y-1">
                               <button
-                                className={`w-full text-left rounded px-3 py-1 text-sm ${
+                                className={`w-full text-left rounded px-3 py-1 pointer-coarse:py-2 text-sm ${
                                   silverBulletDisabled
                                     ? "bg-gray-700/50 text-gray-500 cursor-not-allowed"
                                     : "bg-amber-900/30 hover:bg-amber-900/50"
@@ -3211,7 +3211,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                                 Use {token.name} ({rarityLabel})
                               </button>
                               <button
-                                className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 text-sm"
+                                className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 pointer-coarse:py-2 text-sm"
                                 onClick={() => {
                                   detachToken(token.tileKey, token.index);
                                   onClose();
@@ -3226,7 +3226,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         return (
                           <button
                             key={token.index}
-                            className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 text-sm"
+                            className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 pointer-coarse:py-2 text-sm"
                             onClick={() => {
                               detachToken(token.tileKey, token.index);
                               onClose();
@@ -3241,7 +3241,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           return (
                             <div
                               key={token.index}
-                              className="w-full text-left text-xs text-white/50 px-3 py-1"
+                              className="w-full text-left text-xs text-white/50 px-3 py-1 pointer-coarse:py-2"
                             >
                               {token.name} (opponent&apos;s)
                             </div>
@@ -3250,7 +3250,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         return (
                           <div key={token.index} className="space-y-1">
                             <button
-                              className="w-full text-left rounded bg-amber-900/20 hover:bg-amber-900/40 px-3 py-1 text-sm"
+                              className="w-full text-left rounded bg-amber-900/20 hover:bg-amber-900/40 px-3 py-1 pointer-coarse:py-2 text-sm"
                               onClick={() => {
                                 detachToken(token.tileKey, token.index);
                                 onClose();
@@ -3259,7 +3259,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                               Drop {token.name}
                             </button>
                             <button
-                              className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
+                              className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 pointer-coarse:py-2 text-sm"
                               onClick={() => {
                                 movePermanentToZone(
                                   token.tileKey,
@@ -3282,7 +3282,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           return (
                             <div
                               key={token.index}
-                              className="w-full text-left text-xs text-white/50 px-3 py-1"
+                              className="w-full text-left text-xs text-white/50 px-3 py-1 pointer-coarse:py-2"
                             >
                               {token.name} (opponent&apos;s)
                             </div>
@@ -3291,7 +3291,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         return (
                           <button
                             key={token.index}
-                            className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
+                            className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 pointer-coarse:py-2 text-sm"
                             onClick={() => {
                               const tokenInstanceId = token.card?.instanceId;
                               if (isStealth && tokenInstanceId) {
@@ -3352,7 +3352,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           return (
                             <div
                               key={token.index}
-                              className="w-full text-left text-xs text-white/50 px-3 py-1"
+                              className="w-full text-left text-xs text-white/50 px-3 py-1 pointer-coarse:py-2"
                             >
                               {token.name} (opponent&apos;s)
                             </div>
@@ -3361,7 +3361,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         return (
                           <button
                             key={token.index}
-                            className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 text-sm"
+                            className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 pointer-coarse:py-2 text-sm"
                             onClick={() => {
                               detachToken(token.tileKey, token.index);
                               onClose();
@@ -3398,13 +3398,13 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
                   return (
                     <div className="space-y-2">
-                      <div className="text-xs text-white/70 px-3 py-1">
+                      <div className="text-xs text-white/70 px-3 py-1 pointer-coarse:py-2">
                         Stolen Cards ({pithImpEntry.hand.length}):
                       </div>
                       {pithImpEntry.hand.map((card, cardIdx) => (
                         <button
                           key={cardIdx}
-                          className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 text-sm"
+                          className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 pointer-coarse:py-2 text-sm"
                           onClick={() => {
                             // Drop stolen card onto the board at Pith Imp's location
                             useGameStore

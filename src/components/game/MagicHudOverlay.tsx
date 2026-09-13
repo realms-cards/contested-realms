@@ -13,6 +13,7 @@ import {
   describeMagicMode,
   describeMagicRange,
 } from "@/lib/game/store/utils/magicTargeting";
+import { useSmallScreen } from "@/lib/hooks/useTouchDevice";
 
 export default function MagicHudOverlay() {
   const cpuMatch = useGameStore(s => s.opponentPlayerId?.startsWith("cpu_") === true);
@@ -23,6 +24,7 @@ export default function MagicHudOverlay() {
 }
 
 function TabletopMagicHudOverlay() {
+  const isMobileScreen = useSmallScreen();
   const pendingMagic = useGameStore((s) => s.pendingMagic);
   const board = useGameStore((s) => s.board);
   const permanents = useGameStore((s) => s.permanents);
@@ -294,8 +296,16 @@ function TabletopMagicHudOverlay() {
     })();
 
     return (
-      <div className="fixed inset-x-0 top-6 z-[100] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-lg md:text-xl flex items-center gap-2 select-none">
+      <div
+        className={`fixed inset-x-0 ${isMobileScreen ? "top-[calc(env(safe-area-inset-top,0px)+2.5rem)] px-3" : "top-6"} z-[100] pointer-events-none flex justify-center`}
+      >
+        <div
+          className={`pointer-events-auto bg-black/90 text-white ring-1 ring-white/20 shadow-lg flex items-center select-none ${
+            isMobileScreen
+              ? "px-3 py-2 rounded-2xl text-xs flex-wrap gap-1.5 max-w-[95vw]"
+              : "px-5 py-3 rounded-full text-lg md:text-xl gap-2"
+          }`}
+        >
           <span className="opacity-80">
             {tileNum ? `[T${tileNum}] ` : ""}
             <span className="font-fantaisie">{stepsText}</span>
@@ -499,8 +509,16 @@ function TabletopMagicHudOverlay() {
       }
     })();
     return (
-      <div className="fixed inset-x-0 top-24 z-[100] pointer-events-none flex justify-center px-4">
-        <div className="pointer-events-auto max-w-3xl w-full rounded-xl bg-black/85 text-white ring-1 ring-white/20 shadow-xl p-4">
+      <div
+        className={`fixed inset-x-0 ${isMobileScreen ? "top-[calc(env(safe-area-inset-top,0px)+5.5rem)] px-3" : "top-24 px-4"} z-[100] pointer-events-none flex justify-center`}
+      >
+        <div
+          className={`pointer-events-auto max-w-3xl w-full rounded-xl bg-black/85 text-white ring-1 ring-white/20 shadow-xl overflow-y-auto ${
+            isMobileScreen
+              ? "p-3 text-sm max-h-[calc(100dvh-9rem)]"
+              : "p-4 max-h-[70vh]"
+          }`}
+        >
           <div className="text-base md:text-lg mb-2">
             <span className="font-fantaisie">{cardName}</span>
             <span className="opacity-75">&nbsp;[T{tileNo}]</span>

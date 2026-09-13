@@ -45,7 +45,7 @@ export default function CpuMagicChoices() {
   };
   const eventLabel = pending.cpuEvent ? eventLabels[pending.cpuEvent.kind] : "";
   return (
-    <div className="absolute bottom-24 left-1/2 z-50 max-h-[65vh] w-[min(92vw,44rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-amber-200/25 bg-slate-950/95 p-4 text-white shadow-xl pointer-events-auto">
+    <div className="absolute bottom-14 lg:bottom-24 left-1/2 z-50 max-h-[60vh] w-[min(92vw,44rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-amber-200/25 bg-slate-950/95 p-4 text-white shadow-xl pointer-events-auto">
       <div className="font-fantaisie text-xl text-amber-100">{pending.spell.card.name}{eventLabel ? ` — ${eventLabel}` : ""}</div>
       {!pending.cpuEvent && !supportsSpell(pending.spell.card.name || "") ? (
         <div className="mt-3 space-y-3 text-sm">

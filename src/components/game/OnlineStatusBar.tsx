@@ -198,7 +198,7 @@ export default function OnlineStatusBar({
         {/* UI visibility toggle - surfaced on mobile for quick access */}
         {isMobileScreen && (
           <button
-            className={`rounded-full p-1 transition-colors ${
+            className={`rounded-full p-1.5 transition-colors ${
               uiHidden
                 ? "bg-rc-accent text-rc-accent-fg hover:bg-rc-accent-hover"
                 : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
@@ -397,7 +397,7 @@ export default function OnlineStatusBar({
 
             {/* Dropdown */}
             {moreOpen && (
-              <div className="absolute top-full right-0 mt-2 bg-[rgba(9,13,25,0.92)] backdrop-blur rounded-rc-lg ring-1 ring-rc-line/18 shadow-rc-panel p-2 min-w-[200px] flex flex-col gap-1 z-50">
+              <div className="absolute top-full right-0 mt-2 bg-[rgba(9,13,25,0.92)] backdrop-blur rounded-rc-lg ring-1 ring-rc-line/18 shadow-rc-panel p-2 min-w-[200px] max-h-[calc(100dvh-4rem)] overflow-y-auto flex flex-col gap-1 z-50">
                 {/* Playing as indicator */}
                 {myPlayerKey && !readOnly && (
                   <div className="px-3 py-1.5 text-xs font-rc-mono tracking-[0.06em] text-rc-fg-muted">

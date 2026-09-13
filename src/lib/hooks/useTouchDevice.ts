@@ -278,6 +278,62 @@ export function useSmallScreen(): boolean {
   return isSmall;
 }
 
+export interface ViewportSize {
+  width: number;
+  height: number;
+}
+
+const EMPTY_VIEWPORT: ViewportSize = { width: 0, height: 0 };
+
+/**
+ * Reactive viewport size for layout decisions that need real numbers (camera
+ * fitting), not just the small-screen boolean.
+ *
+ * Height-only changes smaller than 30% are ignored so the on-screen keyboard
+ * or a collapsing browser chrome bar does not count as a relayout; width
+ * changes and orientation flips always propagate.
+ *
+ * Starts as 0×0 to match SSR output; the real size arrives after mount.
+ */
+export function useViewportSize(): ViewportSize {
+  const [size, setSize] = useState<ViewportSize>(EMPTY_VIEWPORT);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let frame: number | null = null;
+    const measure = () => {
+      frame = null;
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      setSize((prev) => {
+        if (prev.width === width && prev.height === height) return prev;
+        const heightOnly = prev.width === width && prev.width > 0;
+        if (heightOnly) {
+          const delta = Math.abs(height - prev.height) / Math.max(1, prev.height);
+          if (delta < 0.3) return prev;
+        }
+        return { width, height };
+      });
+    };
+    const schedule = () => {
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(measure);
+    };
+
+    measure();
+    window.addEventListener("resize", schedule);
+    window.addEventListener("orientationchange", schedule);
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("orientationchange", schedule);
+    };
+  }, []);
+
+  return size;
+}
+
 /**
  * Combined hook for mobile-specific behavior
  * @returns { isTouchDevice, isSmallScreen, isMobile }

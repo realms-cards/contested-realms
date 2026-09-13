@@ -1016,8 +1016,10 @@ export default function CombatHudOverlay() {
 
   return (
     <>
-      {/* Top bar */}
-      <div className="fixed inset-x-0 top-6 z-[100] pointer-events-none flex justify-center">
+      {/* Top bar - on phones sit below the status bar pill (which itself sits below the safe area) */}
+      <div
+        className={`fixed inset-x-0 ${isMobileScreen ? "top-[calc(env(safe-area-inset-top,0px)+2.5rem)]" : "top-6"} z-[100] pointer-events-none flex justify-center`}
+      >
         {attackChoice && actorIsActive ? (
           <div className={barLg}>
             <span className="opacity-80">

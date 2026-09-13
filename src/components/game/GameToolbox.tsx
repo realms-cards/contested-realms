@@ -1228,7 +1228,7 @@ export default function GameToolbox({
         <div
           className={`border border-rc-line/18 bg-[rgba(9,13,25,0.82)] backdrop-blur shadow-rc-panel ${containerWidthClass} overflow-y-auto transition-all ${
             isMobileScreen
-              ? "fixed right-0 bottom-0 z-50 rounded-tl-2xl max-h-[70vh] pb-6"
+              ? "fixed right-0 bottom-0 z-50 rounded-tl-2xl max-h-[70vh] pb-[max(1.5rem,env(safe-area-inset-bottom))]"
               : "rounded-xl max-h-[85vh]"
           }`}
         >
