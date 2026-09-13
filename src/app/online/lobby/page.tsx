@@ -56,6 +56,8 @@ import type { MatchTimerConfig } from "@/lib/net/transport";
 // Map context TournamentInfo to protocol TournamentInfo
 // Seconds the pulsing "Joining" button counts down before entering the match.
 const AUTO_JOIN_SECONDS = 3;
+// How often the lobby list is re-requested while the page is open and visible.
+const LOBBY_LIST_REFRESH_MS = 30_000;
 
 function mapToProtocolTournament(tournament: {
   id: string;
@@ -462,6 +464,57 @@ function LobbyPageContent({
       }
     } catch {}
   }, [tournamentsEnabled, tournamentsFromApi, me?.id, router]);
+
+  // Keep the page fresh while it stays open. The server pushes `lobbiesUpdated`
+  // only from the leader instance and only when a lobby event happens, so
+  // time-based changes (stale/ended matches dropping out of the list) and any
+  // missed broadcast would otherwise leave the list stale until a reload.
+  // The context functions are recreated on every render, so they are read
+  // through a ref to keep the poll timer stable.
+  const listRefreshersRef = useRef({
+    requestLobbies,
+    requestPlayers,
+    refreshTournaments,
+    tournamentsEnabled,
+  });
+  useEffect(() => {
+    listRefreshersRef.current = {
+      requestLobbies,
+      requestPlayers,
+      refreshTournaments,
+      tournamentsEnabled,
+    };
+  }, [requestLobbies, requestPlayers, refreshTournaments, tournamentsEnabled]);
+  useEffect(() => {
+    if (!connected) return;
+    const isVisible = () => document.visibilityState === "visible";
+    const refreshLobbies = () => {
+      if (!isVisible()) return;
+      try {
+        listRefreshersRef.current.requestLobbies();
+      } catch {}
+    };
+    // On tab return, refresh everything the page shows, not just lobbies.
+    const onVisibilityChange = () => {
+      if (!isVisible()) return;
+      const current = listRefreshersRef.current;
+      try {
+        current.requestLobbies();
+      } catch {}
+      try {
+        current.requestPlayers();
+      } catch {}
+      if (current.tournamentsEnabled) {
+        void current.refreshTournaments().catch(() => {});
+      }
+    };
+    const id = window.setInterval(refreshLobbies, LOBBY_LIST_REFRESH_MS);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [connected]);
 
   // Tabs removed: we show all sections in the main view
   const [chatInput, setChatInput] = useState("");
