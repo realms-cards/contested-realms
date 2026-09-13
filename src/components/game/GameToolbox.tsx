@@ -1660,7 +1660,7 @@ export default function GameToolbox({
                   step={0.05}
                   value={cardScale}
                   onChange={(e) => setCardScale(parseFloat(e.target.value))}
-                  className="flex-1 h-1.5 rounded-lg border border-rc-line/12 bg-black/45 appearance-none cursor-pointer accent-rc-accent"
+                  className="rc-range flex-1"
                 />
                 <span className="w-8 text-right font-rc-mono text-[11px] tabular-nums text-rc-fg-strong">
                   {Math.round(cardScale * 100)}%

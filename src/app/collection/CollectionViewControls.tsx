@@ -53,7 +53,7 @@ export default function CollectionViewControls({
             value={zoom}
             onChange={(e) => onZoomChange(Number(e.target.value))}
             aria-label="Card size"
-            className="h-1.5 w-24 cursor-pointer appearance-none rounded-full bg-black/45 accent-rc-accent"
+            className="rc-range w-24"
           />
           <span className="rc-hint w-8 tabular-nums">{zoom}%</span>
         </div>

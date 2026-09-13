@@ -12,6 +12,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { OnlineContext } from "@/app/online/online-context";
 import AuthButton from "@/components/auth/AuthButton";
 import { registerUserBadge } from "@/components/auth/userBadgePresence";
@@ -857,8 +858,10 @@ export default function UserBadge({
           </div>
         </div>
       )}
-      {/* Settings overlay */}
-      {settingsOpen && (
+      {/* Settings overlay. Portaled to <body>: the nav header's backdrop blur
+          would otherwise confine this fixed overlay to the header. */}
+      {settingsOpen &&
+        createPortal(
         <div
           className="fixed inset-0 z-[80] flex items-center justify-center bg-[rgba(6,10,20,0.82)] p-4 backdrop-blur-[4px]"
           onMouseDown={(e) => {
@@ -868,7 +871,7 @@ export default function UserBadge({
           role="dialog"
         >
           <div
-            className="rc-panel thin-scrollbar relative max-h-[90vh] w-full max-w-xl overflow-y-auto p-5 shadow-[0_18px_40px_rgba(0,0,0,0.55),0_0_18px_rgba(243,207,106,0.2)]"
+            className="rc-panel thin-scrollbar relative max-h-[90vh] w-full max-w-xl overflow-y-auto bg-[rgb(9,13,25)] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.55),0_0_18px_rgba(243,207,106,0.2)]"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
@@ -1225,7 +1228,7 @@ export default function UserBadge({
                     onChange={(e) =>
                       setCardPreviewScale(Number(e.target.value) / 100)
                     }
-                    className="h-1.5 w-full cursor-pointer appearance-none rounded-full border border-rc-line/12 bg-black/45 accent-rc-accent"
+                    className="rc-range w-full"
                   />
                 </div>
                 {/* Hand Card Size */}
@@ -1247,7 +1250,7 @@ export default function UserBadge({
                     onChange={(e) =>
                       setHandCardScale(Number(e.target.value) / 100)
                     }
-                    className="h-1.5 w-full cursor-pointer appearance-none rounded-full border border-rc-line/12 bg-black/45 accent-rc-accent"
+                    className="rc-range w-full"
                   />
                 </div>
                 {/* Text Size */}
@@ -1269,7 +1272,7 @@ export default function UserBadge({
                     onChange={(e) =>
                       setUiTextScale(Number(e.target.value) / 100)
                     }
-                    className="h-1.5 w-full cursor-pointer appearance-none rounded-full border border-rc-line/12 bg-black/45 accent-rc-accent"
+                    className="rc-range w-full"
                   />
                 </div>
               </div>
@@ -1500,8 +1503,9 @@ export default function UserBadge({
               </div>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body,
+        )}
     </div>
   );
 }

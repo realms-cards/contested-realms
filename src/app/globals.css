@@ -781,6 +781,67 @@ body[data-colorblind="true"] *[class*="ring-rose-"] {
     transition: width 400ms ease;
   }
 
+  /* Range slider: slim track with a gold thumb centred on it. Browsers drop
+     the native thumb with appearance:none, so both parts are styled here. */
+  .rc-range {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 16px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .rc-range:focus-visible {
+    outline: none;
+  }
+  .rc-range::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 999px;
+    border: 1px solid rgba(236, 231, 215, 0.12);
+    background: rgba(0, 0, 0, 0.45);
+  }
+  .rc-range::-moz-range-track {
+    height: 6px;
+    border-radius: 999px;
+    border: 1px solid rgba(236, 231, 215, 0.12);
+    background: rgba(0, 0, 0, 0.45);
+  }
+  .rc-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    box-sizing: border-box;
+    width: 14px;
+    height: 14px;
+    /* (track content height 6px - thumb 14px) / 2 */
+    margin-top: -4px;
+    border-radius: 999px;
+    border: 1px solid rgba(58, 44, 8, 0.6);
+    background: linear-gradient(180deg, #e8bf5c, #d4a94a);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    transition: box-shadow 150ms ease;
+  }
+  .rc-range::-moz-range-thumb {
+    box-sizing: border-box;
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(58, 44, 8, 0.6);
+    background: linear-gradient(180deg, #e8bf5c, #d4a94a);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    transition: box-shadow 150ms ease;
+  }
+  .rc-range:hover::-webkit-slider-thumb,
+  .rc-range:focus-visible::-webkit-slider-thumb {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.5),
+      0 0 0 4px rgba(243, 207, 106, 0.22);
+  }
+  .rc-range:hover::-moz-range-thumb,
+  .rc-range:focus-visible::-moz-range-thumb {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.5),
+      0 0 0 4px rgba(243, 207, 106, 0.22);
+  }
+
   /* Data table */
   .rc-table {
     width: 100%;

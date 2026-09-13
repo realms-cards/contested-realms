@@ -413,7 +413,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
             value={zoomLevel}
             onChange={(e) => setZoomLevel(Number(e.target.value))}
             aria-label="Card size"
-            className="h-1.5 w-24 cursor-pointer appearance-none rounded-full bg-black/45 accent-rc-accent"
+            className="rc-range w-24"
           />
           <span className="rc-hint w-4 tabular-nums">{zoomLevel}</span>
         </div>
