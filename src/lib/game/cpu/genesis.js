@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Shared card semantics. */
+const { enterScope, leaveScope, realmUnits } = require('./evalScope');
+
 const DEFINITIONS = new Set(['Apprentice Wizard','Grandmaster Wizard','Land Surveyor','Deep-Sea Mermaids','Slumbering Giantess','Wraetannis Titan',
   'Clamor of Harpies','Brobdingnag Bullfrog','Arid Desert','Red Desert','Remote Desert','Shifting Sands','Holy Ground',
   'Humble Village','Rustic Village','Simple Village','Quagmire','Dark Tower','Gothic Tower','Lone Tower','Observatory','Autumn River','Spring River','Summer River','Undertow']);
@@ -7,11 +9,17 @@ function hasCpuGenesis(name) { return DEFINITIONS.has(name); }
 
 /** @param {import('./spellTypes').SpellState} state @returns {import('./spellTypes').SpellChoice[]} */
 function genesisChoices(state) {
-  const { unitsInRealm,inRange,isWater,bodyOfWater,unitStats,hasStealth,sameTarget,scoreOperations } = require('./spells');
+  enterScope();
+  try { return choicesFor(state); } finally { leaveScope(); }
+}
+
+/** @param {import('./spellTypes').SpellState} state @returns {import('./spellTypes').SpellChoice[]} */
+function choicesFor(state) {
+  const { inRange,isWater,bodyOfWater,unitStats,hasStealth,sameTarget,scoreOperations } = require('./spells');
   const pending = state.pendingMagic;
   if (pending?.cpuEvent?.kind !== 'genesis') return [];
   const {card,owner} = pending.spell, seat = owner === 1 ? 'p1' : 'p2', event = pending.cpuEvent;
-  const units = unitsInRealm(state), source = event.source && units.find(u => sameTarget(u.target,event.source));
+  const units = realmUnits(state), source = event.source && units.find(u => sameTarget(u.target,event.source));
   const siteSource = event.sourceSite && Object.entries(state.board.sites).find(([at,tile]) => tile.card && (event.sourceSite.instanceId ? tile.card.instanceId === event.sourceSite.instanceId : at === event.sourceSite.at && tile.card.name === event.sourceSite.name));
   const at = source?.at || siteSource?.[0] || pending.spell.at, region = source?.region || event.region;
   const visible = units.filter(u => u.region === region && (u.owner === seat || !hasStealth(state,u)));

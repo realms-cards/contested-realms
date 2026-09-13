@@ -16,6 +16,13 @@ class BotManager {
 
   registerBot(botId, botInstance) {
     this.activeBots.set(botId, botInstance);
+    // Worker-hosted bots report a dead worker thread; clean up like a failed/stopped bot.
+    if (botInstance && typeof botInstance.onUnexpectedExit === 'function') {
+      botInstance.onUnexpectedExit((reason) => {
+        if (this.activeBots.get(botId) !== botInstance) return;
+        this.stopAndRemoveBot(botId, reason || 'worker_exited');
+      });
+    }
   }
 
   getBot(botId) {

@@ -60,6 +60,19 @@ async function loadCardIdMap(prisma) {
   }
 }
 
+/**
+ * Install a card ID map loaded elsewhere (the server ships its map to bot worker threads).
+ * @param {Record<string, { cardId: number, variantId: number|null }>|null} map
+ */
+function setCardIdMap(map) {
+  if (map && typeof map === "object") _CARD_ID_MAP = map;
+  return _CARD_ID_MAP;
+}
+
+function getCardIdMap() {
+  return _CARD_ID_MAP;
+}
+
 function getCardIds(name) {
   if (!_CARD_ID_MAP || !name) return null;
   return _CARD_ID_MAP[name.toLowerCase()] || null;
@@ -4235,4 +4248,4 @@ class BotClient {
   }
 }
 
-module.exports = { BotClient, loadCardIdMap };
+module.exports = { BotClient, loadCardIdMap, setCardIdMap, getCardIdMap };

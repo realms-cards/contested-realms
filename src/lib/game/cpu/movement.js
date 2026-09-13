@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Shared directly with the CommonJS CPU engine. */
 const { affectedByAura } = require('./auras');
-const { cardText, isDisabled, isWater, unitsInRealm } = require('./spells');
+const { enterScope, leaveScope, realmUnits } = require('./evalScope');
+const { cardText, isDisabled, isWater } = require('./spells');
 
 /** @param {import('./spellTypes').SpellState} state @param {import('../store/types').PermanentItem} unit */
 function movementAllowance(state,unit) {
@@ -10,6 +11,12 @@ function movementAllowance(state,unit) {
 
 /** @param {import('./spellTypes').SpellState} state @param {string} from @param {import('../store/types').PermanentItem} unit @param {string} [origin] */
 function movementSteps(state,from,unit,origin = from) {
+  enterScope();
+  try { return stepsFrom(state,from,unit,origin); } finally { leaveScope(); }
+}
+
+/** @param {import('./spellTypes').SpellState} state @param {string} from @param {import('../store/types').PermanentItem} unit @param {string} origin */
+function stepsFrom(state,from,unit,origin) {
   const text = cardText(unit.card), layer = state.permanentPositions?.[unit.instanceId || unit.card.instanceId]?.state || 'surface';
   if (/\bImmobile\b/.test(text)) return [];
   if (unit.card.type !== 'Avatar' && state.board.sites[from]?.card && affectedByAura(state.permanents,from,'Entangle Terrain')) return [];
@@ -42,10 +49,16 @@ function movementSteps(state,from,unit,origin = from) {
 
 /** @param {import('./spellTypes').SpellState} state @param {string} from @param {import('../store/types').PermanentItem} unit @param {number} [budget] */
 function movementRoutes(state,from,unit,budget = movementAllowance(state,unit)) {
+  enterScope();
+  try { return routesFrom(state,from,unit,budget); } finally { leaveScope(); }
+}
+
+/** @param {import('./spellTypes').SpellState} state @param {string} from @param {import('../store/types').PermanentItem} unit @param {number} budget */
+function routesFrom(state,from,unit,budget) {
   const routes = new Map([[from,{path:[from],cost:0}]]), frontier = [from];
   while (frontier.length) {
     const cell = frontier.shift(), previous = routes.get(cell);
-    for (const next of movementSteps(state,cell,unit,from)) {
+    for (const next of stepsFrom(state,cell,unit,from)) {
       const cost = previous.cost+next.cost;
       if (cost>budget || (routes.get(next.at)?.cost ?? Infinity)<=cost) continue;
       routes.set(next.at,{path:[...previous.path,next.at],cost}); frontier.push(next.at);
@@ -56,11 +69,14 @@ function movementRoutes(state,from,unit,budget = movementAllowance(state,unit)) 
 
 /** @param {import('./spellTypes').SpellState} state @param {string} from @param {import('../store/types').PermanentItem} unit @returns {string[]} */
 function reachableCells(state,from,unit) {
-  const located = unitsInRealm(state).find(u => u.target.kind === 'permanent' && u.target.instanceId === unit.instanceId);
-  if (located && isDisabled(state,located)) return [];
-  const text = cardText(unit.card);
-  if (/\bWaterbound\b/.test(text) && !isWater(state,from) || /\bLandbound\b/.test(text) && isWater(state,from)) return [];
-  return [...movementRoutes(state,from,unit).keys()];
+  enterScope();
+  try {
+    const located = realmUnits(state).find(u => u.target.kind === 'permanent' && u.target.instanceId === unit.instanceId);
+    if (located && isDisabled(state,located)) return [];
+    const text = cardText(unit.card);
+    if (/\bWaterbound\b/.test(text) && !isWater(state,from) || /\bLandbound\b/.test(text) && isWater(state,from)) return [];
+    return [...movementRoutes(state,from,unit).keys()];
+  } finally { leaveScope(); }
 }
 
 module.exports = { reachableCells,movementAllowance,movementSteps,movementRoutes };

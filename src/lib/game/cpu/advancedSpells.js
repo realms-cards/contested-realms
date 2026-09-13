@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Shared by the CommonJS bot and browser. */
+const { bestByScore, cellOf, facts, realmUnits, snapshotOf } = require('./evalScope');
 
 // Damage grids transcribed from data/beta/b_s/{cone_of_flame,major_explosion,craterize}_b_s.png.
 const CRATER = [[1,2,4,2,1],[2,4,7,4,2],[4,7,10,7,4],[2,4,7,4,2],[1,2,4,2,1]];
@@ -15,8 +16,9 @@ const MAJOR = [[3,5,3],[5,7,5],[3,5,3]];
  */
 function advancedSpellChoices(state, seat, name, origin, add, casterKey, selectionKey) {
   // Deferred import avoids executing the mutually shared helpers during module initialization.
-  const { unitsInRealm, inRange, isWater, hasStealth, scoreOperations, projectileKey } = require('./spells');
-  const units = unitsInRealm(state);
+  const { inRange, isWater, hasStealth, scoreOperations, projectileKey } = require('./spells');
+  // Shared read-only realm units of the active evaluation scope.
+  const units = realmUnits(state);
   const sites = Object.keys(state.board.sites).filter(at => state.board.sites[at]?.card);
   const owner = seat === 'p1' ? 1 : 2;
   const locations = [];
@@ -25,28 +27,51 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
   if (name === 'Chain Lightning') {
     // Precons have one mana per controlled site, plus the shared spend/gain ledger.
     const mana = Math.max(0,sites.filter(at => state.board.sites[at].owner === owner && !state.board.sites[at].cpuNeutral).length + (state.players[seat]?.mana || 0));
-    const targetable = units.filter(u => u.region === origin.region && (u.owner === seat || !hasStealth(state,u)));
+    // An unselected chain depends on the realm snapshot, seat, mana and region but never on the
+    // caster, so casters share the targetable list, each target's 2-damage score and the chains.
+    const memos = facts(snapshotOf(state),'chainLightning'), memoKey = `${seat}|${mana}|${origin.region}`;
+    let memo = memos.get(memoKey);
+    if (!memo) memos.set(memoKey, memo = {
+      targetable: units.filter(u => u.region === origin.region && (u.owner === seat || !hasStealth(state,u))),
+      scores: new Map(), chains: new Map(),
+    });
+    const {targetable,scores,chains} = memo;
+    const scoreOf = unit => {
+      let score = scores.get(unit);
+      if (score === undefined) scores.set(unit, score = scoreOperations(state,seat,[{kind:'damage',targets:[unit.target],amount:2}]));
+      return score;
+    };
     const id = unit => unit.target.kind === 'avatar' ? unit.owner : unit.target.instanceId || `${unit.at}:${unit.target.index}`;
+    const plan = (first, requested) => {
+      const chain = [first], selections = [], decisions = [];
+      for (let step=0;step<Math.floor(mana/2);step++) {
+        const previous = chain[chain.length-1];
+        const eligible = targetable.filter(u => !chain.includes(u) && inRange(previous.at,u.at,'nearby'));
+        if (!eligible.length) break;
+        const best = bestByScore(eligible,scoreOf);
+        const preferred = requested[step];
+        const next = preferred === 'stop' ? null : eligible.find(u => id(u) === preferred) ||
+          (scoreOf(best) > 2 ? best : null);
+        decisions.push({label:`After ${previous.card.name}: spend 2 additional mana or stop`,options:[{key:'stop',label:'Stop the chain'},...eligible.map(u => ({key:id(u),label:`${u.card.name} at ${u.at}`}))]});
+        selections.push(next ? id(next) : 'stop');
+        if (!next) break;
+        chain.push(next);
+      }
+      return {chain,selections,decisions};
+    };
     for (const first of targetable.filter(u => inRange(origin.at,u.at,'nearby'))) {
       const suffix = `chain:${id(first)}`, baseKey = `${casterKey}/${suffix}`;
       let requested = [];
       if (selectionKey?.startsWith(`${baseKey}|`)) {
         try { const value = JSON.parse(decodeURIComponent(selectionKey.slice(baseKey.length+1))); if (Array.isArray(value) && value.length <= units.length && value.every(v => typeof v === 'string')) requested = value; } catch { continue; }
       }
-      const chain = [first], selections = [], decisions = [];
-      for (let step=0;step<Math.floor(mana/2);step++) {
-        const previous = chain[chain.length-1];
-        const eligible = targetable.filter(u => !chain.includes(u) && inRange(previous.at,u.at,'nearby'));
-        if (!eligible.length) break;
-        const best = [...eligible].sort((a,b) => scoreOperations(state,seat,[{kind:'damage',targets:[b.target],amount:2}])-scoreOperations(state,seat,[{kind:'damage',targets:[a.target],amount:2}]))[0];
-        const preferred = requested[step];
-        const next = preferred === 'stop' ? null : eligible.find(u => id(u) === preferred) ||
-          (scoreOperations(state,seat,[{kind:'damage',targets:[best.target],amount:2}]) > 2 ? best : null);
-        decisions.push({label:`After ${previous.card.name}: spend 2 additional mana or stop`,options:[{key:'stop',label:'Stop the chain'},...eligible.map(u => ({key:id(u),label:`${u.card.name} at ${u.at}`}))]});
-        selections.push(next ? id(next) : 'stop');
-        if (!next) break;
-        chain.push(next);
+      let planned = requested.length ? undefined : chains.get(first);
+      if (!planned) {
+        planned = plan(first,requested);
+        if (!requested.length) chains.set(first,planned);
       }
+      // Decisions are re-labelled into fresh objects by getSpellChoices; selections and operations stay per choice.
+      const {chain,decisions} = planned, selections = [...planned.selections];
       const operations = [{kind:'spend',seat,amount:2*(chain.length-1)},{kind:'damageEvent',hits:chain.map(u => ({target:u.target,amount:2}))}];
       const choice = add(suffix,`Chain from ${first.card.name}: ${chain.length} units; ${2*(chain.length-1)} additional mana`,first.target,operations);
       choice.projectile = {baseKey,selections,decisions};
@@ -74,7 +99,7 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
       const [cx,cy] = at.split(',').map(Number), hits = [];
       for (const unit of units) {
         if (crater ? !state.board.sites[unit.at]?.card : unit.region !== origin.region) continue;
-        const [ux,uy] = unit.at.split(',').map(Number);
+        const [ux,uy] = cellOf(unit.at);
         const amount = grid[uy-cy+radius]?.[ux-cx+radius];
         if (amount) hits.push({ target: unit.target,amount,...(!crater ? {element:'fire'} : {}) });
       }

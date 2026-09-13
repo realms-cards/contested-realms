@@ -5,12 +5,17 @@ const { advancedSpellChoices } = require('./advancedSpells');
 const { affectedByAura } = require('./auras');
 const cards = require('./cards.json');
 const { evaluateDamage } = require('./damageRules');
+const { bestByScore, cellOf, enterScope, facts, findUnit, freshUnits, leaveScope, realmUnits, scopedChoiceTiles, scopedTileLabel, snapshotOf, unitPosition } = require('./evalScope');
 
 /** @typedef {import('./spellTypes').SpellState} SpellState */
 /** @typedef {import('./spellTypes').SpellChoice} SpellChoice */
 /** @typedef {import('./spellTypes').LocatedUnit} LocatedUnit */
 /** @typedef {import('../store/types').PlayerKey} PlayerKey */
 /** @typedef {import('../store/types').CardRef} CardRef */
+
+// Exported state helpers open an evaluation scope (evalScope.js) so that nested checks share
+// one scan of the realm and one evaluation of each unit fact. Internal *Of / *At helpers
+// memoize within that scope and must only receive units they will not mutate.
 
 const SUPPORTED_SPELLS = new Set([
   'Blink', 'Teleport', 'Divine Healing', 'Bury', 'Drown', 'Cave-In',
@@ -30,20 +35,34 @@ function cardText(card) { return cards[card.name]?.rulesText || card.text || '';
 
 /** @param {string} a @param {string} b @param {'nearby' | 'adjacent' | 'two' | 'any'} range */
 function inRange(a, b, range) {
-  const [ax, ay] = a.split(',').map(Number);
-  const [bx, by] = b.split(',').map(Number);
-  if (![ax, ay, bx, by].every(Number.isFinite)) return false;
+  const [ax, ay] = cellOf(a);
+  const [bx, by] = cellOf(b);
+  if (!(Number.isFinite(ax) && Number.isFinite(ay) && Number.isFinite(bx) && Number.isFinite(by))) return false;
   if (range === 'any') return true;
   const dx = Math.abs(ax - bx), dy = Math.abs(ay - by);
   return range === 'nearby' ? Math.max(dx, dy) <= 1 : dx + dy <= (range === 'two' ? 2 : 1);
 }
 
-/** @param {SpellState} state @param {string} at */
+/** @param {SpellState} state @param {string} at @returns {boolean} */
 function isWater(state, at) {
+  enterScope();
+  try { return waterAt(state, at); } finally { leaveScope(); }
+}
+
+/** @param {SpellState} state @param {string} at @returns {boolean} */
+function waterAt(state, at) {
+  const known = facts(snapshotOf(state), 'water');
+  let water = known.get(at);
+  if (water === undefined) known.set(at, water = computeWater(state, at));
+  return /** @type {boolean} */ (water);
+}
+
+/** @param {SpellState} state @param {string} at @returns {boolean} */
+function computeWater(state, at) {
   if (!state.board.sites[at]?.card) return false;
   if (state.board.sites[at]?.card?.name === 'Bedrock') return false;
   if (affectedByAura(state.permanents,at,'Flood')) return true;
-  if (unitsInRealm(state).some(unit => unit.at === at && unit.card.name === 'Tide Naiads' && !isDisabled(state,unit))) return true;
+  if (realmUnits(state).some(unit => unit.at === at && unit.card.name === 'Tide Naiads' && !disabledOf(state,unit))) return true;
   if (state.permanents?.[at]?.some(item => item.card?.name === 'Flooded' && !item.attachedTo)) return true;
   const card = state.board.sites[at]?.card;
   return Number(card?.thresholds?.water ?? cards[card?.name]?.thresholds?.water ?? 0) > 0;
@@ -51,13 +70,27 @@ function isWater(state, at) {
 
 /** @param {SpellState} state @param {string} from @returns {string[]} */
 function bodyOfWater(state, from) {
-  if (!isWater(state, from)) return [];
+  enterScope();
+  try { return [...bodyAt(state, from)]; } finally { leaveScope(); }
+}
+
+/** @param {SpellState} state @param {string} from @returns {string[]} shared, never mutate */
+function bodyAt(state, from) {
+  const known = facts(snapshotOf(state), 'body');
+  let body = known.get(from);
+  if (!body) known.set(from, body = computeBody(state, from));
+  return /** @type {string[]} */ (body);
+}
+
+/** @param {SpellState} state @param {string} from @returns {string[]} */
+function computeBody(state, from) {
+  if (!waterAt(state, from)) return [];
   const visited = new Set([from]);
   for (const at of visited) {
     const [x,y] = at.split(',').map(Number);
     for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
       const next = `${x+dx},${y+dy}`;
-      if (state.board.sites[next]?.card && isWater(state,next)) visited.add(next);
+      if (state.board.sites[next]?.card && waterAt(state,next)) visited.add(next);
     }
   }
   return [...visited];
@@ -65,52 +98,72 @@ function bodyOfWater(state, from) {
 
 /** @param {SpellState} state @returns {LocatedUnit[]} */
 function unitsInRealm(state) {
-  const result = [];
-  for (const [at, items] of Object.entries(state.permanents || {})) {
-    items.forEach((item, index) => {
-      const type = item.card?.type || cards[item.card?.name]?.type;
-      if (type !== 'Minion' && !(type === 'Token' && ['Foot Soldier','Skeleton','Frog','Bruin','Tawny'].includes(item.card.name)) && !/Automaton/i.test(cards[item.card?.name]?.subTypes || '')) return;
-      const position = state.permanentPositions?.[item.instanceId || item.card?.instanceId];
-      const region = position?.state === 'burrowed' ? 'underground'
-        : position?.state === 'submerged' ? 'underwater'
-        : state.board.sites[at]?.card ? 'surface' : 'void';
-      result.push({
-        target: { kind: 'permanent', at, index, instanceId: item.instanceId || item.card?.instanceId },
-        at, region, owner: item.owner === 1 ? 'p1' : 'p2', card: item.card, damage: item.damage || 0,
-      });
-    });
-  }
-  for (const seat of ['p1', 'p2']) {
-    const avatar = state.avatars?.[seat];
-    if (!avatar?.pos || !avatar.card) continue;
-    result.push({ target: { kind: 'avatar', seat }, at: avatar.pos.join(','),
-      region: 'surface', owner: seat, card: avatar.card, damage: 0 });
-  }
-  return result;
+  return freshUnits(state);
 }
 
-/** @param {SpellState} state @param {LocatedUnit} unit */
+/** @param {SpellState} state @param {LocatedUnit} unit @returns {boolean} */
 function isDisabled(state,unit) {
+  enterScope();
+  try { return disabledOf(state,unit); } finally { leaveScope(); }
+}
+
+/** @param {SpellState} state @param {LocatedUnit} unit @returns {boolean} */
+function disabledOf(state,unit) {
   if (unit.target.kind === 'avatar') return false;
+  const snap = snapshotOf(state), position = unitPosition(snap,unit);
+  if (position === undefined) return computeDisabled(state,unit);
+  const known = facts(snap,'disabled');
+  let disabled = known.get(position);
+  if (disabled === undefined) known.set(position, disabled = computeDisabled(state,unit));
+  return /** @type {boolean} */ (disabled);
+}
+
+/** @param {SpellState} state @param {LocatedUnit} unit @returns {boolean} */
+function computeDisabled(state,unit) {
   const item = state.permanents[unit.at]?.[unit.target.index];
   if (!item) return false;
   if (item.cpuAsleep || item.cpuSwallowedBy && item.attachedTo && state.permanents[item.attachedTo.at]?.[item.attachedTo.index]?.instanceId === item.cpuSwallowedBy) return true;
   if (state.permanents[unit.at]?.some(p => p.card.name === 'Disabled' && p.attachedTo?.index === unit.target.index && p.attachedTo.at === unit.at)) return true;
   const text = cardText(unit.card);
-  if (/\bWaterbound\b/.test(text) && !isWater(state,unit.at) || /\bLandbound\b/.test(text) && isWater(state,unit.at)) return true;
+  if (/\bWaterbound\b/.test(text) && !waterAt(state,unit.at) || /\bLandbound\b/.test(text) && waterAt(state,unit.at)) return true;
   const combat = state.pendingCombat;
   const movingInCombat = combat && (combat.attacker.instanceId === unit.target.instanceId || combat.defenders.some(d => d.instanceId === unit.target.instanceId));
   if (movingInCombat) return false;
-  return unitsInRealm(state).some(other => {
-    if (other.card.name !== 'Hillock Basilisk' || sameTarget(other.target,unit.target) || other.region !== unit.region) return false;
+  return basilisksOf(state).some(other => {
+    if (sameTarget(other.target,unit.target) || other.region !== unit.region) return false;
     const [x,y] = other.at.split(',').map(Number);
     return other.at === unit.at || unit.at === `${x},${y+(other.owner === 'p1' ? -1 : 1)}`;
   });
 }
 
-/** @param {SpellState} state @param {LocatedUnit} unit */
+/** Hillock Basilisks in realm order; the only units that can disable others by position.
+ * @param {SpellState} state @returns {LocatedUnit[]} */
+function basilisksOf(state) {
+  // A plain snapshot slot rather than a fact map: single isDisabled calls stay allocation-light.
+  const snap = snapshotOf(state);
+  return snap.basilisks || (snap.basilisks = realmUnits(state,snap).filter(other => other.card.name === 'Hillock Basilisk'));
+}
+
+/** @param {SpellState} state @param {LocatedUnit} unit @returns {boolean} */
 function hasStealth(state,unit) {
-  if (unit.target.kind !== 'permanent' || isDisabled(state,unit)) return false;
+  enterScope();
+  try { return stealthOf(state,unit); } finally { leaveScope(); }
+}
+
+/** @param {SpellState} state @param {LocatedUnit} unit @returns {boolean} */
+function stealthOf(state,unit) {
+  if (unit.target.kind !== 'permanent') return false;
+  const snap = snapshotOf(state), position = unitPosition(snap,unit);
+  if (position === undefined) return computeStealth(state,unit);
+  const known = facts(snap,'stealth');
+  let stealth = known.get(position);
+  if (stealth === undefined) known.set(position, stealth = computeStealth(state,unit));
+  return /** @type {boolean} */ (stealth);
+}
+
+/** @param {SpellState} state @param {LocatedUnit} unit @returns {boolean} */
+function computeStealth(state,unit) {
+  if (disabledOf(state,unit)) return false;
   const item = state.permanents[unit.at]?.[unit.target.index];
   if (item?.cpuStealthLost) return false;
   return /\bStealth\b/.test(cardText(unit.card)) || !!state.permanents[unit.at]?.some(p => p.card.name === 'Stealth' && p.attachedTo?.index === unit.target.index && p.attachedTo.at === unit.at);
@@ -118,25 +171,27 @@ function hasStealth(state,unit) {
 
 /** @param {SpellState} state @param {PlayerKey} seat @param {string} name @param {string} [selectionKey] @returns {SpellChoice[]} */
 function getSpellChoices(state, seat, name, selectionKey) {
-  const {tileLabel,choiceTiles} = require('./tileLabels');
-  return rawSpellChoices(state,seat,name,selectionKey).map(choice => ({...choice,boardTiles:choiceTiles(choice.label,state.board.size),label:tileLabel(choice.label,state.board.size),
-    ...(choice.projectile ? {projectile:{...choice.projectile,decisions:choice.projectile.decisions.map(decision => ({...decision,label:tileLabel(decision.label,state.board.size),options:decision.options.map(option => ({...option,label:tileLabel(option.label,state.board.size)}))}))}} : {})}));
+  enterScope();
+  try {
+    return rawSpellChoices(state,seat,name,selectionKey).map(choice => ({...choice,boardTiles:scopedChoiceTiles(choice.label,state.board.size),label:scopedTileLabel(choice.label,state.board.size),
+      ...(choice.projectile ? {projectile:{...choice.projectile,decisions:choice.projectile.decisions.map(decision => ({...decision,label:scopedTileLabel(decision.label,state.board.size),options:decision.options.map(option => ({...option,label:scopedTileLabel(option.label,state.board.size)}))}))}} : {})}));
+  } finally { leaveScope(); }
 }
 
 /** @param {SpellState} state @param {PlayerKey} seat @param {string} name @param {string} [selectionKey] @returns {SpellChoice[]} */
 function rawSpellChoices(state, seat, name, selectionKey) {
   if (state.pendingMagic?.cpuEvent?.kind === 'unitEnd') {
     const event = state.pendingMagic.cpuEvent;
-    const source = unitsInRealm(state).find(unit => sameTarget(unit.target,event.source));
+    const source = findUnit(state,event.source);
     const stamp = {kind:'auraUpdate',target:event.source,endKey:event.endKey};
-    if (!source || isDisabled(state,source)) return [{key:'unit-end/gone',label:'Source unavailable; finish end effect',caster:{kind:'avatar',seat},target:null,operations:[stamp],score:0}];
+    if (!source || disabledOf(state,source)) return [{key:'unit-end/gone',label:'Source unavailable; finish end effect',caster:{kind:'avatar',seat},target:null,operations:[stamp],score:0}];
     return ['N','E','S','W'].map(direction => {
       const projectile = {kind:'projectileStep',name:'Colicky Dragonettes',seat,origin:source.at,region:source.region,direction,step:0,shot:0};
-      const impacts = projectileImpactChoices(state,projectile);
+      const impacts = impactChoices(state,projectile);
       return {key:`unit-end/${direction}`,label:`Shoot ${direction} from ${source.at}`,caster:source.target,target:{kind:'projectile',direction},operations:[stamp,projectile],score:Math.max(...impacts.map(choice => choice.score))};
     });
   }
-  if (state.pendingMagic?.cpuEvent?.kind === 'projectileImpact') return projectileImpactChoices(state,state.pendingMagic.cpuEvent.projectile);
+  if (state.pendingMagic?.cpuEvent?.kind === 'projectileImpact') return impactChoices(state,state.pendingMagic.cpuEvent.projectile);
   if (state.pendingMagic?.cpuEvent?.kind === 'geomancerFill') {
     const owner = state.pendingMagic.cpuEvent.seat, pos = state.avatars[owner]?.pos;
     const choices = [];
@@ -150,16 +205,16 @@ function rawSpellChoices(state, seat, name, selectionKey) {
   }
   if (['treasurePlace','treasureRecover','drawChoice'].includes(state.pendingMagic?.cpuEvent?.kind)) return require('./treasure').treasureChoices(state);
   if (state.pendingMagic?.cpuEvent?.kind === 'randomChoice') {
-    const units = unitsInRealm(state);
-    return state.pendingMagic.cpuEvent.outcomes.map((outcome,index) => ({key:`random/${index}`,label:`Outcome ${index+1}: ${outcome.kind === 'damage' ? `${outcome.amount} damage to ${outcome.targets.map(target => units.find(unit => sameTarget(unit.target,target))?.card.name || 'departed unit').join(', ')}` : 'resolve effect'}`,caster:{kind:'avatar',seat},target:null,operations:[outcome],score:scoreOperations(state,seat,[outcome])}));
+    realmUnits(state); // Resolve the realm before any outcome label, as every branch does.
+    return state.pendingMagic.cpuEvent.outcomes.map((outcome,index) => ({key:`random/${index}`,label:`Outcome ${index+1}: ${outcome.kind === 'damage' ? `${outcome.amount} damage to ${outcome.targets.map(target => findUnit(state,target)?.card.name || 'departed unit').join(', ')}` : 'resolve effect'}`,caster:{kind:'avatar',seat},target:null,operations:[outcome],score:scoreOps(state,seat,[outcome])}));
   }
   if (state.pendingMagic?.cpuEvent?.kind === 'fightChoice') {
     const event = state.pendingMagic.cpuEvent;
-    const units = unitsInRealm(state), source = units.find(unit => sameTarget(unit.target,event.source)), target = units.find(unit => sameTarget(unit.target,event.target));
+    const source = findUnit(state,event.source), target = findUnit(state,event.target);
     const choices = [{key:'fight/decline',label:event.strikeOnly ? 'Do not strike' : 'Do not fight',caster:event.source,target:null,operations:[],score:0}];
-    if (source && target && source.at === target.at && source.region === target.region && !isDisabled(state,source)) {
+    if (source && target && source.at === target.at && source.region === target.region && !disabledOf(state,source)) {
       const operations = [{kind:event.strikeOnly ? 'strike' : 'fight',source:event.source,target:event.target}];
-      choices.push({key:'fight/accept',label:`${event.strikeOnly ? 'Strike' : 'Fight'} ${target.card.name}`,caster:event.source,target:null,operations,score:scoreOperations(state,seat,operations)});
+      choices.push({key:'fight/accept',label:`${event.strikeOnly ? 'Strike' : 'Fight'} ${target.card.name}`,caster:event.source,target:null,operations,score:scoreOps(state,seat,operations)});
     }
     return choices;
   }
@@ -167,8 +222,8 @@ function rawSpellChoices(state, seat, name, selectionKey) {
   if (state.pendingMagic?.cpuEvent?.kind === 'blazeTrail') return require('./blaze').blazeTrailChoices(state,selectionKey);
   if (state.pendingMagic?.cpuEvent?.kind === 'genesis') return require('./genesis').genesisChoices(state);
   if (!supportsSpell(name)) return [];
-  const units = unitsInRealm(state);
-  const casters = units.filter(u => u.owner === seat && !isDisabled(state,u) &&
+  const units = realmUnits(state);
+  const casters = units.filter(u => u.owner === seat && !disabledOf(state,u) &&
     (u.target.kind === 'avatar' || /\bSpellcaster\b/.test(cardText(u.card))) &&
     (!/Fire Spellcaster/.test(cardText(u.card)) || Number(cards[name]?.thresholds?.fire || 0) > 0) &&
     (u.card.name !== 'Spire Lich' || /Tower/i.test(state.board.sites[u.at]?.card?.name || '')));
@@ -181,10 +236,10 @@ function rawSpellChoices(state, seat, name, selectionKey) {
     };
     const casterKey = origin.target.kind === 'avatar' ? seat : origin.target.instanceId || `${origin.at}:${origin.target.index}`;
     const visible = units.filter(u => u.region === origin.region);
-    const targetable = visible.filter(u => u.owner === seat || !hasStealth(state,u));
+    const targetable = visible.filter(u => u.owner === seat || !stealthOf(state,u));
     const add = (suffix, description, target, operations) => {
       const choice = { key: `${casterKey}/${suffix}`, label: `${origin.card.name}: ${description}`,
-        caster, target, operations, score: scoreOperations(state, seat, operations) };
+        caster, target, operations, score: scoreOps(state, seat, operations) };
       choices.push(choice);
       return choice;
     };
@@ -203,7 +258,7 @@ function rawSpellChoices(state, seat, name, selectionKey) {
         const key = selections.length ? projectileKey(baseKey, plan.selections) : baseKey;
         choices.push({ key, caster, target: { kind: 'projectile', direction },
           label: `${origin.card.name}: shoot ${direction} — projected: ${plan.decisions.map(d => d.label).join('; ') || 'no impact'}`,
-          operations: plan.operations, score: scoreOperations(state, seat, plan.operations),
+          operations: plan.operations, score: scoreOps(state, seat, plan.operations),
           resolutionOperations: [{kind:'projectileStep',name,seat,origin:origin.at,region:origin.region,direction,step:0,shot:0,preferred:selections}],
           projectile: { baseKey, selections: plan.selections, decisions: plan.decisions } });
       }
@@ -214,7 +269,7 @@ function rawSpellChoices(state, seat, name, selectionKey) {
           add(targetKey(ally.target), `${ally.card.name}: ${name === 'Overpower' ? '+2 power' : name === 'Blaze' ? 'Movement +2; cannot be intercepted; fire trail' : 'draw a card; Movement +1'} this turn`, ally.target, operations);
       }
     } else if (name === 'Font of Life') {
-      const operations = units.filter(u => u.owner === seat).map(u => ({ kind: 'mend', target: u.target, amount: bodyOfWater(state, u.at).length }));
+      const operations = units.filter(u => u.owner === seat).map(u => ({ kind: 'mend', target: u.target, amount: bodyAt(state, u.at).length }));
       add('heal-allies', 'Each ally heals for the size of its body of water', null, operations);
     } else if (name === 'Divine Healing') {
       add('heal', 'Gain 7 life', null, [{ kind: 'heal', seat, amount: 7 }]);
@@ -242,7 +297,7 @@ function rawSpellChoices(state, seat, name, selectionKey) {
             owner: item.owner === 1 ? 'p1' : 'p2', card: item.card, damage: 0 });
         });
       }
-      for (const at of sites.filter(at => isWater(state, at) === water)) {
+      for (const at of sites.filter(at => waterAt(state, at) === water)) {
         const affected = objects.filter(u => u.at === at && u.region === 'surface');
         if (!affected.length || origin.region !== 'surface') continue;
         const groups = area ? [affected] : affected.map(u => [u]);
@@ -252,7 +307,7 @@ function rawSpellChoices(state, seat, name, selectionKey) {
           [{ kind: 'subsurface', targets: group.map(u => u.target), state: water ? 'submerged' : 'burrowed' }]);
       }
     } else if (name === 'Riptide') {
-      for (const at of sites.filter(at => isWater(state, at))) {
+      for (const at of sites.filter(at => waterAt(state, at))) {
         for (const unit of visible.filter(u => u.region === 'surface' && inRange(u.at, at, 'adjacent') && u.at !== at)) {
           add(`${at}/${unit.at}:${unit.target.index ?? unit.owner}`, `Pull ${unit.card.name} to ${at}; draw a card`,
             { kind: 'location', at }, [{ kind: 'move', target: unit.target, to: at }, { kind: 'draw', seat, count: 1 }]);
@@ -261,8 +316,9 @@ function rawSpellChoices(state, seat, name, selectionKey) {
     } else {
       const range = name === 'Minor Explosion' ? 'two' : name === 'Incinerate' ? 'nearby' : 'any';
       const locations = [...new Set(visible.map(u => u.at))];
+      // Only Incinerate reads the dragon origins; the scan is pure, so other spells skip it.
+      const dragonOrigins = name === 'Incinerate' ? units.filter(u => u.owner === seat && u.region === origin.region && /Dragon/i.test(cards[u.card.name]?.subTypes || '')) : [];
       for (const at of locations) {
-        const dragonOrigins = units.filter(u => u.owner === seat && u.region === origin.region && /Dragon/i.test(cards[u.card.name]?.subTypes || ''));
         if (!inRange(origin.at, at, range) && !(name === 'Incinerate' && dragonOrigins.some(u => inRange(u.at, at, 'nearby')))) continue;
         const affected = visible.filter(u => u.at === at && (name !== 'Incinerate' || u !== origin));
         if (!affected.length) continue;
@@ -292,59 +348,88 @@ function targetKey(target) {
   return target.kind === 'avatar' ? target.seat : target.instanceId || `${target.at}:${target.index}`;
 }
 
-/** @param {SpellState} state @param {LocatedUnit} unit */
+/** @param {SpellState} state @param {LocatedUnit} unit @returns {number} */
 function unitDefence(state, unit) {
-  return unitStats(state, unit).def;
+  enterScope();
+  try { return statsOf(state, unit).def; } finally { leaveScope(); }
 }
 
-/** @param {SpellState} state @param {LocatedUnit} unit */
+/** @param {SpellState} state @param {LocatedUnit} unit @returns {{atk: number, def: number}} */
 function unitStats(state, unit) {
+  enterScope();
+  try {
+    const stats = statsOf(state, unit);
+    return { atk: stats.atk, def: stats.def };
+  } finally { leaveScope(); }
+}
+
+/** @param {SpellState} state @param {LocatedUnit} unit @returns {{atk: number, def: number}} shared, never mutate */
+function statsOf(state, unit) {
+  const snap = snapshotOf(state), position = unitPosition(snap,unit);
+  if (position === undefined) return computeStats(state,unit);
+  const known = facts(snap,'stats');
+  let stats = known.get(position);
+  if (!stats) known.set(position, stats = computeStats(state,unit));
+  return /** @type {{atk: number, def: number}} */ (stats);
+}
+
+/** @param {SpellState} state @param {LocatedUnit} unit @returns {{atk: number, def: number}} */
+function computeStats(state, unit) {
   const item = unit.target.kind === 'permanent' ? state.permanents[unit.at]?.[unit.target.index] : null;
   const entity = item || (unit.target.kind === 'avatar' ? state.avatars[unit.target.seat] : null);
   const data = cards[unit.card.name] || unit.card;
   let bonus = Number(entity?.counters || 0);
   if (entity?.cpuTurnEffect?.turn === `${state.turn}:${state.currentPlayer}`) bonus += entity.cpuTurnEffect.power;
-  for (const other of unitsInRealm(state)) {
+  for (const other of realmUnits(state)) {
     if (sameTarget(unit.target, other.target)) continue;
-    if (isDisabled(state,other)) continue;
+    if (disabledOf(state,other)) continue;
     if (other.card.name === 'House Arn Bannerman' && other.owner === unit.owner && other.region === unit.region && inRange(unit.at, other.at, 'nearby')) bonus++;
     if (other.card.name === 'King of the Realm' && /Mortal/.test(data.subTypes || '')) bonus++;
   }
   if (unit.card.name === 'Spire Lich' && /Tower/i.test(state.board.sites[unit.at]?.card?.name || '')) bonus += 2;
-  if (unit.card.name === 'Anui Undine') bonus += bodyOfWater(state,unit.at).length;
+  if (unit.card.name === 'Anui Undine') bonus += bodyAt(state,unit.at).length;
   return { atk: Number(data.attack || 0)+bonus, def: Number(data.defence ?? data.attack ?? 0)+bonus };
 }
 
-/** @param {SpellState} state @param {LocatedUnit} unit */
+/** @param {SpellState} state @param {LocatedUnit} unit @returns {boolean} */
 function hasAirborne(state,unit) {
-  return unit.region === 'surface' && !isDisabled(state,unit) && /\bAirborne\b/.test(cardText(unit.card)) &&
+  enterScope();
+  try { return airborneOf(state,unit); } finally { leaveScope(); }
+}
+
+/** @param {SpellState} state @param {LocatedUnit} unit @returns {boolean} */
+function airborneOf(state,unit) {
+  return unit.region === 'surface' && !disabledOf(state,unit) && /\bAirborne\b/.test(cardText(unit.card)) &&
     !affectedByAura(state.permanents,unit.at,'Entangle Terrain');
 }
 
 /** @param {SpellState} state @param {LocatedUnit} attacker @param {string} [at] */
 function getAttackTargets(state, attacker, at = attacker.at) {
-  if (isDisabled(state,attacker)) return [];
-  const stats = unitStats(state,attacker);
-  const airborne = hasAirborne(state,attacker);
-  const targets = unitsInRealm(state).filter(unit => unit.owner !== attacker.owner && unit.at === at && unit.region === attacker.region &&
-    !hasStealth(state,unit) &&
-    !(hasAirborne(state,unit) && !airborne)).map(unit => {
-      const target = unit.target.kind === 'avatar' ? { kind: 'avatar', at, index: null }
-        : { kind: 'permanent', at, index: unit.target.index };
-      const defending = unitStats(state,unit);
-      const player = state.players[unit.owner];
-      let score = unit.target.kind === 'avatar'
-        ? player.lifeState === 'dd' ? player.deathsDoorTurn === `${state.turn}:${state.currentPlayer}` ? 0 : 1000 : stats.atk*2
-        : stats.atk+((stats.atk+unit.damage >= defending.def || /\bLethal\b/.test(cardText(attacker.card))) ? Number(cards[unit.card.name]?.cost || 1)+4 : 0);
-      if (attacker.target.kind !== 'avatar' && defending.atk+attacker.damage >= stats.def) score -= Number(cards[attacker.card.name]?.cost || 1)+2;
-      return { target, score };
-    });
-  const site = state.board.sites[at];
-  const opponent = attacker.owner === 'p1' ? 'p2' : 'p1';
-  if (attacker.region === 'surface' && site?.card && !site.cpuNeutral && site.owner !== (attacker.owner === 'p1' ? 1 : 2) && state.players[opponent]?.lifeState !== 'dd') {
-    targets.push({ target: { kind: 'site', at, index: null }, score: stats.atk*1.5 });
-  }
-  return targets.sort((a,b) => b.score-a.score);
+  enterScope();
+  try {
+    if (disabledOf(state,attacker)) return [];
+    const stats = statsOf(state,attacker);
+    const airborne = airborneOf(state,attacker);
+    const targets = realmUnits(state).filter(unit => unit.owner !== attacker.owner && unit.at === at && unit.region === attacker.region &&
+      !stealthOf(state,unit) &&
+      !(airborneOf(state,unit) && !airborne)).map(unit => {
+        const target = unit.target.kind === 'avatar' ? { kind: 'avatar', at, index: null }
+          : { kind: 'permanent', at, index: unit.target.index };
+        const defending = statsOf(state,unit);
+        const player = state.players[unit.owner];
+        let score = unit.target.kind === 'avatar'
+          ? player.lifeState === 'dd' ? player.deathsDoorTurn === `${state.turn}:${state.currentPlayer}` ? 0 : 1000 : stats.atk*2
+          : stats.atk+((stats.atk+unit.damage >= defending.def || /\bLethal\b/.test(cardText(attacker.card))) ? Number(cards[unit.card.name]?.cost || 1)+4 : 0);
+        if (attacker.target.kind !== 'avatar' && defending.atk+attacker.damage >= stats.def) score -= Number(cards[attacker.card.name]?.cost || 1)+2;
+        return { target, score };
+      });
+    const site = state.board.sites[at];
+    const opponent = attacker.owner === 'p1' ? 'p2' : 'p1';
+    if (attacker.region === 'surface' && site?.card && !site.cpuNeutral && site.owner !== (attacker.owner === 'p1' ? 1 : 2) && state.players[opponent]?.lifeState !== 'dd') {
+      targets.push({ target: { kind: 'site', at, index: null }, score: stats.atk*1.5 });
+    }
+    return targets.sort((a,b) => b.score-a.score);
+  } finally { leaveScope(); }
 }
 
 /**
@@ -355,7 +440,10 @@ function getAttackTargets(state, attacker, at = attacker.at) {
  * @param {LocatedUnit} origin @param {'N'|'E'|'S'|'W'} direction @param {string[]} requested
  */
 function projectilePlan(state, seat, name, origin, direction, requested) {
-  const units = unitsInRealm(state).map(unit => ({ ...unit }));
+  // Plans track damage on private copies; unit facts are read from the shared originals.
+  const shared = realmUnits(state);
+  const units = shared.map(unit => ({ ...unit }));
+  const originalOf = new Map(units.map((unit,index) => [unit,shared[index]]));
   const [dx,dy] = { N: [0,-1], E: [1,0], S: [0,1], W: [-1,0] }[direction];
   const [ox,oy] = origin.at.split(',').map(Number);
   const path = [];
@@ -364,8 +452,8 @@ function projectilePlan(state, seat, name, origin, direction, requested) {
     if (x < 0 || y < 0 || x >= state.board.size.w || y >= state.board.size.h) break;
     const site = state.board.sites[at]?.card;
     if (origin.region === 'void' ? !!site : !site) break;
-    if (origin.region === 'underwater' && !isWater(state, at)) break;
-    if (origin.region === 'underground' && isWater(state, at)) break;
+    if (origin.region === 'underwater' && !waterAt(state, at)) break;
+    if (origin.region === 'underground' && waterAt(state, at)) break;
     path.push(at);
   }
   /** @type {import('./spellTypes').SpellOperation[]} */
@@ -382,14 +470,12 @@ function projectilePlan(state, seat, name, origin, direction, requested) {
       if (name === 'Ice Lance' && step >= 3) break;
       const at = path[step];
       const eligible = units.filter(u => u.region === origin.region && u.at === at &&
-        !dead.has(targetKey(u.target)) && !(step === 0 && u.owner === seat) && !hasStealth(state,u));
+        !dead.has(targetKey(u.target)) && !(step === 0 && u.owner === seat) && !stealthOf(state,originalOf.get(u)));
       if (!eligible.length) continue;
       const amount = name === 'Firebolts' ? 1 : name === 'Fireball' ? 4 : name === 'Heat Ray' ? 2 : 3-step;
       const options = eligible.map(u => ({ key: targetKey(u.target), label: `${u.card.name} (${u.owner === seat ? 'ally' : 'enemy'}) at ${at}` }));
       const preferred = requested[decisions.length];
-      const target = eligible.find(u => targetKey(u.target) === preferred) || [...eligible].sort((a,b) =>
-        scoreOperations(state, seat, [{ kind: 'damage', amount, targets: [b.target] }]) -
-        scoreOperations(state, seat, [{ kind: 'damage', amount, targets: [a.target] }]))[0];
+      const target = eligible.find(u => targetKey(u.target) === preferred) || bestByScore(eligible,u => damageScore(state, seat, u.target, amount, undefined));
       decisions.push({ label: `${name === 'Firebolts' ? `Bolt ${shot+1}` : `Impact ${step+1}`}: ${target.card.name} takes ${amount}`, options });
       selections.push(targetKey(target.target));
       const element = name === 'Ice Lance' ? {} : { element: 'fire' };
@@ -405,7 +491,7 @@ function projectilePlan(state, seat, name, origin, direction, requested) {
         const key = targetKey(hit.unit.target);
         const item = hit.unit.target.kind === 'permanent' ? state.permanents[hit.unit.at][hit.unit.target.index] : null;
         const outcome = evaluateDamage({ name: hit.unit.card.name, damage: hit.unit.damage,
-          defence: unitDefence(state,hit.unit)+(powerGains.get(key) || 0), avatar: hit.unit.target.kind === 'avatar',
+          defence: statsOf(state,originalOf.get(hit.unit)).def+(powerGains.get(key) || 0), avatar: hit.unit.target.kind === 'avatar',
           damagePreventedTurn: preventedAt.get(key) || item?.cpuDamagePreventedTurn },
           [{ target: hit.unit.target, amount: hit.amount, ...element }], turn);
         hit.unit.damage = outcome.remainingDamage;
@@ -426,12 +512,18 @@ function projectilePlan(state, seat, name, origin, direction, requested) {
  * @returns {import('./spellTypes').SpellOperation | null}
  */
 function expandAreaOperation(state, op) {
+  enterScope();
+  try { return expandArea(state, op); } finally { leaveScope(); }
+}
+
+/** @param {SpellState} state @param {import('./spellTypes').SpellOperation} op @returns {import('./spellTypes').SpellOperation | null} */
+function expandArea(state, op) {
   if (op.kind === 'damageGrid') {
     const [cx,cy] = op.at.split(',').map(Number);
     const ry = Math.floor(op.grid.length/2), rx = Math.floor((op.grid[0]?.length || 0)/2);
-    return {kind:'damageEvent',hits:unitsInRealm(state).flatMap(unit => {
+    return {kind:'damageEvent',hits:realmUnits(state).flatMap(unit => {
       if (!state.board.sites[unit.at]?.card) return [];
-      const [x,y] = unit.at.split(',').map(Number);
+      const [x,y] = cellOf(unit.at);
       const amount = op.grid[y-cy+ry]?.[x-cx+rx];
       return amount ? [{target:unit.target,amount}] : [];
     })};
@@ -439,7 +531,7 @@ function expandAreaOperation(state, op) {
   if (op.kind === 'submergeWater') {
     const targets = [];
     for (const [at,items] of Object.entries(state.permanents)) {
-      if (!state.board.sites[at]?.card || !isWater(state,at)) continue;
+      if (!state.board.sites[at]?.card || !waterAt(state,at)) continue;
       items.forEach((item,index) => {
         if (item.card.type !== 'Minion' && item.card.type !== 'Artifact' && item.card.name !== 'Foot Soldier') return;
         const instanceId = item.instanceId || item.card.instanceId;
@@ -460,9 +552,15 @@ function expandAreaOperation(state, op) {
  * @returns {SpellChoice[]}
  */
 function projectileImpactChoices(state, op) {
+  enterScope();
+  try { return impactChoices(state, op); } finally { leaveScope(); }
+}
+
+/** @param {SpellState} state @param {import('./spellTypes').ProjectileOperation} op @returns {SpellChoice[]} */
+function impactChoices(state, op) {
   const [ox,oy] = op.origin.split(',').map(Number);
   const [dx,dy] = {N:[0,-1],E:[1,0],S:[0,1],W:[-1,0]}[op.direction];
-  const units = unitsInRealm(state);
+  const units = realmUnits(state);
   const nextBolt = op.name === 'Firebolts' && op.shot < 2 ? [{...op,shot:op.shot+1,step:0,preferred:op.preferred?.slice(1)}] : [];
   for (let step=op.step;step<Math.max(state.board.size.w,state.board.size.h);step++) {
     if (op.name === 'Ice Lance' && step>=3) break;
@@ -470,8 +568,8 @@ function projectileImpactChoices(state, op) {
     if (x<0 || y<0 || x>=state.board.size.w || y>=state.board.size.h) break;
     const site = state.board.sites[at]?.card;
     if (op.region === 'void' ? !!site : !site) break;
-    if (op.region === 'underwater' && !isWater(state,at) || op.region === 'underground' && isWater(state,at)) break;
-    const eligible = units.filter(unit => unit.at === at && unit.region === op.region && !(step === 0 && unit.owner === op.seat) && !hasStealth(state,unit));
+    if (op.region === 'underwater' && !waterAt(state,at) || op.region === 'underground' && waterAt(state,at)) break;
+    const eligible = units.filter(unit => unit.at === at && unit.region === op.region && !(step === 0 && unit.owner === op.seat) && !stealthOf(state,unit));
     if (!eligible.length) continue;
     const amount = op.name === 'Fireball' ? 4 : op.name === 'Firebolts' || op.name === 'Colicky Dragonettes' ? 1 : op.name === 'Heat Ray' ? 2 : 3-step;
     return eligible.map(unit => {
@@ -482,35 +580,86 @@ function projectileImpactChoices(state, op) {
       if (op.name === 'Heat Ray' || op.name === 'Ice Lance') operations.push({...op,step:step+1,preferred:op.preferred?.slice(1)});
       else operations.push(...nextBolt);
       return {key:targetKey(unit.target),label:`${op.name === 'Firebolts' ? `Bolt ${op.shot+1}` : 'Impact'}: ${unit.card.name} at ${at} takes ${amount}`,
-        caster:{kind:'avatar',seat:op.seat},target:unit.target,operations,score:scoreOperations(state,op.seat,[operations[0]])};
+        caster:{kind:'avatar',seat:op.seat},target:unit.target,operations,score:scoreOps(state,op.seat,[operations[0]])};
     });
   }
   return [{key:'projectile/no-impact',label:'No further impact in this region',caster:{kind:'avatar',seat:op.seat},target:null,operations:nextBolt,score:0}];
 }
 
-/** @param {SpellState} state @param {PlayerKey} seat @param {import('./spellTypes').SpellOperation[]} operations */
+/** @param {SpellState} state @param {PlayerKey} seat @param {import('./spellTypes').SpellOperation[]} operations @returns {number} */
 function scoreOperations(state, seat, operations) {
-  const units = unitsInRealm(state);
+  enterScope();
+  try { return scoreOps(state, seat, operations); } finally { leaveScope(); }
+}
+
+/**
+ * Bit-identical to `scoreOps(state,seat,[{kind:'damage',targets:[target],amount,element}])`.
+ * @param {SpellState} state @param {PlayerKey} seat @param {import('./spellTypes').UnitTarget} target
+ * @param {number} amount @param {string | undefined} element @returns {number}
+ */
+function damageScore(state, seat, target, amount, element) {
+  let score = 0, value = 0;
+  const unit = findUnit(state,target);
+  if (unit) {
+    const card = cards[unit.card.name] || unit.card;
+    const sign = unit.owner === seat ? -1 : 1;
+    if (element === 'fire' && unit.card.name === 'Askelon Phoenix') value -= sign*2;
+    else if (target.kind === 'avatar') {
+      const player = state.players[target.seat];
+      const turn = `${state.turn || 1}:${state.currentPlayer || 1}`;
+      value += sign * (player?.lifeState === 'dd' ? (player.deathsDoorTurn === turn ? 0 : 1000) : Math.min(amount, player?.life ?? 20));
+    } else {
+      const defence = Number(card.defence ?? card.attack ?? 0);
+      value += sign * (amount + (amount + unit.damage >= Math.max(1, defence) ? Number(card.cost || 1) + 2 : 0));
+    }
+  }
+  score += value;
+  return score;
+}
+
+/** Summed attack of the units not owned by `owner` at `to`, in realm order.
+ * @param {SpellState} state @param {PlayerKey} owner @param {string} to @param {import('./evalScope').Snapshot} snap @returns {number} */
+function threatAt(state, owner, to, snap) {
+  const known = facts(snap, owner === 'p1' ? 'threat:p1' : 'threat:p2');
+  let threat = known.get(to);
+  if (threat === undefined) known.set(to, threat = realmUnits(state, snap).filter(u => u.owner !== owner && u.at === to)
+    .reduce((sum,u) => sum + Number(cards[u.card.name]?.attack || 0),0));
+  return /** @type {number} */ (threat);
+}
+
+/** Same string as `state.avatars[opponent of seat]?.pos?.join(',')`, joined once per snapshot.
+ * @param {SpellState} state @param {PlayerKey} seat @param {import('./evalScope').Snapshot} snap @returns {string | undefined} */
+function opponentAt(state, seat, snap) {
+  const known = facts(snap,'opponentAt'), opponent = seat === 'p1' ? 'p2' : 'p1';
+  if (known.has(opponent)) return /** @type {string | undefined} */ (known.get(opponent));
+  const at = state.avatars[opponent]?.pos?.join(',');
+  known.set(opponent, at);
+  return at;
+}
+
+/** @param {SpellState} state @param {PlayerKey} seat @param {import('./spellTypes').SpellOperation[]} operations @returns {number} */
+function scoreOps(state, seat, operations) {
+  const snap = snapshotOf(state), units = realmUnits(state, snap);
   let score = 0;
   for (const op of operations) {
     if (op.kind === 'projectileStep' || op.kind === 'offerProjectile') continue; // Flight is scored by the cast preview.
-    const expanded = expandAreaOperation(state,op);
-    if (expanded) { score += scoreOperations(state,seat,[expanded]); continue; }
+    const expanded = expandArea(state,op);
+    if (expanded) { score += scoreOps(state,seat,[expanded]); continue; }
     if (op.kind === 'fillRubble') { score += 2; continue; }
     if (op.kind === 'drawCards') { score += (op.spells+op.sites)*2; continue; }
     if (op.kind === 'placeTreasure' || op.kind === 'sacrificeTreasure') continue;
     if (op.kind === 'offerDraw') { score += 2; continue; }
-    if (op.kind === 'chooseRandom') { score += Math.max(0,...op.outcomes.map(outcome => scoreOperations(state,seat,[outcome]))); continue; }
+    if (op.kind === 'chooseRandom') { score += Math.max(0,...op.outcomes.map(outcome => scoreOps(state,seat,[outcome]))); continue; }
     if (op.kind === 'waveshaperFlood') continue;
     if (op.kind === 'stunAt') {
-      score += units.filter(unit => unit.at === op.at && unit.target.kind === 'permanent' && (isDisabled(state,unit) || !/\bSubmerge\b/.test(cardText(unit.card)))).reduce((sum,unit) => sum+(unit.owner === seat ? -1 : 1)*(2+unitStats(state,unit).atk),0);
+      score += units.filter(unit => unit.at === op.at && unit.target.kind === 'permanent' && (disabledOf(state,unit) || !/\bSubmerge\b/.test(cardText(unit.card)))).reduce((sum,unit) => sum+(unit.owner === seat ? -1 : 1)*(2+statsOf(state,unit).atk),0);
       continue;
     }
-    if (op.kind === 'dragUnit') { if (op.path.length) score += scoreOperations(state,seat,[{kind:'move',target:op.target,to:op.path[op.path.length-1]}]); continue; }
+    if (op.kind === 'dragUnit') { if (op.path.length) score += scoreOps(state,seat,[{kind:'move',target:op.target,to:op.path[op.path.length-1]}]); continue; }
     if (op.kind === 'fight' || op.kind === 'offerFight' || op.kind === 'strike') {
-      const source = units.find(unit => sameTarget(unit.target,op.source)), target = units.find(unit => sameTarget(unit.target,op.target));
+      const source = findUnit(state,op.source), target = findUnit(state,op.target);
       if (source && target) {
-        const value = scoreOperations(state,seat,[{kind:'damageEvent',hits:[{target:target.target,amount:isDisabled(state,source) ? 0 : unitStats(state,source).atk},{target:source.target,amount:op.kind === 'strike' || op.strikeOnly || isDisabled(state,target) ? 0 : unitStats(state,target).atk}]}]);
+        const value = scoreOps(state,seat,[{kind:'damageEvent',hits:[{target:target.target,amount:disabledOf(state,source) ? 0 : statsOf(state,source).atk},{target:source.target,amount:op.kind === 'strike' || op.strikeOnly || disabledOf(state,target) ? 0 : statsOf(state,target).atk}]}]);
         score += op.kind === 'offerFight' ? Math.max(0,value) : value;
       }
       continue;
@@ -527,18 +676,18 @@ function scoreOperations(state, seat, operations) {
         const x=ox+dx*step,y=oy+dy*step,at=`${x},${y}`;
         if (x<0 || y<0 || x>=state.board.size.w || y>=state.board.size.h) break;
         if (op.region === 'void' ? !!state.board.sites[at]?.card : !state.board.sites[at]?.card) break;
-        if (op.region === 'underwater' && !isWater(state,at) || op.region === 'underground' && isWater(state,at)) break;
+        if (op.region === 'underwater' && !waterAt(state,at) || op.region === 'underground' && waterAt(state,at)) break;
         steps = step;
         hits.push(...units.filter(unit => unit.at === at && unit.region === op.region).map(unit => ({target:unit.target,amount:4})));
       }
-      if (steps) score += scoreOperations(state,seat,[{kind:'damageEvent',hits}]);
+      if (steps) score += scoreOps(state,seat,[{kind:'damageEvent',hits}]);
       continue;
     }
     if (op.kind === 'banishDeadFire') { score -= state.zones[op.seat].graveyard.filter(card => card.type === 'Minion' && Number(card.thresholds?.fire || 0)>0).length; continue; }
     if (op.kind === 'replaceRubble') { score += 5; continue; }
     if (op.kind === 'strikeNearby') {
-      const source = units.find(unit => sameTarget(unit.target,op.source));
-      if (source) score += scoreOperations(state,seat,[{kind:'damageEvent',hits:units.filter(unit => unit.region === source.region && inRange(source.at,unit.at,'nearby') && !sameTarget(unit.target,source.target)).map(unit => ({target:unit.target,amount:unitStats(state,source).atk}))}]);
+      const source = findUnit(state,op.source);
+      if (source) score += scoreOps(state,seat,[{kind:'damageEvent',hits:units.filter(unit => unit.region === source.region && inRange(source.at,unit.at,'nearby') && !sameTarget(unit.target,source.target)).map(unit => ({target:unit.target,amount:statsOf(state,source).atk}))}]);
       continue;
     }
     if (op.kind === 'auraUpdate') continue;
@@ -546,7 +695,7 @@ function scoreOperations(state, seat, operations) {
     if (op.kind === 'surface') continue;
     if (op.kind === 'gainMana') { score += op.amount; continue; }
     if (op.kind === 'sleep' || op.kind === 'immobilizeSites') continue;
-    if (op.kind === 'swallow') { const target = units.find(u => sameTarget(u.target,op.target)); score += target?.owner === seat ? -5 : 5; continue; }
+    if (op.kind === 'swallow') { const target = findUnit(state,op.target); score += target?.owner === seat ? -5 : 5; continue; }
     if (op.kind === 'retriggerGenesis') { score += op.ats.length; continue; }
     if (op.kind === 'reorder') {
       const top = state.zones[seat].spellbook;
@@ -554,7 +703,7 @@ function scoreOperations(state, seat, operations) {
       score += op.bottom ? useful(top[1])-useful(top[0]) : op.order.reduce((sum,index,position) => sum+useful(top[index])/(position+1),0);
       continue;
     }
-    if (op.kind === 'damageEvent') { score += op.hits.reduce((sum,hit) => sum + scoreOperations(state,seat,[{ kind: 'damage',targets: [hit.target],amount: hit.amount,element: hit.element }]),0); continue; }
+    if (op.kind === 'damageEvent') { score += op.hits.reduce((sum,hit) => sum + damageScore(state,seat,hit.target,hit.amount,hit.element),0); continue; }
     if (op.kind === 'summonTokens') { score += op.ats.length*4; continue; }
     if (op.kind === 'destroySite') { score += state.board.sites[op.at]?.owner === (seat === 'p1' ? 1 : 2) ? -6 : 6; continue; }
     if (op.kind === 'discard') { score -= 2; continue; }
@@ -564,7 +713,7 @@ function scoreOperations(state, seat, operations) {
       const text = op.card ? cardText(op.card) : '';
       const unsafe = op.region === 'void' && !/\bVoidwalk\b/.test(text) || op.region === 'underwater' && !/\bSubmerge\b/.test(text) || op.region === 'underground' && !/\bBurrowing\b/.test(text);
       score += unsafe ? -50 : op.card ? Number(op.card.cost || 0)+4 : 6;
-      if (op.to) score -= units.filter(u => u.at === op.to && u.owner !== seat).reduce((sum,u) => sum+unitStats(state,u).atk,0);
+      if (op.to) score -= units.filter(u => u.at === op.to && u.owner !== seat).reduce((sum,u) => sum+statsOf(state,u).atk,0);
       continue;
     }
     if (op.kind === 'draw') { score += op.count * 2; continue; }
@@ -573,7 +722,7 @@ function scoreOperations(state, seat, operations) {
       continue;
     }
     if (op.kind === 'buff' || op.kind === 'mend') {
-      const unit = units.find(u => sameTarget(u.target, op.target));
+      const unit = findUnit(state, op.target);
       if (!unit) continue;
       const item = unit.target.kind === 'permanent' ? state.permanents[unit.at][unit.target.index] : state.avatars[unit.owner];
       if (op.kind === 'buff') score += item.tapped || item.summonedThisTurn ? 0 : op.power*2+op.movement;
@@ -584,22 +733,21 @@ function scoreOperations(state, seat, operations) {
       continue;
     }
     if (op.kind === 'move') {
-      const unit = units.find(u => sameTarget(u.target, op.target));
+      const unit = findUnit(state, op.target, snap);
       if (!unit) continue;
-      const opponent = state.avatars[seat === 'p1' ? 'p2' : 'p1']?.pos?.join(',');
+      const opponent = opponentAt(state, seat, snap);
       if (opponent) {
-        const distance = (at) => { const [x,y] = at.split(',').map(Number), [ox,oy] = opponent.split(',').map(Number); return Math.abs(x-ox)+Math.abs(y-oy); };
-        score += (distance(unit.at) - distance(op.to)) * (unit.owner === seat ? 1 : -1);
+        const [ox,oy] = cellOf(opponent), [ux,uy] = cellOf(unit.at), [tx,ty] = cellOf(op.to);
+        score += ((Math.abs(ux-ox)+Math.abs(uy-oy)) - (Math.abs(tx-ox)+Math.abs(ty-oy))) * (unit.owner === seat ? 1 : -1);
       }
       // Preserve the avatar and avoid teleporting weak allies into stronger threats.
-      const threat = units.filter(u => u.owner !== unit.owner && u.at === op.to)
-        .reduce((sum,u) => sum + Number(cards[u.card.name]?.attack || 0),0);
+      const threat = threatAt(state, unit.owner, op.to, snap);
       if (unit.owner === seat) score -= threat * (unit.target.kind === 'avatar' ? 3 : 0.5);
       continue;
     }
     let value = 0;
     for (const [targetIndex, target] of op.targets.entries()) {
-      const unit = units.find(u => sameTarget(u.target, target));
+      const unit = findUnit(state, target);
       if (!unit) continue;
       const card = cards[unit.card.name] || unit.card;
       const sign = unit.owner === seat ? -1 : 1;

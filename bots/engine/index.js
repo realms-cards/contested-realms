@@ -4,6 +4,15 @@ const { recordAirCast } = require("../../src/lib/game/cpu/castHistory");
 const { reachableCells } = require("../../src/lib/game/cpu/movement");
 const { moveUnit } = require("../../src/lib/game/cpu/move");
 
+// Per-call / per-node diagnostics (candidate summaries, movement options, site placement) are off
+// by default because they ran for every node of the search tree. Set CPU_ENGINE_DEBUG=1 to print
+// them; search() itself prints one summary line per decision.
+const ENGINE_DEBUG =
+  typeof process !== "undefined" && !!process.env && process.env.CPU_ENGINE_DEBUG === "1";
+function debugLog(...args) {
+  if (ENGINE_DEBUG) console.log(...args);
+}
+
 // T036: Import card evaluation system for card-specific understanding
 let cardEvalLoader = null;
 let cardEvalCache = null;
@@ -163,18 +172,26 @@ function deepClone(x) {
   return x;
 }
 
+// Copy-on-write merge: every object on a patched path is copied, while untouched branches of `dst`
+// and arrays from `src` (arrays still replace wholesale) are shared by reference. This is safe
+// because nothing in this engine, nor in the shared CPU helpers it calls (spells, advancedSpells,
+// movement, move, castHistory, card-evaluations loader), mutates a state or a patch in place:
+// patch builders copy before editing (`[...z.hand]`, `{ ...z }`) and only write to objects they
+// just created. search() deep-clones the patch it returns because the bot client hydrates card
+// refs in that patch in place. Key order matches the former deep-cloning version (dst keys, then
+// new src keys). Verified by tests/bot/engine-search-budget.js (read-only proxies, baseline diff).
 function mergeReplaceArrays(dst, src) {
   if (!src || typeof src !== "object") return dst;
   const out = Array.isArray(dst) ? [] : {};
-  if (Array.isArray(src)) return deepClone(src);
+  if (Array.isArray(src)) return src;
   const keys = new Set([...Object.keys(dst || {}), ...Object.keys(src || {})]);
   for (const k of keys) {
     const dv = dst ? dst[k] : undefined;
     const sv = src[k];
     if (sv === undefined) {
-      out[k] = deepClone(dv);
+      out[k] = dv;
     } else if (Array.isArray(sv)) {
-      out[k] = deepClone(sv);
+      out[k] = sv;
     } else if (sv && typeof sv === "object") {
       out[k] = mergeReplaceArrays(dv && typeof dv === "object" ? dv : {}, sv);
     } else {
@@ -548,13 +565,15 @@ function playSitePatch(state, seat) {
   if (earthIdx !== -1) pick = { idx: earthIdx, card: hand[earthIdx] };
   if (!pick) pick = chooseSiteFromHand({ hand });
   if (!pick) {
-    const handTypes = hand.map(c => {
-      const name = c && c.name ? c.name : '?';
-      const rawType = c && c.type ? c.type : 'null';
-      const resolved = isSite(c) ? 'site' : getCardTypeFromCard(c);
-      return `${name}(type=${rawType},resolved=${resolved})`;
-    });
-    console.log(`[Bot Engine] playSitePatch: No site in hand (${hand.length} cards: ${handTypes.join(', ')})`);
+    if (ENGINE_DEBUG) {
+      const handTypes = hand.map(c => {
+        const name = c && c.name ? c.name : '?';
+        const rawType = c && c.type ? c.type : 'null';
+        const resolved = isSite(c) ? 'site' : getCardTypeFromCard(c);
+        return `${name}(type=${rawType},resolved=${resolved})`;
+      });
+      console.log(`[Bot Engine] playSitePatch: No site in hand (${hand.length} cards: ${handTypes.join(', ')})`);
+    }
     return null;
   }
   hand.splice(pick.idx, 1);
@@ -570,7 +589,7 @@ function playSitePatch(state, seat) {
     // Strategy 1: First site goes ON avatar position (or adjacent if occupied)
     const [ax, ay] = avatarPos;
     cell = isEmpty(state, ax, ay) ? `${ax},${ay}` : findAnyEmptyCell(state);
-    console.log(
+    debugLog(
       `[Bot Engine] playSitePatch: First site at avatar position ${ax},${ay} -> cell ${cell}`
     );
   } else if (siteCount < 3) {
@@ -595,7 +614,7 @@ function playSitePatch(state, seat) {
   // Per rules p.20: "Tap → Play or draw a site" — playing a site taps the Avatar
   const avPrev = getAvatar(state, seat) || {};
   patch.avatars[seat] = { ...avPrev, tapped: true };
-  console.log(
+  debugLog(
     `[Bot Engine] playSitePatch: Placing ${pick.card.name} at ${cell}, hand size after: ${hand.length}`
   );
   return patch;
@@ -1129,7 +1148,9 @@ function isOpponentSiteCell(state, seat, cellKey) {
 // Attacking sites CANNOT deliver death blow (must attack avatar for that)
 // Sites are valid targets EXCEPT when opponent is at death's door (0 life)
 // Units with summoning sickness CAN move/defend but CANNOT attack
-function generateMoveCandidates(state, seat) {
+// `limit`: stop once this many candidates exist (callers only use the first few); the returned
+// prefix is identical to the unlimited list.
+function generateMoveCandidates(state, seat, limit = Infinity) {
   // T057: Filter out tapped units, summoning sick, and non-combat permanents
   const allMyUnits = myUnits(state, seat);
   const units = allMyUnits.filter((u) => {
@@ -1164,14 +1185,16 @@ function generateMoveCandidates(state, seat) {
   }
 
   // Diagnostic: log movement candidate generation
-  try {
-    if (allMyUnits.length > 0 || units.length > 0) {
-      const tapped = allMyUnits.filter(u => u.item?.tapped).length;
-      const sick = allMyUnits.filter(u => u.item?.summonedThisTurn).length;
-      const hasAvatar = units.some(u => u.item?._isAvatar);
-      console.log(`[Engine] Movement: ${allMyUnits.length} total units, ${units.length} can attack (${tapped} tapped, ${sick} sick${hasAvatar ? ', +avatar' : ''})`);
-    }
-  } catch {}
+  if (ENGINE_DEBUG) {
+    try {
+      if (allMyUnits.length > 0 || units.length > 0) {
+        const tapped = allMyUnits.filter(u => u.item?.tapped).length;
+        const sick = allMyUnits.filter(u => u.item?.summonedThisTurn).length;
+        const hasAvatar = units.some(u => u.item?._isAvatar);
+        console.log(`[Engine] Movement: ${allMyUnits.length} total units, ${units.length} can attack (${tapped} tapped, ${sick} sick${hasAvatar ? ', +avatar' : ''})`);
+      }
+    } catch {}
+  }
   if (!units.length) return [];
 
   const oppPos = getOpponentAvatarPos(state, seat);
@@ -1232,6 +1255,7 @@ function generateMoveCandidates(state, seat) {
   // Generate movement candidates for up to 5 closest units (not just one)
   const maxUnitsToConsider = units.length;
   for (let ui = 0; ui < maxUnitsToConsider; ui++) {
+    if (candidates.length >= limit) break;
     const chosen = units[ui];
     const chosenPos = parseCellKey(chosen.at);
     const chosenDist = chosenPos ? Math.min(...targetPositions.map(t => manhattan([chosenPos.x, chosenPos.y], t))) : 999;
@@ -1252,7 +1276,7 @@ function generateMoveCandidates(state, seat) {
       });
 
     // Diagnostic: log movement options for first 3 units
-    if (ui < 3) {
+    if (ENGINE_DEBUG && ui < 3) {
       try {
         const blocked = allNeigh.filter(k => hasFriendlyAt(state, seat, k) && !neigh.includes(k));
         const voidCells = allNeigh.filter(k => !isValidMovement(state, chosen.at, k, chosen));
@@ -2168,7 +2192,7 @@ function getDeterministicAction(state, seat) {
 
   // TURN 1: ALWAYS play site under avatar (no exceptions) — if avatar untapped
   if (turnNumber === 1 && sites === 0 && !avatarTapped && hasSiteInHand(hand)) {
-    console.log("[Bot Engine] T100: Turn 1 deterministic site play");
+    debugLog("[Bot Engine] T100: Turn 1 deterministic site play");
     const thresholdNeeds = analyzeThresholdNeeds(state, seat);
     const site = chooseBestSiteFromHand(hand, thresholdNeeds);
     if (site) {
@@ -2187,7 +2211,7 @@ function getDeterministicAction(state, seat) {
     // If we have a 1-cost and exactly 1 site, let scoring decide
     // Otherwise, play the site
     if (!oneCost) {
-      console.log("[Bot Engine] T100: Turn 2 deterministic site play");
+      debugLog("[Bot Engine] T100: Turn 2 deterministic site play");
       const thresholdNeeds = analyzeThresholdNeeds(state, seat);
       const site = chooseBestSiteFromHand(hand, thresholdNeeds);
       if (site) {
@@ -2202,7 +2226,7 @@ function getDeterministicAction(state, seat) {
 
   // TURN 3: Play site if < 3 sites (need 3 mana base)
   if (turnNumber === 3 && sites < 3 && !avatarTapped && hasSiteInHand(hand)) {
-    console.log(`[Bot Engine] T100: Turn 3 deterministic site play (${sites} sites)`);
+    debugLog(`[Bot Engine] T100: Turn 3 deterministic site play (${sites} sites)`);
     const thresholdNeeds = analyzeThresholdNeeds(state, seat);
     const site = chooseBestSiteFromHand(hand, thresholdNeeds);
     if (site) {
@@ -2898,12 +2922,53 @@ function getCardFromPatch(patch) {
   }
 }
 
+// Spell previews cannot be interrupted: each playSpellPatch runs a full cpuSpells.getSpellChoices,
+// so besides checking the deadline before starting one, the cost measured for a spell's earlier
+// preview in the same search() (the root or another tree node, i.e. nearly the same board) predicts
+// the next one, and generateCandidates skips a preview predicted to end past the deadline. The
+// measurements live on that search's budget object: another bot's board or an earlier decision
+// never hides a spell, and a spell's first preview in a decision always runs if time remains.
+function previewClockMs() {
+  return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+}
+function estimateSpellPreviewMs(budget, card) {
+  const costs = budget && budget.previewCosts;
+  return (costs && card && card.name && costs.get(card.name)) || 0;
+}
+function recordSpellPreviewMs(budget, card, ms) {
+  if (!budget || !card || !card.name) return;
+  if (!budget.previewCosts) budget.previewCosts = new Map();
+  budget.previewCosts.set(card.name, Math.max(0, ms));
+}
+
 // T012-T014: Refined candidate generation with cost validation and prioritization
 // T015: Enhanced to track filtering stats for telemetry
+// The returned order (units, units after draw, spells, spells after draw, moves, site / avatar
+// tap, draw, then pass last) is what search() tie-breaks on. With options.budget
+// ({ deadline, cut }) no further action candidates are built once the deadline has passed (with
+// options.alwaysBuildCheapCandidates only spell previews stop), and a spell preview predicted to end
+// past it is skipped (budget.cut is set either way); the pass candidate is always included.
 function generateCandidates(state, seat, options = {}) {
-  const base = deepClone(state || {});
-  const moves = [];
+  // No defensive deep clone: nothing below mutates `state` (see mergeReplaceArrays).
+  const base = state || {};
   const skipDraw = options && options.skipDrawThisTurn === true;
+  const budget = (options && options.budget) || null;
+  const outOfTime = () => {
+    if (!budget || Date.now() < budget.deadline) return false;
+    budget.cut = true;
+    return true;
+  };
+  const previewWouldOverrun = (spell) => {
+    if (!budget || Date.now() + estimateSpellPreviewMs(budget, spell) <= budget.deadline) return false;
+    budget.cut = true;
+    return true;
+  };
+  const timedSpellPatch = (from, spell) => {
+    const startedAt = previewClockMs();
+    const patch = playSpellPatch(from, seat, spell);
+    recordSpellPreviewMs(budget, spell, previewClockMs() - startedAt);
+    return patch;
+  };
   const ownedSitesNow = countOwnedManaSites(base, seat);
   const hand = getZones(base, seat).hand || [];
 
@@ -2957,78 +3022,52 @@ function generateCandidates(state, seat, options = {}) {
   stats.playableSpells = playableSpells.length;
 
   // Diagnostic: log candidate generation summary
-  try {
-    const mana = countUntappedMana(base, seat);
-    const spent = getManaSpentThisTurn(base, seat);
-    console.log(`[Engine] Candidates: ${playableUnits.length} units (${allUnits.length} total), ${playableSpells.length} spells, sites=${ownedSitesNow}, mana=${mana}, spent=${spent}, hand=${hand.length}`);
-    if (playableUnits.length > 0) {
-      console.log(`[Engine] Playable units:`, playableUnits.map(u => `${u.name || '?'}(cost=${getCardManaCost(u)})`).join(', '));
-    }
-  } catch {}
+  if (ENGINE_DEBUG) {
+    try {
+      const mana = countUntappedMana(base, seat);
+      const spent = getManaSpentThisTurn(base, seat);
+      console.log(`[Engine] Candidates: ${playableUnits.length} units (${allUnits.length} total), ${playableSpells.length} spells, sites=${ownedSitesNow}, mana=${mana}, spent=${spent}, hand=${hand.length}`);
+      if (playableUnits.length > 0) {
+        console.log(`[Engine] Playable units:`, playableUnits.map(u => `${u.name || '?'}(cost=${getCardManaCost(u)})`).join(', '));
+      }
+    } catch {}
+  }
 
   // Draw patches
   const drawSpell = skipDraw
     ? null
     : drawFromPilePatch(base, seat, "spellbook");
-  const drawAtlas = skipDraw ? null : drawFromAtlasPatch(base, seat);
   const pass = {};
 
+  // Candidate groups, concatenated below in the fixed order. Cheap groups are built first and the
+  // spell groups last (each playSpellPatch builds a full cpuSpells.getSpellChoices preview), so a
+  // deadline drops spell candidates before units, attacks or site plays.
+  const unitMoves = [];
+  const unitAfterDrawMoves = [];
+  const spellMoves = [];
+  const spellAfterDrawMoves = [];
+  const movementMoves = [];
+  const siteMoves = [];
+  const drawMoves = [];
+
+  // With options.alwaysBuildCheapCandidates (search() root only) the cheap groups (units, moves,
+  // site / avatar tap, units after draw; a few ms even on crowded boards) are built past the
+  // deadline too, so a decision is never left with pass alone; spell previews stay deadline-gated.
+  const cheapOutOfTime = options && options.alwaysBuildCheapCandidates ? () => false : outOfTime;
+
   // T012: Prioritize unit-playing candidates FIRST - pass specific cards
-  if (playableUnits.length > 0) {
-    for (const unit of playableUnits) {
-      const unitPatch = playUnitPatch(base, seat, null, unit); // Pass specific card
-      if (unitPatch) moves.push(seq([unitPatch]));
-    }
-    // Also try unit after draw
-    if (drawSpell) {
-      const afterDraw = applyPatch(base, drawSpell);
-      // Re-check affordability after draw (hand changed)
-      const newHand = getZones(afterDraw, seat).hand || [];
-      const affordableAfterDraw = newHand
-        .filter((c) => {
-          const cardType = (c.type || "").toLowerCase();
-          if (cardType.includes("site")) return false;
-          if (cardType.includes("avatar")) return false; // CRITICAL: avatars can't be played
-          if (isSpellCard(c)) return false; // Exclude spells
-          return canAffordCard(afterDraw, seat, c);
-        })
-        .slice(0, 3); // Limit to 3 after draw
-
-      for (const unit of affordableAfterDraw) {
-        const unitAfterDraw = playUnitPatch(afterDraw, seat, null, unit);
-        if (unitAfterDraw) moves.push(seq([drawSpell, unitAfterDraw]));
-      }
-    }
-  }
-
-  // T043: Spell-playing candidates - generate for Magic/Sorcery/Aura cards
-  if (playableSpells.length > 0) {
-    for (const spell of playableSpells) {
-      const spellPatch = playSpellPatch(base, seat, spell);
-      if (spellPatch) moves.push(seq([spellPatch]));
-    }
-    // Also try spell after draw (combos)
-    if (drawSpell) {
-      const afterDraw = applyPatch(base, drawSpell);
-      const newHand = getZones(afterDraw, seat).hand || [];
-      const affordableSpellsAfterDraw = newHand
-        .filter((c) => {
-          if (!isSpellCard(c)) return false;
-          return canAffordCard(afterDraw, seat, c);
-        })
-        .slice(0, 2); // Limit to 2 spells after draw
-
-      for (const spell of affordableSpellsAfterDraw) {
-        const spellAfterDraw = playSpellPatch(afterDraw, seat, spell);
-        if (spellAfterDraw) moves.push(seq([drawSpell, spellAfterDraw]));
-      }
-    }
+  for (const unit of playableUnits) {
+    if (cheapOutOfTime()) break;
+    const unitPatch = playUnitPatch(base, seat, null, unit); // Pass specific card
+    if (unitPatch) unitMoves.push(seq([unitPatch]));
   }
 
   // Movement candidates (up to 4)
-  const movePatches = generateMoveCandidates(base, seat);
-  for (let i = 0; i < Math.min(4, movePatches.length); i++) {
-    moves.push(seq([movePatches[i]]));
+  if (!cheapOutOfTime()) {
+    const movePatches = generateMoveCandidates(base, seat, 4);
+    for (let i = 0; i < Math.min(4, movePatches.length); i++) {
+      movementMoves.push(seq([movePatches[i]]));
+    }
   }
 
   // Per rules p.20: "Tap → Play or draw a site" — Avatar must be untapped to play a site
@@ -3038,10 +3077,10 @@ function generateCandidates(state, seat, options = {}) {
   const allowSitePlaying = !avatarTapped;
   stats.sitesGated = !allowSitePlaying;
 
-  if (allowSitePlaying) {
+  if (allowSitePlaying && !cheapOutOfTime()) {
     const sitePatch = playSitePatch(base, seat);
     if (sitePatch) {
-      moves.push(seq([sitePatch]));
+      siteMoves.push(seq([sitePatch]));
     }
 
     // Avatar tap alternative: draw a site to hand instead of placing one
@@ -3050,7 +3089,7 @@ function generateCandidates(state, seat, options = {}) {
     if (avatarTapDraw) {
       // Tag it so getActionType recognizes it as avatar_tap
       avatarTapDraw._avatarTap = true;
-      moves.push(seq([avatarTapDraw]));
+      siteMoves.push(seq([avatarTapDraw]));
     }
   }
 
@@ -3067,8 +3106,66 @@ function generateCandidates(state, seat, options = {}) {
 
   // Only offer spellbook draw as standalone action when hand is very small and nothing to play
   if (handSize < 4 && !hasPlayableActions && drawSpell) {
-    moves.push(seq([drawSpell]));
+    drawMoves.push(seq([drawSpell]));
   }
+
+  // Also try unit after draw
+  if (playableUnits.length > 0 && drawSpell && !cheapOutOfTime()) {
+    const afterDraw = applyPatch(base, drawSpell);
+    // Re-check affordability after draw (hand changed)
+    const newHand = getZones(afterDraw, seat).hand || [];
+    const affordableAfterDraw = newHand
+      .filter((c) => {
+        const cardType = (c.type || "").toLowerCase();
+        if (cardType.includes("site")) return false;
+        if (cardType.includes("avatar")) return false; // CRITICAL: avatars can't be played
+        if (isSpellCard(c)) return false; // Exclude spells
+        return canAffordCard(afterDraw, seat, c);
+      })
+      .slice(0, 3); // Limit to 3 after draw
+
+    for (const unit of affordableAfterDraw) {
+      if (cheapOutOfTime()) break;
+      const unitAfterDraw = playUnitPatch(afterDraw, seat, null, unit);
+      if (unitAfterDraw) unitAfterDrawMoves.push(seq([drawSpell, unitAfterDraw]));
+    }
+  }
+
+  // T043: Spell-playing candidates - generate for Magic/Sorcery/Aura cards
+  for (const spell of playableSpells) {
+    if (outOfTime()) break;
+    if (previewWouldOverrun(spell)) continue; // a cheaper spell further on may still fit
+    const spellPatch = timedSpellPatch(base, spell);
+    if (spellPatch) spellMoves.push(seq([spellPatch]));
+  }
+  // Also try spell after draw (combos)
+  if (playableSpells.length > 0 && drawSpell && !outOfTime()) {
+    const afterDraw = applyPatch(base, drawSpell);
+    const newHand = getZones(afterDraw, seat).hand || [];
+    const affordableSpellsAfterDraw = newHand
+      .filter((c) => {
+        if (!isSpellCard(c)) return false;
+        return canAffordCard(afterDraw, seat, c);
+      })
+      .slice(0, 2); // Limit to 2 spells after draw
+
+    for (const spell of affordableSpellsAfterDraw) {
+      if (outOfTime()) break;
+      if (previewWouldOverrun(spell)) continue;
+      const spellAfterDraw = timedSpellPatch(afterDraw, spell);
+      if (spellAfterDraw) spellAfterDrawMoves.push(seq([drawSpell, spellAfterDraw]));
+    }
+  }
+
+  const moves = [
+    ...unitMoves,
+    ...unitAfterDrawMoves,
+    ...spellMoves,
+    ...spellAfterDrawMoves,
+    ...movementMoves,
+    ...siteMoves,
+    ...drawMoves,
+  ];
 
   // Pass candidate (always include)
   const passCand = seq([pass]);
@@ -3092,6 +3189,20 @@ function generateCandidates(state, seat, options = {}) {
   return limited;
 }
 
+// Time budget of one decision. Hard deadline = start + HARD_DEADLINE_FACTOR × theta.search.budgetMs
+// (default theta: 2 × 60 = 120 ms, the same point at which refinement already stopped). Once it has
+// passed, generateCandidates starts no further spell previews at the root (the cheap unit, move and
+// site candidates are always built there) and no further candidates in the tree, and refinement
+// stops. A spell preview predicted to end past the deadline is not started either (see
+// estimateSpellPreviewMs). Every root candidate that was generated is scored, deadline or not: its
+// generation is already paid for and scoring is cheap, so a cutoff never discards a built action in
+// favour of pass. Work is only abandoned between units (one candidate patch or spell preview, one
+// tree node), so wall time can exceed the deadline by one such unit whose cost was not predicted
+// (a spell's first preview in this decision) plus scoring the root candidates.
+// A legal decision is always returned: a deterministic action first, else the best scored
+// candidate (pass is always generated last and scored), else endTurnPatch.
+const HARD_DEADLINE_FACTOR = 2;
+
 function search(state, seat, theta, rng, options) {
   const start = Date.now();
   const thetaUse = theta && theta.weights ? theta : loadTheta();
@@ -3101,7 +3212,11 @@ function search(state, seat, theta, rng, options) {
   const maxDepth = Math.max(1, Number(conf.maxDepth || 2) || 2);
   const budgetMs = Math.max(1, Number(conf.budgetMs || 60) || 60);
   const gamma = typeof conf.gamma === "number" ? conf.gamma : 0.6;
-  const softDeadline = start + Math.floor(budgetMs * 2); // soft budget, never hard-fail
+  const deadline = start + Math.floor(budgetMs * HARD_DEADLINE_FACTOR);
+  const outOfTime = () => Date.now() >= deadline;
+  // Shared with generateCandidates and bestChildValue: `cut` is set whenever work is skipped.
+  const budget = { deadline, cut: false };
+  let truncatedAt = null; // first stage the deadline cut short: "generate" | "refine"
 
   // T100: Check for deterministic actions FIRST (bypass scoring for obvious plays)
   const deterministicAction = getDeterministicAction(state, seat);
@@ -3127,15 +3242,20 @@ function search(state, seat, theta, rng, options) {
   const genResult = generateCandidates(state, seat, {
     ...options,
     collectStats,
+    budget,
+    alwaysBuildCheapCandidates: true,
   });
   const list = collectStats ? genResult.candidates : genResult;
   const generationStats = collectStats ? genResult.stats : null;
+  if (budget.cut) truncatedAt = "generate";
 
   // T011: Get strategic modifiers for phase-based strategy
   const strategicModifiers = getStrategicModifiers(state, seat, thetaUse);
 
   const scored = [];
-  for (const p of list) {
+  // Every generated candidate is scored, deadline or not (see HARD_DEADLINE_FACTOR).
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
     const next = applyPatch(state, p);
     const f = extractFeatures(state, next, seat);
     let s = evalFeatures(f, w);
@@ -3363,13 +3483,15 @@ function search(state, seat, theta, rng, options) {
   }
 
   // Diagnostic: log top-scored candidates
-  try {
-    const sortedForLog = [...scored].sort((a, b) => b.score - a.score).slice(0, 5);
-    console.log(`[Engine] Top candidates (${scored.length} total):`);
-    for (const c of sortedForLog) {
-      console.log(`  ${c.actionType}: score=${c.score.toFixed(2)} mod=${c.modifier.toFixed(1)} card=${c.cardName || '-'} bonus=${(c.cardBonus || 0).toFixed(2)}`);
-    }
-  } catch {}
+  if (ENGINE_DEBUG) {
+    try {
+      const sortedForLog = [...scored].sort((a, b) => b.score - a.score).slice(0, 5);
+      console.log(`[Engine] Top candidates (${scored.length} total):`);
+      for (const c of sortedForLog) {
+        console.log(`  ${c.actionType}: score=${c.score.toFixed(2)} mod=${c.modifier.toFixed(1)} card=${c.cardName || '-'} bonus=${(c.cardBonus || 0).toFixed(2)}`);
+      }
+    } catch {}
+  }
 
   let nodes = scored.length;
   let depthReached = 1;
@@ -3381,9 +3503,14 @@ function search(state, seat, theta, rng, options) {
     return false;
   }
 
+  const treeOptions = { ...(options || {}), budget };
   function bestChildValue(parentState, parentF, depthLeft, qLeft) {
-    if (depthLeft <= 0 || Date.now() >= softDeadline) return 0;
-    const children = generateCandidates(parentState, seat, options || {});
+    if (depthLeft <= 0) return 0;
+    if (outOfTime()) {
+      budget.cut = true;
+      return 0;
+    }
+    const children = generateCandidates(parentState, seat, treeOptions);
     let bestScore = -Infinity;
     let bestState = null;
     let bestF = null;
@@ -3399,7 +3526,10 @@ function search(state, seat, theta, rng, options) {
         bestState = cstate;
         bestF = cf;
       }
-      if (Date.now() >= softDeadline) break;
+      if (outOfTime()) {
+        if (j < limit - 1) budget.cut = true;
+        break;
+      }
     }
     if (bestState && depthLeft > 1) {
       depthReached = Math.max(depthReached, maxDepth - depthLeft + 2);
@@ -3420,16 +3550,32 @@ function search(state, seat, theta, rng, options) {
     return bestScore;
   }
 
-  if (maxDepth >= 2 && Date.now() < softDeadline) {
-    for (let i = 0; i < scored.length; i++) {
-      if (Date.now() >= softDeadline) break;
+  if (maxDepth >= 2) {
+    // Refine the most promising roots first (descending root score, ties in list order). Each
+    // refinement is independent, so the outcome is unchanged when every root gets refined; under
+    // the deadline the remaining time goes to the best roots. A refinement cut short by the
+    // deadline is discarded instead of being compared with complete ones. The deadline is checked
+    // inside the loop so that skipping refinement altogether is also reported as truncated.
+    const order = scored
+      .map((_, i) => i)
+      .sort((a, b) => scored[b].score - scored[a].score || a - b);
+    for (const i of order) {
+      if (outOfTime()) {
+        truncatedAt = truncatedAt || "refine";
+        break;
+      }
       const root = scored[i];
+      budget.cut = false;
       const refinedTail = bestChildValue(
         root.state,
         root.features,
         maxDepth - 1,
         Number(conf.quiescenceDepth || 0)
       );
+      if (budget.cut) {
+        truncatedAt = truncatedAt || "refine";
+        break;
+      }
       root.refined =
         root.score + gamma * (Number.isFinite(refinedTail) ? refinedTail : 0);
     }
@@ -3455,10 +3601,15 @@ function search(state, seat, theta, rng, options) {
       Math.max(1, scored.length);
     chosen = scored[idx] || null;
   } else {
-    // Pick highest refined score (fallback to root score)
+    // Pick highest refined score (fallback to root score). If the deadline stopped refinement
+    // part-way, only refined roots compete: they are the best roots by root score, and a refined
+    // value (root + gamma × tail) is not comparable with a bare root score.
+    const refinedOnly =
+      truncatedAt !== null && scored.some((it) => Number.isFinite(it.refined));
     let best = null;
     let bestScore = -Infinity;
     for (const it of scored) {
+      if (refinedOnly && !Number.isFinite(it.refined)) continue;
       const sc = Number.isFinite(it.refined) ? it.refined : it.score;
       if (sc > bestScore) {
         bestScore = sc;
@@ -3469,6 +3620,19 @@ function search(state, seat, theta, rng, options) {
   }
 
   const timeMs = Date.now() - start;
+  // One summary line per decision; per-node diagnostics require CPU_ENGINE_DEBUG=1.
+  try {
+    const refinedCount = scored.filter((it) => Number.isFinite(it.refined)).length;
+    const chosenLabel = chosen
+      ? `${chosen.actionType}${chosen.cardName ? `:${chosen.cardName}` : ""}`
+      : "end_turn";
+    const timing = truncatedAt
+      ? `deadline ${deadline - start}ms reached during ${truncatedAt}, took ${timeMs}ms`
+      : `${timeMs}ms`;
+    console.log(
+      `[Engine] search: ${timing}; scored ${scored.length}/${list.length} candidates, refined ${refinedCount}, nodes ${nodes}, depth ${depthReached}; chose ${chosenLabel}`
+    );
+  } catch {}
   function summarizeChosenCards(patch) {
     try {
       if (!patch || typeof patch !== "object") return null;
@@ -3613,10 +3777,14 @@ function search(state, seat, theta, rng, options) {
               candidatesAfterLimit: list.length,
             }
           : null,
+        // Only present when the deadline cut this decision short ("generate" | "refine")
+        ...(truncatedAt ? { deadlineTruncated: truncatedAt } : {}),
       });
     }
   } catch {}
-  if (chosen && chosen.patch) return chosen.patch;
+  // Scored patches share untouched branches with `state` (copy-on-write). Return an independent
+  // copy, as the former deep-cloning pipeline did: the bot client hydrates card refs in place.
+  if (chosen && chosen.patch) return deepClone(chosen.patch);
   return endTurnPatch(state, seat);
 }
 

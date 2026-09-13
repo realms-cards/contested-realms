@@ -16,8 +16,8 @@ import {
 
 export default function MagicHudOverlay() {
   const cpuMatch = useGameStore(s => s.opponentPlayerId?.startsWith("cpu_") === true);
-  const spellName = useGameStore(s => s.pendingMagic?.spell.card.name);
-  if (cpuMatch && spellName) return <CpuMagicChoices />;
+  const hasSpell = useGameStore(s => !!s.pendingMagic?.spell.card.name);
+  if (cpuMatch && hasSpell) return <CpuMagicChoices />;
   if (cpuMatch) return <CpuAbilityChoices />;
   return <TabletopMagicHudOverlay />;
 }

@@ -854,10 +854,12 @@ const CPU_BOTS_ENABLED =
 const BOT_INTERNAL_SECRET = `bot_${Date.now()}_${Math.random().toString(36).slice(2, 14)}`;
 
 // Lazy loader: only require the headless BotClient when feature is enabled
-let _botModule: {
+type BotModule = {
   BotClient?: unknown;
   loadCardIdMap?: (p: unknown) => Promise<unknown>;
-} | null = null;
+  getCardIdMap?: () => unknown;
+};
+let _botModule: BotModule | null = null;
 function _loadBotModule() {
   if (_botModule) return _botModule;
   try {
@@ -875,17 +877,72 @@ function _loadBotModule() {
   }
 }
 
+// Server-spawned bots run in worker threads (bots/bot-worker-pool.js) so bot thinking
+// cannot stall socket traffic. CPU_BOT_WORKERS=0 keeps the in-process BotClient.
+interface BotWorkerPoolHandle {
+  BotClient: unknown;
+  syncCardIdMap(map?: unknown): boolean;
+}
+interface BotWorkerPoolModule {
+  createBotWorkerPool?: (opts: {
+    workerPath: string;
+    fallbackBotClient: unknown;
+    getCardIdMap?: () => unknown;
+  }) => BotWorkerPoolHandle | null;
+}
+let _botWorkerPool: BotWorkerPoolHandle | null | undefined;
+function _getBotWorkerPool(mod: BotModule): BotWorkerPoolHandle | null {
+  if (_botWorkerPool !== undefined) return _botWorkerPool;
+  _botWorkerPool = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const poolModule: BotWorkerPoolModule = require(
+      resolve(process.cwd(), "bots", "bot-worker-pool"),
+    );
+    if (typeof poolModule.createBotWorkerPool === "function") {
+      _botWorkerPool = poolModule.createBotWorkerPool({
+        workerPath: resolve(process.cwd(), "bots", "bot-worker.js"),
+        fallbackBotClient: mod.BotClient,
+        getCardIdMap: mod.getCardIdMap,
+      });
+    }
+  } catch (e) {
+    try {
+      console.warn(
+        "[Bot] Worker pool unavailable; CPU bots run in-process:",
+        safeErrorMessage(e),
+      );
+    } catch {
+      /* ignore */
+    }
+    _botWorkerPool = null;
+  }
+  return _botWorkerPool;
+}
+
 function loadBotClientCtor() {
   if (!CPU_BOTS_ENABLED) return null;
   const mod = _loadBotModule();
-  return mod && mod.BotClient ? mod.BotClient : null;
+  if (!mod || !mod.BotClient) return null;
+  const pool = _getBotWorkerPool(mod);
+  return pool ? pool.BotClient : mod.BotClient;
 }
 
 function loadBotCardIdMapFn(): ((p: unknown) => Promise<unknown>) | null {
   const mod = _loadBotModule();
-  return mod && typeof mod.loadCardIdMap === "function"
-    ? mod.loadCardIdMap
-    : null;
+  const load =
+    mod && typeof mod.loadCardIdMap === "function" ? mod.loadCardIdMap : null;
+  if (!load) return null;
+  return async (p: unknown) => {
+    const map = await load(p);
+    // Bots already hosted in workers pick up a map that finished loading late.
+    try {
+      _botWorkerPool?.syncCardIdMap(map);
+    } catch {
+      /* ignore */
+    }
+    return map;
+  };
 }
 
 const container = createContainer();

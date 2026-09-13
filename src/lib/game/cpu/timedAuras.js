@@ -1,8 +1,15 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Shared CPU rule semantics. */
-const { unitsInRealm, scoreOperations } = require('./spells');
+const { enterScope, leaveScope, realmUnits } = require('./evalScope');
+const { scoreOperations } = require('./spells');
 
 /** @param {import('./spellTypes').SpellState} state @returns {import('./spellTypes').SpellChoice[]} */
 function auraEndChoices(state) {
+  enterScope();
+  try { return choicesFor(state); } finally { leaveScope(); }
+}
+
+/** @param {import('./spellTypes').SpellState} state @returns {import('./spellTypes').SpellChoice[]} */
+function choicesFor(state) {
   const event = state.pendingMagic?.cpuEvent;
   if (event?.kind !== 'auraEnd' || event.source.kind !== 'permanent') return [];
   const source = event.source;
@@ -16,7 +23,7 @@ function auraEndChoices(state) {
   const target = {kind:'permanent',at,index,instanceId:item.instanceId || item.card.instanceId};
   const [x,y] = at.split(',').map(Number);
   const region = name === 'Wildfire' && !state.board.sites[at]?.card ? 'void' : 'surface';
-  const units = unitsInRealm(state).filter(unit => unit.region === region);
+  const units = realmUnits(state).filter(unit => unit.region === region);
   if (name === 'Entangle Terrain' || event.counter) {
     const ticks = (item.cpuAuraTicks || 0)+1;
     return [add('tick',`${name}: turn counter ${ticks}/3`,[{kind:'auraUpdate',target,ticks,dispel:ticks>=3}])];

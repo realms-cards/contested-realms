@@ -143,29 +143,42 @@ function MahoganyTable({ scale = 1, topY = 0 }: { scale?: number; topY?: number 
     markBoardAssetReady("table");
   }, []);
 
-  // Increase environment map intensity on table materials for better reflections
-  // and enable shadow receiving
-  scene.traverse((child) => {
-    if ((child as THREE.Mesh).isMesh) {
-      const mesh = child as THREE.Mesh;
-      mesh.receiveShadow = true;
-      if (mesh.material && "envMapIntensity" in mesh.material) {
-        (mesh.material as THREE.MeshStandardMaterial).envMapIntensity = 1.5;
-      }
-    }
-  });
-
   // Measure the model's own top surface so the tabletop can be pinned exactly
   // at `topY` in world space (cards rest on the y=0 plane; a hardcoded offset
   // previously left a ~0.12 gap that showed as floating cards without a playmat).
-  const localTopY = useMemo(() => {
-    const box = new THREE.Box3().setFromObject(scene);
-    return box.max.y;
+  //
+  // useGLTF hands every mount the same cached scene object, and R3F leaves a
+  // primitive's position/scale on it after unmount. Measuring that shared
+  // object on the next board (next tutorial lesson, next match, deck editor)
+  // folded the previous placement into the bounding box, so the tabletop
+  // alternated between ~6 units above the board and just above it, leaving
+  // the board inside or under the table. Each mount renders its own clone
+  // instead (geometry and materials stay shared), reset to identity and
+  // measured before any transform is applied.
+  const { table, localTopY } = useMemo(() => {
+    const clone = scene.clone(true);
+    clone.position.set(0, 0, 0);
+    clone.quaternion.identity();
+    clone.scale.set(1, 1, 1);
+    // clone() copies `visible`, which R3F's Suspense hiding can leave false
+    clone.visible = true;
+    // Stronger environment reflections on the wood, and receive card shadows
+    clone.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        mesh.receiveShadow = true;
+        if (mesh.material && "envMapIntensity" in mesh.material) {
+          (mesh.material as THREE.MeshStandardMaterial).envMapIntensity = 1.5;
+        }
+      }
+    });
+    const box = new THREE.Box3().setFromObject(clone);
+    return { table: clone, localTopY: box.max.y };
   }, [scene]);
 
   return (
     <primitive
-      object={scene}
+      object={table}
       scale={[scale, scale, scale]}
       position={[0, topY - localTopY * scale, 0]}
       raycast={noopRaycast}

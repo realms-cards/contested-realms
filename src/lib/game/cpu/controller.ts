@@ -99,10 +99,13 @@ export function installCpuController(store: StoreApi<GameState>) {
     }
     const endKey = `${state.turn}:${state.currentPlayer}`;
     const restored = (state.cpuSnapshotRevision || 0) !== (previous.cpuSnapshotRevision || 0);
+    // Pure realm scans of this snapshot, shared by the genesis/trail and Stealth checks below.
+    let realm: ReturnType<typeof unitsInRealm> | undefined;
+    const unitsNow = () => realm ||= unitsInRealm(state);
     if (!restored && (state.permanents !== previous.permanents || state.permanentPositions !== previous.permanentPositions || state.avatars !== previous.avatars)) {
-      const before = treasures(previous);
+      let before: ReturnType<typeof treasures> | undefined;
       for (const treasure of treasures(state)) {
-        const prior = before.find(item => sameTarget(item.target,treasure.target));
+        const prior = (before ||= treasures(previous)).find(item => sameTarget(item.target,treasure.target));
         const seat = treasure.owner === 1 ? "p1" : "p2";
         const fromHand = !prior && previous.zones[seat].hand.some(card => card.instanceId && card.instanceId === treasure.card.instanceId);
         const recovered = prior?.carried && treasure.carried && prior.region !== "surface" && treasure.region === "surface";
@@ -131,7 +134,7 @@ export function installCpuController(store: StoreApi<GameState>) {
     }
     if (!restored && (state.permanents !== previous.permanents || state.avatars !== previous.avatars)) {
       const before = unitsInRealm(previous);
-      for (const current of unitsInRealm(state)) {
+      for (const current of unitsNow()) {
         const prior = before.find(u => sameTarget(u.target,current.target));
         if (!prior && current.target.kind === "permanent") enqueueGenesis(current.card,current.at,current.owner === "p1" ? 1 : 2,batch,current.region,current.target);
         if (!prior || (prior.at === current.at && prior.region === current.region)) continue;
@@ -173,7 +176,7 @@ export function installCpuController(store: StoreApi<GameState>) {
       for (const pending of state.cpuEffectRequests || []) enqueue(pending,batch);
     }
     if (state.permanents !== previous.permanents) {
-      const units = unitsInRealm(state), changes: GameState["permanents"] = {};
+      const units = unitsNow(), changes: GameState["permanents"] = {};
       for (const unit of units) {
         if (unit.target.kind !== "permanent" || !/\bStealth\b/.test(cardText(unit.card))) continue;
         const item = state.permanents[unit.at][unit.target.index];

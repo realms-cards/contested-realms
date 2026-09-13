@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 
 type Choice = {key:string;label:string;boardTiles?:string[]};
@@ -8,18 +8,20 @@ export default function CpuFieldChoices({request,choices,value,onChange,id,manua
   request:string;choices:Choice[];value:string;onChange:(key:string)=>void;id:string;manual?:boolean;
 }) {
   const [armed,setArmed] = useState(!manual);
-  const picker = useCpuBoardPicker();
+  // Only this request's selected field affects rendering, not other highlight updates.
+  const tile = useCpuBoardPicker(picker => picker.request === request ? picker.selected : null);
   const lastSelection = useRef("");
-  const tilesJson = JSON.stringify([...new Set(choices.flatMap(choice => choice.boardTiles || []))]);
+  const tilesJson = useMemo(() => JSON.stringify([...new Set(choices.flatMap(choice => choice.boardTiles || []))]),[choices]);
   useEffect(() => {
     if (armed) useCpuBoardPicker.getState().configure(request,JSON.parse(tilesJson) as string[]);
     return () => useCpuBoardPicker.getState().clear(request);
   },[request,tilesJson,armed]);
-  const tile = picker.request === request ? picker.selected : null;
-  const visible = choices.filter(choice => !choice.boardTiles?.length || (tile && choice.boardTiles.includes(tile)));
+  const visible = useMemo(() => choices.filter(choice => !choice.boardTiles?.length || (tile && choice.boardTiles.includes(tile))),[choices,tile]);
   const selected = visible.find(choice => choice.key === value);
-  const atTile = tile ? visible.filter(choice => choice.boardTiles?.includes(tile)) : [];
-  const single = atTile.length === 1 ? atTile[0].key : null;
+  const single = useMemo(() => {
+    const atTile = tile ? visible.filter(choice => choice.boardTiles?.includes(tile)) : [];
+    return atTile.length === 1 ? atTile[0].key : null;
+  },[visible,tile]);
   useEffect(() => {
     const selection = `${request}:${tile}:${single}`;
     if (single && lastSelection.current !== selection) onChange(single);
