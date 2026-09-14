@@ -79,8 +79,7 @@ export const UserAvatarMenu: React.FC<UserAvatarMenuProps> = ({
         className="
           relative flex cursor-pointer items-center justify-center
           w-10 h-10 rounded-full
-          border border-rc-line/22
-          bg-gradient-to-br from-rc-accent-hover to-rc-accent-press
+          border border-rc-accent/45 bg-rc-accent/14
           transition-all duration-200 ease-out
           focus:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring
           shadow-rc-sm hover:shadow-rc-md
@@ -97,7 +96,7 @@ export const UserAvatarMenu: React.FC<UserAvatarMenuProps> = ({
             unoptimized
           />
         ) : (
-          <span className="font-rc-mono text-sm font-semibold text-rc-accent-fg">
+          <span className="font-rc-mono text-sm font-semibold text-rc-spark">
             {getInitials(displayName)}
           </span>
         )}
@@ -134,7 +133,7 @@ export const UserAvatarMenu: React.FC<UserAvatarMenuProps> = ({
                   className="
                   relative flex items-center justify-center
                   w-8 h-8 rounded-full
-                  bg-gradient-to-br from-rc-accent-hover to-rc-accent-press
+                  border border-rc-accent/45 bg-rc-accent/14
                 "
                 >
                   {avatarUrl ? (
@@ -147,7 +146,7 @@ export const UserAvatarMenu: React.FC<UserAvatarMenuProps> = ({
                       unoptimized
                     />
                   ) : (
-                    <span className="font-rc-mono text-xs font-semibold text-rc-accent-fg">
+                    <span className="font-rc-mono text-xs font-semibold text-rc-spark">
                       {getInitials(displayName)}
                     </span>
                   )}
@@ -274,7 +273,7 @@ export const UserAvatar: React.FC<{
       relative flex items-center justify-center
       ${sizeClasses[size]}
       rounded-full
-      bg-gradient-to-br from-rc-accent-hover to-rc-accent-press
+      border border-rc-accent/45 bg-rc-accent/14
       ${className}
     `}
     >
@@ -288,7 +287,7 @@ export const UserAvatar: React.FC<{
           unoptimized
         />
       ) : (
-        <span className="font-rc-mono font-semibold text-rc-accent-fg">
+        <span className="font-rc-mono font-semibold text-rc-spark">
           {getInitials(displayName)}
         </span>
       )}

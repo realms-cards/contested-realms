@@ -9,6 +9,7 @@ import CardSearchDialog from "@/components/game/CardSearchDialog";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import HandPeekDialog from "@/components/game/HandPeekDialog";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import D20Dice from "@/lib/game/components/D20Dice";
@@ -30,9 +31,12 @@ import {
 /** Quiet toolbox control: hairline border on an inked ground, gold on hover. */
 const QUIET_BTN =
   "border border-rc-line/22 bg-black/35 text-rc-fg-muted transition-colors hover:border-rc-accent hover:text-rc-accent-ring";
-/** The single gold control per surface (the confirm action). */
-const GOLD_BTN =
-  "border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent text-rc-accent-fg transition-transform hover:-translate-y-px";
+/** Selected / open state: gold tint, never a fill. */
+const TINT_BTN =
+  "border border-rc-accent/60 bg-rc-accent/14 text-rc-spark transition-colors";
+/** Open manual game-state fixes: warning tint (edits the live match state). */
+const WARN_TINT_BTN =
+  "border border-rc-warning/60 bg-rc-warning/14 text-rc-warning-ink transition-colors";
 /** Inset group inside the toolbox panel. */
 const GROUP_BOX = "rounded-rc-md border border-rc-line/12 bg-black/30 p-2";
 /** Short mono status label (uppercase, letter-spaced). */
@@ -1228,8 +1232,8 @@ export default function GameToolbox({
         <div
           className={`border border-rc-line/18 bg-[rgba(9,13,25,0.82)] backdrop-blur shadow-rc-panel ${containerWidthClass} overflow-y-auto transition-all ${
             isMobileScreen
-              ? "fixed right-0 bottom-0 z-50 rounded-tl-2xl max-h-[70vh] pb-[max(1.5rem,env(safe-area-inset-bottom))]"
-              : "rounded-xl max-h-[85vh]"
+              ? "fixed right-0 bottom-0 z-50 rounded-tl-rc-lg max-h-[70vh] pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+              : "rounded-rc-lg max-h-[85vh]"
           }`}
         >
           <div
@@ -1344,10 +1348,10 @@ export default function GameToolbox({
                   />
                 </div>
               </div>
-              <button
-                className={`w-full rounded-rc-sm ${
-                  actionType === "draw" ? GOLD_BTN : QUIET_BTN
-                } py-1 disabled:opacity-50`}
+              <RcButton
+                variant={actionType === "draw" ? "default" : "quiet"}
+                size="xs"
+                className="h-auto w-full whitespace-normal rounded-rc-sm py-1 text-[length:inherit]"
                 onClick={() => {
                   if (actionType === "draw") return handleDraw();
                   if (actionType === "peek") return handlePeekPile();
@@ -1363,7 +1367,7 @@ export default function GameToolbox({
                     : actionType === "reveal"
                       ? `Reveal • ${revealSeat.toUpperCase()} • ${revealPile} • ${revealFromWhere} • x${revealCount}`
                       : `Scry • ${scrySeat.toUpperCase()} • ${scryPile} • x${scryCount}`}
-              </button>
+              </RcButton>
 
               {scryOpen && (
                 <div className="mt-2 rounded-rc-md border border-rc-line/12 bg-black/45 p-2">
@@ -1483,10 +1487,9 @@ export default function GameToolbox({
               </button>
               <button
                 className={`rounded-rc-sm ${
-                  gemColorPickerOpen
-                    ? "border border-rc-accent bg-rc-accent text-rc-accent-fg"
-                    : QUIET_BTN
+                  gemColorPickerOpen ? TINT_BTN : QUIET_BTN
                 } px-3 py-2.5 sm:py-1.5 flex items-center justify-center relative`}
+                aria-pressed={gemColorPickerOpen}
                 onClick={() => setGemColorPickerOpen(!gemColorPickerOpen)}
                 aria-label="Spawn Gem Token"
                 title="Spawn Gem Token"
@@ -1672,9 +1675,7 @@ export default function GameToolbox({
             <div className="rounded-rc-md border border-rc-line/12 bg-black/45 p-2 font-rc-mono">
               <button
                 className={`w-full rounded-rc-sm ${
-                  fixOpen
-                    ? "border border-rc-accent bg-rc-accent text-rc-accent-fg"
-                    : QUIET_BTN
+                  fixOpen ? WARN_TINT_BTN : QUIET_BTN
                 } py-1 text-[11px] ${MONO_LABEL}`}
                 onClick={() => setFixOpen((v) => !v)}
                 aria-expanded={fixOpen}
@@ -1818,7 +1819,7 @@ export default function GameToolbox({
       ) : null}
       {d20Open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.7)] backdrop-blur-sm"
           onContextMenu={(e) => e.preventDefault()}
         >
           <div
@@ -1866,7 +1867,7 @@ export default function GameToolbox({
       )}
       {d6Open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.7)] backdrop-blur-sm"
           onContextMenu={(e) => e.preventDefault()}
         >
           <div
@@ -1914,7 +1915,7 @@ export default function GameToolbox({
       )}
       {rndOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.7)] backdrop-blur-sm"
           onClick={() => setRndOpen(false)}
         >
           <div
@@ -1963,12 +1964,13 @@ export default function GameToolbox({
                       }}
                     />
                   </div>
-                  <button
-                    className="w-full rounded-rc-sm border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent py-2 font-rc-mono uppercase tracking-[0.14em] text-rc-accent-fg transition-transform hover:-translate-y-px"
+                  <RcButton
+                    size="sm"
+                    className="h-auto w-full rounded-rc-sm py-2 font-rc-mono text-sm uppercase tracking-[0.14em]"
                     onClick={handleRndGenerate}
                   >
                     Generate
-                  </button>
+                  </RcButton>
                   {rndResult !== null && (
                     <div className="text-center py-4 rounded-rc-md border border-rc-line/12 bg-black/45">
                       <div className="font-rc-mono text-4xl font-semibold tabular-nums text-rc-accent">

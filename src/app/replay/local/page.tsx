@@ -14,6 +14,7 @@ import {
   DynamicPiles3D as Piles3D,
 } from "@/components/game/dynamic-3d";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { RcButton } from "@/components/ui/rc-button";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
@@ -174,26 +175,26 @@ function LocalReplayContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-white">Loading replay...</div>
+      <div className="rc-app min-h-screen flex items-center justify-center">
+        <div className="font-rc-mono text-sm text-rc-fg-muted">Loading replay...</div>
       </div>
     );
   }
 
   if (error || !recording) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-center text-white">
-          <div className="text-xl mb-4">Error loading replay</div>
-          <div className="text-slate-400 mb-4">
+      <div className="rc-app min-h-screen flex items-center justify-center">
+        <div className="text-center text-rc-fg">
+          <div className="mb-4 font-rc-display text-[24px] leading-none text-rc-fg-strong">Error loading replay</div>
+          <div className="rc-alert mb-4" data-tone="danger">
             {error || "Recording not found"}
           </div>
-          <button
+          <RcButton
+            variant="outline"
             onClick={() => router.push("/replay")}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
           >
             Back to Replays
-          </button>
+          </RcButton>
         </div>
       </div>
     );
@@ -206,9 +207,9 @@ function LocalReplayContent() {
       : 0;
 
   return (
-    <div className="fixed inset-0 w-screen h-[100dvh] bg-slate-900">
+    <div className="fixed inset-0 w-screen h-[100dvh] bg-rc-floor">
       {/* Local replay indicator */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 px-3 py-1 bg-amber-600/80 rounded-full text-xs font-semibold text-white">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 px-3 py-1 rounded-full border border-rc-accent/35 bg-[rgba(7,10,20,0.85)] font-rc-mono text-[11px] uppercase tracking-[0.15em] text-rc-accent-link">
         Local Replay
       </div>
 
@@ -319,21 +320,24 @@ function LocalReplayContent() {
       />
 
       {/* Replay Controls Overlay */}
-      <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm p-4">
+      <div className="absolute bottom-0 left-0 right-0 border-t border-rc-line/18 bg-[rgba(7,10,20,0.85)] backdrop-blur-sm p-4">
         <div className="max-w-6xl mx-auto">
           {/* Match Info */}
           <div className="flex items-center justify-between mb-4">
-            <div className="text-white">
-              <div className="font-semibold text-lg">
+            <div className="text-rc-fg">
+              <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
                 {recording.playerNames.join(" vs ")}
               </div>
-              <div className="text-sm text-slate-400">
+              <div className="rc-hint mt-1">
                 {recording.initialState.matchType} • {recording.actions.length}{" "}
                 actions
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button
+              <RcButton
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
                 onClick={() => {
                   const blob = new Blob([JSON.stringify(recording, null, 2)], {
                     type: "application/json",
@@ -353,7 +357,6 @@ function LocalReplayContent() {
                   document.body.removeChild(a);
                   URL.revokeObjectURL(url);
                 }}
-                className="h-9 w-9 grid place-items-center bg-emerald-600 hover:bg-emerald-700 rounded-lg text-white transition-colors"
                 title="Download Replay"
               >
                 <svg
@@ -364,22 +367,23 @@ function LocalReplayContent() {
                 >
                   <path d="M12 16l-6-6h4V4h4v6h4l-6 6zm-8 2h16v2H4v-2z" />
                 </svg>
-              </button>
-              <button
+              </RcButton>
+              <RcButton
+                variant="outline"
+                className="h-9"
                 onClick={() => {
                   sessionStorage.removeItem(LOCAL_REPLAY_STORAGE_KEY);
                   router.push("/replay");
                 }}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors"
               >
                 Back to Replays
-              </button>
+              </RcButton>
             </div>
           </div>
 
           {/* Progress Bar */}
           <div className="mb-4">
-            <div className="flex items-center justify-between text-sm text-slate-400 mb-2">
+            <div className="flex items-center justify-between font-rc-mono text-[11px] uppercase tracking-[0.14em] tabular-nums text-rc-fg-subtle mb-2">
               <span>
                 Action {currentActionIndex + 1} of {recording.actions.length}
               </span>
@@ -387,9 +391,9 @@ function LocalReplayContent() {
                 {currentAction ? formatTime(currentAction.timestamp) : "0:00"}
               </span>
             </div>
-            <div className="relative bg-slate-700 h-2 rounded-full">
+            <div className="relative h-2 rounded-full border border-rc-line/12 bg-black/45">
               <div
-                className="absolute left-0 top-0 h-full bg-blue-500 rounded-full transition-all"
+                className="absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-rc-accent to-rc-accent-hover transition-all"
                 style={{ width: `${progress}%` }}
               />
               <input
@@ -405,9 +409,11 @@ function LocalReplayContent() {
 
           {/* Control Buttons */}
           <div className="flex items-center justify-center gap-3">
-            <button
+            <RcButton
+              variant="outline"
+              size="icon"
               onClick={() => jumpToAction(0)}
-              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
+              className="h-9 w-9"
               title="Jump to Start"
             >
               {/* Skip back icon */}
@@ -419,10 +425,12 @@ function LocalReplayContent() {
               >
                 <path d="M6 6h2v12H6V6zm12 6-8 6V6l8 6z" />
               </svg>
-            </button>
-            <button
+            </RcButton>
+            <RcButton
+              variant="outline"
+              size="icon"
               onClick={stepBackward}
-              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
+              className="h-9 w-9"
               title="Step Backward"
             >
               {/* Step back icon */}
@@ -434,10 +442,10 @@ function LocalReplayContent() {
               >
                 <path d="M6 5h2v14H6V5zm12 7-9 6V6l9 6z" />
               </svg>
-            </button>
-            <button
+            </RcButton>
+            <RcButton
               onClick={() => setIsPlaying(!isPlaying)}
-              className="h-9 px-4 bg-blue-600 hover:bg-blue-700 rounded text-white transition-colors font-semibold flex items-center gap-2"
+              className="h-9 px-4"
             >
               {isPlaying ? (
                 <>
@@ -464,10 +472,12 @@ function LocalReplayContent() {
                   Play
                 </>
               )}
-            </button>
-            <button
+            </RcButton>
+            <RcButton
+              variant="outline"
+              size="icon"
               onClick={stepForward}
-              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
+              className="h-9 w-9"
               title="Step Forward"
             >
               {/* Step forward icon */}
@@ -479,10 +489,12 @@ function LocalReplayContent() {
               >
                 <path d="M7 6h3v12H7V6zm4 6 9 6V6l-9 6z" />
               </svg>
-            </button>
-            <button
+            </RcButton>
+            <RcButton
+              variant="outline"
+              size="icon"
               onClick={() => jumpToAction(recording.actions.length - 1)}
-              className="h-9 w-9 grid place-items-center bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors"
+              className="h-9 w-9"
               title="Jump to End"
             >
               {/* Skip forward icon */}
@@ -494,11 +506,11 @@ function LocalReplayContent() {
               >
                 <path d="M16 6h2v12h-2V6zM6 12l8-6v12l-8-6z" />
               </svg>
-            </button>
+            </RcButton>
 
             {/* Speed Control */}
             <div className="ml-4 flex items-center gap-2">
-              <span className="text-sm text-slate-400">Speed:</span>
+              <span className="font-rc-mono text-[11px] uppercase tracking-[0.14em] text-rc-fg-subtle">Speed:</span>
               <CustomSelect
                 value={String(playbackSpeed)}
                 onChange={(v) => setPlaybackSpeed(parseFloat(v))}
@@ -540,8 +552,8 @@ export default function LocalReplayPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-          <div className="text-white">Loading...</div>
+        <div className="rc-app min-h-screen flex items-center justify-center">
+          <div className="font-rc-mono text-sm text-rc-fg-muted">Loading...</div>
         </div>
       }
     >

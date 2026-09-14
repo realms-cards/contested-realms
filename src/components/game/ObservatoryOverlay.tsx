@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import React, { useState, useCallback, useMemo } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 
 export default function ObservatoryOverlay() {
@@ -104,9 +105,9 @@ export default function ObservatoryOverlay() {
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-2 sm:top-6 z-[201] pointer-events-none flex justify-center px-2">
-        <div className="pointer-events-auto px-3 sm:px-5 py-2 sm:py-3 rounded-full bg-black/90 text-white ring-1 ring-purple-500/50 shadow-lg text-sm sm:text-lg md:text-xl flex items-center gap-2 sm:gap-3 select-none">
-          <span className="text-purple-400 font-fantaisie">🔭 Observatory</span>
-          <span className="opacity-80">
+        <div className="pointer-events-auto px-3 sm:px-5 py-2 sm:py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-sm sm:text-lg md:text-xl flex items-center gap-2 sm:gap-3 select-none">
+          <span className="font-rc-display text-rc-accent-link">Observatory</span>
+          <span className="text-rc-fg-muted">
             {phase === "ordering" &&
               (isOwner
                 ? "Arrange your next spells in any order"
@@ -114,25 +115,27 @@ export default function ObservatoryOverlay() {
             {phase === "resolving" && "Resolving..."}
           </span>
           {isOwner && phase === "ordering" && (
-            <button
-              className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1 select-none"
+            <RcButton
+              variant="outline"
+              size="xs"
+              className="mx-1"
               onClick={handleCancel}
             >
               Cancel
-            </button>
+            </RcButton>
           )}
         </div>
       </div>
 
       {/* Main content area - only for owner */}
       {isOwner && phase === "ordering" && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-3 sm:p-6 max-w-2xl w-full mx-2 sm:mx-4 ring-1 ring-purple-500/30 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl sm:text-2xl font-fantaisie text-purple-400 mb-2 text-center">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="thin-scrollbar rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-3 sm:p-6 max-w-2xl w-full mx-2 sm:mx-4 font-rc-sans text-rc-fg shadow-rc-panel max-h-[90vh] overflow-y-auto">
+            <h2 className="mb-2 text-center font-rc-display text-[22px] sm:text-[26px] leading-tight text-rc-fg-strong">
               Reorder Your Top {pending.revealedCards.length} Spell
               {pending.revealedCards.length !== 1 ? "s" : ""}
             </h2>
-            <p className="text-white/70 text-xs sm:text-sm mb-4 sm:mb-6 text-center">
+            <p className="text-rc-fg-muted text-xs sm:text-sm mb-4 sm:mb-6 text-center">
               Drag to reorder. First card will be on top (drawn first).
             </p>
 
@@ -147,13 +150,13 @@ export default function ObservatoryOverlay() {
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, orderIndex)}
                     onDragEnd={handleDragEnd}
-                    className={`flex items-center gap-3 p-2 rounded bg-white/5 hover:bg-white/10 cursor-move transition-colors ${
+                    className={`flex items-center gap-3 p-2 rounded-rc-md border border-rc-line/18 bg-black/30 hover:border-rc-accent/60 hover:bg-rc-accent/8 cursor-move transition-colors ${
                       draggedIndex === orderIndex
-                        ? "opacity-50 ring-2 ring-purple-500"
+                        ? "opacity-50 ring-2 ring-rc-accent"
                         : ""
                     }`}
                   >
-                    <span className="text-purple-400 text-sm w-6 text-center font-bold">
+                    <span className="font-rc-mono tabular-nums text-rc-accent-link text-sm w-6 text-center font-bold">
                       {orderIndex + 1}
                     </span>
                     <div className="flex-1 flex items-center gap-2">
@@ -162,16 +165,18 @@ export default function ObservatoryOverlay() {
                           src={`/api/images/${card.slug || card.cardId}`}
                           alt={card.name || "Card"}
                           fill
-                          className="object-cover rounded"
+                          className="object-cover rounded-rc-sm"
                           unoptimized
                         />
                       </div>
-                      <span className="text-white/90 text-sm">
+                      <span className="font-rc-display text-rc-fg-strong text-sm">
                         {card.name}
                       </span>
                     </div>
                     <div className="flex gap-1">
-                      <button
+                      <RcButton
+                        variant="quiet"
+                        size="icon-xs"
                         onClick={(e) => {
                           e.stopPropagation();
                           e.preventDefault();
@@ -179,11 +184,13 @@ export default function ObservatoryOverlay() {
                         }}
                         onMouseDown={(e) => e.stopPropagation()}
                         disabled={orderIndex === 0}
-                        className="px-3 py-2 rounded bg-white/20 hover:bg-white/30 active:bg-white/40 disabled:opacity-30 disabled:cursor-not-allowed text-white text-sm font-bold select-none touch-manipulation"
+                        className="rounded-rc-sm text-sm font-bold select-none touch-manipulation"
                       >
                         ↑
-                      </button>
-                      <button
+                      </RcButton>
+                      <RcButton
+                        variant="quiet"
+                        size="icon-xs"
                         onClick={(e) => {
                           e.stopPropagation();
                           e.preventDefault();
@@ -191,10 +198,10 @@ export default function ObservatoryOverlay() {
                         }}
                         onMouseDown={(e) => e.stopPropagation()}
                         disabled={orderIndex >= orderedCards.length - 1}
-                        className="px-3 py-2 rounded bg-white/20 hover:bg-white/30 active:bg-white/40 disabled:opacity-30 disabled:cursor-not-allowed text-white text-sm font-bold select-none touch-manipulation"
+                        className="rounded-rc-sm text-sm font-bold select-none touch-manipulation"
                       >
                         ↓
-                      </button>
+                      </RcButton>
                     </div>
                   </div>
                 ))}
@@ -203,18 +210,10 @@ export default function ObservatoryOverlay() {
 
             {/* Action buttons */}
             <div className="flex gap-3 justify-center">
-              <button
-                className="px-6 py-3 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 font-medium transition-colors"
-                onClick={handleCancel}
-              >
+              <RcButton variant="outline" onClick={handleCancel}>
                 Cancel
-              </button>
-              <button
-                className="px-6 py-3 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold transition-colors"
-                onClick={handleResolve}
-              >
-                Confirm Order
-              </button>
+              </RcButton>
+              <RcButton onClick={handleResolve}>Confirm Order</RcButton>
             </div>
           </div>
         </div>
@@ -223,8 +222,8 @@ export default function ObservatoryOverlay() {
       {/* Opponent view - just a waiting indicator */}
       {!isOwner && phase === "ordering" && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="pointer-events-auto px-4 py-2 rounded-lg bg-black/90 text-white/80 text-sm ring-1 ring-purple-500/30">
-            <span className="text-purple-300">
+          <div className="rc-toast pointer-events-auto">
+            <span className="text-rc-fg-strong">
               {pending.ownerSeat.toUpperCase()}
             </span>{" "}
             is reordering their spells...

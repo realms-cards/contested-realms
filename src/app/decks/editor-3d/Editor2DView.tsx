@@ -56,7 +56,7 @@ function CardImage({
 }) {
   if (!slug) {
     return (
-      <div className="absolute inset-0 bg-slate-800 flex items-center justify-center text-[8px] text-white/50 p-0.5 text-center leading-tight">
+      <div className="absolute inset-0 bg-rc-bg flex items-center justify-center text-[8px] text-rc-fg-subtle p-0.5 text-center leading-tight">
         {name}
       </div>
     );
@@ -355,7 +355,7 @@ export default function Editor2DView({
           {isSortingEnabled && sortedDeckGroups ? (
             /* Sorted mode: flow grid with stacked counts */
             <div className="flex flex-wrap gap-1 content-start p-1">
-              <div className="w-full text-[10px] text-green-400/40 font-medium select-none mb-1">
+              <div className="w-full font-rc-mono text-[10px] text-green-400/40 font-medium select-none mb-1">
                 Deck ({deckCards.length})
               </div>
               {sortedDeckGroups.map(({ pick, count }) => {
@@ -368,7 +368,7 @@ export default function Editor2DView({
                 return (
                   <div
                     key={pick.card.cardId}
-                    className="relative rounded-sm overflow-hidden ring-1 ring-white/15 hover:ring-white/30 cursor-pointer flex-shrink-0"
+                    className="relative rounded-rc-sm overflow-hidden ring-1 ring-rc-line/15 hover:ring-rc-accent/50 cursor-pointer flex-shrink-0"
                     style={{ width: d.w, height: d.h }}
                     onDoubleClick={() => onMoveCard(pick.id, "Sideboard")}
                     onMouseEnter={() => {
@@ -397,7 +397,7 @@ export default function Editor2DView({
                       w={d.w}
                     />
                     {count > 1 && (
-                      <div className="absolute top-0.5 right-0.5 bg-black/80 text-white text-[10px] font-bold rounded px-1 leading-tight">
+                      <div className="absolute top-0.5 right-0.5 rounded-rc-sm border border-rc-line/22 bg-[rgba(7,10,20,0.85)] px-1 font-rc-mono text-[10px] font-bold leading-tight tabular-nums text-rc-fg-strong">
                         x{count}
                       </div>
                     )}
@@ -408,7 +408,7 @@ export default function Editor2DView({
           ) : (
             /* Unsorted mode: free-position canvas with direct DOM drag */
             <div className="relative w-full" style={{ minHeight: canvasMinH }}>
-              <div className="absolute top-1 left-2 text-[10px] text-green-400/40 font-medium select-none pointer-events-none z-0">
+              <div className="absolute top-1 left-2 font-rc-mono text-[10px] text-green-400/40 font-medium select-none pointer-events-none z-0">
                 Deck ({deckCards.length})
               </div>
               {deckCards.map((pick) => {
@@ -423,7 +423,7 @@ export default function Editor2DView({
                 return (
                   <div
                     key={pick.id}
-                    className="absolute cursor-grab rounded-sm overflow-hidden ring-1 ring-white/15 hover:ring-white/30 active:cursor-grabbing"
+                    className="absolute cursor-grab rounded-rc-sm overflow-hidden ring-1 ring-rc-line/15 hover:ring-rc-accent/50 active:cursor-grabbing"
                     style={{
                       left: pos.x,
                       top: pos.y,
@@ -469,17 +469,17 @@ export default function Editor2DView({
         {/* ── Sidebar: Sideboard & Collection ─────────────────────── */}
         <div
           ref={sidebarRef}
-          className={`overflow-auto space-y-2 border-l transition-colors flex-none p-1.5 ${
+          className={`thin-scrollbar overflow-auto space-y-2 border-l transition-colors flex-none p-1.5 ${
             sidebarHighlight
-              ? "border-blue-400 bg-blue-950/20 w-40"
-              : "border-white/10 w-36"
+              ? "border-rc-accent bg-rc-accent/8 w-40"
+              : "border-rc-line/12 w-36"
           }`}
         >
           {/* Sideboard */}
           <div>
-            <h3 className="text-[10px] font-semibold text-blue-300 px-1 mb-1 flex items-center justify-between">
+            <h3 className="font-rc-mono text-[10px] font-semibold text-blue-300 px-1 mb-1 flex items-center justify-between">
               <span>Sideboard</span>
-              <span className="text-white/40 font-normal">
+              <span className="text-rc-fg-subtle font-normal tabular-nums">
                 {sideboardCards.length}
               </span>
             </h3>
@@ -496,7 +496,7 @@ export default function Editor2DView({
                   return (
                     <div
                       key={pick.id}
-                      className="relative rounded-sm overflow-hidden ring-1 ring-white/15 hover:ring-white/30 cursor-pointer"
+                      className="relative rounded-rc-sm overflow-hidden ring-1 ring-rc-line/15 hover:ring-rc-accent/50 cursor-pointer"
                       style={{ width: tw, height: th }}
                       onDoubleClick={() => onMoveCard(pick.id, "Deck")}
                       onMouseEnter={() => {
@@ -530,7 +530,7 @@ export default function Editor2DView({
                 })}
               </div>
             ) : (
-              <div className="text-[9px] text-white/20 text-center py-4">
+              <div className="font-rc-sans text-[9px] text-rc-fg-dim text-center py-4">
                 Drag here or double-click
               </div>
             )}
@@ -539,9 +539,9 @@ export default function Editor2DView({
           {/* Collection */}
           {showCollection && (
             <div>
-              <h3 className="text-[10px] font-semibold text-purple-300 px-1 mb-1 flex items-center justify-between">
+              <h3 className="font-rc-mono text-[10px] font-semibold text-purple-300 px-1 mb-1 flex items-center justify-between">
                 <span>Collection</span>
-                <span className="text-white/40 font-normal">
+                <span className="text-rc-fg-subtle font-normal tabular-nums">
                   {collectionCards.length}
                 </span>
               </h3>
@@ -558,7 +558,7 @@ export default function Editor2DView({
                     return (
                       <div
                         key={pick.id}
-                        className="relative rounded-sm overflow-hidden ring-1 ring-white/15"
+                        className="relative rounded-rc-sm overflow-hidden ring-1 ring-rc-line/15"
                         style={{ width: tw, height: th }}
                         onMouseEnter={() => {
                           if (slug)
@@ -581,7 +581,7 @@ export default function Editor2DView({
                   })}
                 </div>
               ) : (
-                <div className="text-[9px] text-white/20 text-center py-3">
+                <div className="font-rc-sans text-[9px] text-rc-fg-dim text-center py-3">
                   Empty
                 </div>
               )}
@@ -591,15 +591,16 @@ export default function Editor2DView({
       </div>
 
       {/* Scale control — bottom-left */}
-      <div className="fixed bottom-4 left-4 z-[9991] flex items-center gap-1 bg-black/70 rounded px-2 py-1 ring-1 ring-white/10">
+      <div className="fixed bottom-4 left-4 z-[9991] flex items-center gap-1 rounded-rc-md border border-rc-line/22 bg-[rgba(7,10,20,0.85)] px-2 py-1 shadow-rc-panel">
         {SCALE_PRESETS.map((_, i) => (
           <button
             key={i}
             onClick={() => setScaleIdx(i)}
-            className={`px-1.5 py-0.5 text-[10px] rounded transition-colors ${
+            aria-pressed={i === scaleIdx}
+            className={`px-1.5 py-0.5 font-rc-mono text-[10px] rounded-rc-sm transition-colors ${
               i === scaleIdx
-                ? "bg-white/20 text-white"
-                : "text-white/40 hover:text-white/70"
+                ? "bg-rc-accent/14 text-rc-spark"
+                : "text-rc-fg-subtle hover:text-rc-accent-ring"
             }`}
           >
             {SCALE_LABELS[i]}

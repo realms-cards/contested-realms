@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useMemo, useState } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import CardWithPreview from "./CardWithPreview";
 
@@ -16,7 +17,7 @@ function EyeIcon({ open }: { open: boolean }) {
       strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={`transition-opacity duration-200 ${open ? "text-blue-400" : "text-blue-300/50"}`}
+      className={`transition-opacity duration-200 ${open ? "text-rc-accent-link" : "text-rc-fg-subtle"}`}
     >
       {open ? (
         <>
@@ -109,20 +110,20 @@ export default function MerlinOverlay() {
 
   return (
     <div className="fixed bottom-28 left-4 z-[180] pointer-events-none">
-      <div className="pointer-events-auto bg-black/90 rounded-xl p-3 ring-1 ring-blue-500/40 shadow-lg backdrop-blur-sm max-w-[200px]">
+      <div className="pointer-events-auto rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-3 font-rc-sans text-rc-fg shadow-rc-panel backdrop-blur-sm max-w-[200px]">
         {/* Header with scrying toggle */}
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <span className="text-blue-400 font-fantaisie text-sm">
+            <span className="font-rc-display text-rc-accent-link text-sm">
               Merlin
             </span>
-            <span className="text-[10px] text-blue-300/60 uppercase tracking-wider">
+            <span className="text-[10px] text-rc-fg-subtle uppercase tracking-wider">
               Spellcaster
             </span>
           </div>
           <button
             onClick={togglePeek}
-            className="p-1 rounded-md hover:bg-blue-500/20 transition-colors"
+            className="p-1 rounded-rc-md text-rc-fg-muted hover:bg-rc-line/6 hover:text-rc-fg-strong transition-colors"
             title={peekOpen ? "Hide scrying" : "Scry top spell"}
           >
             <EyeIcon open={peekOpen} />
@@ -131,7 +132,7 @@ export default function MerlinOverlay() {
 
         {/* Collapsed state — just the spellbook count */}
         {!peekOpen && (
-          <p className="text-[10px] text-gray-400 text-center">
+          <p className="text-[10px] font-rc-mono tabular-nums text-rc-fg-muted text-center">
             {zones[activeMerlin.ownerSeat]?.spellbook?.length || 0} spells in spellbook
           </p>
         )}
@@ -149,14 +150,14 @@ export default function MerlinOverlay() {
             </div>
 
             {/* Card name */}
-            <p className="text-white text-xs text-center mb-1 truncate">
+            <p className="font-rc-display text-rc-accent-link text-xs text-center mb-1 truncate">
               {topCard.name}
             </p>
 
             {/* Type indicator */}
             <p
               className={`text-[10px] text-center mb-2 ${
-                isMagic ? "text-blue-400" : "text-gray-400"
+                isMagic ? "text-rc-accent-link" : "text-rc-fg-muted"
               }`}
             >
               {isMagic ? "Magic spell" : "Not a magic spell"}
@@ -164,23 +165,24 @@ export default function MerlinOverlay() {
 
             {/* Cast button — only when it's a magic spell and Main phase */}
             {canCast && (
-              <button
+              <RcButton
+                size="xs"
                 onClick={handleCast}
-                className="w-full px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded-lg font-medium transition-colors"
+                className="w-full px-3"
               >
                 Cast from Spellbook
-              </button>
+              </RcButton>
             )}
 
             {/* Info when magic but not Main phase */}
             {isMagic && phase !== "Main" && (
-              <p className="text-[10px] text-center text-yellow-400/70">
+              <p className="text-[10px] text-center text-rc-warning">
                 Cast during Main phase
               </p>
             )}
 
             {/* Spellbook count */}
-            <p className="text-[10px] text-gray-500 text-center mt-1">
+            <p className="text-[10px] font-rc-mono tabular-nums text-rc-fg-subtle text-center mt-1">
               {zones[activeMerlin.ownerSeat]?.spellbook?.length || 0} spells remaining
             </p>
           </>

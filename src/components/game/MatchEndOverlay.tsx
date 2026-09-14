@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { LeagueReportStatus } from "@/components/game/LeagueReportStatus";
 import { SoatcLeagueResultCard } from "@/components/game/SoatcLeagueResultCard";
+import { RcButton } from "@/components/ui/rc-button";
 import { soundManager } from "@/lib/audio/soundManager";
 import type { PlayerKey } from "@/lib/game/store";
 import type { LeagueMatchResult } from "@/lib/soatc/types";
@@ -153,37 +154,37 @@ export default function MatchEndOverlay({
 
   const content = (
     <div
-      className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur flex items-center justify-center"
+      className="fixed inset-0 z-[9999] bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px] flex items-center justify-center"
       onClick={canContinue ? onClose : undefined}
     >
       <div
-        className="bg-zinc-900/95 text-white rounded-2xl sm:rounded-3xl ring-1 ring-white/20 shadow-2xl p-4 sm:p-8 text-center max-w-md w-full mx-2 sm:mx-4 max-h-[90vh] overflow-y-auto"
+        className="thin-scrollbar rounded-rc-md border border-rc-line/18 bg-[rgba(9,13,25,0.95)] text-rc-fg shadow-rc-panel sm:rounded-rc-lg p-4 sm:p-8 text-center max-w-md w-full mx-2 sm:mx-4 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Icon */}
         <div className="mb-3 sm:mb-6 flex justify-center">
           {isDraw || isEarlyForfeit ? (
-            <Users className="w-12 h-12 sm:w-16 sm:h-16 text-yellow-400" />
+            <Users className="w-12 h-12 sm:w-16 sm:h-16 text-rc-warning" />
           ) : isSpectator ? (
-            <Trophy className="w-12 h-12 sm:w-16 sm:h-16 text-yellow-400" />
+            <Trophy className="w-12 h-12 sm:w-16 sm:h-16 text-rc-accent" />
           ) : didIWin ? (
             isRatedForfeit || (!isForfeit && !isAbandonment) ? (
-              <Trophy className="w-12 h-12 sm:w-16 sm:h-16 text-yellow-400" />
+              <Trophy className="w-12 h-12 sm:w-16 sm:h-16 text-rc-accent" />
             ) : (
-              <Users className="w-12 h-12 sm:w-16 sm:h-16 text-yellow-400" />
+              <Users className="w-12 h-12 sm:w-16 sm:h-16 text-rc-warning" />
             )
           ) : (
-            <Skull className="w-12 h-12 sm:w-16 sm:h-16 text-red-400" />
+            <Skull className="w-12 h-12 sm:w-16 sm:h-16 text-rc-danger" />
           )}
         </div>
 
         {/* Title */}
-        <h1 className="text-2xl sm:text-3xl font-bold mb-2 sm:mb-4">
+        <h1 className="mb-2 font-rc-display text-[26px] leading-none text-rc-fg-strong sm:mb-4 sm:text-[32px]">
           {titleText}
         </h1>
 
         {/* Result Description */}
-        <div className="text-base sm:text-lg opacity-90 mb-4 sm:mb-6">
+        <div className="font-rc-sans text-base sm:text-lg text-rc-fg mb-4 sm:mb-6">
           {isDraw ? (
             <p>Both players died simultaneously.</p>
           ) : isEarlyForfeit ? (
@@ -200,14 +201,14 @@ export default function MatchEndOverlay({
             ) : didIWin ? (
               isRatedForfeit ? (
                 <p>
-                  <span className="font-semibold text-green-400">
+                  <span className="font-semibold text-rc-success">
                     Your opponent
                   </span>
                   {" forfeited. You win."}
                 </p>
               ) : (
                 <p>
-                  <span className="font-semibold text-yellow-400">
+                  <span className="font-semibold text-rc-warning">
                     Your opponent
                   </span>
                   {
@@ -225,19 +226,19 @@ export default function MatchEndOverlay({
             )
           ) : isSpectator ? (
             <p>
-              <span className="font-semibold text-green-400">
+              <span className="font-semibold text-rc-success">
                 {winnerName ?? "A player"}
               </span>
               {" wins the match."}
             </p>
           ) : didIWin ? (
             <p>
-              <span className="font-semibold text-green-400">You</span>
+              <span className="font-semibold text-rc-success">You</span>
               {" won the match!"}
             </p>
           ) : (
             <p>
-              <span className="font-semibold text-red-400">
+              <span className="font-semibold text-rc-danger">
                 You were defeated.
               </span>
               {winnerName ? ` ${winnerName} wins the match.` : ""}
@@ -247,16 +248,16 @@ export default function MatchEndOverlay({
 
         {/* Match Summary */}
         {isForfeit || isAbandonment ? (
-          <div className="bg-black/30 rounded-xl p-4 mb-6 text-sm">
-            <div className="text-xs opacity-70 mb-2">Final Result</div>
+          <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-4 mb-6 font-rc-sans text-sm">
+            <div className="rc-eyebrow mb-2">Final Result</div>
             <div className="space-y-1">
               <div
                 className={`flex justify-between ${
                   didIWin
                     ? isRatedForfeit
-                      ? "text-green-400"
-                      : "text-yellow-400"
-                    : "text-red-400"
+                      ? "text-rc-success"
+                      : "text-rc-warning"
+                    : "text-rc-danger"
                 }`}
               >
                 <span>{didIWin ? "You" : "Opponent"}</span>
@@ -271,16 +272,16 @@ export default function MatchEndOverlay({
             </div>
           </div>
         ) : (
-          <div className="bg-black/30 rounded-xl p-4 mb-6 text-sm">
-            <div className="text-xs opacity-70 mb-2">Final Result</div>
+          <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-4 mb-6 font-rc-sans text-sm">
+            <div className="rc-eyebrow mb-2">Final Result</div>
             <div className="space-y-1">
               <div
                 className={`flex justify-between ${
                   winner === "p1"
-                    ? "text-green-400"
+                    ? "text-rc-success"
                     : winner === null
-                      ? "text-yellow-400"
-                      : "text-red-400"
+                      ? "text-rc-warning"
+                      : "text-rc-danger"
                 }`}
               >
                 <span>
@@ -298,10 +299,10 @@ export default function MatchEndOverlay({
               <div
                 className={`flex justify-between ${
                   winner === "p2"
-                    ? "text-green-400"
+                    ? "text-rc-success"
                     : winner === null
-                      ? "text-yellow-400"
-                      : "text-red-400"
+                      ? "text-rc-warning"
+                      : "text-rc-danger"
                 }`}
               >
                 <span>
@@ -342,74 +343,80 @@ export default function MatchEndOverlay({
         {rematch && (
           <div className="mb-3 sm:mb-4 space-y-2">
             {rematch.error ? (
-              <p className="text-sm text-red-400">{rematch.error}</p>
+              <p className="rc-alert" data-tone="danger">{rematch.error}</p>
             ) : rematch.declined ? (
-              <p className="text-sm opacity-70">Rematch declined.</p>
+              <p className="font-rc-sans text-sm text-rc-fg-muted">Rematch declined.</p>
             ) : rematch.requestedByOpponent && !rematch.requestedByMe ? (
               <>
-                <p className="text-sm text-emerald-400 font-medium">
+                <p className="font-rc-sans text-sm font-medium text-rc-success">
                   Your opponent wants a rematch!
                 </p>
                 <div className="flex gap-2">
-                  <button
+                  <RcButton
+                    variant={soatcLeagueResult ? "outline" : "default"}
                     onClick={rematch.onRequest}
-                    className="flex-1 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-500 text-white rounded-lg sm:rounded-xl px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors"
+                    className="flex-1 sm:h-[46px] sm:px-6 sm:text-base"
                   >
                     Accept Rematch
-                  </button>
-                  <button
+                  </RcButton>
+                  <RcButton
+                    variant="outline"
                     onClick={rematch.onDecline}
-                    className="flex-1 bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-500 text-white rounded-lg sm:rounded-xl px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors"
+                    className="flex-1 sm:h-[46px] sm:px-6 sm:text-base"
                   >
                     Decline
-                  </button>
+                  </RcButton>
                 </div>
               </>
             ) : rematch.requestedByMe ? (
               <>
-                <button
+                <RcButton
+                  variant="quiet"
                   disabled
-                  className="w-full bg-emerald-900/60 text-emerald-200/80 rounded-lg sm:rounded-xl px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium cursor-wait"
+                  className="h-auto w-full cursor-wait px-4 py-2.5 font-rc-mono text-sm tracking-[0.08em] disabled:opacity-100 sm:px-6 sm:py-3"
                 >
                   Waiting for opponent…
-                </button>
+                </RcButton>
                 <button
                   onClick={rematch.onDecline}
-                  className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                  className="cursor-pointer font-rc-sans text-xs text-rc-fg-subtle hover:text-rc-fg transition-colors"
                 >
                   Cancel rematch request
                 </button>
               </>
             ) : (
-              <button
+              <RcButton
+                variant={soatcLeagueResult ? "outline" : "default"}
                 onClick={rematch.onRequest}
-                className="w-full bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-500 text-white rounded-lg sm:rounded-xl px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors"
+                className="w-full sm:h-[46px] sm:px-6 sm:text-base"
               >
                 Request Rematch
-              </button>
+              </RcButton>
             )}
           </div>
         )}
 
         {/* Action Buttons */}
         <div className="space-y-2 sm:space-y-3">
-          {onTestAgain && !isSpectator && <button onClick={onTestAgain} className="w-full rounded-lg bg-indigo-600 px-4 py-3 text-white hover:bg-indigo-500">Test again in Goldfish</button>}
+          {onTestAgain && !isSpectator && <RcButton size="lg" onClick={onTestAgain} className="w-full">Test again in Goldfish</RcButton>}
           {canContinue && (
-            <button
+            <RcButton
+              variant="outline"
               onClick={onClose}
-              className="w-full bg-zinc-700 hover:bg-zinc-600 active:bg-zinc-500 text-white rounded-lg sm:rounded-xl px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors"
+              className="w-full sm:h-[46px] sm:px-6 sm:text-base"
             >
               Continue Examining Board
-            </button>
+            </RcButton>
           )}
 
           {onLeave && (
-            <button
+            <RcButton
+              variant="destructive"
               onClick={handleLeaveMatch}
-              className="w-full bg-red-700 hover:bg-red-600 active:bg-red-500 text-white rounded-lg sm:rounded-xl px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors"
+              className="w-full sm:h-[46px] sm:px-6 sm:text-base"
             >
               {leaveLabel || "Leave Match"}
-            </button>
+            </RcButton>
           )}
         </div>
 
@@ -417,7 +424,7 @@ export default function MatchEndOverlay({
           <div className="mt-3 sm:mt-4">
             <Link
               href={`/replay/${matchId}`}
-              className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+              className="rc-link inline-flex items-center gap-1.5 font-rc-sans text-xs"
               onClick={(e) => e.stopPropagation()}
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
@@ -428,7 +435,7 @@ export default function MatchEndOverlay({
           </div>
         )}
 
-        <div className="mt-2 sm:mt-3 text-[10px] sm:text-xs opacity-60">
+        <div className="mt-2 sm:mt-3 font-rc-sans text-[10px] sm:text-xs text-rc-fg-subtle">
           {canContinue
             ? "The match has ended. Players can still examine the board."
             : "The match has ended. Please return to continue your event."}

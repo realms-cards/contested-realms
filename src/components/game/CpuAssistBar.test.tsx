@@ -2,11 +2,14 @@ import { useFrame } from "@react-three/fiber";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import React, { Profiler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import CpuAbilityButtons from "@/components/game/CpuAbilityButtons";
 import CpuAssistBar from "@/components/game/CpuAssistBar";
 import CpuFieldTargets from "@/lib/game/components/CpuFieldTargets";
 import { abilityChoices } from "@/lib/game/cpu/abilities";
+import { useCpuAbilityPicker } from "@/lib/game/cpu/abilityPicker";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import cards from "@/lib/game/cpu/cards.json";
+import { CPU_TRIGGERS_IN_ORDER } from "@/lib/game/cpu/spellTypes";
 import { getSpellChoices } from "@/lib/game/cpu/spells";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, GameState, PendingMagic, PermanentItem, SiteTile } from "@/lib/game/store/types";
@@ -25,6 +28,7 @@ vi.mock("@/lib/game/cpu/spells", async importOriginal => {
   const actual = await importOriginal<typeof import("@/lib/game/cpu/spells")>();
   return {...actual,getSpellChoices:vi.fn(actual.getSpellChoices)};
 });
+vi.mock("@/lib/audio/soundManager", () => ({soundManager:{play:vi.fn()}}));
 // The board layer renders through react-dom here (no WebGL); its pulse registration is what the tests observe.
 vi.mock("@react-three/fiber", async importOriginal => ({...await importOriginal<typeof import("@react-three/fiber")>(),useFrame:vi.fn()}));
 
@@ -88,6 +92,8 @@ beforeEach(() => {
     setCpuMagicChoice,activateCpuAbility,chooseCpuTrigger,cancelMagic,confirmMagic,completeCpuMagicManual,
   });
   useCpuBoardPicker.setState({request:"",tiles:[],selected:null,glow:[],sources:[]});
+  useCpuAbilityPicker.setState({request:"",picked:null,hovered:null});
+  window.sessionStorage.clear();
   renders = 0;
   vi.mocked(abilityChoices).mockClear();
   vi.mocked(getSpellChoices).mockClear();
@@ -150,6 +156,19 @@ describe("CPU assist bar: own spells", () => {
     expect(setCpuMagicChoice).toHaveBeenLastCalledWith("p1/2,1/1");
     expect(screen.queryByRole("region",{name:"Effects"})).toBeNull();
     noDropdowns();
+  });
+
+  it("Genesis lights the site whose Genesis it is, not the avatar's tile (an ability source)", () => {
+    const {board} = useGameStore.getState(), desert = card("Arid Desert","desert");
+    act(() => { useGameStore.setState({board:{...board,sites:{...board.sites,"3,3":{owner:1,card:desert}}},
+      pendingMagic:cast("Arid Desert",{tile:{x:3,y:3},spell:{at:"3,3",index:-1,owner:1,card:desert},cpuEvent:{kind:"genesis",region:"surface",sourceSite:{at:"3,3",name:"Arid Desert",instanceId:"desert"}}})}); });
+    render(<CpuAssistBar />);
+    expect(tiles()).toEqual(["2,2","2,3","3,3"]);
+    click("2,2");
+    expect(setCpuMagicChoice).toHaveBeenLastCalledWith("genesis/2,2");
+    expect(picker().glow).toEqual(["2,2"]);
+    // The avatar stands on the Sinkhole at 2,3: lighting it here read as selecting Sinkhole's ability.
+    expect(picker().sources).toEqual(["3,3"]);
   });
 
   it("offers Done, Cancel and the rules text for a manual effect without generating choices", () => {
@@ -280,36 +299,73 @@ describe("CPU assist bar: spell subscriptions", () => {
   });
 });
 
-describe("CPU assist bar: activated abilities", () => {
-  const chips = () => screen.queryAllByRole("button",{name:/^Sinkhole abilities/});
+const chips = () => screen.queryAllByRole("button",{name:/^Sinkhole abilities/});
+const resolveButton = () => screen.queryByRole("button",{name:"Resolve"});
+const pickedSource = () => useCpuAbilityPicker.getState().picked;
+const pickSinkhole = () => act(() => { useCpuAbilityPicker.getState().pick("m1:ability:3:1","Sinkhole@2,3"); });
+const silenceSinkhole = () => act(() => { useGameStore.setState({permanents:{...useGameStore.getState().permanents,"2,3":[{owner:1,card:{cardId:0,name:"Silenced",type:"Token"},instanceId:"silence",tapped:false}]}}); });
 
-  it("taps a source chip, clicks the target tile and resolves", () => {
-    render(<CpuAssistBar />);
-    expect(picker().sources).toEqual(["2,3"]);
+describe("CPU assist bar: activated abilities", () => {
+  it("opens nothing until a source button is clicked, then clicks the target tile and resolves", () => {
+    render(<><CpuAbilityButtons /><CpuAssistBar /></>);
+    expect(chips()).toHaveLength(1);
+    expect(resolveButton()).toBeNull();
+    expect(screen.queryByRole("button",{name:"Back"})).toBeNull();
+    expect(picker().sources).toEqual([]);
     expect(picker().tiles).toEqual([]);
+    expect(pickedSource()).toBeNull();
+    expect(useGameStore.getState().selectedPermanent).toBeFalsy();
     fireEvent.click(chips()[0]);
     expect(tiles()).toEqual(["2,2","2,3"]);
     click("2,2");
     expect(screen.getByText("Sinkhole: destroy the site at Tile #13, then sacrifice Sinkhole")).toBeTruthy();
     fireEvent.click(screen.getByRole("button",{name:"Resolve"}));
     expect(activateCpuAbility).toHaveBeenCalledWith("sinkhole/Sinkhole/2,2");
+    expect(pickedSource()).toBeNull();
+    expect(resolveButton()).toBeNull();
     expect(chips()).toHaveLength(1);
     expect(picker().tiles).toEqual([]);
     noDropdowns();
   });
 
-  it("ignores UI-only store updates and regenerates when the realm changes", () => {
-    renderCounted(<CpuAssistBar />);
+  it("targets a pick set through the shared store; Back and a stale source clear it", () => {
+    render(<CpuAssistBar />);
+    expect(screen.queryByRole("button")).toBeNull();
+    pickSinkhole();
+    expect(resolveButton()).toBeTruthy();
+    expect(tiles()).toEqual(["2,2","2,3"]);
+    fireEvent.click(screen.getByRole("button",{name:"Back"}));
+    expect(pickedSource()).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    pickSinkhole();
+    expect(resolveButton()).toBeTruthy();
+    // Silencing the Sinkhole removes its only abilities: the pick must not linger and come back later.
+    silenceSinkhole();
+    expect(pickedSource()).toBeNull();
+    expect(resolveButton()).toBeNull();
+    expect(picker().tiles).toEqual([]);
+  });
+
+  it("clears the pick when the turn changes", () => {
+    render(<CpuAssistBar />);
+    pickSinkhole();
+    act(() => { useGameStore.setState({turn:4}); });
+    expect(resolveButton()).toBeNull();
+    expect(pickedSource()).toBeNull();
+  });
+
+  it("ignores UI-only store updates and generates once for both consumers when the realm changes", () => {
+    renderCounted(<><CpuAbilityButtons /><CpuAssistBar /></>);
     expect(chips()).toHaveLength(1);
     expect(abilityCalls()).toBe(1);
     const mounted = renders;
     applyUiUpdates();
     expect(abilityCalls()).toBe(1);
     expect(renders).toBe(mounted);
-    // Silencing the Sinkhole removes its only abilities: the bar must not keep stale choices.
-    act(() => { useGameStore.setState({permanents:{...useGameStore.getState().permanents,"2,3":[{owner:1,card:{cardId:0,name:"Silenced",type:"Token"},instanceId:"silence",tapped:false}]}}); });
+    silenceSinkhole();
     expect(abilityCalls()).toBe(2);
     expect(chips()).toHaveLength(0);
+    expect(screen.getByRole("button",{name:"Abilities"}).hasAttribute("disabled")).toBe(true);
   });
 
   it.each<[string, Partial<GameState>]>([
@@ -321,7 +377,7 @@ describe("CPU assist bar: activated abilities", () => {
     ["the end of the match",{matchEnded:true}],
   ])("does not generate abilities during %s", (_label, inactive) => {
     act(() => { useGameStore.setState(inactive); });
-    renderCounted(<CpuAssistBar />);
+    renderCounted(<><CpuAbilityButtons /><CpuAssistBar /></>);
     expect(chips()).toHaveLength(0);
     act(() => { useGameStore.setState({permanents:{...useGameStore.getState().permanents,"3,1":[unit("Mountain Giant",2,"giant2")]}}); });
     applyUiUpdates();
@@ -331,7 +387,7 @@ describe("CPU assist bar: activated abilities", () => {
 
   it("generates as soon as the human's Main phase begins", () => {
     act(() => { useGameStore.setState({currentPlayer:2}); });
-    renderCounted(<CpuAssistBar />);
+    renderCounted(<><CpuAbilityButtons /><CpuAssistBar /></>);
     expect(abilityCalls()).toBe(0);
     act(() => { useGameStore.setState({currentPlayer:1}); });
     expect(abilityCalls()).toBe(1);
@@ -340,34 +396,53 @@ describe("CPU assist bar: activated abilities", () => {
 });
 
 describe("CPU assist bar: combat HUD top slot", () => {
-  const chips = () => screen.queryAllByRole("button",{name:/^Sinkhole abilities/});
   const attacker = {at:"2,2",index:0,owner:1 as const};
 
   it("gives way to the attack-choice bars, which precede pendingCombat", () => {
-    render(<CpuAssistBar />);
-    expect(chips()).toHaveLength(1);
+    render(<><CpuAbilityButtons /><CpuAssistBar /></>);
     act(() => { useGameStore.setState({attackChoice:{tile:{x:2,y:1},attacker,attackerName:"Ogre Goons"}}); });
-    expect(chips()).toHaveLength(0);
+    expect(chips()[0].hasAttribute("disabled")).toBe(true);
+    fireEvent.click(chips()[0]);
+    expect(pickedSource()).toBeNull();
     expect(picker().sources).toEqual([]);
-    expect(screen.queryByRole("button")).toBeNull();
     act(() => { useGameStore.setState({attackChoice:null}); });
-    expect(chips()).toHaveLength(1);
-    expect(picker().sources).toEqual(["2,3"]);
     fireEvent.click(chips()[0]);
     expect(tiles()).toEqual(["2,2","2,3"]);
     act(() => { useGameStore.setState({attackConfirm:{tile:{x:2,y:1},attacker,target:{kind:"site",at:"2,1",index:null},targetLabel:"Lone Tower"}}); });
     expect(picker().tiles).toEqual([]);
-    expect(screen.queryByRole("button",{name:"Resolve"})).toBeNull();
+    expect(picker().sources).toEqual([]);
+    expect(resolveButton()).toBeNull();
+    // Escape belongs to the combat bar while it is open: the ability pick survives it.
     fireEvent.keyDown(window,{key:"Escape"});
+    expect(pickedSource()).toBe("Sinkhole@2,3");
     act(() => { useGameStore.setState({attackConfirm:null,attackTargetChoice:{tile:{x:2,y:1},attacker,candidates:[]}}); });
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(resolveButton()).toBeNull();
     act(() => { useGameStore.setState({attackTargetChoice:null}); });
     expect(tiles()).toEqual(["2,2","2,3"]);
+    expect(resolveButton()).toBeTruthy();
+  });
+});
+
+describe("CPU assist bar: ability Escape", () => {
+  it("leaves targeting, but never while typing or while the hand is hovered", () => {
+    render(<><input aria-label="chat" /><CpuAssistBar /></>);
+    pickSinkhole();
+    const input = screen.getByRole("textbox",{name:"chat"});
+    input.focus();
+    fireEvent.keyDown(input,{key:"Escape"});
+    expect(pickedSource()).toBe("Sinkhole@2,3");
+    input.blur();
+    act(() => { useGameStore.setState({handHoverCount:1}); });
+    fireEvent.keyDown(window,{key:"Escape"});
+    expect(pickedSource()).toBe("Sinkhole@2,3");
+    act(() => { useGameStore.setState({handHoverCount:0}); });
+    fireEvent.keyDown(window,{key:"Escape"});
+    expect(pickedSource()).toBeNull();
+    expect(resolveButton()).toBeNull();
   });
 });
 
 describe("CPU board layer", () => {
-  const chips = () => screen.queryAllByRole("button",{name:/^Sinkhole abilities/});
   const plane = (tile: string) => document.querySelector(`mesh[name="cpu-pick:${tile}"]`);
   // react-dom warns about the three.js intrinsics (<mesh>, renderOrder, ...); the handlers and structure are what matter here.
   let quiet: ReturnType<typeof vi.spyOn>;
@@ -390,12 +465,17 @@ describe("CPU board layer", () => {
     expect(plane("0,0")).toBeTruthy();
   });
 
-  it("keeps idle ability sources static and pulses only while a tile awaits a click", () => {
-    render(<><CpuAssistBar /><CpuFieldTargets offsetX={0} offsetY={0} /></>);
+  it("lights a source only while its button is hovered or picked, and pulses only while a tile awaits a click", () => {
+    render(<><CpuAbilityButtons /><CpuAssistBar /><CpuFieldTargets offsetX={0} offsetY={0} /></>);
+    expect(picker().sources).toEqual([]);
+    expect(document.querySelectorAll("mesh")).toHaveLength(0);
+    fireEvent.pointerEnter(chips()[0]);
     expect(picker().sources).toEqual(["2,3"]);
     expect(document.querySelectorAll("mesh")).toHaveLength(1);
     expect(plane("2,3")).toBeNull();
     expect(useFrame).not.toHaveBeenCalled();
+    fireEvent.pointerLeave(chips()[0]);
+    expect(picker().sources).toEqual([]);
     fireEvent.click(chips()[0]);
     expect(plane("2,2")).toBeTruthy();
     expect(useFrame).toHaveBeenCalled();
@@ -413,40 +493,6 @@ describe("CPU board layer", () => {
   });
 });
 
-describe("CPU assist bar: hiding abilities", () => {
-  const chips = () => screen.queryAllByRole("button",{name:/^Sinkhole abilities/});
-  const hide = () => fireEvent.click(screen.getByRole("button",{name:"Hide abilities for this turn"}));
-  const addSinkhole = () => act(() => {
-    const {board} = useGameStore.getState();
-    useGameStore.setState({board:{...board,sites:{...board.sites,"1,3":{owner:1,card:card("Sinkhole","sinkhole2")}}}});
-  });
-
-  it("collapses to a Show abilities pill and stays hidden while the same sources offer abilities", () => {
-    render(<CpuAssistBar />);
-    hide();
-    expect(chips()).toHaveLength(0);
-    expect(picker().sources).toEqual([]);
-    // A realm change that adds no ability source keeps the chips hidden.
-    act(() => { useGameStore.setState({permanents:{...useGameStore.getState().permanents,"3,1":[unit("Mountain Giant",2,"giant2")]}}); });
-    expect(chips()).toHaveLength(0);
-    fireEvent.click(screen.getByRole("button",{name:"Show abilities"}));
-    expect(chips()).toHaveLength(1);
-    expect(screen.queryByRole("button",{name:"Show abilities"})).toBeNull();
-  });
-
-  it("reopens when a new ability source appears or the turn changes", () => {
-    render(<CpuAssistBar />);
-    hide();
-    addSinkhole();
-    expect(chips()).toHaveLength(2);
-    hide();
-    expect(chips()).toHaveLength(0);
-    act(() => { useGameStore.setState({turn:4}); });
-    expect(chips()).toHaveLength(2);
-    noDropdowns();
-  });
-});
-
 describe("CPU assist bar: trigger ordering", () => {
   it("lists the trigger options under the bar and resolves the chosen one", () => {
     act(() => { useGameStore.setState({cpuTriggerOptions:[{id:"t1",label:"Spring River: Genesis"},{id:"t2",label:"Sinkhole: Genesis"}]}); });
@@ -455,5 +501,14 @@ describe("CPU assist bar: trigger ordering", () => {
     fireEvent.click(screen.getByRole("button",{name:"Sinkhole: Genesis"}));
     expect(chooseCpuTrigger).toHaveBeenCalledWith("t2");
     noDropdowns();
+  });
+  it("can be dismissed, which resolves the triggers in the listed order", () => {
+    act(() => { useGameStore.setState({cpuTriggerOptions:[{id:"t1",label:"Arid Desert — Genesis"},{id:"t2",label:"Red Desert — Genesis"}]}); });
+    render(<CpuAssistBar />);
+    fireEvent.click(screen.getByRole("button",{name:"Close Triggers"}));
+    expect(chooseCpuTrigger).toHaveBeenCalledWith(CPU_TRIGGERS_IN_ORDER);
+    chooseCpuTrigger.mockClear();
+    fireEvent.keyDown(window,{key:"Escape"});
+    expect(chooseCpuTrigger).toHaveBeenCalledWith(CPU_TRIGGERS_IN_ORDER);
   });
 });

@@ -21,7 +21,7 @@ type CubeItemProps = {
 const ROW_ACTION = "h-7 w-7 bg-black/35";
 
 /** Public toggle when the cube is public. */
-const PUBLIC_ACTION = "border-rc-success/40 bg-rc-success/15 text-[#c5d6a8]";
+const PUBLIC_ACTION = "border-rc-success/40 bg-rc-success/15 text-rc-success-ink";
 
 export default function CubeItem({
   cube,
@@ -211,7 +211,7 @@ export default function CubeItem({
     }
     if (cube.imported) {
       items.push(
-        <Badge key="imported" tone="gold">
+        <Badge key="imported" tone="info">
           Imported
         </Badge>
       );
@@ -253,13 +253,14 @@ export default function CubeItem({
         <div className="flex flex-shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           {/* Edit */}
           <RcButton
+            variant="outline"
             size="icon"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               router.push(`/cubes/${encodeURIComponent(cube.id)}/edit`);
             }}
-            className="h-7 w-7"
+            className={ROW_ACTION}
             aria-label="Edit"
             title="Edit Cube"
           >
@@ -329,9 +330,8 @@ export default function CubeItem({
           {/* Delete */}
           {isOwner && (
             <RcButton
-              variant="destructive"
-              size="icon"
-              className="h-7 w-7"
+              variant="danger-soft"
+              size="icon-xs"
               onClick={handleDelete}
               disabled={deleting}
               aria-label="Delete"
@@ -384,6 +384,8 @@ export default function CubeItem({
 
         {/* Edit Cube */}
         <RcButton
+          variant="outline"
+          className="bg-black/35"
           aria-label="Edit Cube"
           onClick={(e: MouseEvent<HTMLButtonElement>) => {
             e.preventDefault();
@@ -456,7 +458,7 @@ export default function CubeItem({
         {/* Delete */}
         {isOwner && (
           <RcButton
-            variant="destructive"
+            variant="danger-soft"
             size="icon"
             aria-label="Delete cube"
             title="Delete"

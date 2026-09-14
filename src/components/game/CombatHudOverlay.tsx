@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { Icon } from "@iconify/react";
+import React, { useEffect, useRef, useState } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore, type CellKey, type Permanents } from "@/lib/game/store";
 import {
@@ -34,6 +36,7 @@ export default function CombatHudOverlay() {
   const setLastCombatSummary = useGameStore((s) => s.setLastCombatSummary);
 
   const declareAttack = useGameStore((s) => s.declareAttack);
+  const rangedStrike = useGameStore((s) => s.rangedStrike);
   const requestRevertCrossMove = useGameStore((s) => s.requestRevertCrossMove);
   const commitDefenders = useGameStore((s) => s.commitDefenders);
   const autoResolveCombat = useGameStore((s) => s.autoResolveCombat);
@@ -47,42 +50,6 @@ export default function CombatHudOverlay() {
     !actorKey ||
     (actorKey === "p1" && currentPlayer === 1) ||
     (actorKey === "p2" && currentPlayer === 2);
-
-  // Render text with color markup [p1:Name] or [p2:Name] as colored spans with font-fantaisie
-  function renderColoredText(text: string): React.ReactNode {
-    const parts: React.ReactNode[] = [];
-    const regex = /\[(p[12]):([^\]]+)\]/g;
-    let lastIndex = 0;
-    let match;
-    let key = 0;
-
-    while ((match = regex.exec(text)) !== null) {
-      // Add text before the match
-      if (match.index > lastIndex) {
-        parts.push(text.slice(lastIndex, match.index));
-      }
-      // Add the colored name with font-fantaisie
-      const playerKey = match[1] as "p1" | "p2";
-      const cardName = match[2];
-      parts.push(
-        <span
-          key={key++}
-          className="font-fantaisie"
-          style={{ color: PLAYER_COLORS[playerKey], fontWeight: 600 }}
-        >
-          {cardName}
-        </span>,
-      );
-      lastIndex = match.index + match[0].length;
-    }
-
-    // Add remaining text
-    if (lastIndex < text.length) {
-      parts.push(text.slice(lastIndex));
-    }
-
-    return parts.length > 0 ? parts : text;
-  }
 
   const tileNum = (() => {
     const source =
@@ -311,22 +278,22 @@ export default function CombatHudOverlay() {
       >
         <div className={barMd}>
           {!committed ? (
-            <span className="text-xs opacity-75 mr-1">
+            <span className="text-xs text-rc-fg-subtle mr-1">
               Waiting for defense commit…
             </span>
           ) : null}
           {defs.length > 1 ? (
             <>
-              <div className="text-sm opacity-80">
+              <div className="text-sm text-rc-fg-muted">
                 Assign {totalAtk} damage:
               </div>
               {asList.map((d, i) => (
                 <div key={d.key} className="flex items-center gap-1">
-                  <span className="text-xs opacity-80">D{i + 1}</span>
+                  <span className="font-rc-mono text-xs text-rc-fg-muted">D{i + 1}</span>
                   <input
                     type="number"
                     min={0}
-                    className="w-16 bg-white/10 rounded px-2 py-1 text-sm"
+                    className="rc-input w-16 px-2 py-1 text-sm"
                     value={
                       Number.isFinite(assign[d.key])
                         ? (assign[d.key] as number)
@@ -343,30 +310,36 @@ export default function CombatHudOverlay() {
                   />
                 </div>
               ))}
-              <div className="text-xs opacity-80">
+              <div className="font-rc-mono text-xs tabular-nums text-rc-fg-muted">
                 Sum {sum}/{totalAtk}
               </div>
-              <button
-                className="rounded bg-white/15 hover:bg-white/25 px-2 py-1 text-xs disabled:opacity-50"
+              <RcButton
+                variant="quiet"
+                size="xs"
+                className="h-auto px-2 py-1"
                 onClick={quickFill}
                 disabled={!committed}
               >
                 Quick Fill
-              </button>
-              <button
-                className="rounded bg-white/15 hover:bg-white/25 px-2 py-1 text-xs disabled:opacity-50"
+              </RcButton>
+              <RcButton
+                variant="quiet"
+                size="xs"
+                className="h-auto px-2 py-1"
                 onClick={reset}
                 disabled={!committed}
               >
                 Reset
-              </button>
-              <button
-                className="rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1 text-sm disabled:opacity-50"
+              </RcButton>
+              <RcButton
+                variant="quiet"
+                size="xs"
+                className="h-auto px-3 py-1 text-sm text-rc-fg-strong"
                 onClick={pushAssignment}
                 disabled={!committed || !valid}
               >
                 Set
-              </button>
+              </RcButton>
             </>
           ) : null}
         </div>
@@ -549,7 +522,7 @@ export default function CombatHudOverlay() {
         const dd = players[seat]?.lifeState === "dd";
         const dmg = dd ? 0 : Math.max(0, Math.floor(totalAtk));
         return (
-          <span className="opacity-80">
+          <span className="text-rc-fg-muted">
             - Deal <span className="font-semibold">{dmg}</span> to{" "}
             <span
               className="font-semibold"
@@ -559,7 +532,7 @@ export default function CombatHudOverlay() {
             </span>
             {eff.firstStrike ? " (FS)" : ""}
             {bBonus > 0 ? (
-              <span className="text-amber-400 ml-1">
+              <span className="text-rc-accent-link ml-1">
                 [Boudicca +{BOUDICCA_POWER_BONUS}]
               </span>
             ) : null}
@@ -575,7 +548,7 @@ export default function CombatHudOverlay() {
       const isDD = players[seat]?.lifeState === "dd";
       if (isDD) {
         return (
-          <span className="opacity-80">
+          <span className="text-rc-fg-muted">
             -{" "}
             <span
               className="font-semibold"
@@ -591,13 +564,13 @@ export default function CombatHudOverlay() {
       const next = Math.max(0, life - dmg);
       if (life > 0 && next <= 0) {
         return (
-          <span className="opacity-80">
+          <span className="text-rc-fg-muted">
             - {seat.toUpperCase()} reaches Death&apos;s Door
           </span>
         );
       }
       return (
-        <span className="opacity-80">
+        <span className="text-rc-fg-muted">
           - Deal <span className="font-semibold">{dmg}</span> to{" "}
           <span
             className="font-semibold"
@@ -630,7 +603,7 @@ export default function CombatHudOverlay() {
     }
     const verdict = eff.atk >= tDef ? "likely kill" : "may fail";
     return (
-      <span className="opacity-80">
+      <span className="text-rc-fg-muted">
         - Atk {eff.atk}
         {eff.firstStrike ? " (FS)" : ""} vs Def {tDef} ({verdict})
       </span>
@@ -751,7 +724,7 @@ export default function CombatHudOverlay() {
           })();
           // Match the format from autoResolveCombat
           return (
-            <span className="opacity-70 ml-2">
+            <span className="text-rc-fg-muted ml-2">
               → &quot;{attackerName}&quot; strikes Site &quot;{siteName}&quot;
               for <span className="font-semibold">{dmg}</span> damage (
               <span style={{ color: PLAYER_COLORS[seat] }}>
@@ -759,7 +732,7 @@ export default function CombatHudOverlay() {
               </span>{" "}
               life {life} → {after})
               {bBonus > 0 ? (
-                <span className="text-amber-400 ml-1">
+                <span className="text-rc-accent-link ml-1">
                   [Boudicca +{BOUDICCA_POWER_BONUS}]
                 </span>
               ) : null}
@@ -785,7 +758,7 @@ export default function CombatHudOverlay() {
         // Match format from autoResolveCombat
         if (isDD) {
           return (
-            <span className="opacity-70 ml-2">
+            <span className="text-rc-fg-muted ml-2">
               → &quot;{attackerName}&quot; strikes Avatar (
               <span style={{ color: PLAYER_COLORS[seat] }}>
                 {seat.toUpperCase()}
@@ -798,7 +771,7 @@ export default function CombatHudOverlay() {
         const next = Math.max(0, life - dmg);
         if (life > 0 && next <= 0) {
           return (
-            <span className="opacity-70 ml-2">
+            <span className="text-rc-fg-muted ml-2">
               → &quot;{attackerName}&quot; strikes Avatar for{" "}
               <span className="font-semibold">{dmg}</span> damage (
               <span style={{ color: PLAYER_COLORS[seat] }}>
@@ -809,7 +782,7 @@ export default function CombatHudOverlay() {
           );
         }
         return (
-          <span className="opacity-70 ml-2">
+          <span className="text-rc-fg-muted ml-2">
             → &quot;{attackerName}&quot; strikes Avatar for{" "}
             <span className="font-semibold">{dmg}</span> damage (
             <span style={{ color: PLAYER_COLORS[seat] }}>
@@ -886,7 +859,7 @@ export default function CombatHudOverlay() {
           outcome = `Both survive`;
         }
 
-        return <span className="opacity-70 ml-2">→ {outcome}</span>;
+        return <span className="text-rc-fg-muted ml-2">→ {outcome}</span>;
       }
     }
     const attackerDef = (() => {
@@ -957,7 +930,7 @@ export default function CombatHudOverlay() {
       })();
 
       return (
-        <span className="opacity-70 ml-2">
+        <span className="text-rc-fg-muted ml-2">
           <span className="font-medium">{defName}</span> defends! Attacker{" "}
           <span className="font-semibold">{attackerPower}</span>
           {a.firstStrike ? " (FS)" : ""} Defender{" "}
@@ -984,14 +957,25 @@ export default function CombatHudOverlay() {
           : "attacker survives"
         : "—";
     return (
-      <span className="opacity-70 ml-2">
+      <span className="text-rc-fg-muted ml-2">
         · Suggests: <span className="font-medium">{parts.join(" ")}</span> →{" "}
         {killVerdict}; {tradeVerdict}
       </span>
     );
   }
 
-  // Auto-hide summary after longer display (still manually closable)
+  // A resolved combat is announced with a toast; nobody has to click it away.
+  // The relayed combatSummary echoes back to its sender with the same id.
+  const toastedSummaryId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!lastCombatSummary || toastedSummaryId.current === lastCombatSummary.id) return;
+    toastedSummaryId.current = lastCombatSummary.id;
+    window.dispatchEvent(
+      new CustomEvent("app:toast", { detail: { message: lastCombatSummary.text } }),
+    );
+  }, [lastCombatSummary]);
+
+  // The summary stays in the store a while so a late echo is not announced (or voiced) twice.
   useEffect(() => {
     if (!lastCombatSummary) return;
     const id = window.setTimeout(() => setLastCombatSummary(null), 12000);
@@ -1002,30 +986,33 @@ export default function CombatHudOverlay() {
 
   // Shared mobile-responsive bar classes
   const barBase = isMobileScreen
-    ? "pointer-events-auto px-3 py-2 rounded-2xl bg-black/90 text-white ring-1 ring-white/20 shadow-lg text-xs flex flex-wrap items-center gap-1.5 max-w-[95vw]"
-    : "pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-white/20 shadow-lg";
+    ? "pointer-events-auto px-3 py-2 rounded-rc-lg border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-xs flex flex-wrap items-center gap-1.5 max-w-[95vw]"
+    : "pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel";
   const barLg = isMobileScreen
     ? barBase
     : barBase + " text-lg md:text-xl flex items-center gap-2";
   const barMd = isMobileScreen
     ? barBase
     : barBase + " text-base md:text-lg flex items-center gap-3";
-  const btnSm = isMobileScreen ? "text-[10px] px-2 py-0.5" : "px-3 py-1";
+  // Compact HUD buttons: phones stay at 10px, desktop inherits the bar's text size.
+  const btnSm = isMobileScreen
+    ? "h-auto px-2 py-0.5 text-[10px]"
+    : "h-auto px-3 py-1 text-[length:inherit]";
 
   if (!combatGuidesActive) return null;
 
   return (
     <>
-      {/* Top bar - on phones sit below the status bar pill (which itself sits below the safe area) */}
+      {/* Top bar - sits below the status bar pill (which on phones sits below the safe area) */}
       <div
-        className={`fixed inset-x-0 ${isMobileScreen ? "top-[calc(env(safe-area-inset-top,0px)+2.5rem)]" : "top-6"} z-[100] pointer-events-none flex justify-center`}
+        className={`fixed inset-x-0 ${isMobileScreen ? "top-[calc(env(safe-area-inset-top,0px)+2.5rem)]" : "top-16"} z-[100] pointer-events-none flex justify-center`}
       >
         {attackChoice && actorIsActive ? (
           <div className={barLg}>
-            <span className="opacity-80">
+            <span className="text-rc-fg-muted">
               {tileNum ? `[T${tileNum}] ` : ""}
               <span
-                className="font-fantaisie"
+                className="font-rc-display"
                 style={{
                   color:
                     attackChoice.attacker.owner === 1
@@ -1046,8 +1033,10 @@ export default function CombatHudOverlay() {
                 })()}
               </span>
             </span>
-            <button
-              className={`mx-1 rounded bg-white/15 hover:bg-white/25 ${btnSm}`}
+            <RcButton
+              variant="quiet"
+              size="xs"
+              className={`mx-1 ${btnSm}`}
               onClick={() => {
                 try {
                   // Tap the moved minion now that user has chosen to just move
@@ -1065,9 +1054,10 @@ export default function CombatHudOverlay() {
               }}
             >
               Moves Only
-            </button>
-            <button
-              className={`mx-1 rounded bg-emerald-600/90 hover:bg-emerald-500 ${btnSm}`}
+            </RcButton>
+            <RcButton
+              size="xs"
+              className={`mx-1 ${btnSm}`}
               onClick={() => {
                 // Tap the moved minion now that user has chosen to attack
                 if (!attackChoice.attacker.isAvatar) {
@@ -1086,38 +1076,67 @@ export default function CombatHudOverlay() {
               }}
             >
               Moves &amp; Attacks
-            </button>
-            <button
-              className={`mx-1 rounded bg-white/15 hover:bg-white/25 ${btnSm}`}
+            </RcButton>
+            <RcButton
+              variant="quiet"
+              size="xs"
+              className={`mx-1 ${btnSm}`}
               onClick={() => {
                 setAttackChoice(null);
                 requestRevertCrossMove(); // Revert the movement
               }}
             >
               Cancel
-            </button>
+            </RcButton>
           </div>
         ) : attackTargetChoice && !attackConfirm ? (
           <div className={barLg}>
-            <span className="opacity-80">
-              Select a target at{" "}
-              <span className="font-fantaisie">T{tileNum}</span>
-            </span>
-            <button
-              className={`mx-2 rounded bg-white/15 hover:bg-white/25 ${btnSm}`}
+            {attackTargetChoice.ranged ? (
+              <>
+                <span className="text-rc-fg-muted">Ranged strike · pick a target</span>
+                {attackTargetChoice.candidates.map((c) => (
+                  <RcButton
+                    key={`${c.kind}:${c.at}:${c.index}`}
+                    variant="danger-soft"
+                    size="xs"
+                    className={`mx-1 ${btnSm}`}
+                    onClick={() =>
+                      setAttackConfirm({
+                        tile: attackTargetChoice.tile,
+                        ranged: true,
+                        attacker: attackTargetChoice.attacker,
+                        target: { kind: c.kind, at: c.at, index: c.index },
+                        targetLabel: c.label,
+                      })
+                    }
+                  >
+                    <span className="font-rc-display">{c.label}</span>
+                  </RcButton>
+                ))}
+              </>
+            ) : (
+              <span className="text-rc-fg-muted">
+                Select a target at{" "}
+                <span className="font-rc-display">T{tileNum}</span>
+              </span>
+            )}
+            <RcButton
+              variant="quiet"
+              size="xs"
+              className={`mx-2 ${btnSm}`}
               onClick={() => {
                 setAttackTargetChoice(null);
               }}
             >
               Cancel
-            </button>
+            </RcButton>
           </div>
         ) : attackConfirm ? (
           <div className={barLg}>
-            <span className="opacity-80">
+            <span className="text-rc-fg-muted">
               {tileNum ? `[T${tileNum}] ` : ""}
               <span
-                className="font-fantaisie"
+                className="font-rc-display"
                 style={{
                   color:
                     attackConfirm.attacker.owner === 1
@@ -1127,31 +1146,39 @@ export default function CombatHudOverlay() {
               >
                 {(() => {
                   try {
+                    const { attacker } = attackConfirm;
+                    if (attacker.isAvatar && attacker.avatarSeat) {
+                      return avatars[attacker.avatarSeat]?.card?.name || "Avatar";
+                    }
                     return (
-                      permanents[attackConfirm.attacker.at]?.[
-                        attackConfirm.attacker.index
-                      ]?.card?.name || "Attacker"
+                      permanents[attacker.at]?.[attacker.index]?.card?.name ||
+                      "Attacker"
                     );
                   } catch {
                     return "Attacker";
                   }
                 })()}
               </span>
-              {" attacks "}
-              <span className="font-fantaisie">
+              {attackConfirm.ranged ? " shoots " : " attacks "}
+              <span className="font-rc-display">
                 {attackConfirm.targetLabel}
               </span>
             </span>
-            <SuggestionConfirm />
-            <button
-              className={`mx-2 rounded bg-emerald-600/90 hover:bg-emerald-500 ${btnSm}`}
+            {!attackConfirm.ranged && <SuggestionConfirm />}
+            <RcButton
+              size="xs"
+              className={`mx-2 ${btnSm}`}
               onClick={() => {
                 try {
-                  declareAttack(
-                    attackConfirm.tile,
-                    attackConfirm.attacker,
-                    attackConfirm.target,
-                  );
+                  if (attackConfirm.ranged) {
+                    rangedStrike(attackConfirm.attacker, attackConfirm.target);
+                  } else {
+                    declareAttack(
+                      attackConfirm.tile,
+                      attackConfirm.attacker,
+                      attackConfirm.target,
+                    );
+                  }
                 } finally {
                   setAttackConfirm(null);
                   setAttackTargetChoice(null);
@@ -1159,13 +1186,15 @@ export default function CombatHudOverlay() {
               }}
             >
               Confirm
-            </button>
-            <button
-              className={`rounded bg-white/15 hover:bg-white/25 ${btnSm}`}
+            </RcButton>
+            <RcButton
+              variant="quiet"
+              size="xs"
+              className={btnSm}
               onClick={() => setAttackConfirm(null)}
             >
               Back
-            </button>
+            </RcButton>
           </div>
         ) : pendingCombat &&
           (actorKey
@@ -1173,12 +1202,12 @@ export default function CombatHudOverlay() {
             : pendingCombat.status !== "committed") ? (
           pendingCombat.status !== "committed" ? (
             <div className={barLg}>
-              <span className="opacity-80">
+              <span className="text-rc-fg-muted">
                 {pendingCombat.target == null ? (
                   <>
                     Intercept{" "}
                     <span
-                      className="font-fantaisie"
+                      className="font-rc-display"
                       style={{
                         color:
                           pendingCombat.attacker.owner === 1
@@ -1196,7 +1225,7 @@ export default function CombatHudOverlay() {
                 ) : (
                   <>
                     <span
-                      className="font-fantaisie"
+                      className="font-rc-display"
                       style={{
                         color:
                           pendingCombat.attacker.owner === 1
@@ -1208,7 +1237,7 @@ export default function CombatHudOverlay() {
                     </span>
                     {targetLabel ? ` attacks ` : " attacks"}
                     {targetLabel ? (
-                      <span className="font-fantaisie">{targetLabel}</span>
+                      <span className="font-rc-display">{targetLabel}</span>
                     ) : null}
                     . Choose defenders: {pendingCombat.defenders?.length || 0}{" "}
                     selected
@@ -1224,21 +1253,24 @@ export default function CombatHudOverlay() {
                 // Intercept offer with nobody assigned: the mover simply
                 // passes through. Committing an empty defence would fall
                 // through to the site-damage branch of autoResolveCombat.
-                <button
-                  className={`rounded bg-white/15 hover:bg-white/25 ${btnSm}`}
+                <RcButton
+                  variant="quiet"
+                  size="xs"
+                  className={btnSm}
                   onClick={() => cancelCombat()}
                 >
                   Let pass
-                </button>
+                </RcButton>
               ) : (
-                <button
-                  className={`rounded bg-emerald-600/90 hover:bg-emerald-500 ${btnSm}`}
+                <RcButton
+                  size="xs"
+                  className={btnSm}
                   onClick={() => {
                     commitDefenders();
                   }}
                 >
                   Done
-                </button>
+                </RcButton>
               )}
             </div>
           ) : (
@@ -1250,31 +1282,35 @@ export default function CombatHudOverlay() {
                     <div>Defenders committed.</div>
                     {combatHasArtifacts ? (
                       <>
-                        <span className="text-amber-400 text-xs">
-                          ⚠️ Artifact
+                        <span className="inline-flex items-center gap-1 text-rc-warning text-xs">
+                          <Icon icon="game-icons:hazard-sign" width={14} height={14} /> Artifact
                         </span>
-                        <button
-                          className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
+                        <RcButton
+                          size="xs"
+                          className="h-auto px-3 py-1 text-sm"
                           onClick={() => autoResolveCombat()}
                           title="Use base stats only (artifact effects not calculated)"
                         >
                           Resolve (base)
-                        </button>
+                        </RcButton>
                       </>
                     ) : (
-                      <button
-                        className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
+                      <RcButton
+                        size="xs"
+                        className="h-auto px-3 py-1 text-sm"
                         onClick={() => autoResolveCombat()}
                       >
                         Auto Resolve
-                      </button>
+                      </RcButton>
                     )}
-                    <button
-                      className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm"
+                    <RcButton
+                      variant="quiet"
+                      size="xs"
+                      className="h-auto px-3 py-1 text-sm"
                       onClick={() => cancelCombat()}
                     >
                       Cancel
-                    </button>
+                    </RcButton>
                   </div>
                 );
               }
@@ -1306,31 +1342,35 @@ export default function CombatHudOverlay() {
                       <>
                         {combatHasArtifacts ? (
                           <>
-                            <span className="text-amber-400 text-xs">
-                              ⚠️ Artifact
+                            <span className="inline-flex items-center gap-1 text-rc-warning text-xs">
+                              <Icon icon="game-icons:hazard-sign" width={14} height={14} /> Artifact
                             </span>
-                            <button
-                              className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
+                            <RcButton
+                              size="xs"
+                              className="h-auto px-3 py-1 text-sm"
                               onClick={() => autoResolveCombat()}
                               title="Use base stats only (artifact effects not calculated)"
                             >
                               Resolve (base)
-                            </button>
+                            </RcButton>
                           </>
                         ) : (
-                          <button
-                            className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm"
+                          <RcButton
+                            size="xs"
+                            className="h-auto px-3 py-1 text-sm"
                             onClick={() => autoResolveCombat()}
                           >
                             Auto Resolve
-                          </button>
+                          </RcButton>
                         )}
-                        <button
-                          className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm"
+                        <RcButton
+                          variant="quiet"
+                          size="xs"
+                          className="h-auto px-3 py-1 text-sm"
                           onClick={() => cancelCombat()}
                         >
                           Cancel
-                        </button>
+                        </RcButton>
                       </>
                     );
                   }
@@ -1351,12 +1391,13 @@ export default function CombatHudOverlay() {
                   return (
                     <>
                       {combatHasArtifacts && (
-                        <span className="text-amber-400 text-xs">
-                          ⚠️ Artifact
+                        <span className="inline-flex items-center gap-1 text-rc-warning text-xs">
+                          <Icon icon="game-icons:hazard-sign" width={14} height={14} /> Artifact
                         </span>
                       )}
-                      <button
-                        className="rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 text-sm disabled:opacity-50"
+                      <RcButton
+                        size="xs"
+                        className="h-auto px-3 py-1 text-sm"
                         onClick={() => autoResolveCombat()}
                         disabled={!valid}
                         title={
@@ -1366,13 +1407,15 @@ export default function CombatHudOverlay() {
                         }
                       >
                         {combatHasArtifacts ? "Resolve (base)" : "Resolve"}
-                      </button>
-                      <button
-                        className="rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-sm"
+                      </RcButton>
+                      <RcButton
+                        variant="quiet"
+                        size="xs"
+                        className="h-auto px-3 py-1 text-sm"
                         onClick={() => cancelCombat()}
                       >
                         Cancel
-                      </button>
+                      </RcButton>
                     </>
                   );
                 })()
@@ -1383,52 +1426,6 @@ export default function CombatHudOverlay() {
 
       {/* Bottom attacker controls */}
       <AttackerAssignmentBar />
-
-      {/* Final summary banner (both players) */}
-      {lastCombatSummary
-        ? (() => {
-            const actor = lastCombatSummary.actor;
-            const targetSeat = lastCombatSummary.targetSeat;
-            const ac = actor ? PLAYER_COLORS[actor] : "#aaaaaa";
-            const tc = targetSeat ? PLAYER_COLORS[targetSeat] : "#aaaaaa";
-            return (
-              <div
-                className={`fixed inset-x-0 ${isMobileScreen ? "top-16" : "top-28"} z-[100] pointer-events-none flex justify-center`}
-              >
-                <div className={barMd}>
-                  <div className="min-w-0">
-                    {actor || targetSeat ? (
-                      <div className="text-xs opacity-90 mb-1">
-                        {actor ? (
-                          <span style={{ color: ac }} className="font-semibold">
-                            {actor.toUpperCase()}
-                          </span>
-                        ) : null}
-                        {actor || targetSeat ? (
-                          <span className="mx-1">→</span>
-                        ) : null}
-                        {targetSeat ? (
-                          <span style={{ color: tc }} className="font-semibold">
-                            {targetSeat.toUpperCase()}
-                          </span>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    <div className="leading-tight drop-shadow-sm break-words">
-                      {renderColoredText(lastCombatSummary.text)}
-                    </div>
-                  </div>
-                  <button
-                    className="ml-2 rounded bg-white/15 hover:bg-white/25 px-2 py-1 text-sm"
-                    onClick={() => setLastCombatSummary(null)}
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            );
-          })()
-        : null}
     </>
   );
 }

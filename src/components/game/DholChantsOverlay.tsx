@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import CardWithPreview, { CardGrid } from "./CardWithPreview";
 
@@ -29,9 +30,9 @@ export default function DholChantsOverlay() {
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-cyan-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
-          <span className="text-cyan-400 font-fantaisie">🎵 Dhol Chants</span>
-          <span className="opacity-80">
+        <div className="pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg md:text-xl flex items-center gap-3 select-none">
+          <span className="font-rc-display text-rc-accent-link">Dhol Chants</span>
+          <span className="text-rc-fg-muted">
             {phase === "selecting_allies" &&
               `Select allies to tap (${selectedAllies.length} selected)`}
             {phase === "revealing" && "Revealing spells..."}
@@ -44,17 +45,17 @@ export default function DholChantsOverlay() {
 
       {/* Ally selection phase */}
       {phase === "selecting_allies" && isOwner && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-6 max-w-lg w-full mx-4 ring-1 ring-cyan-500/30">
-            <h2 className="text-2xl font-fantaisie text-cyan-400 mb-4 text-center">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-lg w-full mx-4 font-rc-sans text-rc-fg shadow-rc-panel">
+            <h2 className="mb-4 text-center font-rc-display text-[26px] leading-tight text-rc-fg-strong">
               Dhol Chants - Select Allies to Tap
             </h2>
 
-            <p className="text-gray-400 text-center mb-4">
+            <p className="text-rc-fg-muted text-center mb-4">
               Tap nearby allies to reveal that many spells
             </p>
 
-            <div className="space-y-2 max-h-64 overflow-y-auto mb-6">
+            <div className="thin-scrollbar space-y-2 max-h-64 overflow-y-auto mb-6">
               {nearbyAllies.map((ally) => {
                 const isSelected = selectedAllies.some(
                   (s) => s.at === ally.at && s.index === ally.index
@@ -63,41 +64,33 @@ export default function DholChantsOverlay() {
                   <button
                     key={`${ally.at}-${ally.index}`}
                     onClick={() => toggleAlly(ally.at, ally.index)}
-                    className={`w-full p-3 rounded-lg border-2 transition-all text-left ${
+                    className={`w-full p-3 rounded-rc-md border transition-colors text-left ${
                       isSelected
-                        ? "border-cyan-500 bg-cyan-900/40"
-                        : "border-gray-600 hover:border-cyan-400 bg-gray-800/30"
+                        ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                        : "border-rc-line/18 bg-black/30 hover:border-rc-accent/60 hover:bg-rc-accent/8"
                     }`}
                   >
                     <span
-                      className={isSelected ? "text-cyan-300" : "text-gray-300"}
+                      className={`font-rc-display ${isSelected ? "text-rc-accent-link" : "text-rc-fg-strong"}`}
                     >
                       {ally.name}
                     </span>
-                    {isSelected && <span className="float-right">✓</span>}
+                    {isSelected && <span className="float-right text-rc-accent-link">✓</span>}
                   </button>
                 );
               })}
             </div>
 
             <div className="flex justify-center gap-4">
-              <button
+              <RcButton
                 onClick={confirmAllies}
                 disabled={selectedAllies.length === 0}
-                className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                  selectedAllies.length > 0
-                    ? "bg-cyan-600 hover:bg-cyan-500 text-white"
-                    : "bg-gray-600 text-gray-400 cursor-not-allowed"
-                }`}
               >
                 Tap {selectedAllies.length} Allies
-              </button>
-              <button
-                onClick={cancel}
-                className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-medium"
-              >
+              </RcButton>
+              <RcButton variant="outline" onClick={cancel}>
                 Cancel
-              </button>
+              </RcButton>
             </div>
           </div>
         </div>
@@ -105,19 +98,19 @@ export default function DholChantsOverlay() {
 
       {/* Spell selection phase */}
       {phase === "selecting_spell" && isOwner && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-6 max-w-3xl w-full mx-4 ring-1 ring-cyan-500/30 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-fantaisie text-cyan-400 mb-4 text-center">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="thin-scrollbar rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-3xl w-full mx-4 font-rc-sans text-rc-fg shadow-rc-panel max-h-[90vh] overflow-y-auto">
+            <h2 className="mb-4 text-center font-rc-display text-[26px] leading-tight text-rc-fg-strong">
               Select Spell to Cast Free
             </h2>
 
-            <p className="text-gray-400 text-center mb-4">
+            <p className="text-rc-fg-muted text-center mb-4">
               Revealed {revealedSpells.length} spells. Choose one to add to hand
               (cast for free).
             </p>
 
             {revealedSpells.length === 0 ? (
-              <p className="text-gray-400 text-center py-8">
+              <p className="text-rc-fg-subtle text-center py-8">
                 No spells revealed
               </p>
             ) : (
@@ -136,23 +129,12 @@ export default function DholChantsOverlay() {
             )}
 
             <div className="flex justify-center gap-4">
-              <button
-                onClick={resolve}
-                disabled={!selectedSpell}
-                className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                  selectedSpell
-                    ? "bg-cyan-600 hover:bg-cyan-500 text-white"
-                    : "bg-gray-600 text-gray-400 cursor-not-allowed"
-                }`}
-              >
+              <RcButton onClick={resolve} disabled={!selectedSpell}>
                 Cast Spell Free
-              </button>
-              <button
-                onClick={cancel}
-                className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-medium"
-              >
+              </RcButton>
+              <RcButton variant="outline" onClick={cancel}>
                 Cancel
-              </button>
+              </RcButton>
             </div>
           </div>
         </div>
@@ -161,7 +143,7 @@ export default function DholChantsOverlay() {
       {/* Opponent view */}
       {!isOwner && phase !== "complete" && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="pointer-events-auto px-4 py-2 rounded-lg bg-black/90 text-sm text-cyan-300 ring-1 ring-cyan-500/30">
+          <div className="rc-toast pointer-events-auto">
             {casterSeat.toUpperCase()} is resolving Dhol Chants...
           </div>
         </div>

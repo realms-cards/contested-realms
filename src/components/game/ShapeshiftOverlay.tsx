@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useMemo } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import CardWithPreview, { CardGrid } from "./CardWithPreview";
 
@@ -70,9 +71,9 @@ export default function ShapeshiftOverlay() {
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-2 sm:top-6 z-[201] pointer-events-none flex justify-center px-2">
-        <div className="pointer-events-auto px-3 sm:px-5 py-2 sm:py-3 rounded-full bg-black/90 text-white ring-1 ring-purple-500/50 shadow-lg text-sm sm:text-lg md:text-xl flex items-center gap-2 sm:gap-3 select-none">
-          <span className="text-purple-400 font-fantaisie">Shapeshift</span>
-          <span className="opacity-80">
+        <div className="pointer-events-auto px-3 sm:px-5 py-2 sm:py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-sm sm:text-lg md:text-xl flex items-center gap-2 sm:gap-3 select-none">
+          <span className="font-rc-display text-rc-accent-link">Shapeshift</span>
+          <span className="text-rc-fg-muted">
             {phase === "selectingTarget" &&
               (isCaster
                 ? "Select an allied minion to transform"
@@ -86,20 +87,24 @@ export default function ShapeshiftOverlay() {
           </span>
           {isCaster && phase === "selectingTarget" && (
             <>
-              <button
-                className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1 select-none"
+              <RcButton
+                variant="quiet"
+                size="xs"
+                className="mx-1 h-auto min-h-7 py-1 leading-4 whitespace-normal"
                 onClick={handleSkipAutoResolve}
                 title="Leaves spell on board for manual resolution"
               >
                 Manual Resolve
-              </button>
-              <button
-                className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1 select-none"
+              </RcButton>
+              <RcButton
+                variant="outline"
+                size="xs"
+                className="mx-1"
                 onClick={handleCancel}
                 title="Returns spell to hand"
               >
                 Cancel
-              </button>
+              </RcButton>
             </>
           )}
         </div>
@@ -110,12 +115,12 @@ export default function ShapeshiftOverlay() {
 
       {/* Phase: Viewing Spells & Selecting Minion */}
       {isCaster && phase === "viewing" && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-3 sm:p-6 max-w-4xl w-full mx-2 sm:mx-4 ring-1 ring-purple-500/30 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="thin-scrollbar rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-3 sm:p-6 max-w-4xl w-full mx-2 sm:mx-4 font-rc-sans text-rc-fg shadow-rc-panel max-h-[90vh] overflow-y-auto">
             {/* Target minion display */}
             {pending.targetMinion && (
-              <div className="mb-4 p-3 rounded bg-purple-900/30 ring-1 ring-purple-500/50">
-                <p className="text-purple-400 text-sm mb-2 text-center">
+              <div className="mb-4 p-3 rounded-rc-md border border-rc-accent/35 bg-rc-accent/8">
+                <p className="text-rc-accent-link text-sm mb-2 text-center">
                   Transforming:
                 </p>
                 <div className="flex justify-center">
@@ -129,11 +134,11 @@ export default function ShapeshiftOverlay() {
               </div>
             )}
 
-            <h2 className="text-xl sm:text-2xl font-fantaisie text-purple-400 mb-2 text-center">
+            <h2 className="mb-2 text-center font-rc-display text-[22px] sm:text-[26px] leading-tight text-rc-fg-strong">
               Your Next {pending.revealedCards.length} Spell
               {pending.revealedCards.length !== 1 ? "s" : ""}
             </h2>
-            <p className="text-white/70 text-xs sm:text-sm mb-4 sm:mb-6 text-center">
+            <p className="text-rc-fg-muted text-xs sm:text-sm mb-4 sm:mb-6 text-center">
               {hasMinionsInRevealed
                 ? "Click a minion to be the new form. Non-minions cannot be selected."
                 : "No minions found. All cards will go to the bottom of your spellbook."}
@@ -158,15 +163,15 @@ export default function ShapeshiftOverlay() {
                       accentColor={isMinion ? "purple" : undefined}
                     />
                     {!isMinion && (
-                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded pointer-events-none">
-                        <span className="text-white/60 text-xs text-center px-1">
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-rc-md pointer-events-none">
+                        <span className="text-rc-fg-subtle text-xs text-center px-1">
                           Not a minion
                         </span>
                       </div>
                     )}
                     {isSelected && (
-                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                        <span className="text-white text-sm">✓</span>
+                      <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full border border-rc-success/60 bg-[rgba(7,10,20,0.85)] shadow-rc-sm flex items-center justify-center">
+                        <span className="text-rc-success-ink text-sm">✓</span>
                       </div>
                     )}
                   </div>
@@ -176,40 +181,35 @@ export default function ShapeshiftOverlay() {
 
             {/* Action buttons */}
             <div className="flex gap-3 justify-center mt-6">
-              <button
-                className="px-6 py-3 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 font-medium transition-colors"
-                onClick={handleCancel}
-              >
+              <RcButton variant="outline" onClick={handleCancel}>
                 Cancel
-              </button>
+              </RcButton>
               {!hasMinionsInRevealed ? (
-                <button
-                  className="px-6 py-3 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold transition-colors"
+                <RcButton
                   onClick={() => {
                     handleSkip();
                     handleResolve();
                   }}
                 >
                   Continue (No Minions)
-                </button>
+                </RcButton>
               ) : pending.selectedMinionIndex !== null ? (
-                <button
-                  className="px-6 py-3 rounded-lg bg-green-600 hover:bg-green-500 text-white font-bold transition-colors"
+                <RcButton
+                  className="h-auto py-2 whitespace-normal"
                   onClick={handleResolve}
                 >
                   Transform into{" "}
                   {pending.revealedCards[pending.selectedMinionIndex]?.name}
-                </button>
+                </RcButton>
               ) : (
-                <button
-                  className="px-6 py-3 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold transition-colors"
+                <RcButton
                   onClick={() => {
                     handleSkip();
                     handleResolve();
                   }}
                 >
                   Skip (No Transform)
-                </button>
+                </RcButton>
               )}
             </div>
           </div>
@@ -219,8 +219,8 @@ export default function ShapeshiftOverlay() {
       {/* Opponent view - just a waiting indicator */}
       {!isCaster && (phase === "selectingTarget" || phase === "viewing") && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="pointer-events-auto px-4 py-2 rounded-lg bg-black/90 text-white/80 text-sm ring-1 ring-purple-500/30">
-            <span className="text-purple-300">
+          <div className="rc-toast pointer-events-auto">
+            <span className="text-rc-fg-strong">
               {pending.casterSeat.toUpperCase()}
             </span>{" "}
             is casting Shapeshift...

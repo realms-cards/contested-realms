@@ -16,6 +16,7 @@ import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
+import { RcButton } from "@/components/ui/rc-button";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import type { SearchResult } from "@/lib/deckEditor/search";
@@ -1584,9 +1585,9 @@ export default function EnhancedOnlineDraft3DScreen({
         : "grid-cols-1";
 
     return (
-      <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
-        <div className="rounded-xl p-6 bg-black/80 ring-1 ring-white/30 text-white w-full max-w-5xl shadow-2xl">
-          <div className="text-lg font-semibold mb-3">
+      <div className="fixed inset-0 z-50 bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px] flex items-center justify-center p-6">
+        <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-rc-fg w-full max-w-5xl shadow-rc-panel">
+          <div className="mb-3 font-rc-display text-[22px] leading-none text-rc-fg-strong">
             Choose a pack to crack (Round {draftState.packIndex + 1}/
             {totalPacks})
           </div>
@@ -1616,15 +1617,15 @@ export default function EnhancedOnlineDraft3DScreen({
                     handlePackChoice(packIdx);
                   }}
                   disabled={isUsed || !allowedToOpen}
-                  className={`group rounded-lg p-3 bg-black/60 ring-1 ring-white/25 text-left ${
+                  className={`group rounded-rc-md border border-rc-line/12 bg-black/30 p-3 text-left transition-colors ${
                     isUsed
                       ? "opacity-40 cursor-not-allowed"
-                      : "hover:bg-black/50"
+                      : "hover:border-rc-accent/40 hover:bg-rc-accent/8"
                   }`}
                 >
                   <div
-                    className={`relative w-full h-40 sm:h-48 md:h-56 rounded-md overflow-hidden ring-1 ring-white/15 bg-black/40 ${
-                      !isUsed ? "group-hover:ring-white/30" : ""
+                    className={`relative w-full h-40 sm:h-48 md:h-56 rounded-rc-md overflow-hidden ring-1 ring-rc-line/15 bg-black/40 ${
+                      !isUsed ? "group-hover:ring-rc-accent/45" : ""
                     }`}
                   >
                     {assetName ? (
@@ -1638,15 +1639,15 @@ export default function EnhancedOnlineDraft3DScreen({
                         unoptimized
                       />
                     ) : (
-                      <div className="flex items-center justify-center w-full h-full text-sm opacity-70">
+                      <div className="flex items-center justify-center w-full h-full font-rc-sans text-sm text-rc-fg-muted">
                         Pack {packIdx + 1}
                       </div>
                     )}
-                    <div className="absolute bottom-1 left-1 right-1 text-[11px] px-2 py-1 rounded bg-black/60 text-white text-center pointer-events-none">
+                    <div className="absolute bottom-1 left-1 right-1 text-[11px] px-2 py-1 rounded-rc-sm bg-[rgba(7,10,20,0.85)] font-rc-mono text-rc-fg text-center pointer-events-none">
                       {setName} - Pack {packIdx + 1}
                     </div>
                   </div>
-                  <div className="mt-2 text-xs opacity-70 text-center">
+                  <div className="rc-hint mt-2 text-center">
                     {isUsed
                       ? "Already used"
                       : !allowedToOpen
@@ -1664,27 +1665,27 @@ export default function EnhancedOnlineDraft3DScreen({
 
   if (draftState.phase === "waiting") {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-b from-slate-950 to-slate-900 flex items-center justify-center p-4">
-        <div className="w-full max-w-4xl bg-slate-900/95 backdrop-blur-sm rounded-xl p-8 ring-1 ring-white/10 shadow-2xl relative">
+      <div className="rc-app min-h-screen w-full flex items-center justify-center p-4">
+        <div className="w-full max-w-4xl rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] backdrop-blur-sm p-8 text-rc-fg shadow-rc-panel relative">
           <UserBadge variant="floating" />
           <div className="text-center space-y-6">
-            <h2 className="text-3xl font-bold text-white">Preparing Draft…</h2>
+            <h2 className="m-0 font-rc-display text-[28px] leading-none text-rc-fg-strong">Preparing Draft…</h2>
 
-            <p className="text-slate-300">
+            <p className="font-rc-sans text-sm text-rc-fg-muted">
               Setting up draft between{" "}
-              <span className="font-semibold">{playerNames.p1}</span> and{" "}
-              <span className="font-semibold">{playerNames.p2}</span>. This
+              <span className="font-semibold text-rc-fg-strong">{playerNames.p1}</span> and{" "}
+              <span className="font-semibold text-rc-fg-strong">{playerNames.p2}</span>. This
               should only take a moment.
             </p>
 
-            <div className="flex flex-col md:flex-row justify-center gap-8 text-sm text-slate-300">
+            <div className="flex flex-col md:flex-row justify-center gap-8 font-rc-sans text-sm text-rc-fg-muted">
               <div>
-                <div className="font-semibold text-white mb-1">Players</div>
+                <div className="rc-eyebrow mb-1">Players</div>
                 <div>{playerNames.p1}</div>
                 <div>{playerNames.p2}</div>
               </div>
               <div>
-                <div className="font-semibold text-white mb-1">
+                <div className="rc-eyebrow mb-1">
                   Draft Settings
                 </div>
                 <div>
@@ -1700,11 +1701,11 @@ export default function EnhancedOnlineDraft3DScreen({
             </div>
 
             {error ? (
-              <div className="mt-4 inline-block px-4 py-2 rounded bg-red-900/60 border border-red-500 text-red-100 text-sm">
+              <div className="rc-alert mt-4 inline-block px-4 py-2 text-sm" data-tone="danger">
                 {error}
               </div>
             ) : (
-              <div className="mt-4 text-slate-400 text-sm">
+              <div className="mt-4 font-rc-sans text-sm text-rc-fg-subtle">
                 {loading
                   ? "Starting draft…"
                   : "Waiting for the server to start the draft…"}
@@ -1994,33 +1995,35 @@ export default function EnhancedOnlineDraft3DScreen({
         {/* Enhanced Top controls */}
         <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none relative">
           <div className="flex items-center gap-3">
-            <div className="text-3xl font-fantaisie text-white">
+            <div className="font-rc-display text-[28px] leading-none text-rc-fg-strong">
               Online Draft
             </div>
-            <button
+            <RcButton
+              variant="quiet"
+              size="icon"
               onClick={() => setHelpOpen(true)}
-              className="h-9 w-9 grid place-items-center rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-all"
+              className="h-9 w-9"
               title="Draft controls"
             >
-              <span className="font-fantaisie text-xl font-bold">?</span>
-            </button>
+              <span className="font-rc-display text-xl font-bold">?</span>
+            </RcButton>
           </div>
 
           {/* Enhanced sorting controls */}
           {pick3D.length > 0 && (
             <div className="flex items-center gap-2">
-              <button
+              <RcButton
+                variant="quiet"
+                size="icon"
                 onClick={() => setIsSortingEnabled(!isSortingEnabled)}
                 title={
                   isSortingEnabled
                     ? "Disable auto-stacking"
                     : "Enable auto-stacking"
                 }
-                className={`h-9 w-9 rounded-full grid place-items-center ring-1 transition ${
-                  isSortingEnabled
-                    ? "bg-emerald-500 text-black ring-emerald-400 hover:bg-emerald-400"
-                    : "bg-white/15 text-white ring-white/30 hover:bg-white/25"
-                }`}
+                tone="success"
+                aria-pressed={isSortingEnabled}
+                className="h-9 w-9 rounded-full"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -2030,10 +2033,12 @@ export default function EnhancedOnlineDraft3DScreen({
                 >
                   <path d="M3 7h3.586a2 2 0 0 1 1.414.586l6.828 6.828A2 2 0 0 0 16.242 15H21v2h-4.758a4 4 0 0 1-2.829-1.172L6.586 9.414A2 2 0 0 0 5.172 9H3V7zm0 10h5l2 2H3v-2zm18-8h-5l-2-2H21v2z" />
                 </svg>
-              </button>
+              </RcButton>
               {/* Sort mode toggle: Mana vs Element */}
               {isSortingEnabled && (
-                <button
+                <RcButton
+                  variant="quiet"
+                  size="sm"
                   onClick={() =>
                     setSortMode((m) => (m === "mana" ? "element" : "mana"))
                   }
@@ -2042,14 +2047,12 @@ export default function EnhancedOnlineDraft3DScreen({
                       ? "Group by element thresholds"
                       : "Group by mana cost"
                   }
-                  className={`h-9 px-3 rounded-full ring-1 transition ${
-                    sortMode === "mana"
-                      ? "bg-white/15 text-white ring-white/30 hover:bg-white/25"
-                      : "bg-indigo-500 text-black ring-indigo-400 hover:bg-indigo-400"
-                  }`}
+                  tone="info"
+                  aria-pressed={sortMode === "element"}
+                  className="h-9 rounded-full font-rc-mono"
                 >
                   {sortMode === "mana" ? "Sort: Mana" : "Sort: Element"}
-                </button>
+                </RcButton>
               )}
             </div>
           )}
@@ -2059,20 +2062,20 @@ export default function EnhancedOnlineDraft3DScreen({
             <div className="absolute left-1/2 -translate-x-1/2 top-10 z-[55] pointer-events-auto text-center">
               {/* Pick & Pass button - only show when a card is staged */}
               {staged && (
-                <button
+                <RcButton
                   onClick={() =>
                     commitPickAndPass(staged.idx, staged.x, staged.z)
                   }
                   disabled={!amPicker}
-                  className="h-10 px-4 rounded border border-emerald-500 text-emerald-400 font-semibold disabled:opacity-50 bg-transparent hover:text-emerald-300 hover:border-emerald-400"
+                  className="h-10 px-4"
                 >
                   Pick & Pass:{" "}
-                  <span className="font-fantaisie text-lg md:text-xl">
+                  <span className="font-rc-display text-lg md:text-xl">
                     {packAsBoosterCards[staged.idx]?.cardName ?? "Card"}
                   </span>
-                </button>
+                </RcButton>
               )}
-              <div className="mt-1 text-[11px] text-white/40 pointer-events-none">
+              <div className="rc-hint mt-1 tabular-nums pointer-events-none">
                 Pack {draftState.packIndex + 1} / 3 • Pick{" "}
                 {draftState.pickNumber} / 15 •
                 {draftState.phase === "passing" && (
@@ -2094,31 +2097,35 @@ export default function EnhancedOnlineDraft3DScreen({
           <div className="grid grid-cols-12 gap-3 lg:gap-4">
             <div className="col-span-12 lg:col-span-8" />
             <div className="col-span-12 lg:col-span-4 justify-self-end pr-0">
-              <div className="rounded p-3 bg-black/80 ring-1 ring-white/30 shadow-lg pointer-events-none">
-                <div className="font-medium mb-2 text-white flex items-center justify-between">
-                  <span>Your Picks ({pick3D.length})</span>
+              <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-3 text-rc-fg shadow-rc-panel pointer-events-none">
+                <div className="mb-2 text-rc-fg-strong flex items-center justify-between">
+                  <span className="font-rc-display text-[18px] leading-none">Your Picks ({pick3D.length})</span>
                   <div className="flex items-center gap-2">
-                    <button
+                    <RcButton
+                      variant="quiet"
+                      size="xs"
                       onClick={() => setCompactPicks((v) => !v)}
-                      className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20 pointer-events-auto"
+                      className="h-auto px-2 py-1 font-rc-mono pointer-events-auto"
                       title="Toggle compact view"
                     >
                       {compactPicks ? "Comfort" : "Compact"}
-                    </button>
-                    <button
+                    </RcButton>
+                    <RcButton
+                      variant="quiet"
+                      size="xs"
                       onClick={() => setPicksOpen((v) => !v)}
-                      className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20 pointer-events-auto"
+                      className="h-auto px-2 py-1 font-rc-mono pointer-events-auto"
                     >
                       {picksOpen ? "Hide" : "Show"}
-                    </button>
+                    </RcButton>
                   </div>
                 </div>
 
                 {/* Enhanced stats row */}
                 {pick3D.length > 0 && (
-                  <div className="mb-2 text-[11px] text-white/90 flex flex-wrap items-center gap-3 pointer-events-auto">
+                  <div className="mb-2 font-rc-mono text-[11px] tabular-nums text-rc-fg flex flex-wrap items-center gap-3 pointer-events-auto">
                     <div className="flex items-center gap-2">
-                      <span className="opacity-80">Types:</span>
+                      <span className="text-rc-fg-muted">Types:</span>
                       <span>C {picksByType.creatures}</span>
                       <span>S {picksByType.spells}</span>
                       <span>Sites {picksByType.sites}</span>
@@ -2126,7 +2133,7 @@ export default function EnhancedOnlineDraft3DScreen({
                     </div>
                     {thresholdSummary.elements.length > 0 && (
                       <div className="flex items-center gap-2">
-                        <span className="opacity-80">Thresholds:</span>
+                        <span className="text-rc-fg-muted">Thresholds:</span>
                         {thresholdSummary.elements.map((element) => (
                           <span
                             key={element}
@@ -2156,7 +2163,7 @@ export default function EnhancedOnlineDraft3DScreen({
                 {/* Enhanced picks list */}
                 {picksOpen && (
                   <div
-                    className={`max-h-[52vh] overflow-auto pr-2 grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-2 gap-2 text-xs pointer-events-auto`}
+                    className={`thin-scrollbar max-h-[52vh] overflow-auto pr-2 grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-2 gap-2 text-xs pointer-events-auto`}
                   >
                     {yourCounts.map((it) => {
                       const meta = metaByCardId[it.cardId];
@@ -2178,9 +2185,9 @@ export default function EnhancedOnlineDraft3DScreen({
                       return (
                         <div
                           key={it.cardId}
-                          className={`rounded ${
+                          className={`rounded-rc-md ${
                             compactPicks ? "p-1" : "p-2"
-                          } bg-black/70 ring-1 ring-white/25 text-white`}
+                          } bg-black/45 ring-1 ring-rc-line/18 text-rc-fg`}
                           onMouseEnter={() => {
                             if (cardSlug) {
                               showCardPreview({
@@ -2196,7 +2203,7 @@ export default function EnhancedOnlineDraft3DScreen({
                         >
                           {compactPicks ? (
                             <div className="flex items-center justify-between gap-2">
-                              <div className="truncate max-w-[60%] font-medium">
+                              <div className="truncate max-w-[60%] font-rc-display text-[13px] leading-4">
                                 {it.name}
                               </div>
                               <div className="flex items-center gap-2">
@@ -2237,7 +2244,7 @@ export default function EnhancedOnlineDraft3DScreen({
                                       {meta.cost}
                                     </span>
                                   ))}
-                                <div className="text-right font-semibold">
+                                <div className="text-right font-rc-mono font-semibold tabular-nums text-rc-fg-strong">
                                   x{it.count}
                                 </div>
                               </div>
@@ -2250,7 +2257,7 @@ export default function EnhancedOnlineDraft3DScreen({
                                     isSite
                                       ? "aspect-[4/3] w-14"
                                       : "aspect-[3/4] w-12"
-                                  } rounded overflow-hidden ring-1 ring-white/10 bg-black/40`}
+                                  } rounded-rc-sm overflow-hidden ring-1 ring-rc-line/18 bg-black/40`}
                                 >
                                   <Image
                                     src={`/api/images/${cardSlug}`}
@@ -2271,16 +2278,16 @@ export default function EnhancedOnlineDraft3DScreen({
                                 <div className="flex items-start justify-between">
                                   <div className="min-w-0">
                                     <div
-                                      className="font-semibold truncate"
+                                      className="font-rc-display text-[14px] leading-4 text-rc-fg-strong truncate"
                                       title={it.name}
                                     >
                                       {it.name}
                                     </div>
-                                    <div className="opacity-90 text-xs">
+                                    <div className="font-rc-sans text-xs text-rc-fg-muted">
                                       {it.rarity}
                                     </div>
                                   </div>
-                                  <div className="text-right font-semibold">
+                                  <div className="text-right font-rc-mono font-semibold tabular-nums text-rc-fg-strong">
                                     x{it.count}
                                   </div>
                                 </div>
@@ -2345,23 +2352,23 @@ export default function EnhancedOnlineDraft3DScreen({
         {helpOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-auto">
             <div
-              className="absolute inset-0 bg-black/70"
+              className="absolute inset-0 bg-[rgba(6,10,20,0.7)] backdrop-blur-[4px]"
               onClick={() => setHelpOpen(false)}
             />
-            <div className="relative bg-slate-900 text-white rounded-lg p-6 w-[min(90vw,720px)] ring-1 ring-white/20 shadow-2xl">
+            <div className="relative rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] text-rc-fg p-6 w-[min(90vw,720px)] shadow-rc-panel">
               <div className="flex items-center justify-between mb-4">
-                <div className="text-lg font-semibold">Enhanced Draft Help</div>
+                <div className="font-rc-display text-[22px] leading-none text-rc-fg-strong">Enhanced Draft Help</div>
                 <button
                   onClick={() => setHelpOpen(false)}
-                  className="h-8 w-8 grid place-items-center rounded bg-white/10 hover:bg-white/20"
+                  className="h-8 w-8 grid place-items-center rounded-rc-md text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
                 >
                   ×
                 </button>
               </div>
-              <div className="space-y-4 text-sm opacity-90">
+              <div className="space-y-4 font-rc-sans text-sm text-rc-fg-muted">
                 <div>
-                  <div className="font-medium mb-1 text-yellow-400">
-                    ✨ Enhanced Features
+                  <div className="rc-eyebrow mb-1">
+                    Enhanced Features
                   </div>
                   <ul className="list-disc pl-5 space-y-1">
                     <li>Advanced hand management with keyboard controls</li>
@@ -2371,7 +2378,7 @@ export default function EnhancedOnlineDraft3DScreen({
                   </ul>
                 </div>
                 <div>
-                  <div className="font-medium mb-1">Picking cards</div>
+                  <div className="rc-eyebrow mb-1">Picking cards</div>
                   <ul className="list-disc pl-5 space-y-1">
                     <li>Hover cards in your hand to preview (left side)</li>
                     <li>Click or drag cards outward to stage them</li>
@@ -2383,7 +2390,7 @@ export default function EnhancedOnlineDraft3DScreen({
                   </ul>
                 </div>
                 <div>
-                  <div className="font-medium mb-1">Keyboard controls</div>
+                  <div className="rc-eyebrow mb-1">Keyboard controls</div>
                   <ul className="list-disc pl-5 space-y-1">
                     <li>
                       <b>Left/Right</b>: Browse cards in hand
@@ -2397,7 +2404,7 @@ export default function EnhancedOnlineDraft3DScreen({
                   </ul>
                 </div>
                 <div>
-                  <div className="font-medium mb-1">Enhanced sorting</div>
+                  <div className="rc-eyebrow mb-1">Enhanced sorting</div>
                   <ul className="list-disc pl-5 space-y-1">
                     <li>Auto-stack picks by mana cost and type</li>
                     <li>Toggle sorting to manually arrange cards</li>

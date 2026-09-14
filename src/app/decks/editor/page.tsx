@@ -736,9 +736,6 @@ export default function DeckEditorPage() {
     </div>
   );
 
-  const fieldLabelClass =
-    "font-rc-mono text-[10px] uppercase tracking-[0.22em] text-rc-fg-dim";
-
   return (
     <AppShell width="wide">
       <PageHeader
@@ -767,8 +764,9 @@ export default function DeckEditorPage() {
         <PanelHeader title="Deck Setup" meta={deckFormat}>
           {/* Format indicator and tournament-legal quick actions */}
           <RcButton
-            variant={tournamentControlsVisible ? "default" : "outline"}
+            variant="outline"
             size="sm"
+            tone="success"
             aria-pressed={tournamentControlsVisible}
             onClick={() =>
               setTournamentControlsVisible(!tournamentControlsVisible)
@@ -781,7 +779,7 @@ export default function DeckEditorPage() {
 
         <div className="flex flex-wrap items-end gap-4 px-[18px] py-3.5">
           <label className="flex flex-col gap-1.5">
-            <span className={fieldLabelClass}>Deck</span>
+            <span className="rc-field-label">Deck</span>
             <div className="flex flex-wrap items-center gap-2">
               <CustomSelect
                 value={deckId || ""}
@@ -810,7 +808,7 @@ export default function DeckEditorPage() {
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className={fieldLabelClass}>Name</span>
+            <span className="rc-field-label">Name</span>
             <input
               value={deckName}
               onChange={(e) => setDeckName(e.target.value)}
@@ -819,7 +817,7 @@ export default function DeckEditorPage() {
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className={fieldLabelClass}>Set</span>
+            <span className="rc-field-label">Set</span>
             <CustomSelect
               value={setName}
               onChange={(v) => setSetName(v)}

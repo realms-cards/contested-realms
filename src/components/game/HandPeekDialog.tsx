@@ -1,7 +1,9 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import CardPreview from "@/components/game/CardPreview";
+import { RcButton } from "@/components/ui/rc-button";
 import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
 import { useGameStore } from "@/lib/game/store";
@@ -150,19 +152,19 @@ export default function HandPeekDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.5)] backdrop-blur-sm"
       onContextMenu={(e) => e.preventDefault()}
     >
       <div
         ref={dialogRef}
-        className="bg-zinc-900/95 backdrop-blur rounded-2xl ring-1 ring-white/10 shadow-2xl p-3 w-fit max-w-[90vw] max-h-[80vh] text-white flex flex-col gap-3"
+        className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] backdrop-blur shadow-rc-panel p-3 w-fit max-w-[90vw] max-h-[80vh] font-rc-sans text-rc-fg flex flex-col gap-3"
         onContextMenu={(e) => e.preventDefault()}
       >
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">{title}</h3>
+          <h3 className="m-0 font-rc-display text-[22px] leading-none text-rc-fg-strong">{title}</h3>
           <button
             onClick={onClose}
-            className="text-zinc-400 hover:text-white transition-colors"
+            className="rounded-rc-md px-1.5 text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
           >
             ✕
           </button>
@@ -170,7 +172,7 @@ export default function HandPeekDialog({
 
         {/* Hint for right-click actions */}
         {canAct && (
-          <div className="text-xs text-zinc-400 -mt-1">
+          <div className="-mt-1 font-rc-sans text-xs text-rc-fg-subtle">
             Right-click a card for actions
             {source?.pile === "hand"
               ? " (take, top/bottom of pile, discard, banish)"
@@ -178,9 +180,9 @@ export default function HandPeekDialog({
           </div>
         )}
 
-        <div className="max-h-[60vh] overflow-y-auto">
+        <div className="thin-scrollbar max-h-[60vh] overflow-y-auto">
           {cardsToRender.length === 0 ? (
-            <div className="text-center text-zinc-400 py-10">
+            <div className="rc-hint text-center py-10 text-rc-fg-subtle">
               No cards available
             </div>
           ) : (
@@ -208,10 +210,10 @@ export default function HandPeekDialog({
                   <button
                     key={key}
                     type="button"
-                    className={`relative rounded-md transition-colors ${
+                    className={`relative rounded-rc-md transition-colors ${
                       isRemoved
                         ? "opacity-30 cursor-not-allowed"
-                        : "bg-zinc-800/50 hover:bg-zinc-700/50"
+                        : "bg-black/30 ring-1 ring-rc-line/12 hover:bg-rc-accent/8 hover:ring-rc-accent/35"
                     }`}
                     disabled={isRemoved}
                     onMouseEnter={() => !isRemoved && setPreviewCard(card)}
@@ -229,7 +231,7 @@ export default function HandPeekDialog({
                     }}
                   >
                     <div
-                      className="relative overflow-hidden rounded"
+                      className="relative overflow-hidden rounded-rc-sm"
                       style={{
                         width: isSite ? GRID_CARD_HEIGHT : GRID_CARD_WIDTH,
                         height: isSite ? GRID_CARD_WIDTH : GRID_CARD_HEIGHT,
@@ -251,13 +253,10 @@ export default function HandPeekDialog({
           )}
         </div>
 
-        <div className="pt-3 border-t border-zinc-800 flex justify-end">
-          <button
-            className="px-3 py-1.5 text-sm font-medium text-zinc-200 bg-zinc-700/60 hover:bg-zinc-600/70 rounded-lg transition-colors"
-            onClick={onClose}
-          >
+        <div className="pt-3 border-t border-rc-line/12 flex justify-end">
+          <RcButton variant="outline" size="sm" onClick={onClose}>
             Close
-          </button>
+          </RcButton>
         </div>
       </div>
 
@@ -265,30 +264,31 @@ export default function HandPeekDialog({
       {contextMenu && (
         <div
           data-context-menu
-          className="fixed z-[60] bg-zinc-800/95 backdrop-blur rounded-lg ring-1 ring-white/20 shadow-xl py-1 min-w-[140px]"
+          className="fixed z-[60] rounded-rc-md border border-rc-line/18 bg-[rgba(9,13,25,0.95)] backdrop-blur shadow-rc-panel py-1 min-w-[140px] font-rc-sans text-rc-fg"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="px-3 py-1.5 text-xs text-zinc-400 border-b border-zinc-700 truncate max-w-[180px]">
+          <div className="px-3 py-1.5 font-rc-display text-sm text-rc-fg-muted border-b border-rc-line/12 truncate max-w-[180px]">
             {contextMenu.card.name}
           </div>
           {/* Pile peek actions (spellbook/atlas) */}
           {source?.pile !== "hand" && (
             <>
               <button
-                className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors"
+                className="w-full px-3 py-1.5 text-sm text-left hover:bg-rc-line/8 transition-colors"
                 onClick={() => handleAction("top")}
               >
                 ✓ Keep on top
               </button>
               <button
-                className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-emerald-400"
+                className="w-full px-3 py-1.5 text-sm text-left hover:bg-rc-line/8 transition-colors text-rc-success-ink"
                 onClick={() => handleAction("hand")}
               >
-                ✋ Draw to hand
+                <Icon icon="game-icons:hand" width={14} height={14} className="mr-1 inline-block align-[-2px]" />
+                Draw to hand
               </button>
               <button
-                className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-amber-400"
+                className="w-full px-3 py-1.5 text-sm text-left hover:bg-rc-line/8 transition-colors text-rc-warning-ink"
                 onClick={() => handleAction("bottom")}
               >
                 ↓ Put on bottom
@@ -299,19 +299,20 @@ export default function HandPeekDialog({
           {source?.pile === "hand" && (
             <>
               <button
-                className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-emerald-400"
+                className="w-full px-3 py-1.5 text-sm text-left hover:bg-rc-line/8 transition-colors text-rc-success-ink"
                 onClick={() => handleAction("steal")}
               >
-                ✋ Take to your hand
+                <Icon icon="game-icons:hand" width={14} height={14} className="mr-1 inline-block align-[-2px]" />
+                Take to your hand
               </button>
               <button
-                className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-cyan-400"
+                className="w-full px-3 py-1.5 text-sm text-left hover:bg-rc-line/8 transition-colors text-rc-moonlight"
                 onClick={() => handleAction("topOfSpellbook")}
               >
                 ↑ Put top of spellbook
               </button>
               <button
-                className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-amber-400"
+                className="w-full px-3 py-1.5 text-sm text-left hover:bg-rc-line/8 transition-colors text-rc-warning-ink"
                 onClick={() => handleAction("bottomOfSpellbook")}
               >
                 ↓ Put bottom of spellbook
@@ -320,16 +321,18 @@ export default function HandPeekDialog({
           )}
           {/* Common actions for both pile and hand peeks */}
           <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-red-400"
+            className="w-full px-3 py-1.5 text-sm text-left hover:bg-rc-line/8 transition-colors text-rc-danger-ink"
             onClick={() => handleAction("graveyard")}
           >
-            ☠ Send to cemetery
+            <Icon icon="game-icons:tombstone" width={14} height={14} className="mr-1 inline-block align-[-2px]" />
+            Send to cemetery
           </button>
           <button
-            className="w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors text-purple-400"
+            className="w-full px-3 py-1.5 text-sm text-left hover:bg-rc-line/8 transition-colors text-rc-ember"
             onClick={() => handleAction("banish")}
           >
-            ⛔ Banish
+            <Icon icon="game-icons:cancel" width={14} height={14} className="mr-1 inline-block align-[-2px]" />
+            Banish
           </button>
         </div>
       )}

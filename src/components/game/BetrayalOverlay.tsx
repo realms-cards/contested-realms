@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import CardWithPreview from "./CardWithPreview";
 
@@ -25,9 +26,9 @@ export default function BetrayalOverlay() {
   return (
     <div className="fixed inset-0 z-[200] pointer-events-none">
       <div className="fixed inset-x-0 top-2 sm:top-6 z-[201] pointer-events-none flex justify-center px-2">
-        <div className="pointer-events-auto px-3 sm:px-5 py-2 sm:py-3 rounded-full bg-black/90 text-white ring-1 ring-amber-500/50 shadow-lg text-sm sm:text-lg md:text-xl flex items-center gap-2 sm:gap-3 select-none">
-          <span className="text-amber-400 font-fantaisie">Betrayal</span>
-          <span className="opacity-80">
+        <div className="pointer-events-auto px-3 sm:px-5 py-2 sm:py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-sm sm:text-lg md:text-xl flex items-center gap-2 sm:gap-3 select-none">
+          <span className="font-rc-display text-rc-accent-link">Betrayal</span>
+          <span className="text-rc-fg-muted">
             {pending.phase === "selectingTarget" &&
               (isCaster
                 ? "Select an enemy minion to betray their owner"
@@ -40,24 +41,26 @@ export default function BetrayalOverlay() {
                 : `${pending.casterSeat.toUpperCase()} is resolving Betrayal...`)}
           </span>
           {isCaster && pending.phase === "selectingTarget" && (
-            <button
-              className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1 select-none"
+            <RcButton
+              variant="outline"
+              size="xs"
+              className="mx-1"
               onClick={handleCancel}
               title="Cancels target selection"
             >
               Cancel
-            </button>
+            </RcButton>
           )}
         </div>
       </div>
 
       {isCaster && pending.phase === "resolving" && pending.targetMinion && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-4 sm:p-6 max-w-xl w-full mx-2 sm:mx-4 ring-1 ring-amber-500/30">
-            <h2 className="text-xl sm:text-2xl font-fantaisie text-amber-400 mb-3 text-center">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-4 sm:p-6 max-w-xl w-full mx-2 sm:mx-4 font-rc-sans text-rc-fg shadow-rc-panel">
+            <h2 className="mb-3 text-center font-rc-display text-[22px] sm:text-[26px] leading-tight text-rc-fg-strong">
               Confirm Betrayal
             </h2>
-            <p className="text-white/70 text-xs sm:text-sm mb-5 text-center">
+            <p className="text-rc-fg-muted text-xs sm:text-sm mb-5 text-center">
               Gain control of the target enemy minion this turn and untap it.
             </p>
             <div className="flex justify-center mb-6">
@@ -69,18 +72,15 @@ export default function BetrayalOverlay() {
               />
             </div>
             <div className="flex gap-3 justify-center">
-              <button
-                className="px-6 py-3 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 font-medium transition-colors"
-                onClick={handleCancel}
-              >
+              <RcButton variant="outline" onClick={handleCancel}>
                 Cancel
-              </button>
-              <button
-                className="px-6 py-3 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold transition-colors"
+              </RcButton>
+              <RcButton
                 onClick={handleResolve}
+                className="h-auto whitespace-normal py-2"
               >
                 Betray {pending.targetMinion.card.name}
-              </button>
+              </RcButton>
             </div>
           </div>
         </div>
@@ -88,7 +88,7 @@ export default function BetrayalOverlay() {
 
       {!isCaster && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="px-4 py-2 rounded-lg bg-black/90 text-sm text-amber-300">
+          <div className="rc-toast">
             {pending.casterSeat.toUpperCase()} is resolving Betrayal...
           </div>
         </div>

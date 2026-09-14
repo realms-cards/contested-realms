@@ -266,7 +266,7 @@ export default function OpenTournamentDashboardPage() {
             )}
             {/* End Event Button (host only) */}
             {isHost && tournament.status === "active" && (
-              <RcButton variant="destructive" onClick={handleEndEvent}>
+              <RcButton variant="danger-soft" onClick={handleEndEvent}>
                 End Event
               </RcButton>
             )}

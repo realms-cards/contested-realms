@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect } from "react";
+import { RcButton } from "@/components/ui/rc-button";
+import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store/types";
 import CardWithPreview from "./CardWithPreview";
@@ -65,11 +67,11 @@ export default function SearingTruthOverlay({
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-orange-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
-          <span className="text-orange-400 font-fantaisie flex items-center gap-1">
+        <div className="pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg md:text-xl flex items-center gap-3 select-none">
+          <span className="font-rc-display text-rc-accent-link flex items-center gap-1">
             <img src="/fire.png" alt="fire" className="w-5 h-5" /> Searing Truth
           </span>
-          <span className="opacity-80">
+          <span className="text-rc-fg-muted">
             {phase === "selectingTarget" &&
               (isCaster
                 ? "Select a player to draw and reveal two spells"
@@ -79,37 +81,42 @@ export default function SearingTruthOverlay({
             {phase === "resolving" && "Resolving..."}
           </span>
           {isCaster && phase === "selectingTarget" && (
-            <button
-              className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1 select-none"
+            <RcButton
+              variant="outline"
+              size="xs"
+              className="mx-1 select-none"
               onClick={handleCancel}
             >
               Cancel
-            </button>
+            </RcButton>
           )}
         </div>
       </div>
 
       {/* Target selection - only for caster */}
       {isCaster && phase === "selectingTarget" && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-6 max-w-md w-full mx-4 ring-1 ring-orange-500/30">
-            <h2 className="text-2xl font-fantaisie text-orange-400 mb-4 text-center">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-md w-full mx-4 font-rc-sans text-rc-fg shadow-rc-panel">
+            <h2 className="mb-4 text-center font-rc-display text-[26px] leading-tight text-rc-fg-strong">
               Choose Target Player
             </h2>
-            <p className="text-white/70 text-sm mb-6 text-center">
+            <p className="text-rc-fg-muted text-sm mb-6 text-center">
               Target will draw and reveal two spells, then take damage equal to
               the higher mana cost.
             </p>
 
+            {/* Seat identity colour (P1 blue / P2 red): ring = 50% alpha border, text = solid */}
             <div className="flex gap-4 justify-center mb-6">
               <button
-                className="px-8 py-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold transition-colors text-lg"
+                className="px-8 py-4 rounded-rc-md border border-rc-line/18 bg-black/30 hover:bg-rc-accent/8 font-bold transition-colors text-lg"
+                style={{ borderColor: `${PLAYER_COLORS.p1}80`, color: PLAYER_COLORS.p1 }}
                 onClick={() => handleSelectTarget("p1")}
               >
                 {playerNames.p1}
               </button>
               <button
-                className="px-8 py-4 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold transition-colors text-lg"
+                className="px-8 py-4 rounded-rc-md border border-rc-line/18 bg-black/30 hover:bg-rc-accent/8 font-bold transition-colors text-lg"
+                style={{ borderColor: `${PLAYER_COLORS.p2}80`, color: PLAYER_COLORS.p2 }}
                 onClick={() => handleSelectTarget("p2")}
               >
                 {playerNames.p2}
@@ -117,12 +124,9 @@ export default function SearingTruthOverlay({
             </div>
 
             <div className="flex justify-center">
-              <button
-                className="px-6 py-3 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 font-medium transition-colors"
-                onClick={handleCancel}
-              >
+              <RcButton variant="outline" onClick={handleCancel}>
                 Cancel
-              </button>
+              </RcButton>
             </div>
           </div>
         </div>
@@ -130,14 +134,14 @@ export default function SearingTruthOverlay({
 
       {/* Reveal phase - both players see this */}
       {phase === "revealing" && revealedCards.length > 0 && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-6 max-w-2xl w-full mx-4 ring-1 ring-orange-500/30">
-            <h2 className="text-2xl font-fantaisie text-orange-400 mb-2 text-center">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-2xl w-full mx-4 font-rc-sans text-rc-fg shadow-rc-panel">
+            <h2 className="mb-2 text-center font-rc-display text-[26px] leading-tight text-rc-fg-strong">
               {targetSeat ? playerNames[targetSeat] : "Target"} Reveals
             </h2>
-            <p className="text-white/70 text-sm mb-6 text-center">
+            <p className="text-rc-fg-muted text-sm mb-6 text-center">
               Drawn cards revealed - Highest cost:{" "}
-              <span className="text-orange-400 font-bold text-lg">
+              <span className="font-rc-mono font-bold text-lg tabular-nums text-rc-danger">
                 {damageAmount}
               </span>{" "}
               damage
@@ -158,20 +162,17 @@ export default function SearingTruthOverlay({
 
             {/* Damage indicator */}
             <div className="flex justify-center mb-6">
-              <div className="px-6 py-3 rounded-lg bg-orange-600/30 border border-orange-500/50 text-orange-300 font-bold text-xl">
-                💥 {damageAmount} Damage to {targetSeat ? playerNames[targetSeat] : "Target"}
+              <div className="rc-alert px-6 py-3 font-bold text-xl" data-tone="danger">
+                {damageAmount} Damage to {targetSeat ? playerNames[targetSeat] : "Target"}
               </div>
             </div>
 
             {/* Confirm button for caster */}
             {isCaster && (
               <div className="flex justify-center">
-                <button
-                  className="px-6 py-3 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-bold transition-colors"
-                  onClick={handleResolve}
-                >
+                <RcButton onClick={handleResolve}>
                   Confirm Damage
-                </button>
+                </RcButton>
               </div>
             )}
           </div>
@@ -181,8 +182,8 @@ export default function SearingTruthOverlay({
       {/* Opponent view during target selection */}
       {!isCaster && phase === "selectingTarget" && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="pointer-events-auto px-4 py-2 rounded-lg bg-black/90 text-white/80 text-sm ring-1 ring-orange-500/30">
-            <span className="text-orange-300">
+          <div className="rc-toast pointer-events-auto">
+            <span className="text-rc-fg-strong">
               {playerNames[pending.casterSeat]}
             </span>{" "}
             is casting Searing Truth...

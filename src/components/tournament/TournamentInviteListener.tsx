@@ -1,9 +1,11 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useOnline } from "@/app/online/online-context";
+import { RcButton, rcButtonVariants } from "@/components/ui/rc-button";
 import { soundManager } from "@/lib/audio/soundManager";
 
 interface TournamentInviteData {
@@ -130,27 +132,33 @@ export default function TournamentInviteListener() {
       {toasts.map((toast) => (
         <div
           key={toast.id}
-          className="bg-slate-900 border border-emerald-500/50 rounded-lg shadow-xl p-4 animate-slide-in"
+          className="rc-toast p-4 animate-slide-in"
         >
           <div className="flex items-start gap-3">
-            <div className="text-2xl">&#127942;</div>
+            <Icon
+              icon="game-icons:laurels-trophy"
+              width={24}
+              height={24}
+              className="shrink-0 text-rc-accent"
+            />
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-emerald-400">
+              <div className="font-rc-display text-[18px] leading-none text-rc-fg-strong">
                 Tournament Invitation
               </div>
-              <div className="text-sm text-white/80 mt-1">
-                <span className="font-medium">
+              <div className="font-rc-sans text-sm text-rc-fg-muted mt-1">
+                <span className="font-medium text-rc-fg-strong">
                   {toast.data.from.displayName}
                 </span>{" "}
                 invited you to join{" "}
-                <span className="font-medium">
+                <span className="font-medium text-rc-fg-strong">
                   {toast.data.tournamentName}
                 </span>
               </div>
               <div className="flex gap-2 mt-3">
                 {toast.data.invitationId ? (
                   <>
-                    <button
+                    <RcButton
+                      size="sm"
                       onClick={() =>
                         handleRespond(
                           toast.id,
@@ -159,11 +167,12 @@ export default function TournamentInviteListener() {
                         )
                       }
                       disabled={toast.responding !== null}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {toast.responding === "accept" ? "Accepting..." : "Accept"}
-                    </button>
-                    <button
+                    </RcButton>
+                    <RcButton
+                      variant="danger-soft"
+                      size="sm"
                       onClick={() =>
                         handleRespond(
                           toast.id,
@@ -172,27 +181,28 @@ export default function TournamentInviteListener() {
                         )
                       }
                       disabled={toast.responding !== null}
-                      className="px-3 py-1.5 bg-red-600/80 hover:bg-red-500 rounded text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {toast.responding === "decline" ? "Declining..." : "Decline"}
-                    </button>
+                    </RcButton>
                   </>
                 ) : null}
                 <Link
                   href={`/tournaments/${toast.data.tournamentId}`}
                   onClick={() => removeToast(toast.id)}
-                  className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded text-sm text-white/70"
+                  className={rcButtonVariants({ variant: "secondary", size: "sm" })}
                 >
                   View
                 </Link>
               </div>
             </div>
-            <button
+            <RcButton
+              variant="ghost"
+              size="icon-xs"
               onClick={() => removeToast(toast.id)}
-              className="text-white/50 hover:text-white text-lg leading-none"
+              className="text-lg leading-none"
             >
               ×
-            </button>
+            </RcButton>
           </div>
         </div>
       ))}

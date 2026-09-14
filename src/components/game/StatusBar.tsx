@@ -3,6 +3,7 @@
 import { Eye, EyeOff, Grid3X3, Hand, Search, Star } from "lucide-react";
 import AudioControls from "@/components/game/AudioControls";
 import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
+import { RcButton } from "@/components/ui/rc-button";
 import { FEATURE_UNDO } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useGameStore } from "@/lib/game/store";
@@ -34,17 +35,17 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
   const { enabled: colorBlindEnabled } = useColorBlind();
   const isMobileScreen = useSmallScreen();
 
-  const primaryActionButtonClass =
-    "rounded-full font-rc-mono text-[11px] uppercase tracking-[0.1em] " +
-    (isMobileScreen ? "px-2 py-0.5 text-[10px] " : "px-3 py-1 ") +
-    "ring-1 ring-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent " +
-    "text-rc-accent-fg transition-[background-color,transform] hover:-translate-y-px " +
-    "hover:from-rc-accent-ring hover:to-rc-accent-hover";
+  // Pill text buttons (End Turn / Go First primary, Go Second / Undo quiet).
+  const pillButtonClass =
+    "rounded-full font-rc-mono uppercase tracking-[0.1em] " +
+    (isMobileScreen ? "h-5 px-2 text-[10px]" : "h-6 px-3 text-[11px]");
 
   const p2RollClass = colorBlindEnabled ? "text-rc-warning" : "text-rc-danger";
   const iconSize = isMobileScreen ? "w-3 h-3" : "w-4 h-4";
   // Keep a usable tap target on phones even though the icons shrink.
-  const btnPad = "p-1.5";
+  const iconToggleClass = isMobileScreen
+    ? "rounded-full h-6 w-6"
+    : "rounded-full";
 
   return (
     <div
@@ -63,12 +64,12 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
       >
         {/* Playmat/Grid toggle - hidden on mobile to save space */}
         {!isMobileScreen && (
-          <button
-            className={`rounded-full ${btnPad} transition-colors ${
-              showPlaymatOverlay
-                ? "bg-rc-accent text-rc-accent-fg hover:bg-rc-accent-hover"
-                : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
-            }`}
+          <RcButton
+            variant="quiet"
+            size="icon-xs"
+            tone="info"
+            className={iconToggleClass}
+            aria-pressed={showPlaymatOverlay}
             onClick={() => {
               togglePlaymatOverlay();
               togglePlaymat();
@@ -76,16 +77,16 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
             title={showPlaymatOverlay ? "Show playmat" : "Show grid"}
           >
             <Grid3X3 className={iconSize} />
-          </button>
+          </RcButton>
         )}
 
         {/* UI visibility toggle (keyboard: U) */}
-        <button
-          className={`rounded-full ${btnPad} transition-colors ${
-            uiHidden
-              ? "bg-rc-accent text-rc-accent-fg hover:bg-rc-accent-hover"
-              : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
-          }`}
+        <RcButton
+          variant="quiet"
+          size="icon-xs"
+          tone="warning"
+          className={iconToggleClass}
+          aria-pressed={uiHidden}
           onClick={toggleUiHidden}
           title={`UI ${uiHidden ? "Hidden" : "Visible"} (U)`}
         >
@@ -94,27 +95,27 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
           ) : (
             <Eye className={iconSize} />
           )}
-        </button>
+        </RcButton>
 
         {/* Card Previews toggle (keyboard: P) - hidden on mobile */}
         {!isMobileScreen && (
-          <button
-            className={`rounded-full ${btnPad} transition-colors ${
-              cardPreviewsEnabled
-                ? "bg-rc-accent text-rc-accent-fg hover:bg-rc-accent-hover"
-                : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
-            }`}
+          <RcButton
+            variant="quiet"
+            size="icon-xs"
+            tone="info"
+            className={iconToggleClass}
+            aria-pressed={cardPreviewsEnabled}
             onClick={toggleCardPreviews}
             title={`Card Previews ${cardPreviewsEnabled ? "On" : "Off"} (P)`}
           >
             <Search className={iconSize} />
-          </button>
+          </RcButton>
         )}
 
         {/* Hand visibility indicator - shows red when hand is hidden (Space key) */}
         {handVisibilityMode === "hidden" && (
           <button
-            className={`rounded-full ${btnPad} transition-colors bg-rc-danger text-rc-fg-strong hover:bg-rc-danger-hover`}
+            className={`rounded-full p-1.5 transition-colors bg-rc-danger text-rc-fg-strong hover:bg-rc-danger-hover`}
             onClick={toggleHandVisibility}
             title="Show Hand (Space)"
           >
@@ -161,20 +162,23 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
                   ? `P${setupWinner === "p1" ? "1" : "2"} won!`
                   : `Player ${setupWinner === "p1" ? "1" : "2"} won the roll! Choose turn order:`}
               </span>
-              <button
-                className={primaryActionButtonClass}
+              <RcButton
+                size="xs"
+                className={pillButtonClass}
                 onClick={() => choosePlayerOrder(setupWinner, true)}
                 onContextMenu={(e) => e.preventDefault()}
               >
                 Go First
-              </button>
-              <button
-                className={`rounded-full font-rc-mono uppercase tracking-[0.1em] transition-colors bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent ${isMobileScreen ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-[11px]"}`}
+              </RcButton>
+              <RcButton
+                variant="quiet"
+                size="xs"
+                className={`${pillButtonClass} ${isMobileScreen ? "" : "px-2.5"}`}
                 onClick={() => choosePlayerOrder(setupWinner, false)}
                 onContextMenu={(e) => e.preventDefault()}
               >
                 Go Second
-              </button>
+              </RcButton>
             </>
           )
         ) : (
@@ -185,23 +189,26 @@ export default function StatusBar({ dragFromHand }: StatusBarProps) {
               P{currentPlayer}&apos;s Turn
             </span>
 
-            <button
-              className={primaryActionButtonClass}
+            <RcButton
+              size="xs"
+              className={pillButtonClass}
               onClick={() => requestEndTurn()}
               onContextMenu={(e) => e.preventDefault()}
             >
               End Turn
-            </button>
+            </RcButton>
 
             {FEATURE_UNDO && !isMobileScreen && (
-              <button
-                className="rounded-full font-rc-mono text-[11px] uppercase tracking-[0.1em] px-2.5 py-1 disabled:opacity-40 transition-colors bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
+              <RcButton
+                variant="quiet"
+                size="xs"
+                className="h-6 rounded-full px-2.5 font-rc-mono text-[11px] uppercase tracking-[0.1em] disabled:opacity-40"
                 onClick={() => undo()}
                 disabled={!history.length}
                 onContextMenu={(e) => e.preventDefault()}
               >
                 Undo
-              </button>
+              </RcButton>
             )}
           </>
         )}

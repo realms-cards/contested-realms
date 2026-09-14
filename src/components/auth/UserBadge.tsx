@@ -19,6 +19,7 @@ import { registerUserBadge } from "@/components/auth/userBadgePresence";
 import SeatMediaControls from "@/components/rtc/SeatMediaControls";
 import CacheSettingsSection from "@/components/settings/CacheSettingsSection";
 import NotificationSettingsSection from "@/components/settings/NotificationSettingsSection";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { FEATURE_CARD_SLEEVES } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
@@ -667,7 +668,7 @@ export default function UserBadge({
           }`}
           aria-hidden="true"
         >
-          <span className="text-xl opacity-70">
+          <span className="text-xl text-rc-fg-muted">
             {SPINNER_CHARS[spinnerIndex]}
           </span>
         </div>
@@ -946,7 +947,7 @@ export default function UserBadge({
                   onClick={() => setColorBlindEnabled(!colorBlindEnabled)}
                   className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     colorBlindEnabled
-                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      ? "border-rc-success/60 bg-rc-success/12"
                       : "border-rc-line/12 bg-black/30"
                   }`}
                 >
@@ -960,7 +961,7 @@ export default function UserBadge({
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
-                      colorBlindEnabled ? "bg-rc-accent" : "bg-rc-fg-dim"
+                      colorBlindEnabled ? "bg-rc-success" : "bg-rc-fg-dim"
                     }`}
                   />
                 </button>
@@ -970,7 +971,7 @@ export default function UserBadge({
                   onClick={toggleMonochromeMode}
                   className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     graphicsSettings.monochromeMode
-                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      ? "border-rc-success/60 bg-rc-success/12"
                       : "border-rc-line/12 bg-black/30"
                   }`}
                 >
@@ -985,7 +986,7 @@ export default function UserBadge({
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       graphicsSettings.monochromeMode
-                        ? "bg-rc-accent"
+                        ? "bg-rc-success"
                         : "bg-rc-fg-dim"
                     }`}
                   />
@@ -997,7 +998,7 @@ export default function UserBadge({
                   onClick={toggleEnhanced3DCards}
                   className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     graphicsSettings.enhanced3DCards
-                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      ? "border-rc-success/60 bg-rc-success/12"
                       : "border-rc-line/12 bg-black/30"
                   }`}
                 >
@@ -1012,7 +1013,7 @@ export default function UserBadge({
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       graphicsSettings.enhanced3DCards
-                        ? "bg-rc-accent"
+                        ? "bg-rc-success"
                         : "bg-rc-fg-dim"
                     }`}
                   />
@@ -1027,7 +1028,7 @@ export default function UserBadge({
                     playmatPrefLoading ? "opacity-60 cursor-wait" : ""
                   } ${
                     showOpponentPlaymat
-                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      ? "border-rc-success/60 bg-rc-success/12"
                       : "border-rc-line/12 bg-black/30"
                   }`}
                 >
@@ -1041,7 +1042,7 @@ export default function UserBadge({
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
-                      showOpponentPlaymat ? "bg-rc-accent" : "bg-rc-fg-dim"
+                      showOpponentPlaymat ? "bg-rc-success" : "bg-rc-fg-dim"
                     }`}
                   />
                 </button>
@@ -1052,7 +1053,7 @@ export default function UserBadge({
                   onClick={toggleShowTable}
                   className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     graphicsSettings.showTable
-                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      ? "border-rc-success/60 bg-rc-success/12"
                       : "border-rc-line/12 bg-black/30"
                   }`}
                 >
@@ -1067,7 +1068,7 @@ export default function UserBadge({
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       graphicsSettings.showTable
-                        ? "bg-rc-accent"
+                        ? "bg-rc-success"
                         : "bg-rc-fg-dim"
                     }`}
                   />
@@ -1079,7 +1080,7 @@ export default function UserBadge({
                   onClick={toggleHandSortOrder}
                   className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     graphicsSettings.handSortOrder === "spellsFirst"
-                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      ? "border-rc-success/60 bg-rc-success/12"
                       : "border-rc-line/12 bg-black/30"
                   }`}
                 >
@@ -1096,7 +1097,7 @@ export default function UserBadge({
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       graphicsSettings.handSortOrder === "spellsFirst"
-                        ? "bg-rc-accent"
+                        ? "bg-rc-success"
                         : "bg-rc-fg-dim"
                     }`}
                   />
@@ -1108,7 +1109,7 @@ export default function UserBadge({
                   onClick={toggleGamepadLifeControls}
                   className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     graphicsSettings.gamepadLifeControls
-                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      ? "border-rc-success/60 bg-rc-success/12"
                       : "border-rc-line/12 bg-black/30"
                   }`}
                 >
@@ -1123,7 +1124,7 @@ export default function UserBadge({
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       graphicsSettings.gamepadLifeControls
-                        ? "bg-rc-accent"
+                        ? "bg-rc-success"
                         : "bg-rc-fg-dim"
                     }`}
                   />
@@ -1135,7 +1136,7 @@ export default function UserBadge({
                   onClick={togglePreferRaster}
                   className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     graphicsSettings.preferRaster
-                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      ? "border-rc-success/60 bg-rc-success/12"
                       : "border-rc-line/12 bg-black/30"
                   }`}
                 >
@@ -1150,7 +1151,7 @@ export default function UserBadge({
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                       graphicsSettings.preferRaster
-                        ? "bg-rc-accent"
+                        ? "bg-rc-success"
                         : "bg-rc-fg-dim"
                     }`}
                   />
@@ -1162,7 +1163,7 @@ export default function UserBadge({
                   onClick={toggleContextMenuIcons}
                   className={`flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     contextMenuIcons
-                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      ? "border-rc-success/60 bg-rc-success/12"
                       : "border-rc-line/12 bg-black/30"
                   }`}
                 >
@@ -1176,7 +1177,7 @@ export default function UserBadge({
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
-                      contextMenuIcons ? "bg-rc-accent" : "bg-rc-fg-dim"
+                      contextMenuIcons ? "bg-rc-success" : "bg-rc-fg-dim"
                     }`}
                   />
                 </button>
@@ -1187,7 +1188,7 @@ export default function UserBadge({
                   onClick={toggleControlScheme}
                   className={`hidden [@media(pointer:fine)]:flex items-center justify-between gap-2 rounded-rc-md border px-3 py-2.5 text-left transition-colors ${
                     controlScheme === "tts"
-                      ? "border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                      ? "border-rc-success/60 bg-rc-success/12"
                       : "border-rc-line/12 bg-black/30"
                   }`}
                 >
@@ -1201,7 +1202,7 @@ export default function UserBadge({
                   </div>
                   <span
                     className={`shrink-0 w-2.5 h-2.5 rounded-full ${
-                      controlScheme === "tts" ? "bg-rc-accent" : "bg-rc-fg-dim"
+                      controlScheme === "tts" ? "bg-rc-success" : "bg-rc-fg-dim"
                     }`}
                   />
                 </button>
@@ -1397,32 +1398,32 @@ export default function UserBadge({
                     />
                     Upload Image
                   </label>
-                  <button
-                    type="button"
+                  <RcButton
+                    variant="outline"
                     onClick={() => {
                       setAvatarDataUrl(undefined);
                       setProfileError(null);
                       setProfileSuccess(null);
                       if (fileInputRef.current) fileInputRef.current.value = "";
                     }}
-                    className="h-9 cursor-pointer rounded-rc-md border border-rc-line/28 px-3 font-rc-sans text-sm text-rc-fg transition-colors hover:border-rc-accent hover:bg-rc-accent/8"
+                    className="h-9 px-3"
                     title="Use current avatar"
                   >
                     Reset
-                  </button>
-                  <button
-                    type="button"
+                  </RcButton>
+                  <RcButton
+                    variant="danger-soft"
                     onClick={() => {
                       setAvatarDataUrl(null);
                       setProfileError(null);
                       setProfileSuccess(null);
                       if (fileInputRef.current) fileInputRef.current.value = "";
                     }}
-                    className="h-9 cursor-pointer rounded-rc-md border border-rc-danger/40 bg-rc-danger/12 px-3 font-rc-sans text-sm text-rc-danger transition-colors hover:bg-rc-danger/20"
+                    className="h-9 px-3"
                     title="Remove avatar"
                   >
                     Remove
-                  </button>
+                  </RcButton>
                 </div>
               </div>
               {profileError && (
@@ -1432,26 +1433,25 @@ export default function UserBadge({
                 <p className="font-rc-mono text-[11px] text-rc-success">{profileSuccess}</p>
               )}
               <div className="mt-1 flex items-center justify-end gap-2">
-                <button
-                  type="button"
+                <RcButton
+                  variant="outline"
                   onClick={handleCloseSettings}
-                  className="h-9 cursor-pointer rounded-rc-md border border-rc-line/28 px-3 font-rc-sans text-sm text-rc-fg transition-colors hover:border-rc-accent hover:bg-rc-accent/8"
+                  className="h-9 px-3"
                 >
                   Cancel
-                </button>
-                <button
-                  type="button"
+                </RcButton>
+                <RcButton
                   onClick={async () => {
                     await handleProfileSave();
                     // Keep overlay open but reflect saved state
                   }}
                   disabled={profileSaving}
-                  className={`h-9 cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent px-4 font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px ${
+                  className={`h-9 px-4 ${
                     profileSaving ? "cursor-progress opacity-60" : ""
                   }`}
                 >
                   {profileSaving ? "Saving…" : "Save"}
-                </button>
+                </RcButton>
               </div>
 
               {/* Delete account section */}
@@ -1474,29 +1474,31 @@ export default function UserBadge({
                       <p className="font-rc-mono text-[11px] text-rc-danger">{deleteError}</p>
                     )}
                     <div className="flex gap-2">
-                      <button
-                        type="button"
+                      <RcButton
+                        variant="outline"
+                        size="xs"
                         onClick={() => {
                           setDeleteConfirmOpen(false);
                           setDeleteError(null);
                         }}
-                        className="h-7 cursor-pointer rounded-rc-md border border-rc-line/28 px-2 font-rc-mono text-[11px] text-rc-fg transition-colors hover:border-rc-accent hover:text-rc-accent-ring"
+                        className="px-2 font-rc-mono text-[11px]"
                         disabled={deleteInProgress}
                       >
                         Cancel
-                      </button>
-                      <button
-                        type="button"
+                      </RcButton>
+                      <RcButton
+                        variant="destructive"
+                        size="xs"
                         onClick={handleDeleteAccount}
                         disabled={deleteInProgress}
-                        className={`h-7 cursor-pointer rounded-rc-md border border-white/8 bg-rc-danger px-3 font-rc-mono text-[11px] font-semibold text-[#faf3e5] transition-colors hover:bg-rc-danger-hover ${
+                        className={`px-3 font-rc-mono text-[11px] font-semibold ${
                           deleteInProgress ? "cursor-progress opacity-60" : ""
                         }`}
                       >
                         {deleteInProgress
                           ? "Deleting…"
                           : "Yes, delete my account"}
-                      </button>
+                      </RcButton>
                     </div>
                   </div>
                 )}

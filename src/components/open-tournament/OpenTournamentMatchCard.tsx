@@ -146,7 +146,7 @@ export function OpenTournamentMatchCard({
                 : `${playerName(results?.winnerId) ?? "?"} won`}
             </Badge>
           )}
-          {!isCompleted && !isPending && <Badge>pending</Badge>}
+          {!isCompleted && !isPending && <Badge tone="info">pending</Badge>}
           {isCompleted && results?.source ? (
             <div className="rc-hint">via {String(results.source)}</div>
           ) : null}
@@ -163,6 +163,7 @@ export function OpenTournamentMatchCard({
       {isPending && isHost && (
         <div className="mb-2 flex gap-2">
           <RcButton
+            variant="outline"
             size="sm"
             onClick={() => handleApproval(true)}
             disabled={submitting}
@@ -171,7 +172,7 @@ export function OpenTournamentMatchCard({
             Approve
           </RcButton>
           <RcButton
-            variant="destructive"
+            variant="danger-soft"
             size="sm"
             onClick={() => handleApproval(false)}
             disabled={submitting}

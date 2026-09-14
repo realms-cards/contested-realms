@@ -17,6 +17,8 @@ import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
 import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
+import { Badge } from "@/components/ui/badge";
+import { RcButton } from "@/components/ui/rc-button";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import type { SearchResult } from "@/lib/deckEditor/search";
@@ -1957,28 +1959,30 @@ export default function TournamentDraft3DScreen({
         <UserBadge variant="floating" />
         <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none relative">
           <div className="flex items-center gap-3">
-            <div className="text-3xl font-fantaisie text-white">
+            <div className="font-rc-display text-[28px] leading-none text-rc-fg-strong">
               Tournament Draft
             </div>
             {pick3D.length > 0 && (
               <div className="flex items-center gap-2 ml-2 pointer-events-auto">
-                <button
+                <RcButton
+                  variant="quiet"
+                  size="xs"
                   onClick={() => setIsSortingEnabled(!isSortingEnabled)}
                   title={
                     isSortingEnabled
                       ? "Disable auto-stacking"
                       : "Enable auto-stacking"
                   }
-                  className={`text-xs px-2 py-1 rounded ring-1 transition ${
-                    isSortingEnabled
-                      ? "bg-emerald-500 text-black ring-emerald-400 hover:bg-emerald-400"
-                      : "bg-white/15 text-white ring-white/30 hover:bg-white/25"
-                  }`}
+                  tone="success"
+                  aria-pressed={isSortingEnabled}
+                  className="h-auto px-2 py-1 font-rc-mono"
                 >
                   {isSortingEnabled ? "Auto-stack: On" : "Auto-stack: Off"}
-                </button>
+                </RcButton>
                 {isSortingEnabled && (
-                  <button
+                  <RcButton
+                    variant="quiet"
+                    size="xs"
                     onClick={() =>
                       setSortMode((m) => (m === "mana" ? "element" : "mana"))
                     }
@@ -1987,14 +1991,12 @@ export default function TournamentDraft3DScreen({
                         ? "Group by element thresholds"
                         : "Group by mana cost"
                     }
-                    className={`text-xs px-2 py-1 rounded ring-1 transition ${
-                      sortMode === "mana"
-                        ? "bg-white/15 text-white ring-white/30 hover:bg-white/25"
-                        : "bg-indigo-500 text-black ring-indigo-400 hover:bg-indigo-400"
-                    }`}
+                    tone="info"
+                    aria-pressed={sortMode === "element"}
+                    className="h-auto px-2 py-1 font-rc-mono"
                   >
                     {sortMode === "mana" ? "Sort: Mana" : "Sort: Element"}
-                  </button>
+                  </RcButton>
                 )}
               </div>
             )}
@@ -2003,30 +2005,30 @@ export default function TournamentDraft3DScreen({
           {draftState.phase !== "complete" && (
             <div className="absolute left-1/2 -translate-x-1/2 top-12 z-[55] pointer-events-auto text-center">
               {staged && (
-                <button
+                <RcButton
                   onClick={() =>
                     commitPickAndPass(staged.idx, staged.x, staged.z)
                   }
                   disabled={!amPicker || ready}
-                  className="h-10 px-4 rounded border border-emerald-500 text-emerald-400 font-semibold disabled:opacity-50 bg-transparent hover:text-emerald-300 hover:border-emerald-400"
+                  className="h-10 px-4"
                 >
                   Pick & Pass:{" "}
-                  <span className="font-fantaisie text-lg md:text-xl">
+                  <span className="font-rc-display text-lg md:text-xl">
                     {packAsBoosterCards[staged.idx]?.cardName ?? "Card"}
                   </span>
-                </button>
+                </RcButton>
               )}
-              <div className="mt-1 text-[11px] text-white/40 pointer-events-none">
+              <div className="rc-hint mt-1 tabular-nums pointer-events-none">
                 Pack {draftState.packIndex + 1} • Pick {draftState.pickNumber}
               </div>
               {draftState.phase === "picking" && pickTimeRemaining > 0 && (
                 <div
-                  className={`mt-0.5 text-sm font-mono pointer-events-none ${
+                  className={`mt-0.5 text-sm font-rc-mono tabular-nums pointer-events-none ${
                     pickTimeRemaining <= 10
-                      ? "text-red-400"
+                      ? "text-rc-danger"
                       : pickTimeRemaining <= 20
-                      ? "text-yellow-300"
-                      : "text-green-400"
+                      ? "text-rc-warning"
+                      : "text-rc-success"
                   }`}
                 >
                   {Math.floor(pickTimeRemaining / 60)}:
@@ -2035,7 +2037,7 @@ export default function TournamentDraft3DScreen({
               )}
               {draftState.phase === "picking" &&
                 draftState.waitingFor.length > 0 && (
-                  <div className="mt-0.5 text-[11px] text-white/50 pointer-events-none">
+                  <div className="rc-hint mt-0.5 text-rc-fg-subtle pointer-events-none">
                     {amPicker ? (
                       <>Your turn to pick & pass…</>
                     ) : (
@@ -2056,29 +2058,33 @@ export default function TournamentDraft3DScreen({
           <div className="grid grid-cols-12 gap-3 lg:gap-4">
             <div className="col-span-12 lg:col-span-8" />
             <div className="col-span-12 lg:col-span-4 justify-self-end pr-0">
-              <div className="rounded p-3 bg-black/80 ring-1 ring-white/30 shadow-lg pointer-events-none">
-                <div className="font-medium mb-2 text-white flex items-center justify-between">
-                  <span>Your Picks ({pick3D.length})</span>
+              <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-3 text-rc-fg shadow-rc-panel pointer-events-none">
+                <div className="mb-2 text-rc-fg-strong flex items-center justify-between">
+                  <span className="font-rc-display text-[18px] leading-none">Your Picks ({pick3D.length})</span>
                   <div className="flex items-center gap-2">
-                    <button
+                    <RcButton
+                      variant="quiet"
+                      size="xs"
                       onClick={() => setCompactPicks((v) => !v)}
-                      className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20 pointer-events-auto"
+                      className="h-auto px-2 py-1 font-rc-mono pointer-events-auto"
                     >
                       {compactPicks ? "Comfort" : "Compact"}
-                    </button>
-                    <button
+                    </RcButton>
+                    <RcButton
+                      variant="quiet"
+                      size="xs"
                       onClick={() => setPicksOpen((v) => !v)}
-                      className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20 pointer-events-auto"
+                      className="h-auto px-2 py-1 font-rc-mono pointer-events-auto"
                     >
                       {picksOpen ? "Hide" : "Show"}
-                    </button>
+                    </RcButton>
                   </div>
                 </div>
 
                 {pick3D.length > 0 && (
-                  <div className="mb-2 text-[11px] text-white/90 flex flex-wrap items-center gap-3 pointer-events-auto">
+                  <div className="mb-2 font-rc-mono text-[11px] tabular-nums text-rc-fg flex flex-wrap items-center gap-3 pointer-events-auto">
                     <div className="flex items-center gap-2">
-                      <span className="opacity-80">Types:</span>
+                      <span className="text-rc-fg-muted">Types:</span>
                       <span>C {picksByType.creatures}</span>
                       <span>S {picksByType.spells}</span>
                       <span>Sites {picksByType.sites}</span>
@@ -2087,7 +2093,7 @@ export default function TournamentDraft3DScreen({
                 )}
 
                 {picksOpen && (
-                  <div className="max-h-[52vh] overflow-auto pr-2 grid gap-2 text-xs pointer-events-auto">
+                  <div className="thin-scrollbar max-h-[52vh] overflow-auto pr-2 grid gap-2 text-xs pointer-events-auto">
                     {yourCounts.map((it) => {
                       const meta = metaByCardId[it.cardId];
                       const t =
@@ -2102,9 +2108,9 @@ export default function TournamentDraft3DScreen({
                       return (
                         <div
                           key={it.cardId}
-                          className={`rounded ${
+                          className={`rounded-rc-md ${
                             compactPicks ? "p-1" : "p-2"
-                          } bg-black/70 ring-1 ring-white/25 text-white`}
+                          } bg-black/45 ring-1 ring-rc-line/18 text-rc-fg`}
                           onMouseEnter={() => {
                             if (cardSlug) {
                               showCardPreview({
@@ -2119,7 +2125,7 @@ export default function TournamentDraft3DScreen({
                           }}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <div className="truncate max-w-[60%] font-medium">
+                            <div className="truncate max-w-[60%] font-rc-display text-[13px] leading-4">
                               {it.name}
                             </div>
                             <div className="flex items-center gap-2">
@@ -2164,7 +2170,7 @@ export default function TournamentDraft3DScreen({
                                     {meta.cost}
                                   </span>
                                 ))}
-                              <div className="text-right font-semibold">
+                              <div className="text-right font-rc-mono font-semibold tabular-nums text-rc-fg-strong">
                                 x{it.count}
                               </div>
                             </div>
@@ -2185,11 +2191,11 @@ export default function TournamentDraft3DScreen({
 
         {/* Loading overlay for waiting phase */}
         {showLoadingOverlay && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center">
-            <div className="bg-slate-900/95 rounded-xl p-8 ring-1 ring-white/20 text-white text-center">
-              <h2 className="text-2xl font-bold">Loading Draft Interface</h2>
+          <div className="fixed inset-0 z-50 bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px] flex items-center justify-center">
+            <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-8 text-rc-fg text-center shadow-rc-panel">
+              <h2 className="m-0 font-rc-display text-[28px] leading-none text-rc-fg-strong">Loading Draft Interface</h2>
               <div className="mt-4 flex justify-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white" />
+                <div className="animate-spin rounded-full h-12 w-12 border-2 border-rc-accent/30 border-t-rc-accent" />
               </div>
             </div>
           </div>
@@ -2197,9 +2203,9 @@ export default function TournamentDraft3DScreen({
 
         {/* Pack opening overlay (UI-only gating, tournament sets are preconfigured per round) */}
         {packChoiceOverlay && draftState.phase !== "complete" && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 pointer-events-auto select-none">
-            <div className="rounded-xl p-6 bg-black/80 ring-1 ring-white/30 text-white w-[min(92vw,900px)] shadow-2xl select-none">
-              <div className="text-lg font-semibold mb-3 text-center">
+          <div className="fixed inset-0 z-50 bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px] flex items-center justify-center p-6 pointer-events-auto select-none">
+            <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-rc-fg w-[min(92vw,900px)] shadow-rc-panel select-none">
+              <div className="mb-3 text-center font-rc-display text-[22px] leading-none text-rc-fg-strong">
                 Choose a pack to open (Round {draftState.packIndex + 1})
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2215,11 +2221,11 @@ export default function TournamentDraft3DScreen({
                   return (
                     <div
                       key={`pack-${packIdx}`}
-                      className={`group rounded-lg p-3 bg-black/60 ring-1 ring-white/25 text-left select-none ${
+                      className={`group rounded-rc-md border border-rc-line/12 bg-black/30 p-3 text-left select-none ${
                         isAlreadyUsed ? "opacity-50" : ""
                       }`}
                     >
-                      <div className="relative w-full h-44 md:h-56 rounded-md overflow-hidden ring-1 ring-white/15 bg-black/40 group-hover:ring-white/30">
+                      <div className="relative w-full h-44 md:h-56 rounded-rc-md overflow-hidden ring-1 ring-rc-line/15 bg-black/40 group-hover:ring-rc-accent/45">
                         <Image
                           src={`/api/assets/${assetName}`}
                           alt={`${setName} booster pack`}
@@ -2229,22 +2235,22 @@ export default function TournamentDraft3DScreen({
                           priority
                           unoptimized
                         />
-                        <div className="absolute bottom-1 left-1 right-1 text-[11px] px-2 py-1 rounded bg-black/60 text-white text-center pointer-events-none">
+                        <div className="absolute bottom-1 left-1 right-1 text-[11px] px-2 py-1 rounded-rc-sm bg-[rgba(7,10,20,0.85)] font-rc-mono text-rc-fg text-center pointer-events-none">
                           {setName}
                         </div>
                         {isAlreadyUsed && (
-                          <div className="absolute top-1 right-1 text-[10px] px-2 py-0.5 rounded bg-emerald-600/80">
+                          <Badge tone="info" className="absolute top-1 right-1 bg-[rgba(7,10,20,0.85)] px-2 py-0.5 text-[10px]">
                             Opened
-                          </div>
+                          </Badge>
                         )}
                         {isUpcoming && (
-                          <div className="absolute top-1 right-1 text-[10px] px-2 py-0.5 rounded bg-slate-600/80">
+                          <Badge tone="info" className="absolute top-1 right-1 bg-[rgba(7,10,20,0.85)] px-2 py-0.5 text-[10px]">
                             Upcoming
-                          </div>
+                          </Badge>
                         )}
                       </div>
                       <div className="mt-3 flex justify-center">
-                        <button
+                        <RcButton
                           onClick={async () => {
                             if (isAlreadyUsed) return;
                             // Optimistic UI: mark opened and close overlay immediately for instant feedback
@@ -2301,14 +2307,13 @@ export default function TournamentDraft3DScreen({
                             }
                           }}
                           disabled={isAlreadyUsed}
-                          className={`px-4 py-2 rounded-lg font-semibold transition-colors select-none ${
-                            !isAlreadyUsed
-                              ? "bg-purple-600 hover:bg-purple-700 text-white"
-                              : "bg-slate-700 text-slate-300 cursor-not-allowed"
-                          }`}
+                          variant={
+                            !isAlreadyUsed && !isUpcoming ? "default" : "outline"
+                          }
+                          className="select-none disabled:opacity-100"
                         >
                           {!isAlreadyUsed ? "Open Pack" : "Opened"}
-                        </button>
+                        </RcButton>
                       </div>
                     </div>
                   );
@@ -2329,14 +2334,14 @@ export default function TournamentDraft3DScreen({
           rtc={rtc}
         />
         {showDeckConstructionOverlay && (
-          <div className="fixed inset-0 z-[999] flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm text-white px-6 text-center">
+          <div className="fixed inset-0 z-[999] flex flex-col items-center justify-center bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px] text-rc-fg px-6 text-center">
             <div className="flex flex-col items-center gap-4 max-w-md">
               <div
-                className="h-12 w-12 rounded-full border-2 border-white/30 border-t-white animate-spin"
+                className="h-12 w-12 rounded-full border-2 border-rc-accent/30 border-t-rc-accent animate-spin"
                 aria-hidden="true"
               />
-              <h2 className="text-2xl font-semibold">Draft complete</h2>
-              <p className="text-base text-white/80">
+              <h2 className="m-0 font-rc-display text-[28px] leading-none text-rc-fg-strong">Draft complete</h2>
+              <p className="font-rc-sans text-sm text-rc-fg-muted">
                 Preparing the deck construction phase. You&apos;ll be moved to
                 the editor in just a moment.
               </p>

@@ -54,10 +54,6 @@ interface CreateTournamentForm {
   };
 }
 
-/** Mono spaced-caps label above a form control. */
-const FIELD_LABEL =
-  "mb-1.5 block font-rc-mono text-[11px] uppercase tracking-[0.18em] text-rc-fg-subtle";
-
 /** Boxed option row inside the create form. */
 const OPTION_BOX = "rounded-rc-md border border-rc-line/18 bg-black/30 p-3.5";
 
@@ -654,7 +650,7 @@ export default function TournamentsPage() {
               }
           action={
             viewFilter === "active" ? (
-              <RcButton onClick={handleShowCreateForm}>
+              <RcButton variant="outline" onClick={handleShowCreateForm}>
                 Create Tournament
               </RcButton>
             ) : undefined
@@ -789,6 +785,7 @@ export default function TournamentsPage() {
 
                     {canJoin && (
                       <RcButton
+                        variant="outline"
                         onClick={() => handleJoinTournament(tournament.id)}
                         className="flex-1"
                       >
@@ -839,7 +836,7 @@ export default function TournamentsPage() {
             className="space-y-4"
           >
             <div>
-              <label className={FIELD_LABEL}>Tournament Name</label>
+              <label className="rc-field-label mb-1.5">Tournament Name</label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -933,7 +930,7 @@ export default function TournamentsPage() {
             {/* Tournament Structure Row */}
             <div className="flex flex-wrap gap-4">
               <div>
-                <label className={FIELD_LABEL}>Format</label>
+                <label className="rc-field-label mb-1.5">Format</label>
                 <CustomSelect
                   value={form.format}
                   onChange={(v) =>
@@ -950,7 +947,7 @@ export default function TournamentsPage() {
                 />
               </div>
               <div>
-                <label className={FIELD_LABEL}>
+                <label className="rc-field-label mb-1.5">
                   {form.registrationMode === "open" ? "Seat Cap" : "Players"}
                 </label>
                 {form.registrationMode === "open" ? (
@@ -991,7 +988,7 @@ export default function TournamentsPage() {
                 )}
               </div>
               <div>
-                <label className={FIELD_LABEL}>Rounds</label>
+                <label className="rc-field-label mb-1.5">Rounds</label>
                 <CustomSelect
                   value={String(form.settings.totalRounds || 3)}
                   onChange={(v) =>
@@ -1012,7 +1009,7 @@ export default function TournamentsPage() {
                 />
               </div>
               <div>
-                <label className={FIELD_LABEL}>Round Time</label>
+                <label className="rc-field-label mb-1.5">Round Time</label>
                 <CustomSelect
                   value={String(roundTimeLimit)}
                   onChange={(v) => setRoundTimeLimit(parseInt(v))}
@@ -1029,7 +1026,7 @@ export default function TournamentsPage() {
             {/* Timer warning + tiebreak extra turns */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className={FIELD_LABEL}>Timer Warning At</label>
+                <label className="rc-field-label mb-1.5">Timer Warning At</label>
                 <CustomSelect
                   value={String(timerWarningMinutes)}
                   onChange={(v) => setTimerWarningMinutes(parseInt(v))}
@@ -1041,7 +1038,7 @@ export default function TournamentsPage() {
                 />
               </div>
               <div>
-                <label className={FIELD_LABEL}>Extra Turns (Tiebreak)</label>
+                <label className="rc-field-label mb-1.5">Extra Turns (Tiebreak)</label>
                 <CustomSelect
                   value={String(tiebreakExtraTurns)}
                   onChange={(v) => setTiebreakExtraTurns(parseInt(v))}
@@ -1117,7 +1114,7 @@ export default function TournamentsPage() {
                   /* Cube selector + pack count */
                   <div className="space-y-2">
                     <div>
-                      <label className={FIELD_LABEL}>Select Cube</label>
+                      <label className="rc-field-label mb-1.5">Select Cube</label>
                       <CustomSelect
                         value={sealedCubeId}
                         onChange={(v) => setSealedCubeId(v)}
@@ -1135,7 +1132,7 @@ export default function TournamentsPage() {
                       />
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
-                      <label className={`${FIELD_LABEL} mb-0`}>
+                      <label className="rc-field-label">
                         Pack Count
                       </label>
                       <div className="flex items-center gap-2">
@@ -1185,7 +1182,7 @@ export default function TournamentsPage() {
                   /* Set-based booster configuration */
                   <>
                     <div className="flex flex-wrap items-center gap-3">
-                      <label className={`${FIELD_LABEL} mb-0`}>
+                      <label className="rc-field-label">
                         Booster Count
                       </label>
                       <div className="flex items-center gap-2">
@@ -1265,7 +1262,7 @@ export default function TournamentsPage() {
 
                 {/* Sealed Time Limit */}
                 <div>
-                  <label className={FIELD_LABEL}>Time Limit (minutes)</label>
+                  <label className="rc-field-label mb-1.5">Time Limit (minutes)</label>
                   <input
                     type="number"
                     min={10}
@@ -1321,7 +1318,7 @@ export default function TournamentsPage() {
                   /* Cube selector + sideboard option */
                   <div className="space-y-2">
                     <div>
-                      <label className={FIELD_LABEL}>Select Cube</label>
+                      <label className="rc-field-label mb-1.5">Select Cube</label>
                       <CustomSelect
                         value={cubeId}
                         onChange={(v) => setCubeId(v)}
@@ -1358,7 +1355,7 @@ export default function TournamentsPage() {
                   /* Set-based booster configuration */
                   <>
                     <div className="flex flex-wrap items-center gap-3">
-                      <label className={`${FIELD_LABEL} mb-0`}>
+                      <label className="rc-field-label">
                         Booster Count
                       </label>
                       <div className="flex items-center gap-2">
@@ -1431,7 +1428,7 @@ export default function TournamentsPage() {
                 {/* Draft Time Limits */}
                 <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div>
-                    <label className={FIELD_LABEL}>Pick Time Limit (sec)</label>
+                    <label className="rc-field-label mb-1.5">Pick Time Limit (sec)</label>
                     <input
                       type="number"
                       min={30}
@@ -1453,7 +1450,7 @@ export default function TournamentsPage() {
                     </p>
                   </div>
                   <div>
-                    <label className={FIELD_LABEL}>
+                    <label className="rc-field-label mb-1.5">
                       Construction Time (min)
                     </label>
                     <input
@@ -1495,7 +1492,7 @@ export default function TournamentsPage() {
                 {/* Pod Size for large tournaments */}
                 {form.maxPlayers > 8 && (
                   <div className="mt-3 rounded-rc-md border border-rc-warning/35 bg-rc-warning/10 p-3">
-                    <label className={FIELD_LABEL}>Draft Pod Size</label>
+                    <label className="rc-field-label mb-1.5">Draft Pod Size</label>
                     <p className="rc-hint mb-2 leading-relaxed">
                       For tournaments with more than 8 players, players will be
                       split into pods.

@@ -1022,10 +1022,20 @@ export function PermanentStack({
                     attackTargetChoice.tile.y === tileY;
                   // Attachments (like Lance, Disabled) cannot be targeted directly
                   const isAttachment = Boolean(p.attachedTo);
-                  if (onTile && owner === enemyOwner && !isAttachment) {
+                  // A ranged strike may only hit what its projectile reaches.
+                  const legal = attackTargetChoice.ranged
+                    ? attackTargetChoice.candidates.some(
+                        (c) =>
+                          c.kind === "permanent" &&
+                          c.at === key &&
+                          c.index === idx,
+                      )
+                    : onTile && owner === enemyOwner && !isAttachment;
+                  if (legal) {
                     const label = p.card?.name || "Unit";
                     setAttackConfirm({
                       tile: attackTargetChoice.tile,
+                      ranged: attackTargetChoice.ranged,
                       attacker: attackTargetChoice.attacker,
                       target: {
                         kind: "permanent",

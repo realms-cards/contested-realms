@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import React, { useCallback, useEffect } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import {
   useOverlaySlot,
   useOverlayRegistry,
@@ -65,24 +66,26 @@ export default function InquisitionSummonOverlay() {
   if (phase === "selectingCell") {
     return (
       <div className="fixed inset-x-0 bottom-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-xl bg-gray-900/95 text-white ring-1 ring-purple-500/50 shadow-lg flex items-center gap-3 select-none">
-          <span className="text-purple-400 font-fantaisie text-sm">
+        <div className="pointer-events-auto px-5 py-3 rounded-rc-lg border border-rc-line/22 bg-[rgba(7,10,20,0.95)] font-rc-sans text-rc-fg shadow-rc-panel flex items-center gap-3 select-none">
+          <span className="font-rc-display text-rc-accent-link text-sm">
             The Inquisition
           </span>
           {isOwner ? (
             <>
-              <span className="text-sm opacity-80">
+              <span className="text-sm text-rc-fg-muted">
                 Click a highlighted tile to summon
               </span>
-              <button
+              <RcButton
+                variant="outline"
+                size="xs"
                 onClick={handleDecline}
-                className="ml-1 rounded bg-gray-700 hover:bg-gray-600 px-3 py-1 text-xs font-semibold text-gray-300 transition"
+                className="ml-1 h-6 px-3"
               >
                 Cancel
-              </button>
+              </RcButton>
             </>
           ) : (
-            <span className="text-sm opacity-60">
+            <span className="text-sm text-rc-fg-subtle">
               Opponent is placing The Inquisition...
             </span>
           )}
@@ -99,14 +102,14 @@ export default function InquisitionSummonOverlay() {
       className={`${slotClass} flex items-center justify-center ${layout.tiled ? "p-2 overflow-y-auto" : ""}`}
     >
       <div
-        className={`relative rounded-xl border border-purple-500/50 bg-gray-900/95 shadow-2xl shadow-purple-900/30 ${layout.tiled ? "w-full p-4" : "mx-4 max-w-lg p-6"}`}
+        className={`relative rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] font-rc-sans text-rc-fg shadow-rc-panel ${layout.tiled ? "w-full p-4" : "mx-4 max-w-lg p-6"}`}
       >
         {/* Header */}
         <div className="mb-4 text-center">
-          <h2 className="text-lg font-bold text-purple-300">
+          <h2 className="font-rc-display text-[18px] leading-tight text-rc-fg-strong">
             The Inquisition Revealed!
           </h2>
-          <p className="mt-1 text-sm text-gray-400">
+          <p className="mt-1 text-sm text-rc-fg-muted">
             Your {sourceZone === "hand" ? "hand" : "spellbook"} was searched —
             The Inquisition was seen.
           </p>
@@ -115,7 +118,7 @@ export default function InquisitionSummonOverlay() {
         {/* Card preview */}
         {imageUrl && (
           <div className="mx-auto mb-4 flex justify-center">
-            <div className="relative h-48 w-36 overflow-hidden rounded-lg border-2 border-purple-400/60 shadow-lg shadow-purple-500/20">
+            <div className="relative h-48 w-36 overflow-hidden rounded-rc-md shadow-rc-md ring-1 ring-rc-line/25">
               <Image
                 src={imageUrl}
                 alt={card.name || "The Inquisition"}
@@ -130,24 +133,18 @@ export default function InquisitionSummonOverlay() {
         {/* Owner: Accept / Decline */}
         {isOwner && (
           <div className="flex justify-center gap-3">
-            <button
-              onClick={handleAccept}
-              className="rounded-lg bg-purple-600 px-5 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-purple-500 active:scale-95"
-            >
+            <RcButton size="sm" onClick={handleAccept}>
               Summon It
-            </button>
-            <button
-              onClick={handleDecline}
-              className="rounded-lg bg-gray-700 px-5 py-2 text-sm font-semibold text-gray-300 shadow-md transition hover:bg-gray-600 active:scale-95"
-            >
+            </RcButton>
+            <RcButton variant="outline" size="sm" onClick={handleDecline}>
               Decline
-            </button>
+            </RcButton>
           </div>
         )}
 
         {/* Not owner: Waiting */}
         {!isOwner && (
-          <p className="text-center text-sm text-gray-400">
+          <p className="text-center text-sm text-rc-fg-muted">
             Opponent is deciding whether to summon The Inquisition...
           </p>
         )}

@@ -27,6 +27,7 @@ import CardPreview from "@/components/game/CardPreview";
 import KeyboardShortcutsHelp, {
   useHelpShortcut,
 } from "@/components/ui/KeyboardShortcutsHelp";
+import { RcButton } from "@/components/ui/rc-button";
 import { useCardSearch } from "@/lib/collection/useCardSearch";
 import {
   formatValidationErrors,
@@ -5235,12 +5236,12 @@ function AuthenticatedDeckEditor() {
       })()}
       {/* Draft picks loading indicator */}
       {isDraftMode && !draftInitDone && pick3D.length === 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="rounded-xl bg-slate-900/90 px-6 py-4 text-center text-white shadow-2xl border border-white/10">
-            <div className="text-xs uppercase tracking-widest text-white/60">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.7)] backdrop-blur-[4px]">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] px-6 py-4 text-center text-rc-fg shadow-rc-panel">
+            <div className="rc-eyebrow">
               Loading Drafted Cards
             </div>
-            <div className="mt-2 text-lg font-semibold">
+            <div className="mt-2 font-rc-mono text-lg font-semibold tabular-nums text-rc-fg-strong">
               {draftLoadProgress.total > 0
                 ? `${draftLoadProgress.processed}/${draftLoadProgress.total}`
                 : "Preparing…"}
@@ -5609,12 +5610,12 @@ function AuthenticatedDeckEditor() {
         {/* Minimal Navigation (top-right) */}
         {status !== "authenticated" && (
           <div className="absolute top-3 right-4 z-[60] pointer-events-auto text-xs flex items-center gap-3">
-            <Link href="/" className="underline text-white/80 hover:text-white">
+            <Link href="/" className="rc-link underline">
               Home
             </Link>
             <Link
               href="/online/lobby"
-              className="underline text-white/80 hover:text-white"
+              className="rc-link underline"
             >
               Lobby
             </Link>
@@ -5747,8 +5748,8 @@ function AuthenticatedDeckEditor() {
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="bg-black/90 backdrop-blur-sm rounded-lg shadow-xl border border-white/20 min-w-48 p-2">
-              <div className="text-white text-sm font-medium mb-2 px-2">
+            <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] backdrop-blur-sm font-rc-sans text-rc-fg shadow-rc-panel min-w-48 p-2">
+              <div className="text-rc-fg-strong text-sm font-medium mb-2 px-2">
                 Move &quot;{contextMenu.cardName}&quot;
               </div>
 
@@ -5760,7 +5761,7 @@ function AuthenticatedDeckEditor() {
                   {contextMenu.deckCards.map((card) => (
                     <button
                       key={card.id}
-                      className="w-full text-left px-2 py-1 text-xs text-blue-100 hover:bg-blue-700/40 rounded"
+                      className="w-full text-left px-2 py-1 text-xs text-rc-fg hover:bg-rc-line/6 hover:text-rc-fg-strong rounded-rc-sm"
                       onClick={() => {
                         moveSpecificCardToSideboard(card.id);
                         setFeedbackMessage(
@@ -5776,7 +5777,7 @@ function AuthenticatedDeckEditor() {
 
                   {/* Aggregate Deck → Collection action */}
                   <button
-                    className="mt-1 w-full text-left px-2 py-1 text-xs text-purple-100 hover:bg-purple-700/40 rounded disabled:opacity-40 disabled:hover:bg-transparent"
+                    className="mt-1 w-full text-left px-2 py-1 text-xs text-rc-fg hover:bg-rc-line/6 hover:text-rc-fg-strong rounded-rc-sm disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-rc-fg"
                     disabled={collectionCount >= 10}
                     onClick={() => {
                       moveOneFromDeckToCollection(contextMenu.cardId);
@@ -5798,7 +5799,7 @@ function AuthenticatedDeckEditor() {
                   {contextMenu.sideboardCards.map((card, index) => (
                     <button
                       key={card.id}
-                      className="w-full text-left px-2 py-1 text-sm text-white hover:bg-white/10 rounded"
+                      className="w-full text-left px-2 py-1 text-sm text-rc-fg hover:bg-rc-line/6 hover:text-rc-fg-strong rounded-rc-sm"
                       onClick={() => {
                         moveSpecificCardToDeck(card.id);
                         setFeedbackMessage(
@@ -5814,7 +5815,7 @@ function AuthenticatedDeckEditor() {
 
                   {/* Aggregate Sideboard → Collection action */}
                   <button
-                    className="mt-1 w-full text-left px-2 py-1 text-xs text-purple-100 hover:bg-purple-700/40 rounded disabled:opacity-40 disabled:hover:bg-transparent"
+                    className="mt-1 w-full text-left px-2 py-1 text-xs text-rc-fg hover:bg-rc-line/6 hover:text-rc-fg-strong rounded-rc-sm disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-rc-fg"
                     disabled={collectionCount >= 10}
                     onClick={() => {
                       moveOneFromSideboardToCollection(contextMenu.cardId);
@@ -5835,7 +5836,7 @@ function AuthenticatedDeckEditor() {
                     total {contextMenu.totalCollection}/10):
                   </div>
                   <button
-                    className="w-full text-left px-2 py-1 text-sm text-white hover:bg-white/10 rounded"
+                    className="w-full text-left px-2 py-1 text-sm text-rc-fg hover:bg-rc-line/6 hover:text-rc-fg-strong rounded-rc-sm"
                     onClick={() => {
                       moveOneFromCollectionToDeck(contextMenu.cardId);
                       setFeedbackMessage(
@@ -5848,7 +5849,7 @@ function AuthenticatedDeckEditor() {
                     Move one copy → Deck
                   </button>
                   <button
-                    className="mt-1 w-full text-left px-2 py-1 text-sm text-white hover:bg-white/10 rounded"
+                    className="mt-1 w-full text-left px-2 py-1 text-sm text-rc-fg hover:bg-rc-line/6 hover:text-rc-fg-strong rounded-rc-sm"
                     onClick={() => {
                       moveOneFromCollectionToSideboard(contextMenu.cardId);
                       setFeedbackMessage(
@@ -5867,9 +5868,9 @@ function AuthenticatedDeckEditor() {
               {isFreeMode &&
                 (contextMenu.deckCards.length > 0 ||
                   contextMenu.sideboardCards.length > 0) && (
-                  <div className="border-t border-white/10 mt-2 pt-2">
+                  <div className="border-t border-rc-line/12 mt-2 pt-2">
                     <button
-                      className="w-full text-left px-2 py-1 text-xs text-red-300 hover:bg-red-700/40 rounded"
+                      className="w-full text-left px-2 py-1 text-xs text-rc-danger-ink hover:bg-rc-danger/25 rounded-rc-sm"
                       onClick={() => {
                         const zone =
                           contextMenu.deckCards.length > 0
@@ -5883,16 +5884,16 @@ function AuthenticatedDeckEditor() {
                         setContextMenu(null);
                       }}
                     >
-                      🗑️ Remove one copy
+                      Remove one copy
                     </button>
                   </div>
                 )}
 
               {/* Draft/Sealed mode: Hide card action */}
               {(isDraftMode || isSealed) && (
-                <div className="border-t border-white/10 mt-2 pt-2">
+                <div className="border-t border-rc-line/12 mt-2 pt-2">
                   <button
-                    className="w-full text-left px-2 py-1 text-xs text-yellow-300 hover:bg-yellow-700/40 rounded"
+                    className="w-full text-left px-2 py-1 text-xs text-rc-accent-link hover:bg-rc-accent/12 rounded-rc-sm"
                     onClick={() => {
                       toggleHideCard(contextMenu.cardId);
                       const isHidden = hiddenCardIds.has(contextMenu.cardId);
@@ -5906,8 +5907,8 @@ function AuthenticatedDeckEditor() {
                     }}
                   >
                     {hiddenCardIds.has(contextMenu.cardId)
-                      ? "👁️ Show card"
-                      : "👁️‍🗨️ Hide card"}
+                      ? "Show card"
+                      : "Hide card"}
                   </button>
                 </div>
               )}
@@ -5917,10 +5918,10 @@ function AuthenticatedDeckEditor() {
 
         {matchEndedBannerVisible && matchEndedBannerMessage && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 pointer-events-auto">
-            <div className="flex items-start gap-3 rounded-lg bg-yellow-500/90 text-black px-4 py-3 shadow-lg border border-yellow-300 max-w-xl">
+            <div className="rc-toast flex items-start gap-3 px-4 py-3 max-w-xl" data-tone="warning">
               <div className="mt-0.5">
                 <svg
-                  className="w-4 h-4 text-black/80"
+                  className="w-4 h-4 text-rc-warning"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -5933,10 +5934,10 @@ function AuthenticatedDeckEditor() {
                   />
                 </svg>
               </div>
-              <div className="text-sm">
-                <div className="font-semibold">Match update</div>
+              <div className="font-rc-sans text-sm">
+                <div className="font-semibold text-rc-fg-strong">Match update</div>
                 <div className="mt-0.5">{matchEndedBannerMessage}</div>
-                <div className="mt-1 text-xs text-black/80">
+                <div className="mt-1 text-xs text-rc-fg-muted">
                   You can keep editing and saving this deck even though the
                   match has ended.
                 </div>
@@ -5944,7 +5945,7 @@ function AuthenticatedDeckEditor() {
               <button
                 type="button"
                 onClick={() => setMatchEndedBannerVisible(false)}
-                className="ml-2 text-black/60 hover:text-black focus:outline-none"
+                className="ml-2 rounded-rc-md text-rc-fg-muted hover:bg-rc-line/6 hover:text-rc-fg-strong focus:outline-none"
                 aria-label="Dismiss match update"
               >
                 ×
@@ -5956,7 +5957,7 @@ function AuthenticatedDeckEditor() {
         {/* Feedback Message */}
         {feedbackMessage && (
           <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
-            <div className="bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg font-medium">
+            <div className="rc-toast px-4 py-2 font-medium" data-tone="success">
               {feedbackMessage}
             </div>
           </div>
@@ -5964,32 +5965,32 @@ function AuthenticatedDeckEditor() {
 
         {/* Auto-save prompt for free mode */}
         {showAutoSavePrompt && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto">
-            <div className="bg-slate-900 rounded-xl p-6 max-w-md mx-4 shadow-2xl border border-white/10">
-              <h3 className="text-lg font-semibold text-white mb-3">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.6)] backdrop-blur-[4px] pointer-events-auto">
+            <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-md mx-4 text-rc-fg shadow-rc-panel">
+              <h3 className="mb-3 font-rc-display text-[22px] leading-none text-rc-fg-strong">
                 Enable Auto-Save?
               </h3>
-              <p className="text-white/70 text-sm mb-4">
+              <p className="font-rc-sans text-sm text-rc-fg-muted mb-4">
                 Would you like to automatically save your deck changes?
                 Auto-save will periodically save your progress in the
                 background.
               </p>
-              <p className="text-white/50 text-xs mb-4">
+              <p className="font-rc-sans text-xs text-rc-fg-subtle mb-4">
                 Note: This only applies to existing decks. You&apos;ll still
                 need to save manually the first time.
               </p>
               <div className="flex gap-3 justify-end">
-                <button
+                <RcButton
+                  variant="outline"
                   onClick={() => {
                     localStorage.setItem("sorcery:deckEditorAutoSave", "false");
                     setAutoSaveEnabled(false);
                     setShowAutoSavePrompt(false);
                   }}
-                  className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm transition-colors"
                 >
                   No, save manually
-                </button>
-                <button
+                </RcButton>
+                <RcButton
                   onClick={() => {
                     localStorage.setItem("sorcery:deckEditorAutoSave", "true");
                     setAutoSaveEnabled(true);
@@ -5997,10 +5998,9 @@ function AuthenticatedDeckEditor() {
                     setFeedbackMessage("Auto-save enabled");
                     setTimeout(() => setFeedbackMessage(null), 2000);
                   }}
-                  className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white text-sm font-medium transition-colors"
                 >
                   Yes, enable auto-save
-                </button>
+                </RcButton>
               </div>
             </div>
           </div>
@@ -6088,31 +6088,31 @@ function AuthenticatedDeckEditor() {
           />
         </Suspense>
         {error && (
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-red-700/80 text-white px-3 py-1 rounded text-sm pointer-events-none">
+          <div className="rc-toast absolute bottom-20 left-1/2 -translate-x-1/2 px-3 py-1 pointer-events-none" data-tone="danger">
             Error: {error}
           </div>
         )}
         {saveMsg && (
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-green-700/80 text-white px-3 py-1 rounded text-sm pointer-events-none">
+          <div className="rc-toast absolute bottom-20 left-1/2 -translate-x-1/2 px-3 py-1 pointer-events-none" data-tone="success">
             {saveMsg}
           </div>
         )}
 
         {/* Waiting overlay for deck submission */}
         {waitingForOtherPlayers && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center px-4">
-            <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-md text-center">
+          <div className="fixed inset-0 z-50 bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px] flex items-center justify-center px-4">
+            <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] text-rc-fg shadow-rc-panel p-6 sm:p-8 w-full max-w-md text-center">
               <div className="flex flex-col items-center gap-4">
                 <div
-                  className="h-10 w-10 sm:h-12 sm:w-12 rounded-full border-2 border-blue-200 border-t-blue-600 animate-spin"
+                  className="h-10 w-10 sm:h-12 sm:w-12 rounded-full border-2 border-rc-accent/30 border-t-rc-accent animate-spin"
                   aria-hidden="true"
                 />
-                <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">
+                <h2 className="m-0 font-rc-display text-[22px] leading-none text-rc-fg-strong sm:text-[28px]">
                   {waitingOverlayStage === "submitting"
                     ? "Submitting deck..."
                     : "Deck submitted!"}
                 </h2>
-                <p className="text-gray-600">
+                <p className="font-rc-sans text-sm text-rc-fg-muted">
                   {waitingOverlayStage === "submitting"
                     ? "Validating your deck and syncing with the event server. Please keep this window open."
                     : searchParams?.get("tournament") &&
@@ -6121,7 +6121,7 @@ function AuthenticatedDeckEditor() {
                       : "Returning you to the match momentarily."}
                 </p>
                 {waitingOverlayStage === "waiting" && (
-                  <div className="text-sm text-gray-500">
+                  <div className="font-rc-sans text-xs text-rc-fg-subtle">
                     {searchParams?.get("tournament") &&
                     !searchParams?.get("matchId")
                       ? "The page will refresh automatically when the tournament advances."
@@ -6130,9 +6130,8 @@ function AuthenticatedDeckEditor() {
                 )}
                 {waitingOverlayStage === "waiting" && (
                   <div className="mt-2">
-                    <button
+                    <RcButton
                       type="button"
-                      className="inline-flex items-center px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-60 disabled:cursor-not-allowed"
                       onClick={() => {
                         const tournamentId = searchParams?.get("tournament");
                         const matchId = searchParams?.get("matchId");
@@ -6149,7 +6148,7 @@ function AuthenticatedDeckEditor() {
                       !searchParams?.get("matchId")
                         ? "Return to Tournament Now"
                         : "Return to Match Now"}
-                    </button>
+                    </RcButton>
                   </div>
                 )}
               </div>
@@ -6203,7 +6202,7 @@ export default function DeckEditor3DPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+        <div className="rc-app min-h-screen flex items-center justify-center font-rc-mono text-sm text-rc-fg-muted">
           Loading editor…
         </div>
       }

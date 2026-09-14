@@ -5,6 +5,7 @@ import Image from "next/image";
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import CardPreview from "@/components/game/CardPreview";
+import { RcButton } from "@/components/ui/rc-button";
 import { useSound } from "@/lib/contexts/SoundContext";
 import {
   useCardHover,
@@ -71,18 +72,20 @@ export default function FeastForCrowsOverlay() {
   if (layout.minimized) {
     return (
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-4 py-2 rounded-full bg-black/90 text-white ring-1 ring-cyan-500/50 shadow-lg text-sm flex items-center gap-2 select-none">
-          <span className="text-cyan-400 font-fantaisie">Feast for Crows</span>
-          <span className="opacity-80 truncate max-w-[200px]">
+        <div className="pointer-events-auto px-4 py-2 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-sm flex items-center gap-2 select-none">
+          <span className="font-rc-display text-rc-accent-link">Feast for Crows</span>
+          <span className="text-rc-fg-muted truncate max-w-[200px]">
             {getInstructionText()}
           </span>
-          <button
-            className="ml-1 rounded bg-white/15 hover:bg-white/25 px-2 py-0.5 text-xs"
+          <RcButton
+            variant="quiet"
+            size="xs"
+            className="ml-1 h-6 px-2"
             onClick={layout.toggleMinimize}
             title="Expand overlay"
           >
             ▼
-          </button>
+          </RcButton>
         </div>
       </div>
     );
@@ -96,26 +99,30 @@ export default function FeastForCrowsOverlay() {
       <div
         className={`${layout.tiled ? "" : "fixed inset-x-0 top-6 z-[201]"} pointer-events-none flex justify-center ${layout.tiled ? "pt-4 px-2" : ""}`}
       >
-        <div className="pointer-events-auto px-4 py-2 rounded-full bg-black/90 text-white ring-1 ring-cyan-500/50 shadow-lg text-sm md:text-base flex items-center gap-2 select-none">
-          <span className="text-cyan-400 font-fantaisie">Feast for Crows</span>
-          <span className="opacity-80 truncate">
+        <div className="pointer-events-auto px-4 py-2 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-sm md:text-base flex items-center gap-2 select-none">
+          <span className="font-rc-display text-rc-accent-link">Feast for Crows</span>
+          <span className="text-rc-fg-muted truncate">
             {getInstructionText()}
           </span>
           {isCaster && (
-            <button
-              className="mx-1 rounded bg-white/15 hover:bg-white/25 px-2 py-0.5 select-none text-xs"
+            <RcButton
+              variant="outline"
+              size="xs"
+              className="mx-1 h-6 px-2"
               onClick={cancelFeastForCrows}
             >
               Cancel
-            </button>
+            </RcButton>
           )}
-          <button
-            className="ml-1 rounded bg-white/15 hover:bg-white/25 px-2 py-0.5 text-xs"
+          <RcButton
+            variant="quiet"
+            size="xs"
+            className="ml-1 h-6 px-2"
             onClick={layout.toggleMinimize}
             title="Minimize overlay"
           >
             ▲
-          </button>
+          </RcButton>
         </div>
       </div>
 
@@ -132,8 +139,8 @@ export default function FeastForCrowsOverlay() {
       {/* Naming phase — opponent waiting */}
       {phase === "naming" && !isCaster && (
         <div className="flex-1 flex items-center justify-center pointer-events-auto">
-          <div className="bg-black/95 rounded-xl p-6 ring-1 ring-cyan-500/30 text-center">
-            <p className="text-white/70">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 font-rc-sans text-rc-fg shadow-rc-panel text-center">
+            <p className="text-rc-fg-muted">
               {pending.casterSeat.toUpperCase()} is naming a spell...
             </p>
           </div>
@@ -220,16 +227,16 @@ function SpellNameSearch({
   const content = (
     <div
       ref={dialogRef}
-      className="bg-zinc-900/95 backdrop-blur rounded-xl ring-1 ring-cyan-500/30 shadow-2xl p-6 w-[420px] max-h-[80vh] text-white flex flex-col"
+      className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] backdrop-blur shadow-rc-panel p-6 w-[420px] max-h-[80vh] font-rc-sans text-rc-fg flex flex-col"
     >
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-fantaisie flex items-center gap-2 text-cyan-400">
-          <Search className="w-5 h-5" />
+        <h3 className="flex items-center gap-2 font-rc-display text-[18px] leading-tight text-rc-fg-strong">
+          <Search className="w-5 h-5 text-rc-accent-link" />
           Name a Spell
         </h3>
         <button
           onClick={onCancel}
-          className="text-zinc-400 hover:text-white transition-colors"
+          className="-m-0.5 rounded-rc-md p-0.5 text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
         >
           <X className="w-5 h-5" />
         </button>
@@ -271,20 +278,20 @@ function SpellNameSearch({
           onMouseDown={(e) => e.currentTarget.removeAttribute("readonly")}
           onTouchStart={(e) => e.currentTarget.removeAttribute("readonly")}
           readOnly={!isMobile}
-          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+          className="rc-input h-9 w-full placeholder:text-rc-fg-subtle"
           autoFocus
         />
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-[200px]">
+      <div className="thin-scrollbar flex-1 overflow-y-auto min-h-[200px]">
         {loading ? (
-          <div className="text-center text-zinc-400 py-8">Searching...</div>
+          <div className="text-rc-fg-subtle text-center py-8">Searching...</div>
         ) : !searchTerm.trim() ? (
-          <div className="text-center text-zinc-400 py-8">
+          <div className="text-rc-fg-subtle text-center py-8">
             Type a spell name to search
           </div>
         ) : results.length === 0 ? (
-          <div className="text-center text-zinc-400 py-8">
+          <div className="text-rc-fg-subtle text-center py-8">
             No spells found for &quot;{searchTerm}&quot;
           </div>
         ) : (
@@ -292,7 +299,7 @@ function SpellNameSearch({
             {results.map((card) => (
               <div
                 key={card.cardId}
-                className="bg-zinc-800/50 hover:bg-zinc-700/50 rounded-lg p-3 transition-colors cursor-pointer"
+                className="rounded-rc-md border border-rc-line/18 bg-black/30 hover:border-rc-accent/60 hover:bg-rc-accent/8 p-3 transition-colors cursor-pointer"
                 onMouseEnter={() => {
                   if (card.slug) {
                     showCardPreview({
@@ -310,26 +317,28 @@ function SpellNameSearch({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-white truncate">
+                    <div className="font-rc-display text-rc-fg-strong truncate">
                       {card.name}
                     </div>
                     {card.type && (
-                      <div className="text-xs text-zinc-400 truncate">
+                      <div className="text-xs text-rc-fg-muted truncate">
                         {card.type}
                         {card.subTypes && ` — ${card.subTypes}`}
                       </div>
                     )}
                   </div>
-                  <button
+                  <RcButton
+                    variant="outline"
+                    size="xs"
                     onClick={(e) => {
                       e.stopPropagation();
                       try { playCardSelect(); } catch {}
                       onSelect(card);
                     }}
-                    className="flex-shrink-0 text-xs bg-cyan-600/80 hover:bg-cyan-500 rounded px-3 py-1.5 transition-colors"
+                    className="flex-shrink-0 px-3"
                   >
                     Name
-                  </button>
+                  </RcButton>
                 </div>
               </div>
             ))}
@@ -337,16 +346,13 @@ function SpellNameSearch({
         )}
       </div>
 
-      <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center justify-between">
-        <span className="text-xs text-zinc-500">
+      <div className="mt-4 pt-4 border-t border-rc-line/14 flex items-center justify-between">
+        <span className="text-xs text-rc-fg-subtle">
           {results.length > 0 && `${results.length} spells found`}
         </span>
-        <button
-          className="text-sm text-zinc-400 hover:text-zinc-300 transition-colors"
-          onClick={onCancel}
-        >
+        <RcButton variant="ghost" size="sm" onClick={onCancel}>
           Cancel
-        </button>
+        </RcButton>
       </div>
 
       {hoverPreview && (
@@ -361,7 +367,7 @@ function SpellNameSearch({
 
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[rgba(6,10,20,0.5)] backdrop-blur-sm">
       {content}
     </div>,
     document.body,
@@ -396,14 +402,14 @@ function RevealPanel({
 
   return (
     <div
-      className={`bg-black/95 rounded-xl p-4 md:p-6 w-full mx-2 md:mx-4 ring-1 ring-cyan-500/30 ${tiled ? "max-h-full" : "max-w-5xl max-h-[90vh]"} overflow-y-auto`}
+      className={`thin-scrollbar rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-4 md:p-6 w-full mx-2 md:mx-4 font-rc-sans text-rc-fg shadow-rc-panel ${tiled ? "max-h-full" : "max-w-5xl max-h-[90vh]"} overflow-y-auto`}
     >
       <h2
-        className={`font-fantaisie text-cyan-400 mb-2 text-center ${tiled ? "text-lg" : "text-2xl"}`}
+        className={`mb-2 text-center font-rc-display leading-tight text-rc-fg-strong ${tiled ? "text-[18px]" : "text-[26px]"}`}
       >
         Searching for &ldquo;{namedName}&rdquo;
       </h2>
-      <p className="text-white/70 text-sm mb-4 text-center">
+      <p className="text-rc-fg-muted text-sm mb-4 text-center">
         {matches.length === 0
           ? "No copies found in opponent's cards"
           : `${matches.length} cop${matches.length === 1 ? "y" : "ies"} found — ${handMatches} in hand, ${spellbookMatches} in spellbook, ${graveyardMatches} in cemetery`}
@@ -436,25 +442,19 @@ function RevealPanel({
       {/* Action buttons */}
       {isCaster && (
         <div className="flex gap-3 justify-center mt-4">
-          <button
-            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 font-medium transition-colors text-sm"
-            onClick={onCancel}
-          >
+          <RcButton variant="outline" onClick={onCancel}>
             Cancel
-          </button>
-          <button
-            className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition-colors text-sm"
-            onClick={onResolve}
-          >
+          </RcButton>
+          <RcButton onClick={onResolve}>
             {matches.length > 0
               ? `Banish ${matches.length} & Shuffle`
               : "Resolve (Shuffle)"}
-          </button>
+          </RcButton>
         </div>
       )}
 
       {!isCaster && (
-        <div className="text-center text-white/60 text-sm mt-4">
+        <div className="text-center text-rc-fg-subtle text-sm mt-4">
           Waiting for {pending.casterSeat.toUpperCase()} to confirm...
         </div>
       )}
@@ -463,10 +463,11 @@ function RevealPanel({
 }
 
 // ─── Zone config ──────────────────────────────────────────────────────────────
+// Hand (amber) and Spellbook (cyan) keep their zone-identity hues; the
+// Cemetery zone was plain grey and uses the neutral rc tokens.
 const ZONE_STYLES = {
   hand: {
     label: "Hand",
-    icon: "✋",
     headerColor: "text-amber-400",
     badgeBg: "bg-amber-600",
     ringColor: "ring-amber-500/30",
@@ -478,7 +479,6 @@ const ZONE_STYLES = {
   },
   spellbook: {
     label: "Spellbook",
-    icon: "📖",
     headerColor: "text-cyan-400",
     badgeBg: "bg-cyan-600",
     ringColor: "ring-cyan-500/30",
@@ -490,15 +490,14 @@ const ZONE_STYLES = {
   },
   graveyard: {
     label: "Cemetery",
-    icon: "⚰️",
-    headerColor: "text-zinc-400",
-    badgeBg: "bg-zinc-600",
-    ringColor: "ring-zinc-500/30",
-    bgTint: "bg-zinc-900/40",
-    matchRing: "ring-zinc-300",
-    matchGlow: "shadow-zinc-400/30",
-    matchOverlay: "bg-zinc-400/20",
-    matchText: "text-zinc-200",
+    headerColor: "text-rc-fg-muted",
+    badgeBg: "bg-rc-line/20",
+    ringColor: "ring-rc-line/18",
+    bgTint: "bg-black/30",
+    matchRing: "ring-rc-line/70",
+    matchGlow: "shadow-rc-line/20",
+    matchOverlay: "bg-rc-line/15",
+    matchText: "text-rc-fg",
   },
 } as const;
 
@@ -520,15 +519,14 @@ function ZoneSection({
   const s = ZONE_STYLES[zone];
 
   return (
-    <div className={`mb-4 rounded-lg p-3 ${s.bgTint} ring-1 ${s.ringColor}`}>
+    <div className={`mb-4 rounded-rc-md p-3 ${s.bgTint} ring-1 ${s.ringColor}`}>
       <h3 className={`text-sm font-semibold ${s.headerColor} mb-2 flex items-center gap-2`}>
-        <span>{s.icon}</span>
         {s.label}
-        <span className="text-white/50 font-normal">
+        <span className="font-rc-mono tabular-nums text-rc-fg-subtle font-normal">
           ({cards.length} card{cards.length !== 1 ? "s" : ""})
         </span>
         {matchCount > 0 && (
-          <span className={`${s.badgeBg} text-white text-xs px-2 py-0.5 rounded-full ml-auto`}>
+          <span className={`${s.badgeBg} font-rc-mono tabular-nums text-rc-fg-strong text-xs px-2 py-0.5 rounded-full ml-auto`}>
             {matchCount} banished
           </span>
         )}
@@ -591,7 +589,7 @@ function RevealedCard({
       className="flex flex-col gap-1"
     >
       <div
-        className={`relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all ${
+        className={`relative aspect-[2.5/3.5] rounded-rc-md overflow-hidden transition-all ${
           matched
             ? `ring-4 ${matchRing} scale-105 shadow-lg ${matchGlow}`
             : "opacity-50"
@@ -607,14 +605,14 @@ function RevealedCard({
         />
         {matched && (
           <div className={`absolute inset-0 ${matchOverlay} flex items-end justify-center pb-1`}>
-            <span className={`text-xs font-semibold ${matchText} bg-black/70 px-1.5 py-0.5 rounded`}>
+            <span className={`text-xs font-semibold ${matchText} bg-[rgba(7,10,20,0.85)] px-1.5 py-0.5 rounded-rc-sm`}>
               Banish
             </span>
           </div>
         )}
       </div>
       {/* Card name label */}
-      <p className={`text-center text-[10px] leading-tight truncate px-0.5 ${matched ? "text-white font-medium" : "text-white/40"}`}>
+      <p className={`font-rc-display text-center text-[10px] leading-tight truncate px-0.5 ${matched ? "text-rc-fg-strong font-medium" : "text-rc-fg-subtle"}`}>
         {card.name || "—"}
       </p>
     </div>

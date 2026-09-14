@@ -8,10 +8,6 @@ interface Props {
   onCreated: (tournamentId: string) => void;
 }
 
-/** Mono spaced-caps label above a form control. */
-const FIELD_LABEL =
-  "mb-1.5 block font-rc-mono text-[11px] uppercase tracking-[0.18em] text-rc-fg-subtle";
-
 export function OpenTournamentCreateForm({ onCreated }: Props) {
   const [name, setName] = useState(() => generateTournamentName());
   const [gameFormat, setGameFormat] = useState<
@@ -78,7 +74,7 @@ export function OpenTournamentCreateForm({ onCreated }: Props) {
 
       {/* Name */}
       <div>
-        <label className={FIELD_LABEL}>Event Name</label>
+        <label className="rc-field-label mb-1.5">Event Name</label>
         <input
           type="text"
           value={name}
@@ -92,7 +88,7 @@ export function OpenTournamentCreateForm({ onCreated }: Props) {
 
       {/* Game Format */}
       <div>
-        <label className={FIELD_LABEL}>Game Format</label>
+        <label className="rc-field-label mb-1.5">Game Format</label>
         <div className="rc-segment">
           {(["constructed", "sealed", "draft"] as const).map((f) => (
             <button
@@ -117,7 +113,7 @@ export function OpenTournamentCreateForm({ onCreated }: Props) {
 
       {/* Max Players */}
       <div>
-        <label className={FIELD_LABEL}>Max Players</label>
+        <label className="rc-field-label mb-1.5">Max Players</label>
         <input
           type="number"
           value={maxPlayers}
@@ -131,7 +127,7 @@ export function OpenTournamentCreateForm({ onCreated }: Props) {
 
       {/* Play Network URL */}
       <div>
-        <label className={FIELD_LABEL}>
+        <label className="rc-field-label mb-1.5">
           Play Network Event URL
           <span className="ml-1 normal-case tracking-[0.1em] text-rc-fg-dim">
             (optional)
@@ -151,7 +147,7 @@ export function OpenTournamentCreateForm({ onCreated }: Props) {
 
       {/* Pairing Mode */}
       <div>
-        <label className={FIELD_LABEL}>Default Pairing Mode</label>
+        <label className="rc-field-label mb-1.5">Default Pairing Mode</label>
         <div className="flex flex-wrap gap-4">
           <label className="rc-check">
             <input
@@ -179,7 +175,7 @@ export function OpenTournamentCreateForm({ onCreated }: Props) {
 
       {/* Match Resolution */}
       <div>
-        <label className={FIELD_LABEL}>Match Resolution</label>
+        <label className="rc-field-label mb-1.5">Match Resolution</label>
         <div className="flex flex-col gap-2">
           <label className="rc-check">
             <input

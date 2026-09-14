@@ -56,17 +56,16 @@ export default function PithImpOverlay() {
   return (
     <div className="fixed inset-0 z-[200] pointer-events-none flex items-center justify-center">
       <div
-        className="pointer-events-auto bg-black/95 rounded-xl p-6 shadow-2xl border-2 border-purple-500/50 max-w-sm animate-in fade-in zoom-in duration-300"
+        className="pointer-events-auto rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 font-rc-sans text-rc-fg shadow-rc-panel max-w-sm animate-in fade-in zoom-in duration-300"
         onClick={dismissNotification}
       >
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">
-          <span className="text-3xl">🦇</span>
           <div>
-            <h3 className="text-purple-300 font-bold text-lg">
+            <h3 className="font-rc-display text-[18px] leading-tight text-rc-fg-strong">
               {hasCard ? "Pith Imp Steals!" : "Pith Imp Enters"}
             </h3>
-            <p className="text-white/70 text-sm">
+            <p className="text-rc-fg-muted text-sm">
               {hasCard
                 ? isOwner
                   ? "You stole a card from your opponent!"
@@ -93,7 +92,7 @@ export default function PithImpOverlay() {
         )}
 
         {/* Info text */}
-        <p className="text-white/60 text-xs text-center">
+        <p className="text-rc-fg-subtle text-xs text-center">
           {hasCard
             ? isOwner
               ? "This card is hidden under your Pith Imp. It will return to your opponent if the Imp leaves the realm."
@@ -104,7 +103,7 @@ export default function PithImpOverlay() {
         </p>
 
         {/* Dismiss hint */}
-        <p className="text-purple-400/50 text-xs text-center mt-3">
+        <p className="rc-hint text-center mt-3">
           Click anywhere to dismiss
         </p>
       </div>

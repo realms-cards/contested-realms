@@ -31,11 +31,11 @@ export default function AnimatedImage({
   };
 
   return (
-    <div className={"relative w-full rounded-md border border-slate-700/80 overflow-hidden "+wrapperClassName}>
+    <div className={"relative w-full rounded-rc-md border border-rc-line/18 overflow-hidden "+wrapperClassName}>
       {showSkeleton && !loaded && (
         <div
           aria-hidden
-          className="absolute inset-0 bg-gradient-to-r from-slate-800/80 via-slate-700/70 to-slate-800/80 animate-pulse"
+          className="absolute inset-0 bg-rc-line/8 animate-pulse"
         />
       )}
       <Image

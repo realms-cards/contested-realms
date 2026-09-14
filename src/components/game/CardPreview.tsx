@@ -235,8 +235,8 @@ export default function CardPreview({
   })();
 
   const base = isSite
-    ? "aspect-[4/3] rounded-xl overflow-hidden bg-black/20 backdrop-blur-sm shadow-2xl ring-1 ring-white/10"
-    : "aspect-[3/4] rounded-xl overflow-hidden bg-black/20 backdrop-blur-sm shadow-2xl ring-1 ring-white/10";
+    ? "aspect-[4/3] rounded-rc-lg overflow-hidden bg-black/20 backdrop-blur-sm shadow-rc-panel ring-1 ring-rc-line/18"
+    : "aspect-[3/4] rounded-rc-lg overflow-hidden bg-black/20 backdrop-blur-sm shadow-rc-panel ring-1 ring-rc-line/18";
 
   const imageEl = (
     <div className={`relative ${base}`} style={{ width }}>

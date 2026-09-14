@@ -13,6 +13,8 @@ const cpuSpells = require("../src/lib/game/cpu/spells");
 const { abilityChoices } = require("../src/lib/game/cpu/abilities");
 const { reachableCells } = require("../src/lib/game/cpu/movement");
 const { moveUnit, mergePermanents } = require("../src/lib/game/cpu/move");
+const { tileLabel } = require("../src/lib/game/cpu/tileLabels");
+const { abilityLog, castLog, combatLog, endTurnLog, playLog } = require("./action-log");
 
 // Lazy-loaded card database from data/cards_raw.json
 let _CARDS_DB = null;
@@ -1361,6 +1363,8 @@ class BotClient {
       if (type === "magicResolve" && this._castingMagicId === id && payload.playerKey === this._getMeKey()) return;
       this._pendingResolutions.delete(id);
       if (type.startsWith("combat")) this._pendingCombats.delete(id);
+      // Let the human read the result before the next action lands.
+      this._actionPacing.settled(Date.now());
       this._scheduleResolution(() => this._maybeAct(), 200);
     }
   }
@@ -1415,10 +1419,11 @@ class BotClient {
   /**
    * Emit a toast message to the opponent (human player) so they can see what the bot did.
    * Uses the existing socket message protocol — client handles "botActionToast" type.
+   * `log` is a marked-up event log line: the bot keeps no log, so the human client records it.
    */
-  _emitBotToast(message) {
+  _emitBotToast(message, log = null) {
     try {
-      this.socket.emit("message", { type: "botActionToast", message, ts: Date.now() });
+      this.socket.emit("message", { type: "botActionToast", message, log, ts: Date.now() });
     } catch {}
   }
 
@@ -1438,10 +1443,12 @@ class BotClient {
         const at = pos.join(",");
         this.socket.emit("message", { type: "magicBegin", id: magicId,
           tile: { x: pos[0], y: pos[1] }, spell: { at, index: -1, instanceId: spellCard.instanceId, card: spellCard, owner: meKey === "p1" ? 1 : 2 } });
+        this._emitBotToast(`Casts ${spellCard.name}: ${choice.label}`, castLog(meKey, spellCard.name));
+        // Keep the target preview up long enough to read before the effect lands.
         this._scheduleResolution(() => {
           this.socket.emit("message", { type: "cpuMagicChoice", id: magicId, key: choiceKey });
           this.socket.emit("message", { type: "magicConfirm", id: magicId });
-        }, 400);
+        }, 1500);
         return;
       }
       const cardName = spellCard.name || "Spell";
@@ -1505,6 +1512,7 @@ class BotClient {
         seat: meKey,
         ts: Date.now(),
       });
+      this._emitBotToast(null, castLog(meKey, cardName));
 
       // 5. magicResolve — spell resolves (after delay for human to see)
       setTimeout(() => {
@@ -1965,7 +1973,7 @@ class BotClient {
       }
       // Spell cast
       if (patch._spellCast) {
-        return `Cast ${patch._spellCast.name || "a spell"}`;
+        return `Cast ${patch._spellCard?.name || "a spell"}`;
       }
       // End turn
       if (typeof patch.currentPlayer === "number" && !patch.permanents && !patch.board) {
@@ -2044,6 +2052,8 @@ class BotClient {
         : unit.target.kind === "permanent" && unit.at === toKey && unit.target.index === meta.attackerIndex);
       if (!attacker) return;
       const target = cpuSpells.getAttackTargets(this._game, attacker)[0]?.target;
+      // Log the move or attack itself; the checks below only skip the combat or intercept prompt.
+      if (this._hasHumanOpponent()) this._emitBotToast(null, combatLog(this._game, attacker, target, meKey, this._game.board?.size));
       const attackingEntity = attacker.target.kind === "avatar" ? this._game.avatars[attacker.target.seat] : this._game.permanents[attacker.at][attacker.target.index];
       if (!target && attackingEntity?.cpuTurnEffect?.blaze && attackingEntity.cpuTurnEffect.turn === `${this._game.turn}:${this._game.currentPlayer}`) return;
       if (!target && !this._hasHumanOpponent()) return;
@@ -2074,6 +2084,9 @@ class BotClient {
         playerKey: meKey,
         ts: Date.now(),
       });
+      if (!target) {
+        this._emitBotToast(tileLabel(`${attacker.card.name} moved to ${toKey}: intercept it or let it pass`, this._game.board?.size || { w: 5, h: 4 }));
+      }
 
       // Track this combat — we're the attacker
       this._pendingResolutions.add(combatId);
@@ -3152,7 +3165,10 @@ class BotClient {
           const id = `cpu_ability_${Date.now()}_${Math.random().toString(36).slice(2)}`;
           this._pendingResolutions.add(id);
           this._turnActionCount.set(turnKey,actionCount+1);
-          this.socket.emit("message",{type:"cpuActivateAbility",id,key:ability.key});
+          // Announce the ability, then give the human a beat before it lands. A choice that went
+          // stale meanwhile is rejected by the human store, which still releases this lock.
+          this._emitBotToast(ability.label, abilityLog(meKey, ability.source.card.name));
+          this._scheduleResolution(() => this.socket.emit("message",{type:"cpuActivateAbility",id,key:ability.key}),1200);
           return;
         }
       }
@@ -3332,7 +3348,7 @@ class BotClient {
                 ? patch  // Engine returned proper endTurnPatch
                 : { currentPlayer: other, phase: "Start" };  // Empty patch, construct end-turn
               this.socket.emit("action", { action: endTurnAction });
-              this._emitBotToast("Ended turn");
+              this._emitBotToast("Ended turn", endTurnLog(meKey));
               // Optimistically apply end-turn locally (server won't echo back to us)
               try { this._mergeGamePatch(endTurnAction); } catch {}
               this._actedTurn.add(turnKey);
@@ -3359,8 +3375,11 @@ class BotClient {
               this._sendCpuAction(toSend, () => {
                 this._turnActionCount.set(turnKey, actionCount + 1);
                 // Emit toast so the human player can see what the bot did
-                const toastMsg = this._describePatch(patch);
-                if (toastMsg) this._emitBotToast(toastMsg);
+                // A spell announces itself from the magic flow instead.
+                const toastMsg = patch._spellCast && this._hasHumanOpponent() ? null : this._describePatch(patch);
+                // A card played from hand already toasts "Played 'X'" below, so it only adds its log line.
+                const logLine = playLog(patch, meKey, this._game.board?.size);
+                if (toastMsg || logLine) this._emitBotToast(logLine ? null : toastMsg, logLine);
                 // Human matches use the authoritative echo; legacy bot matches
                 // still apply their own patch locally.
                 if (!this._hasHumanOpponent()) this._mergeGamePatch(patch);

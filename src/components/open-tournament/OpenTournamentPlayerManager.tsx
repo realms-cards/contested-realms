@@ -198,6 +198,7 @@ export function OpenTournamentPlayerManager({
                     </span>
                   ) : (
                     <RcButton
+                      variant="outline"
                       size="sm"
                       onClick={() => handleInvitePlayer(player)}
                       disabled={adding === player.userId}
@@ -235,7 +236,7 @@ export function OpenTournamentPlayerManager({
                 </div>
                 {isHost && isActive && (
                   <RcButton
-                    variant="destructive"
+                    variant="danger-soft"
                     size="sm"
                     onClick={() => handleRemovePlayer(reg.playerId)}
                     title="Remove player"

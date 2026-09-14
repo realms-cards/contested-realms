@@ -264,7 +264,12 @@ export default function LobbyChatConsole({
             }}
           />
         </div>
-        <RcButton onClick={handleSend} disabled={!canSend} className="h-10">
+        <RcButton
+          variant="outline"
+          onClick={handleSend}
+          disabled={!canSend}
+          className="h-10"
+        >
           Send
         </RcButton>
       </div>

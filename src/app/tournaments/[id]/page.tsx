@@ -1218,7 +1218,7 @@ export default function TournamentDetailsPage() {
       case "preparing":
         return "warn";
       case "active":
-        return "gold";
+        return "info";
       case "completed":
         return "default";
       case "cancelled":
@@ -1315,7 +1315,7 @@ export default function TournamentDetailsPage() {
       <FloatingChat tournamentId={tournamentId} />
       {/* Toast overlay */}
       {toast && (
-        <div className="rc-panel fixed bottom-4 left-1/2 z-50 -translate-x-1/2 px-4 py-2 font-rc-mono text-xs tracking-[0.08em] text-rc-fg">
+        <div className="rc-toast fixed bottom-4 left-1/2 z-50 -translate-x-1/2 px-4 py-2 font-rc-mono text-xs tracking-[0.08em]">
           {toast}
         </div>
       )}
@@ -1505,7 +1505,7 @@ export default function TournamentDetailsPage() {
               {tournament.status}
             </Badge>
             {activeRoundNumber != null && (
-              <Badge tone="gold">Round {activeRoundNumber}</Badge>
+              <Badge tone="info">Round {activeRoundNumber}</Badge>
             )}
             {isOpenSeat && (
               <Badge tone={isRegistrationLocked ? "warn" : "default"}>
@@ -2117,6 +2117,7 @@ export default function TournamentDetailsPage() {
                           disabled={curiosaImporting}
                         />
                         <RcButton
+                          variant="outline"
                           size="sm"
                           disabled={curiosaImporting || !curiosaUrl.trim()}
                           onClick={async () => {
@@ -2254,6 +2255,7 @@ export default function TournamentDetailsPage() {
                                   </span>
                                 ) : (
                                   <RcButton
+                                    variant="outline"
                                     size="sm"
                                     onClick={() =>
                                       handleSubmitConstructedDeck(d.id, false)
@@ -2308,6 +2310,7 @@ export default function TournamentDetailsPage() {
                                     </span>
                                   ) : (
                                     <RcButton
+                                      variant="outline"
                                       size="sm"
                                       onClick={() =>
                                         handleSubmitConstructedDeck(d.id, true)
@@ -2464,6 +2467,7 @@ export default function TournamentDetailsPage() {
                             </div>
                             {isMine && !isCompleted && (
                               <RcButton
+                                variant="outline"
                                 size="sm"
                                 onClick={() => startJoinMatch(String(m.id))}
                               >
@@ -2499,10 +2503,7 @@ export default function TournamentDetailsPage() {
               />
               <div className="flex flex-wrap items-center justify-between gap-3 px-[18px] py-3.5">
                 <div className="flex items-center gap-3">
-                  <label
-                    htmlFor="draft-pod-size"
-                    className="font-rc-mono text-[11px] uppercase tracking-[0.16em] text-rc-fg-muted"
-                  >
+                  <label htmlFor="draft-pod-size" className="rc-field-label">
                     Pod size
                   </label>
                   <select
@@ -2976,6 +2977,7 @@ export default function TournamentDetailsPage() {
                   <PanelHeader title="Round Management">
                     {statistics.rounds.some((r) => r.status === "pending") && (
                       <RcButton
+                        variant="outline"
                         size="sm"
                         onClick={handleStartNextRound}
                         disabled={startingRound}
@@ -3102,7 +3104,7 @@ export default function TournamentDetailsPage() {
               tournament.status !== "completed" &&
               !isCreator && (
                 <RcButton
-                  variant="destructive"
+                  variant="danger-soft"
                   onClick={async () => {
                     const ok = window.confirm("Forfeit this tournament now?");
                     if (!ok) return;
@@ -3157,7 +3159,7 @@ export default function TournamentDetailsPage() {
 
             {isCreator && tournament.status !== "completed" && (
               <RcButton
-                variant="destructive"
+                variant="danger-soft"
                 onClick={handleEndTournament}
                 title="End this tournament now"
               >
@@ -3278,6 +3280,7 @@ export default function TournamentDetailsPage() {
                                 </span>
                               ) : (
                                 <RcButton
+                                  variant="outline"
                                   size="sm"
                                   onClick={async () => {
                                     await handleSubmitConstructedDeck(
@@ -3325,6 +3328,7 @@ export default function TournamentDetailsPage() {
                                 </span>
                               ) : (
                                 <RcButton
+                                  variant="outline"
                                   size="sm"
                                   onClick={async () => {
                                     await handleSubmitConstructedDeck(

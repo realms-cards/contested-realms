@@ -1,10 +1,11 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import { Check, Loader2, AlertCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 
-const LEAGUE_EMOJIS: Record<string, string> = {
-  "sorcerers-summit": "\u26F0\uFE0F",
+const LEAGUE_ICONS: Record<string, string> = {
+  "sorcerers-summit": "game-icons:mountains",
 };
 
 interface LeagueReport {
@@ -82,8 +83,8 @@ export function LeagueReportStatus({ matchId }: LeagueReportStatusProps) {
   if (reports.length === 0) return null;
 
   return (
-    <div className="bg-violet-900/20 border border-violet-700/40 rounded-lg p-3 text-sm">
-      <div className="text-xs text-violet-300/70 mb-2 font-medium">
+    <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-3 font-rc-sans text-sm">
+      <div className="rc-eyebrow mb-2">
         League Reports
       </div>
       <div className="space-y-1.5">
@@ -92,29 +93,33 @@ export function LeagueReportStatus({ matchId }: LeagueReportStatusProps) {
             key={report.leagueSlug}
             className="flex items-center justify-between gap-2"
           >
-            <span className="flex items-center gap-1.5 text-stone-200">
-              <span>
-                {LEAGUE_EMOJIS[report.leagueSlug] || "\uD83C\uDFC6"}
-              </span>
+            <span className="flex items-center gap-1.5 text-rc-fg">
+              <Icon
+                icon={LEAGUE_ICONS[report.leagueSlug] || "game-icons:laurels-trophy"}
+                width={14}
+                height={14}
+                className="text-rc-accent-link"
+                aria-hidden="true"
+              />
               {report.leagueName}
             </span>
             <span className="flex items-center gap-1">
               {report.status === "sent" && (
                 <>
-                  <Check className="w-3.5 h-3.5 text-green-400" />
-                  <span className="text-xs text-green-400">Reported</span>
+                  <Check className="w-3.5 h-3.5 text-rc-success" />
+                  <span className="font-rc-mono text-xs text-rc-success">Reported</span>
                 </>
               )}
               {report.status === "pending" && (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 text-yellow-400 animate-spin" />
-                  <span className="text-xs text-yellow-400">Sending...</span>
+                  <Loader2 className="w-3.5 h-3.5 text-rc-warning animate-spin" />
+                  <span className="font-rc-mono text-xs text-rc-warning">Sending...</span>
                 </>
               )}
               {report.status === "failed" && (
                 <>
-                  <AlertCircle className="w-3.5 h-3.5 text-red-400" />
-                  <span className="text-xs text-red-400">Failed</span>
+                  <AlertCircle className="w-3.5 h-3.5 text-rc-danger" />
+                  <span className="font-rc-mono text-xs text-rc-danger">Failed</span>
                 </>
               )}
             </span>

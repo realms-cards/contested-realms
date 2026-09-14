@@ -293,7 +293,7 @@ export function useBotActionToastListener(
       if (!message) return;
       window.dispatchEvent(
         new CustomEvent("app:toast", {
-          detail: { message: `🤖 ${message}` },
+          detail: { message: `CPU: ${message}` },
         })
       );
     });

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 
 /**
@@ -36,9 +37,9 @@ export default function PrivateHandTargetingOverlay() {
 
   return (
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] pointer-events-auto">
-      <div className="bg-slate-900/95 border border-purple-500/50 rounded-lg shadow-lg p-3 flex items-center gap-3">
+      <div className="rounded-rc-md border border-rc-line/18 bg-[rgba(9,13,25,0.95)] font-rc-sans text-rc-fg shadow-rc-panel p-3 flex items-center gap-3">
         {/* Card thumbnail */}
-        <div className="relative w-12 h-16 rounded overflow-hidden border border-purple-400/30">
+        <div className="relative w-12 h-16 rounded-rc-sm overflow-hidden shadow-rc-md ring-1 ring-rc-line/25">
           {imageId ? (
             <Image
               src={`/api/images/${imageId}`}
@@ -48,7 +49,7 @@ export default function PrivateHandTargetingOverlay() {
               sizes="48px"
             />
           ) : (
-            <div className="w-full h-full bg-purple-900/50 flex items-center justify-center text-xs text-purple-300">
+            <div className="w-full h-full rounded-rc-sm border border-rc-line/12 bg-black/30 flex items-center justify-center text-xs text-rc-fg-subtle">
               ?
             </div>
           )}
@@ -56,20 +57,22 @@ export default function PrivateHandTargetingOverlay() {
 
         {/* Info */}
         <div className="flex flex-col">
-          <span className="text-purple-300 text-xs">{sourceName}</span>
-          <span className="text-white font-medium">
+          <span className="font-rc-display text-rc-accent-link text-xs">{sourceName}</span>
+          <span className="font-rc-display text-rc-fg-strong">
             {card.name || "Unknown"}
           </span>
-          <span className="text-slate-400 text-sm">{instruction}</span>
+          <span className="text-rc-fg-muted text-sm">{instruction}</span>
         </div>
 
         {/* Cancel button */}
-        <button
+        <RcButton
+          variant="outline"
+          size="xs"
           onClick={() => setPendingPrivateHandCast(null)}
-          className="ml-2 px-3 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded text-sm transition-colors"
+          className="ml-2"
         >
           Cancel
-        </button>
+        </RcButton>
       </div>
     </div>
   );

@@ -18,6 +18,7 @@ import {
   SkipBack,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useMusicPlayer } from "@/hooks/useMusicPlayer";
 import type { SfxGroup } from "@/lib/audio/soundManager";
 import { useSound } from "@/lib/contexts/SoundContext";
@@ -73,8 +74,8 @@ export default function AudioControls({ enableMusic = true }: AudioControlsProps
       {!isExpanded && (
         <button
           onClick={() => setIsExpanded(true)}
-          className={`text-white/70 hover:text-white transition-colors p-1 ${
-            waitingForGesture ? "animate-pulse text-rc-accent-ring" : ""
+          className={`hover:text-rc-fg-strong transition-colors p-1 ${
+            waitingForGesture ? "animate-pulse text-rc-accent-ring" : "text-rc-fg-muted"
           }`}
           title={
             waitingForGesture
@@ -90,13 +91,13 @@ export default function AudioControls({ enableMusic = true }: AudioControlsProps
       {/* Expanded State: Full controls */}
       {isExpanded && (
         <div
-          className="absolute top-full right-0 mt-2 p-4 rounded-lg bg-slate-900/95 backdrop-blur-md border border-slate-700/50 shadow-xl min-w-[320px] z-50"
+          className="absolute top-full right-0 mt-2 p-4 rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] text-rc-fg backdrop-blur-md shadow-rc-panel min-w-[320px] z-50"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Close button */}
           <button
             onClick={() => setIsExpanded(false)}
-            className="absolute top-2 right-2 text-slate-400 hover:text-white transition-colors"
+            className="absolute top-2 right-2 rounded-rc-md px-1 text-rc-fg-muted hover:bg-rc-line/6 hover:text-rc-fg-strong transition-colors"
             aria-label="Close audio controls"
           >
             ×
@@ -107,14 +108,14 @@ export default function AudioControls({ enableMusic = true }: AudioControlsProps
             <>
               <div className="mb-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Music className="w-4 h-4 text-slate-300" />
-                  <span className="text-sm font-medium text-slate-200">Music</span>
+                  <Music className="w-4 h-4 text-rc-accent-link" />
+                  <span className="rc-eyebrow">Music</span>
                 </div>
 
                 {/* Current Track */}
-                <div className="text-xs text-slate-400 mb-2">
+                <div className="font-rc-sans text-xs text-rc-fg-muted mb-2">
                   {musicState.currentTrack.title}
-                  <span className="ml-2">
+                  <span className="ml-2 font-rc-mono tabular-nums text-rc-fg-subtle">
                     ({musicState.currentTrackIndex + 1} / {MUSIC_TRACKS.length})
                   </span>
                 </div>
@@ -123,21 +124,17 @@ export default function AudioControls({ enableMusic = true }: AudioControlsProps
                 <div className="flex items-center gap-2 mb-2">
                   <button
                     onClick={musicControls.previousTrack}
-                    className="p-1.5 rounded hover:bg-slate-800/60 text-slate-300 hover:text-slate-100 transition-colors"
+                    className="p-1.5 rounded-rc-md text-rc-fg-muted hover:bg-rc-line/6 hover:text-rc-fg-strong transition-colors"
                     title="Previous track"
                     aria-label="Previous track"
                   >
                     <SkipBack className="w-4 h-4" />
                   </button>
 
-                  <button
-                    onClick={() => {
-                      if (!musicState.isEnabled) {
-                        musicControls.toggleEnabled();
-                      }
-                      musicControls.togglePlay();
-                    }}
-                    className="p-2 rounded-full bg-slate-700/50 hover:bg-slate-600/50 text-slate-100 transition-colors"
+                  <RcButton
+                    size="icon-xs"
+                    onClick={musicControls.togglePlay}
+                    className="h-[34px] w-[34px] rounded-full"
                     title={musicState.isPlaying ? "Pause" : "Play"}
                     aria-label={musicState.isPlaying ? "Pause music" : "Play music"}
                   >
@@ -146,11 +143,11 @@ export default function AudioControls({ enableMusic = true }: AudioControlsProps
                     ) : (
                       <Play className="w-4 h-4" fill="currentColor" />
                     )}
-                  </button>
+                  </RcButton>
 
                   <button
                     onClick={musicControls.nextTrack}
-                    className="p-1.5 rounded hover:bg-slate-800/60 text-slate-300 hover:text-slate-100 transition-colors"
+                    className="p-1.5 rounded-rc-md text-rc-fg-muted hover:bg-rc-line/6 hover:text-rc-fg-strong transition-colors"
                     title="Next track"
                     aria-label="Next track"
                   >
@@ -164,7 +161,7 @@ export default function AudioControls({ enableMusic = true }: AudioControlsProps
                     onClick={() =>
                       musicControls.setVolume(musicState.volume > 0 ? 0 : 0.7)
                     }
-                    className="text-slate-300 hover:text-slate-100 transition-colors"
+                    className="text-rc-fg-muted hover:text-rc-fg-strong transition-colors"
                     aria-label={musicState.volume === 0 ? "Unmute music" : "Mute music"}
                   >
                     {musicState.volume === 0 ? (
@@ -182,34 +179,31 @@ export default function AudioControls({ enableMusic = true }: AudioControlsProps
                     onChange={(e) =>
                       musicControls.setVolume(parseInt(e.target.value) / 100)
                     }
-                    className="flex-1 h-1 rounded-full appearance-none cursor-pointer bg-slate-700
-                      [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
-                      [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-slate-300
-                      [&::-webkit-slider-thumb]:hover:bg-slate-100 [&::-webkit-slider-thumb]:transition-colors
-                      [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full
-                      [&::-moz-range-thumb]:bg-slate-300 [&::-moz-range-thumb]:hover:bg-slate-100
-                      [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:transition-colors"
+                    className="rc-range flex-1"
                     title={`Music volume: ${Math.round(musicState.volume * 100)}%`}
                     aria-label="Music volume slider"
                   />
 
-                  <div className="text-xs text-slate-400 w-8 text-right">
+                  <div className="font-rc-mono text-xs tabular-nums text-rc-fg-subtle w-8 text-right">
                     {Math.round(musicState.volume * 100)}%
                   </div>
                 </div>
 
                 {/* Track List */}
                 <div className="mt-2 relative">
-                  <button
+                  <RcButton
+                    variant="quiet"
+                    size="xs"
                     onClick={() => setShowTrackList(!showTrackList)}
-                    className="w-full px-2 py-1.5 rounded bg-slate-800/40 hover:bg-slate-800/60 border border-slate-700/50 text-xs text-slate-300 text-left transition-colors"
+                    className="h-[30px] w-full justify-start rounded-rc-md px-2 font-rc-mono tracking-[0.08em]"
                     aria-label="Select track"
+                    aria-pressed={showTrackList}
                   >
                     Track List
-                  </button>
+                  </RcButton>
 
                   {showTrackList && (
-                    <div className="absolute top-full mt-2 left-0 right-0 max-h-48 overflow-y-auto bg-slate-900/95 backdrop-blur-md border border-slate-700/50 rounded-lg shadow-xl z-10">
+                    <div className="thin-scrollbar absolute top-full mt-2 left-0 right-0 max-h-48 overflow-y-auto rounded-rc-md border border-rc-line/18 bg-[rgba(9,13,25,0.95)] backdrop-blur-md shadow-rc-panel z-10">
                       {MUSIC_TRACKS.map((track, index) => (
                         <button
                           key={track.filename}
@@ -217,10 +211,10 @@ export default function AudioControls({ enableMusic = true }: AudioControlsProps
                             musicControls.selectTrack(index);
                             setShowTrackList(false);
                           }}
-                          className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-800/60 transition-colors ${
+                          className={`w-full px-3 py-2 text-left font-rc-sans text-xs hover:bg-rc-accent/8 transition-colors ${
                             index === musicState.currentTrackIndex
-                              ? "bg-slate-700/50 text-slate-100 font-medium"
-                              : "text-slate-300"
+                              ? "bg-rc-accent/12 text-rc-spark font-medium"
+                              : "text-rc-fg-muted hover:text-rc-fg-strong"
                           }`}
                         >
                           <div className="truncate">{track.title}</div>
@@ -232,15 +226,15 @@ export default function AudioControls({ enableMusic = true }: AudioControlsProps
               </div>
 
               {/* Divider */}
-              <div className="border-t border-slate-700/50 my-3" />
+              <div className="border-t border-rc-line/12 my-3" />
             </>
           )}
 
           {/* Sound Section */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <Volume2 className="w-4 h-4 text-slate-300" />
-              <span className="text-sm font-medium text-slate-200">
+              <Volume2 className="w-4 h-4 text-rc-accent-link" />
+              <span className="rc-eyebrow">
                 Sound Effects
               </span>
             </div>
@@ -249,7 +243,7 @@ export default function AudioControls({ enableMusic = true }: AudioControlsProps
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setSoundVolume(soundVolume > 0 ? 0 : 0.7)}
-                className="text-slate-300 hover:text-slate-100 transition-colors"
+                className="text-rc-fg-muted hover:text-rc-fg-strong transition-colors"
                 aria-label={soundVolume === 0 ? "Unmute sounds" : "Mute sounds"}
               >
                 {soundVolume === 0 ? (
@@ -265,18 +259,12 @@ export default function AudioControls({ enableMusic = true }: AudioControlsProps
                 max="100"
                 value={soundVolume * 100}
                 onChange={(e) => setSoundVolume(parseInt(e.target.value) / 100)}
-                className="flex-1 h-1 rounded-full appearance-none cursor-pointer bg-slate-700
-                  [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
-                  [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-slate-300
-                  [&::-webkit-slider-thumb]:hover:bg-slate-100 [&::-webkit-slider-thumb]:transition-colors
-                  [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full
-                  [&::-moz-range-thumb]:bg-slate-300 [&::-moz-range-thumb]:hover:bg-slate-100
-                  [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:transition-colors"
+                className="rc-range flex-1"
                 title={`Sound volume: ${Math.round(soundVolume * 100)}%`}
                 aria-label="Sound volume slider"
               />
 
-              <div className="text-xs text-slate-400 w-8 text-right">
+              <div className="font-rc-mono text-xs tabular-nums text-rc-fg-subtle w-8 text-right">
                 {Math.round(soundVolume * 100)}%
               </div>
             </div>
@@ -290,13 +278,12 @@ export default function AudioControls({ enableMusic = true }: AudioControlsProps
               {SFX_GROUP_OPTIONS.map((option) => (
                 <label
                   key={option.group}
-                  className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none"
+                  className="rc-check select-none"
                   title={option.hint}
                 >
                   <input
                     id={`sfx-group-${option.group}`}
                     type="checkbox"
-                    className="accent-amber-400"
                     checked={mix[option.group]}
                     onChange={(e) => setMixGroup(option.group, e.target.checked)}
                   />

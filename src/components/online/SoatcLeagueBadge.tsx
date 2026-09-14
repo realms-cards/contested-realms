@@ -12,11 +12,10 @@ export function SoatcLeagueBadge({
   if (compact) {
     return (
       <span
-        className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium
-                   bg-amber-600/20 text-amber-300 rounded border border-amber-500/30"
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 font-rc-mono text-[10px] font-medium tracking-[0.12em]
+                   bg-rc-accent/16 text-rc-accent-link rounded-rc-sm border border-rc-accent/35"
         title={tournamentName || "SATC League Participant"}
       >
-        <span className="text-[10px] leading-none">🔘</span>
         SATC
       </span>
     );
@@ -24,14 +23,13 @@ export function SoatcLeagueBadge({
 
   return (
     <div
-      className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium
-                 bg-gradient-to-r from-amber-600/20 to-amber-500/10
-                 text-amber-200 rounded-lg border border-amber-500/30"
+      className="inline-flex items-center gap-1.5 px-2 py-1 font-rc-mono text-xs font-medium
+                 bg-rc-accent/12
+                 text-rc-accent-link rounded-rc-md border border-rc-accent/35"
     >
-      <span className="text-sm leading-none">🔘</span>
       <span>SATC League</span>
       {tournamentName && (
-        <span className="text-amber-400/70 text-[10px]">
+        <span className="text-rc-fg-subtle text-[10px]">
           • {tournamentName}
         </span>
       )}
@@ -54,11 +52,11 @@ export function SoatcLeagueCheckbox({
 }: SoatcLeagueCheckboxProps) {
   return (
     <label
-      className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors
+      className={`flex items-center gap-2 px-3 py-2 rounded-rc-md border transition-colors
                   ${
                     checked
-                      ? "bg-amber-600/20 border-amber-500/50"
-                      : "bg-slate-800/50 border-slate-700 hover:border-slate-600"
+                      ? "bg-rc-accent/8 border-rc-accent/35"
+                      : "bg-black/30 border-rc-line/12 hover:border-rc-accent/40"
                   }
                   ${
                     disabled
@@ -71,20 +69,19 @@ export function SoatcLeagueCheckbox({
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
         disabled={disabled}
-        className="rounded border-amber-500 text-amber-500 focus:ring-amber-500 
+        className="accent-rc-accent
                    disabled:opacity-50 disabled:cursor-not-allowed"
       />
-      <span className="text-base leading-none">🔘</span>
       <div className="flex flex-col">
         <span
-          className={`text-sm font-medium ${
-            checked ? "text-amber-200" : "text-slate-300"
+          className={`font-rc-sans text-sm font-medium ${
+            checked ? "text-rc-fg-strong" : "text-rc-fg-muted"
           }`}
         >
           Count as SATC League Match
         </span>
         {tournamentName && (
-          <span className="text-xs text-slate-400">{tournamentName}</span>
+          <span className="font-rc-sans text-xs text-rc-fg-subtle">{tournamentName}</span>
         )}
       </div>
     </label>

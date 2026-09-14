@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { RcLinkButton } from "@/components/ui/rc-button";
 
 // Prevent static generation to avoid drei Html detection during build
 export const dynamic = "force-dynamic";
@@ -13,12 +13,9 @@ export default function NotFound() {
       <p className="mt-3 font-rc-mono text-xs tracking-[0.1em] text-rc-fg-subtle">
         The page you are looking for was never summoned, or has been banished.
       </p>
-      <Link
-        href="/"
-        className="mt-7 inline-flex h-[38px] items-center justify-center rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent px-[18px] font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px"
-      >
+      <RcLinkButton href="/" className="mt-7">
         Return home
-      </Link>
+      </RcLinkButton>
     </div>
   );
 }

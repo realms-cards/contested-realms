@@ -353,7 +353,7 @@ export default function PlayersInvitePanel({
           Players
         </h2>
         {pendingInvites > 0 && (
-          <Badge tone="gold">
+          <Badge tone="info">
             {pendingInvites} invite{pendingInvites > 1 ? "s" : ""}
           </Badge>
         )}

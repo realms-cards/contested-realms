@@ -118,7 +118,7 @@ export default function CardWithPreview({
       onClick={interactive ? onClick : undefined}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`relative aspect-[2.5/3.5] ${sizeClass} rounded-lg overflow-hidden transition-all ${
+      className={`relative aspect-[2.5/3.5] ${sizeClass} rounded-rc-md overflow-hidden transition-all ${
         interactive
           ? `cursor-pointer hover:scale-105 hover:ring-2 ${accent.hover}`
           : ""
@@ -133,7 +133,7 @@ export default function CardWithPreview({
       />
       {showName && (
         <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent p-1">
-          <p className="text-white text-[10px] text-center truncate">
+          <p className="font-rc-display text-rc-fg-strong text-[10px] text-center truncate">
             {card.name}
           </p>
         </div>
@@ -146,7 +146,7 @@ export default function CardWithPreview({
             className={`${accent.selected.replace(
               "ring-",
               "bg-"
-            )} text-white font-bold px-1 py-0.5 rounded text-[10px]`}
+            )} font-rc-mono font-semibold text-rc-fg-strong px-1 py-0.5 rounded-rc-sm text-[10px]`}
           >
             ✓
           </div>

@@ -100,7 +100,7 @@ export default function RevealOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm cursor-pointer"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.8)] backdrop-blur-sm cursor-pointer"
       style={
         closing
           ? {
@@ -118,17 +118,17 @@ export default function RevealOverlay({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="mb-4 text-center">
-          <h2 className="text-2xl font-fantaisie text-white mb-1">{title}</h2>
+        <div className="mb-4 text-center font-rc-sans">
+          <h2 className="mb-1 font-rc-display text-[26px] leading-tight text-rc-fg-strong">{title}</h2>
           {isOpponentReveal && revealedBy && (
-            <p className="text-amber-300 text-sm">
+            <p className="text-rc-accent-link text-sm">
               Your opponent revealed{" "}
               {cardsToRender.length === 1
                 ? "a card"
                 : `${cardsToRender.length} cards`}
             </p>
           )}
-          <p className="text-white/50 text-xs mt-1">
+          <p className="text-rc-fg-subtle text-xs mt-1">
             Click anywhere to dismiss
           </p>
         </div>
@@ -142,7 +142,7 @@ export default function RevealOverlay({
           {cardsToRender.map((card, index) => (
             <div
               key={`${card.cardId}-${index}`}
-              className="relative w-48 aspect-[2.5/3.5] rounded-lg overflow-hidden ring-1 ring-white/20 shadow-2xl"
+              className="relative w-48 aspect-[2.5/3.5] rounded-rc-md overflow-hidden ring-1 ring-rc-line/25 shadow-rc-md"
               style={{
                 animation: `revealCardIn 0.3s ease-out ${index * 0.1}s both`,
               }}
@@ -155,7 +155,7 @@ export default function RevealOverlay({
                 unoptimized
               />
               <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                <p className="text-white text-sm text-center font-medium truncate">
+                <p className="font-rc-display text-rc-accent-link text-sm text-center truncate">
                   {card.name}
                 </p>
               </div>

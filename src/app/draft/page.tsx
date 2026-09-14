@@ -264,7 +264,7 @@ export default function DraftPage() {
         <PanelHeader title="Table setup" meta={setName} />
         <div className="flex flex-wrap items-end gap-4 px-[18px] py-3.5">
           <label className="flex flex-col gap-1.5">
-            <span className="rc-eyebrow">Set</span>
+            <span className="rc-field-label">Set</span>
             <CustomSelect
               value={setName}
               onChange={(v) => setSetName(v)}
@@ -277,7 +277,7 @@ export default function DraftPage() {
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="rc-eyebrow">Players</span>
+            <span className="rc-field-label">Players</span>
             <input
               type="number"
               min={2}
@@ -290,7 +290,11 @@ export default function DraftPage() {
             />
           </label>
 
-          <RcButton onClick={startDraft} disabled={starting}>
+          <RcButton
+            variant={yourPicks.length > 0 ? "outline" : "default"}
+            onClick={startDraft}
+            disabled={starting}
+          >
             {starting ? "Starting…" : "Start draft"}
           </RcButton>
         </div>
@@ -392,7 +396,7 @@ export default function DraftPage() {
           />
           <div className="flex flex-wrap items-end gap-3 px-[18px] py-3.5">
             <label className="flex flex-col gap-1.5">
-              <span className="rc-eyebrow">Deck name</span>
+              <span className="rc-field-label">Deck name</span>
               <input
                 value={deckName}
                 onChange={(e) => setDeckName(e.target.value)}

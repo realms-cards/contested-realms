@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { guidesForcedOn } from "./preferenceState";
 import type { GameState, PlayerKey, SerializedGame } from "./types";
 import {
   loadHistoryFromStorage,
@@ -103,11 +104,15 @@ export const createSessionSlice: StateCreator<
           [key]: localMagic,
           [opponentSeat]: false,
         } as Record<PlayerKey, boolean>;
+        const forced = guidesForcedOn({
+          actorKey: key,
+          opponentPlayerId: state.opponentPlayerId,
+        });
         return {
           combatGuideSeatPrefs: combatPrefs,
-          combatGuidesActive: combatPrefs.p1 && combatPrefs.p2,
+          combatGuidesActive: forced || (combatPrefs.p1 && combatPrefs.p2),
           magicGuideSeatPrefs: magicPrefs,
-          magicGuidesActive: magicPrefs.p1 && magicPrefs.p2,
+          magicGuidesActive: forced || (magicPrefs.p1 && magicPrefs.p2),
         } as Partial<GameState> as GameState;
       });
       try {
@@ -131,5 +136,21 @@ export const createSessionSlice: StateCreator<
 
   opponentPlayerId: null,
   setOpponentPlayerId: (id: string | null) =>
-    set({ opponentPlayerId: id ?? null }),
+    set((state) => {
+      const next = { actorKey: state.actorKey, opponentPlayerId: id ?? null };
+      const forced = guidesForcedOn(next);
+      if (forced === guidesForcedOn(state)) {
+        return { opponentPlayerId: next.opponentPlayerId } as Partial<GameState> as GameState;
+      }
+      // Entering or leaving a vs-CPU match: always-on guides, else the handshake result.
+      return {
+        opponentPlayerId: next.opponentPlayerId,
+        combatGuidesActive:
+          forced ||
+          (!!state.combatGuideSeatPrefs?.p1 && !!state.combatGuideSeatPrefs?.p2),
+        magicGuidesActive:
+          forced ||
+          (!!state.magicGuideSeatPrefs?.p1 && !!state.magicGuideSeatPrefs?.p2),
+      } as Partial<GameState> as GameState;
+    }),
 });

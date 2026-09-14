@@ -1,6 +1,7 @@
 "use client";
 
 import { Modal } from "@/components/ui/Modal";
+import { RcButton } from "@/components/ui/rc-button";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useGameStore } from "@/lib/game/store";
 
@@ -17,33 +18,34 @@ export function EndTurnConfirmDialog() {
   if (!showEndTurnConfirm) return null;
 
   const primaryButtonClass = colorBlindEnabled
-    ? "bg-sky-600 hover:bg-sky-500"
-    : "bg-emerald-600 hover:bg-emerald-500";
+    ? "border-rc-info/60 bg-rc-info text-rc-bg hover:bg-rc-info hover:brightness-110"
+    : "border-rc-success/60 bg-rc-success text-rc-bg hover:bg-rc-success hover:brightness-110";
 
   return (
-    <Modal onClose={dismissEndTurnConfirm} closeOnBackdrop={false}>
-      <div className="bg-gray-900/95 backdrop-blur-sm rounded-lg shadow-xl border border-white/10 p-6 max-w-md">
-        <h3 className="text-lg font-medium text-white mb-3">
+    <Modal onClose={dismissEndTurnConfirm} closeOnBackdrop={false} backdropClassName="bg-[rgba(6,10,20,0.8)]">
+      <div className="max-w-md rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 text-rc-fg shadow-rc-panel backdrop-blur-sm">
+        <h3 className="mb-3 font-rc-display text-[22px] leading-none text-rc-fg-strong">
           End Turn?
         </h3>
-        <p className="text-gray-300 text-sm mb-6">
+        <p className="font-rc-sans text-rc-fg-muted text-sm mb-6">
           Your avatar is still untapped. You might want to{" "}
-          <span className="text-amber-400 font-medium">draw a card</span> or{" "}
-          <span className="text-amber-400 font-medium">play a site</span> first.
+          <span className="text-rc-accent-link font-medium">draw a card</span> or{" "}
+          <span className="text-rc-accent-link font-medium">play a site</span> first.
         </p>
         <div className="flex gap-3 justify-end">
-          <button
+          <RcButton
+            variant="outline"
             onClick={dismissEndTurnConfirm}
-            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors"
           >
             Cancel
-          </button>
-          <button
+          </RcButton>
+          <RcButton
+            variant="secondary"
             onClick={confirmEndTurn}
-            className={`px-4 py-2 rounded-lg ${primaryButtonClass} text-white text-sm font-medium transition-colors`}
+            className={primaryButtonClass}
           >
             End Turn Anyway
-          </button>
+          </RcButton>
         </div>
       </div>
     </Modal>

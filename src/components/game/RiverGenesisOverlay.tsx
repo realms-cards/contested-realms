@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useCallback } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 
 export function RiverGenesisOverlay() {
@@ -47,13 +48,13 @@ export function RiverGenesisOverlay() {
   // If we're not the owner, show a waiting message
   if (!isOwner) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
-        <div className="flex flex-col items-center gap-4">
-          <p className="text-gray-400 text-sm">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.9)]">
+        <div className="flex flex-col items-center gap-4 font-rc-sans">
+          <p className="text-rc-fg-muted text-sm">
             Opponent is looking at their next spell...
           </p>
-          <div className="w-48 h-64 bg-gray-800/50 rounded-lg animate-pulse flex items-center justify-center">
-            <span className="text-gray-600">?</span>
+          <div className="w-48 h-64 rounded-rc-md border border-rc-line/12 bg-black/30 animate-pulse flex items-center justify-center">
+            <span className="text-rc-fg-subtle">?</span>
           </div>
         </div>
       </div>
@@ -63,17 +64,14 @@ export function RiverGenesisOverlay() {
   // No spell to show (should not happen if beginRiverGenesis guards properly)
   if (!topSpell) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
-        <div className="flex flex-col items-center gap-4">
-          <p className="text-gray-400 text-sm">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.9)]">
+        <div className="flex flex-col items-center gap-4 font-rc-sans">
+          <p className="text-rc-fg-muted text-sm">
             {siteName} Genesis: No spells in spellbook
           </p>
-          <button
-            onClick={handleKeepOnTop}
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white text-sm"
-          >
+          <RcButton variant="outline" size="sm" onClick={handleKeepOnTop}>
             Close
-          </button>
+          </RcButton>
         </div>
       </div>
     );
@@ -86,18 +84,18 @@ export function RiverGenesisOverlay() {
     : "/api/assets/cardback_spellbook.png";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
-      <div className="flex flex-col items-center gap-6 max-w-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.9)]">
+      <div className="flex flex-col items-center gap-6 max-w-md font-rc-sans text-rc-fg">
         {/* Title */}
         <div className="text-center">
-          <h2 className="text-lg font-semibold text-cyan-400">{siteName}</h2>
-          <p className="text-gray-400 text-sm mt-1">
+          <h2 className="font-rc-display text-[18px] leading-tight text-rc-fg-strong">{siteName}</h2>
+          <p className="text-rc-fg-muted text-sm mt-1">
             Genesis: Look at your next spell
           </p>
         </div>
 
         {/* Card display */}
-        <div className="relative w-48 h-64 rounded-lg overflow-hidden shadow-2xl border-2 border-cyan-500/50">
+        <div className="relative w-48 h-64 rounded-rc-md overflow-hidden shadow-rc-md ring-1 ring-rc-line/25">
           <Image
             src={imageUrl}
             alt={topSpell.name}
@@ -108,25 +106,19 @@ export function RiverGenesisOverlay() {
         </div>
 
         {/* Card name */}
-        <p className="text-white font-medium">{topSpell.name}</p>
+        <p className="font-rc-display text-rc-accent-link">{topSpell.name}</p>
 
         {/* Choice buttons */}
         <div className="flex gap-4">
-          <button
-            onClick={handleKeepOnTop}
-            className="px-6 py-3 bg-cyan-700 hover:bg-cyan-600 rounded-lg text-white font-medium transition-colors"
-          >
+          <RcButton onClick={handleKeepOnTop}>
             Keep on Top
-          </button>
-          <button
-            onClick={handleMoveToBottom}
-            className="px-6 py-3 bg-amber-700 hover:bg-amber-600 rounded-lg text-white font-medium transition-colors"
-          >
+          </RcButton>
+          <RcButton variant="outline" onClick={handleMoveToBottom}>
             Move to Bottom
-          </button>
+          </RcButton>
         </div>
 
-        <p className="text-gray-600 text-xs">Press Esc to keep on top</p>
+        <p className="text-rc-fg-subtle text-xs">Press Esc to keep on top</p>
       </div>
     </div>
   );

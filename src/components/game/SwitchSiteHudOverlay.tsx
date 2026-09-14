@@ -1,5 +1,6 @@
 "use client";
 
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import { getCellNumber } from "@/lib/game/store/utils/boardHelpers";
 
@@ -38,21 +39,23 @@ export default function SwitchSiteHudOverlay() {
 
     return (
       <div className="fixed inset-x-0 bottom-14 lg:bottom-44 flex justify-center pointer-events-none z-[200] px-3">
-        <div className="pointer-events-auto px-4 py-2 lg:px-5 lg:py-3 rounded-2xl lg:rounded-full bg-black/90 text-white ring-1 ring-amber-500/40 shadow-lg text-sm lg:text-xl flex flex-wrap items-center justify-center gap-2 lg:gap-3 max-w-[95vw]">
-          <span className="text-amber-200">
-            Moving site <span className="font-fantaisie">#{sourceCellNo}</span>{" "}
-            → <span className="font-fantaisie">#{targetCellNo}</span>
+        <div className="pointer-events-auto px-4 py-2 lg:px-5 lg:py-3 rounded-rc-lg lg:rounded-full border border-rc-accent/40 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-sm lg:text-xl flex flex-wrap items-center justify-center gap-2 lg:gap-3 max-w-[95vw]">
+          <span className="text-rc-spark">
+            Moving site <span className="font-rc-mono tabular-nums">#{sourceCellNo}</span>{" "}
+            → <span className="font-rc-mono tabular-nums">#{targetCellNo}</span>
           </span>
-          <span className="opacity-70">|</span>
-          <span className="opacity-80 animate-pulse">
+          <span className="text-rc-fg-dim">|</span>
+          <span className="text-rc-fg-muted animate-pulse">
             Waiting for opponent approval...
           </span>
-          <button
-            className="ml-2 rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-base"
+          <RcButton
+            variant="outline"
+            size="xs"
+            className="ml-2"
             onClick={handleCancel}
           >
             Cancel
-          </button>
+          </RcButton>
         </div>
       </div>
     );
@@ -70,21 +73,23 @@ export default function SwitchSiteHudOverlay() {
 
   return (
     <div className="fixed inset-x-0 bottom-14 lg:bottom-44 flex justify-center pointer-events-none z-[200] px-3">
-      <div className="pointer-events-auto px-4 py-2 lg:px-5 lg:py-3 rounded-2xl lg:rounded-full bg-black/90 text-white ring-1 ring-amber-500/40 shadow-lg text-sm lg:text-xl flex flex-wrap items-center justify-center gap-2 lg:gap-3 max-w-[95vw]">
-        <span className="text-amber-200">
-          Site <span className="font-fantaisie">#{cellNo}</span> selected
+      <div className="pointer-events-auto px-4 py-2 lg:px-5 lg:py-3 rounded-rc-lg lg:rounded-full border border-rc-accent/40 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-sm lg:text-xl flex flex-wrap items-center justify-center gap-2 lg:gap-3 max-w-[95vw]">
+        <span className="text-rc-spark">
+          Site <span className="font-rc-mono tabular-nums">#{cellNo}</span> selected
         </span>
-        <span className="opacity-70">→</span>
-        <span className="opacity-80">
+        <span className="text-rc-fg-dim">→</span>
+        <span className="text-rc-fg-muted">
           Click a void or another site to move/swap
         </span>
-        <button
-          className="ml-2 rounded bg-white/15 hover:bg-white/25 px-3 py-1 text-base"
+        <RcButton
+          variant="outline"
+          size="xs"
+          className="ml-2"
           onClick={handleCancel}
         >
           Cancel
-        </button>
-        <span className="text-xs opacity-50 ml-1">(Esc)</span>
+        </RcButton>
+        <span className="rc-hint ml-1">(Esc)</span>
       </div>
     </div>
   );

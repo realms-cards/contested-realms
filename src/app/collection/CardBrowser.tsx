@@ -317,7 +317,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
         <div className="grid grid-cols-1 gap-3 rounded-rc-md border border-rc-line/18 bg-black/30 p-4 sm:grid-cols-3">
           {/* Set Filter */}
           <div>
-            <div className="rc-eyebrow mb-1.5">Set</div>
+            <div className="rc-field-label mb-1.5">Set</div>
             <CustomSelect
               value={selectedSet}
               onChange={(v) => setSelectedSet(v)}
@@ -331,7 +331,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
 
           {/* Type Filter */}
           <div>
-            <div className="rc-eyebrow mb-1.5">Type</div>
+            <div className="rc-field-label mb-1.5">Type</div>
             <CustomSelect
               value={selectedType}
               onChange={(v) => setSelectedType(v)}
@@ -345,7 +345,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
 
           {/* Subtype Filter */}
           <div>
-            <div className="rc-eyebrow mb-1.5">Subtype/Keyword</div>
+            <div className="rc-field-label mb-1.5">Subtype/Keyword</div>
             <CustomSelect
               value={selectedSubtype}
               onChange={(v) => setSelectedSubtype(v)}
@@ -393,7 +393,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
                 }}
                 className={`${SET_PILL_BASE} ${
                   active
-                    ? "border-rc-accent-press bg-rc-accent text-rc-accent-fg"
+                    ? "border-rc-accent/60 bg-rc-accent/14 text-rc-spark"
                     : "border-rc-line/22 bg-transparent text-rc-fg-muted hover:border-rc-accent hover:text-rc-accent-ring"
                 }`}
               >
@@ -497,7 +497,7 @@ export default function CardBrowser({ onCardAdded }: CardBrowserProps) {
 
                   {/* Hover Overlay */}
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-opacity group-hover:bg-black/55 group-hover:opacity-100">
-                    <RcButton size="sm" tabIndex={-1}>
+                    <RcButton variant="quiet" size="sm" tabIndex={-1}>
                       + Add to Collection
                     </RcButton>
                   </div>

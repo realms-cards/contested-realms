@@ -40,11 +40,11 @@ export default function InterrogatorChoiceOverlay() {
     return (
       <div className="fixed inset-0 z-[200] pointer-events-none">
         <div className="fixed inset-x-0 top-6 z-[201] flex justify-center">
-          <div className="px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-rose-500/50 shadow-lg text-lg flex items-center gap-3">
-            <span className="text-rose-400 font-fantaisie">
-              🔍 {interrogatorAvatarName}
+          <div className="px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg flex items-center gap-3">
+            <span className="font-rc-display text-rc-accent-link">
+              {interrogatorAvatarName}
             </span>
-            <span className="opacity-80">
+            <span className="text-rc-fg-muted">
               Waiting for {victimSeat.toUpperCase()} to respond...
             </span>
           </div>
@@ -56,30 +56,29 @@ export default function InterrogatorChoiceOverlay() {
   return (
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/60 pointer-events-auto" />
+      <div className="fixed inset-0 bg-[rgba(6,10,20,0.6)] pointer-events-auto" />
 
       {/* Choice dialog */}
       <div className="fixed inset-0 flex items-center justify-center pointer-events-auto">
-        <div className="bg-gradient-to-b from-zinc-900 to-black rounded-xl p-6 max-w-md w-full mx-4 ring-1 ring-rose-500/40 shadow-2xl">
+        <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-md w-full mx-4 font-rc-sans text-rc-fg shadow-rc-panel">
           {/* Header */}
           <div className="text-center mb-6">
-            <div className="text-3xl mb-2">🔍</div>
-            <h3 className="text-xl font-semibold text-rose-300 font-fantaisie">
+            <h3 className="font-rc-display text-[22px] leading-tight text-rc-fg-strong">
               Interrogator&apos;s Demand
             </h3>
-            <p className="text-sm text-gray-400 mt-2">
-              <span className="text-amber-300">{attackerName}</span> struck your
+            <p className="text-sm text-rc-fg-muted mt-2">
+              <span className="font-rc-display text-rc-accent-link">{attackerName}</span> struck your
               Avatar!
             </p>
           </div>
 
           {/* Ability description */}
-          <div className="bg-black/50 rounded-lg p-4 mb-6 border border-rose-500/20">
-            <p className="text-sm text-gray-300 text-center">
-              <span className="text-rose-300">{interrogatorAvatarName}</span>
+          <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-4 mb-6">
+            <p className="text-sm text-rc-fg-muted text-center">
+              <span className="font-rc-display text-rc-accent-link">{interrogatorAvatarName}</span>
               &apos;s ability triggers:
             </p>
-            <p className="text-sm text-amber-200 text-center mt-2 italic">
+            <p className="text-sm text-rc-accent-link text-center mt-2 italic">
               &ldquo;Draw a spell unless they pay {INTERROGATOR_LIFE_COST}{" "}
               life.&rdquo;
             </p>
@@ -87,8 +86,8 @@ export default function InterrogatorChoiceOverlay() {
 
           {/* Current life display */}
           <div className="text-center mb-4">
-            <span className="text-sm text-gray-400">Your current life:</span>
-            <span className="ml-2 text-lg font-bold text-white">
+            <span className="text-sm text-rc-fg-muted">Your current life:</span>
+            <span className="ml-2 font-rc-mono text-lg font-bold tabular-nums text-rc-fg-strong">
               {victimLife}
             </span>
           </div>
@@ -100,21 +99,20 @@ export default function InterrogatorChoiceOverlay() {
               onClick={() => resolveChoice("pay")}
               disabled={!canPay}
               className={`
-                w-full py-3 px-4 rounded-lg font-medium text-sm
-                transition-all duration-200
+                w-full py-3 px-4 rounded-rc-md border font-medium text-sm
+                transition-colors duration-200
                 ${
                   canPay
-                    ? "bg-rose-600 hover:bg-rose-500 text-white ring-1 ring-rose-400/50 hover:ring-rose-400"
-                    : "bg-gray-700 text-gray-500 cursor-not-allowed"
+                    ? "border-rc-line/18 bg-black/30 text-rc-fg-strong hover:border-rc-accent/60 hover:bg-rc-accent/8"
+                    : "border-rc-line/10 bg-black/20 text-rc-fg-subtle cursor-not-allowed opacity-50"
                 }
               `}
             >
               <div className="flex items-center justify-center gap-2">
-                <span>💔</span>
                 <span>Pay {INTERROGATOR_LIFE_COST} Life to Prevent Draw</span>
               </div>
               {!canPay && (
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-rc-fg-subtle mt-1">
                   (Not enough life)
                 </div>
               )}
@@ -124,14 +122,13 @@ export default function InterrogatorChoiceOverlay() {
             <button
               onClick={() => resolveChoice("allow")}
               className="
-                w-full py-3 px-4 rounded-lg font-medium text-sm
-                bg-amber-600 hover:bg-amber-500 text-white
-                ring-1 ring-amber-400/50 hover:ring-amber-400
-                transition-all duration-200
+                w-full py-3 px-4 rounded-rc-md border font-medium text-sm
+                border-rc-accent/45 bg-rc-accent/8 text-rc-accent-link
+                hover:border-rc-accent hover:bg-rc-accent/12
+                transition-colors duration-200
               "
             >
               <div className="flex items-center justify-center gap-2">
-                <span>📜</span>
                 <span>
                   Allow {interrogatorSeat.toUpperCase()} to Draw a Spell
                 </span>
@@ -140,7 +137,7 @@ export default function InterrogatorChoiceOverlay() {
           </div>
 
           {/* Hint */}
-          <p className="text-xs text-gray-500 text-center mt-4">
+          <p className="text-xs text-rc-fg-subtle text-center mt-4">
             {canPay
               ? "Choose wisely - a drawn spell could be game-changing!"
               : "You don't have enough life to pay, so you must allow the draw."}

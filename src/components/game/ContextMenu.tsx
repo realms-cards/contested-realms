@@ -2,6 +2,7 @@
 import { Icon } from "@iconify/react";
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { RcButton } from "@/components/ui/rc-button";
 import { useSound } from "@/lib/contexts/SoundContext";
 import {
   isNecromancer,
@@ -21,7 +22,6 @@ import {
   detectCarryAbilitySync,
   detectLanceAbility,
   detectLanceAbilitySync,
-  detectRangedAbilitySync,
   detectStealthAbility,
   detectStealthAbilitySync,
   detectWardAbility,
@@ -30,6 +30,11 @@ import {
 import AttachmentTargetSelectionDialog, {
   type AttachmentTarget,
 } from "@/lib/game/components/AttachmentTargetSelectionDialog";
+import {
+  rangedAttack,
+  stationaryAttack,
+  type AttackSource,
+} from "@/lib/game/cpu/stationaryAttack";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store";
 import { isMergedTower } from "@/lib/game/store/babelTowerState";
@@ -78,7 +83,7 @@ function MenuBtn({
   icon,
   label,
   onClick,
-  className = "bg-white/10 hover:bg-white/20",
+  className = "bg-rc-line/6 hover:bg-rc-accent/14",
   disabled,
   title,
 }: MenuBtnProps) {
@@ -99,14 +104,14 @@ function MenuBtn({
             if (r) setTipPos({ x: r.left + r.width / 2, y: r.bottom });
           }}
           onMouseLeave={() => setTipPos(null)}
-          className={`rounded ${className} p-2 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed`}
+          className={`rounded-rc-md ${className} p-2 flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed`}
         >
           <Icon icon={icon} width={20} height={20} />
         </button>
         {tipPos &&
           createPortal(
             <div
-              className="pointer-events-none fixed z-[9999] px-2 py-0.5 rounded bg-black/90 text-white text-xs whitespace-nowrap -translate-x-1/2 mt-1"
+              className="pointer-events-none fixed z-[9999] px-2 py-0.5 rounded-rc-sm border border-rc-line/18 bg-[rgba(7,10,20,0.95)] font-rc-sans text-xs text-rc-fg shadow-rc-md whitespace-nowrap -translate-x-1/2 mt-1"
               style={{ left: tipPos.x, top: tipPos.y + 4 }}
             >
               {tooltipText}
@@ -121,7 +126,7 @@ function MenuBtn({
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className={`w-full text-left rounded ${className} px-3 py-1 pointer-coarse:py-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed`}
+      className={`w-full text-left rounded-rc-md ${className} px-3 py-1 pointer-coarse:py-2 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed`}
     >
       {label}
     </button>
@@ -631,37 +636,38 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   // If only rubble dialog is open (contextMenu closed), just render the dialog
   if (!contextMenu && rubbleDialog) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.6)]">
         <div
-          className="bg-zinc-900 rounded-xl ring-1 ring-white/20 shadow-2xl p-5 w-80 text-white"
+          className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-5 w-80 font-rc-sans text-rc-fg shadow-rc-panel"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="text-lg font-semibold mb-3">Replace with Rubble?</div>
-          <div className="text-sm text-white/80 mb-4">
-            <span className="font-medium">{rubbleDialog.siteName}</span> is
+          <div className="mb-3 font-rc-display text-[22px] leading-none text-rc-fg-strong">Replace with Rubble?</div>
+          <div className="mb-4 text-sm text-rc-fg-muted">
+            <span className="font-medium text-rc-fg-strong">{rubbleDialog.siteName}</span> is
             being sent to the cemetery. Would you like to place a Rubble token
             at this location under{" "}
-            <span className="font-medium">
+            <span className="font-medium text-rc-fg-strong">
               P{rubbleDialog.siteOwner}&apos;s
             </span>{" "}
             control?
           </div>
           <div className="flex gap-3">
-            <button
-              className="flex-1 rounded bg-amber-600 hover:bg-amber-500 px-4 py-2 font-medium"
+            <RcButton
+              className="h-auto flex-1 whitespace-normal px-3 py-2"
               onClick={() => handleRubbleConfirm(true)}
             >
               Yes, place Rubble
-            </button>
-            <button
-              className="flex-1 rounded bg-zinc-700 hover:bg-zinc-600 px-4 py-2"
+            </RcButton>
+            <RcButton
+              variant="outline"
+              className="h-auto flex-1 whitespace-normal px-3 py-2"
               onClick={() => handleRubbleConfirm(false)}
             >
               No Rubble
-            </button>
+            </RcButton>
           </div>
           <button
-            className="w-full mt-2 text-sm text-white/60 hover:text-white/80 py-1"
+            className="w-full mt-2 py-1 text-sm text-rc-fg-muted transition-colors hover:text-rc-fg-strong"
             onClick={handleRubbleCancel}
           >
             Cancel
@@ -676,6 +682,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
   const t = contextMenu.target;
   let header = "";
   let tapped = false;
+  // A unit of the acting seat that may attack without moving (Combat group)
+  let attackSource: AttackSource | null = null;
   let hasToggle = false;
   let doToggle: (() => void) | null = null;
   let doFlip: (() => void) | null = null;
@@ -882,7 +890,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
     ) {
       extraActions.push({
         actionId: "__annual_fair_activate__",
-        displayText: "🎪 Activate (1)",
+        displayText: "Activate (1)",
         isEnabled: true,
         targetPermanentId: "",
         description:
@@ -906,7 +914,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
       extraActions.push({
         actionId: "__transform_site__",
-        displayText: `Transform${meetsThreshold ? "" : " ⚠️"}`,
+        displayText: `Transform${meetsThreshold ? "" : " ⚠"}`,
         isEnabled: true,
         targetPermanentId: "",
         description: transformDescription,
@@ -1328,78 +1336,12 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       });
     }
 
-    // Combat actions (same-tile and ranged-adjacent)
+    // Attacks without moving are offered in the Combat group.
+    if (combatGuidesActive && item && isMine) {
+      attackSource = { kind: "permanent", at: t.at, index: t.index };
+    }
+
     try {
-      const canAct =
-        isMine &&
-        ((actorKey === "p1" && currentPlayer === 1) ||
-          (actorKey === "p2" && currentPlayer === 2) ||
-          !actorKey);
-      const ownerNum: 1 | 2 | null = item ? item.owner : null;
-      const enemyOwner: 1 | 2 | null =
-        ownerNum != null ? opponentOwner(ownerNum) : null;
-      const { x, y } = parseCellKey(t.at as string);
-      const tileKey = t.at;
-      const unitsHere =
-        enemyOwner != null
-          ? (permanents[tileKey] || []).some((p) => p && p.owner === enemyOwner)
-          : false;
-      const siteHereEnemy =
-        enemyOwner != null ? board.sites[tileKey]?.owner === enemyOwner : false;
-      // Also check for enemy avatar on the same tile
-      const enemyAvatarHere = (() => {
-        if (enemyOwner == null) return false;
-        const enemySeat = enemyOwner === 1 ? "p1" : "p2";
-        const av = avatars?.[enemySeat];
-        if (!av || !Array.isArray(av.pos) || av.pos.length !== 2) return false;
-        return av.pos[0] === x && av.pos[1] === y;
-      })();
-      const canAttackHere =
-        canAct && !tapped && (unitsHere || siteHereEnemy || enemyAvatarHere);
-      const isRanged = !!(
-        item?.card?.name && detectRangedAbilitySync(item.card.name)
-      );
-      const boardW = board.size.w,
-        boardH = board.size.h;
-      const neighbors: Array<{ x: number; y: number }> = [
-        { x: x - 1, y },
-        { x: x + 1, y },
-        { x, y: y - 1 },
-        { x, y: y + 1 },
-      ].filter((p) => p.x >= 0 && p.y >= 0 && p.x < boardW && p.y < boardH);
-      const rangedTargets =
-        isRanged && enemyOwner != null && canAct && !tapped
-          ? neighbors.filter((p) => {
-              const k = toCellKey(p.x, p.y);
-              const list = permanents[k] || [];
-              return list.some((u) => u && u.owner === enemyOwner);
-            })
-          : [];
-
-      if (canAttackHere && item && combatGuidesActive) {
-        // Insert button to render later
-        extraActions.push({
-          actionId: "__attack_here__",
-          displayText: "Attack here",
-          isEnabled: true,
-          targetPermanentId: "",
-          description: "Start an attack on this tile",
-        });
-      }
-
-      if (rangedTargets.length > 0 && item && combatGuidesActive) {
-        for (const p of rangedTargets) {
-          const cellNo = getCellNumber(p.x, p.y, board.size.w, board.size.h);
-          extraActions.push({
-            actionId: `__attack_adj_${p.x}_${p.y}__`,
-            displayText: `Ranged attack T${cellNo}`,
-            isEnabled: true,
-            targetPermanentId: "",
-            description: "Start a ranged attack to an adjacent tile",
-          });
-        }
-      }
-
       // Frontier Settlers tap ability
       const isFrontierSettlers =
         (item?.card?.name || "").toLowerCase() === "frontier settlers";
@@ -1668,41 +1610,9 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       });
     }
 
-    // Avatar "Attack here" action - same as minions
-    const avatarPos2 =
-      Array.isArray(a?.pos) && a.pos.length === 2 ? a.pos : null;
-    if (isMine && avatarPos2 && combatGuidesActive) {
-      const [avX, avY] = avatarPos2;
-      const avatarTileKey2 = toCellKey(avX, avY);
-      const avatarOwner2: 1 | 2 = t.who === "p1" ? 1 : 2;
-      const enemyOwner2: 1 | 2 = avatarOwner2 === 1 ? 2 : 1;
-      const tilePermanents2 = permanents[avatarTileKey2] || [];
-      const enemyUnitsHere = tilePermanents2.some(
-        (p) => p && p.owner === enemyOwner2,
-      );
-      const enemySiteHere = board.sites[avatarTileKey2]?.owner === enemyOwner2;
-      // Also check for enemy avatar on the same tile
-      const enemyAvatarHere2 = (() => {
-        const enemySeat2 = enemyOwner2 === 1 ? "p1" : "p2";
-        const av2 = avatars?.[enemySeat2];
-        if (!av2 || !Array.isArray(av2.pos) || av2.pos.length !== 2)
-          return false;
-        return av2.pos[0] === avX && av2.pos[1] === avY;
-      })();
-      const canAvatarAttackHere =
-        !tapped &&
-        isMyTurn &&
-        (enemyUnitsHere || enemySiteHere || enemyAvatarHere2);
-
-      if (canAvatarAttackHere) {
-        extraActions.push({
-          actionId: "__avatar_attack_here__",
-          displayText: "Attack here",
-          isEnabled: true,
-          targetPermanentId: "",
-          description: "Start an attack from this avatar on this tile",
-        });
-      }
+    // Attacks without moving are offered in the Combat group.
+    if (combatGuidesActive && isMine) {
+      attackSource = { kind: "avatar", seat: t.who };
     }
 
     // Find artifacts attached to this avatar (attachedTo.index === -1)
@@ -1935,39 +1845,40 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
         />
       )}
       {rubbleDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.6)]">
           <div
-            className="bg-zinc-900 rounded-xl ring-1 ring-white/20 shadow-2xl p-5 w-80 text-white"
+            className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-5 w-80 font-rc-sans text-rc-fg shadow-rc-panel"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="text-lg font-semibold mb-3">
+            <div className="mb-3 font-rc-display text-[22px] leading-none text-rc-fg-strong">
               Replace with Rubble?
             </div>
-            <div className="text-sm text-white/80 mb-4">
-              <span className="font-medium">{rubbleDialog.siteName}</span> is
+            <div className="mb-4 text-sm text-rc-fg-muted">
+              <span className="font-medium text-rc-fg-strong">{rubbleDialog.siteName}</span> is
               being sent to the cemetery. Would you like to place a Rubble token
               at this location under{" "}
-              <span className="font-medium">
+              <span className="font-medium text-rc-fg-strong">
                 P{rubbleDialog.siteOwner}&apos;s
               </span>{" "}
               control?
             </div>
             <div className="flex gap-3">
-              <button
-                className="flex-1 rounded bg-amber-600 hover:bg-amber-500 px-4 py-2 font-medium"
+              <RcButton
+                className="h-auto flex-1 whitespace-normal px-3 py-2"
                 onClick={() => handleRubbleConfirm(true)}
               >
                 Yes, place Rubble
-              </button>
-              <button
-                className="flex-1 rounded bg-zinc-700 hover:bg-zinc-600 px-4 py-2"
+              </RcButton>
+              <RcButton
+                variant="outline"
+                className="h-auto flex-1 whitespace-normal px-3 py-2"
                 onClick={() => handleRubbleConfirm(false)}
               >
                 No Rubble
-              </button>
+              </RcButton>
             </div>
             <button
-              className="w-full mt-2 text-sm text-white/60 hover:text-white/80 py-1"
+              className="w-full mt-2 py-1 text-sm text-rc-fg-muted transition-colors hover:text-rc-fg-strong"
               onClick={handleRubbleCancel}
             >
               Cancel
@@ -2003,7 +1914,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
       >
         <div
           ref={menuRef}
-          className="fixed bg-zinc-900/90 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg p-3 w-56 text-white pointer-events-auto max-h-[80vh] overflow-y-auto"
+          className="thin-scrollbar fixed rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] backdrop-blur shadow-rc-panel p-3 w-56 font-rc-sans text-rc-fg pointer-events-auto max-h-[80vh] overflow-y-auto"
           style={{
             left: (menuPos?.left ?? contextMenu?.screen?.x ?? 16) + "px",
             top: (menuPos?.top ?? contextMenu?.screen?.y ?? 16) + "px",
@@ -2011,9 +1922,55 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
           onClick={(e) => e.stopPropagation()}
         >
           <div>
-            <div className="text-sm font-semibold mb-2 truncate" title={header}>
+            <div className="mb-2 truncate font-rc-display text-[18px] leading-tight text-rc-fg-strong" title={header}>
               {header}
             </div>
+            {/* Combat group: set apart from the utility actions below */}
+            {(() => {
+              const source = attackSource;
+              if (!source) return null;
+              // Read live: phase, selection and pending resolutions are not subscribed here.
+              const live = useGameStore.getState();
+              const melee = stationaryAttack(live, source);
+              const ranged = rangedAttack(live, source);
+              if (!melee && !ranged) return null;
+              const start = (choose: typeof stationaryAttack) => {
+                const choice = choose(useGameStore.getState(), source);
+                if (choice) setAttackTargetChoice(choice);
+                onClose();
+              };
+              const combatBtn = "bg-rc-danger/30 hover:bg-rc-danger/50 font-medium";
+              return (
+                <div className="mb-2 rounded-rc-md bg-rc-danger/10 p-1.5 ring-1 ring-rc-danger/40">
+                  {!iconMode && (
+                    <div className="mb-1 flex items-center gap-1 px-1.5 font-rc-mono text-[10px] uppercase tracking-[0.18em] text-rc-danger-hover">
+                      <Icon icon="game-icons:battle-gear" width={12} height={12} />
+                      Combat
+                    </div>
+                  )}
+                  <div className={iconMode ? "flex flex-wrap gap-1" : "space-y-1"}>
+                    {melee && (
+                      <MenuBtn
+                        icon="game-icons:crossed-swords"
+                        label="Attack here"
+                        title="Attack a target at this tile without moving"
+                        className={combatBtn}
+                        onClick={() => start(stationaryAttack)}
+                      />
+                    )}
+                    {ranged && (
+                      <MenuBtn
+                        icon="game-icons:high-shot"
+                        label="Ranged attack"
+                        title="Tap to shoot the first unit in a straight line; it can't strike back"
+                        className={combatBtn}
+                        onClick={() => start(rangedAttack)}
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
             <div className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}>
               {hasToggle && doToggle && (
                 <MenuBtn
@@ -2048,7 +2005,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 <MenuBtn
                   icon="game-icons:two-shadows"
                   label="Copy (token)"
-                  className="bg-cyan-900/30 hover:bg-cyan-900/50"
+                  className="bg-rc-info/18 hover:bg-rc-info/32"
                   onClick={() => {
                     copyPermanent(t.at, t.index);
                     try {
@@ -2080,10 +2037,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       : "Banish dead minion, become copy until next turn.";
                   return (
                     <button
-                      className={`w-full text-left rounded px-3 py-1 pointer-coarse:py-2 ${
+                      className={`w-full text-left rounded-rc-md px-3 py-1 pointer-coarse:py-2 transition-colors ${
                         canActivate
-                          ? "bg-purple-600/30 hover:bg-purple-600/50"
-                          : "bg-gray-600/20 text-white/40 cursor-not-allowed"
+                          ? "bg-rc-moonlight/10 hover:bg-rc-moonlight/20"
+                          : "bg-rc-line/4 text-rc-fg-dim cursor-not-allowed"
                       }`}
                       title={description}
                       disabled={!canActivate}
@@ -2125,7 +2082,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   if (!transform) return null;
                   return (
                     <button
-                      className="w-full text-left rounded bg-purple-600/30 hover:bg-purple-600/50 px-3 py-1 pointer-coarse:py-2"
+                      className="w-full text-left rounded-rc-md bg-rc-moonlight/10 hover:bg-rc-moonlight/20 px-3 py-1 pointer-coarse:py-2 transition-colors"
                       title="Revert this copy back to Assimilator Snail"
                       onClick={() => {
                         revertAssimilatorSnailTransforms(transform.ownerSeat);
@@ -2224,7 +2181,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     buttons.push(
                       <button
                         key={`carry-pick-${target.index}`}
-                        className="w-full text-left rounded bg-green-600/30 hover:bg-green-600/50 px-3 py-1 pointer-coarse:py-2"
+                        className="w-full text-left rounded-rc-md bg-rc-success/18 hover:bg-rc-success/32 px-3 py-1 pointer-coarse:py-2 transition-colors"
                         title={`Pick up ${target.name}`}
                         onClick={() => {
                           carryPickUp(t.at, t.index, target.index);
@@ -2267,7 +2224,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     buttons.push(
                       <button
                         key={`carry-pick-avatar-${target.seat}`}
-                        className="w-full text-left rounded bg-green-600/30 hover:bg-green-600/50 px-3 py-1 pointer-coarse:py-2"
+                        className="w-full text-left rounded-rc-md bg-rc-success/18 hover:bg-rc-success/32 px-3 py-1 pointer-coarse:py-2 transition-colors"
                         title={`Pick up ${target.name}`}
                         onClick={() => {
                           carryPickUpAvatar(t.at, t.index, target.seat);
@@ -2284,7 +2241,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     buttons.push(
                       <button
                         key={`carry-drop-${c.instanceId}`}
-                        className="w-full text-left rounded bg-yellow-600/30 hover:bg-yellow-600/50 px-3 py-1 pointer-coarse:py-2"
+                        className="w-full text-left rounded-rc-md bg-rc-accent/12 hover:bg-rc-accent/24 px-3 py-1 pointer-coarse:py-2 transition-colors"
                         title={`Drop ${c.name}`}
                         onClick={() => {
                           if (!carrierInstanceId) return;
@@ -2335,7 +2292,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     buttons.push(
                       <button
                         key={`carry-drop-avatar-${c.seat}`}
-                        className="w-full text-left rounded bg-yellow-600/30 hover:bg-yellow-600/50 px-3 py-1 pointer-coarse:py-2"
+                        className="w-full text-left rounded-rc-md bg-rc-accent/12 hover:bg-rc-accent/24 px-3 py-1 pointer-coarse:py-2 transition-colors"
                         title={`Drop ${c.name}`}
                         onClick={() => {
                           if (!carrierInstanceId) return;
@@ -2357,7 +2314,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   <MenuBtn
                     icon="game-icons:big-diamond-ring"
                     label="Copy"
-                    className="bg-cyan-900/30 hover:bg-cyan-900/50"
+                    className="bg-rc-info/18 hover:bg-rc-info/32"
                     onClick={() => {
                       duplicateGemToken(t.tokenId);
                       onClose();
@@ -2366,7 +2323,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   <MenuBtn
                     icon="game-icons:cancel"
                     label="Delete"
-                    className="bg-red-900/30 hover:bg-red-900/50"
+                    className="bg-rc-danger/18 hover:bg-rc-danger/32"
                     onClick={() => {
                       destroyGemToken(t.tokenId);
                       onClose();
@@ -2391,7 +2348,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     <MenuBtn
                       icon="game-icons:archive-register"
                       label="Move to Collection"
-                      className="bg-purple-900/30 hover:bg-purple-900/50"
+                      className="bg-rc-moonlight/10 hover:bg-rc-moonlight/20"
                       onClick={() => {
                         selectHandCard(t.who, t.index);
                         moveCardFromHandToPile(t.who, "collection", "top");
@@ -2401,7 +2358,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     <MenuBtn
                       icon="game-icons:broken-skull"
                       label="Discard"
-                      className="bg-red-900/30 hover:bg-red-900/50"
+                      className="bg-rc-danger/18 hover:bg-rc-danger/32"
                       onClick={() => {
                         selectHandCard(t.who, t.index);
                         moveCardFromHandToPile(t.who, "graveyard", "top");
@@ -2427,7 +2384,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     <MenuBtn
                       icon="game-icons:layered-armor"
                       label="Cast Subsurface"
-                      className="bg-amber-900/30 hover:bg-amber-900/50"
+                      className="bg-rc-accent/12 hover:bg-rc-accent/24"
                       onClick={() => {
                         selectHandCard(t.who, t.index);
                         setCastSubsurface(true);
@@ -2440,7 +2397,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     <MenuBtn
                       icon="game-icons:archive-register"
                       label="Move to Collection"
-                      className="bg-purple-900/30 hover:bg-purple-900/50"
+                      className="bg-rc-moonlight/10 hover:bg-rc-moonlight/20"
                       onClick={() => {
                         selectHandCard(t.who, t.index);
                         moveCardFromHandToPile(t.who, "collection", "top");
@@ -2450,7 +2407,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     <MenuBtn
                       icon="game-icons:broken-skull"
                       label="Discard"
-                      className="bg-red-900/30 hover:bg-red-900/50"
+                      className="bg-rc-danger/18 hover:bg-rc-danger/32"
                       onClick={() => {
                         selectHandCard(t.who, t.index);
                         moveCardFromHandToPile(t.who, "graveyard", "top");
@@ -2465,7 +2422,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 <MenuBtn
                   icon="game-icons:shield"
                   label="Ward"
-                  className="bg-cyan-900/30 hover:bg-cyan-900/50"
+                  className="bg-rc-info/18 hover:bg-rc-info/32"
                   onClick={() => {
                     // Spawn ward token and attach to this site
                     const wardDef = TOKEN_BY_NAME["ward"];
@@ -2555,7 +2512,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                       key={`spawn-${tokenName}`}
                       icon="game-icons:token"
                       label={`Spawn ${label}`}
-                      className="bg-emerald-900/30 hover:bg-emerald-900/50"
+                      className="bg-rc-success/18 hover:bg-rc-success/32"
                       onClick={() => {
                         const key = toCellKey(t.x, t.y);
                         const site = board.sites[key];
@@ -2633,7 +2590,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   <MenuBtn
                     icon="game-icons:ghost"
                     label="Gain Stealth"
-                    className="bg-violet-900/30 hover:bg-violet-900/50"
+                    className="bg-rc-moonlight/10 hover:bg-rc-moonlight/20"
                     onClick={() => {
                       // Spawn stealth token and attach to this permanent
                       const stealthDef = TOKEN_BY_NAME["stealth"];
@@ -2722,7 +2679,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   <MenuBtn
                     icon="game-icons:shield"
                     label="Ward"
-                    className="bg-cyan-900/30 hover:bg-cyan-900/50"
+                    className="bg-rc-info/18 hover:bg-rc-info/32"
                     onClick={() => {
                       // Spawn ward token and attach to this permanent
                       const wardDef = TOKEN_BY_NAME["ward"];
@@ -2826,7 +2783,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   return true;
                 })() && (
                   <button
-                    className={`w-full text-left rounded px-3 py-1 pointer-coarse:py-2 ${
+                    className={`w-full text-left rounded-rc-md px-3 py-1 pointer-coarse:py-2 transition-colors ${
                       (() => {
                         const arr = permanents[t.at] || [];
                         const attachedTokens = arr.filter(
@@ -2839,8 +2796,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         );
                         return alreadyHasWard;
                       })()
-                        ? "bg-gray-700/50 text-gray-500 cursor-not-allowed"
-                        : "bg-cyan-900/30 hover:bg-cyan-900/50"
+                        ? "bg-rc-line/4 text-rc-fg-dim cursor-not-allowed"
+                        : "bg-rc-info/18 hover:bg-rc-info/32"
                     }`}
                     disabled={(() => {
                       const arr = permanents[t.at] || [];
@@ -2988,7 +2945,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   <MenuBtn
                     icon="game-icons:lightning-arc"
                     label="Lance"
-                    className="bg-amber-900/30 hover:bg-amber-900/50"
+                    className="bg-rc-accent/12 hover:bg-rc-accent/24"
                     onClick={() => {
                       // Spawn lance token and attach to this permanent
                       const lanceDef = TOKEN_BY_NAME["lance"];
@@ -3086,7 +3043,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                 attachedTokens.length > 0 &&
                 (t.kind === "permanent" || t.kind === "avatar") && (
                   <div className="space-y-2">
-                    <div className="text-xs text-white/70 px-3 py-1 pointer-coarse:py-2">
+                    <div className="rc-eyebrow px-3 py-1 pointer-coarse:py-2">
                       Attached Items:
                     </div>
                     {attachedTokens.map((token) => {
@@ -3120,7 +3077,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           return (
                             <div
                               key={token.index}
-                              className="w-full text-left text-xs text-white/50 px-3 py-1 pointer-coarse:py-2"
+                              className="w-full text-left text-xs text-rc-fg-subtle px-3 py-1 pointer-coarse:py-2"
                             >
                               {token.name} (opponent&apos;s)
                             </div>
@@ -3158,10 +3115,10 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           return (
                             <div key={token.index} className="space-y-1">
                               <button
-                                className={`w-full text-left rounded px-3 py-1 pointer-coarse:py-2 text-sm ${
+                                className={`w-full text-left rounded-rc-md px-3 py-1 pointer-coarse:py-2 text-sm transition-colors ${
                                   silverBulletDisabled
-                                    ? "bg-gray-700/50 text-gray-500 cursor-not-allowed"
-                                    : "bg-amber-900/30 hover:bg-amber-900/50"
+                                    ? "bg-rc-line/4 text-rc-fg-dim cursor-not-allowed"
+                                    : "bg-rc-accent/12 hover:bg-rc-accent/24"
                                 }`}
                                 disabled={silverBulletDisabled}
                                 title={
@@ -3211,7 +3168,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                                 Use {token.name} ({rarityLabel})
                               </button>
                               <button
-                                className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 pointer-coarse:py-2 text-sm"
+                                className="w-full text-left rounded-rc-md bg-rc-moonlight/10 hover:bg-rc-moonlight/20 px-3 py-1 pointer-coarse:py-2 text-sm transition-colors"
                                 onClick={() => {
                                   detachToken(token.tileKey, token.index);
                                   onClose();
@@ -3226,7 +3183,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         return (
                           <button
                             key={token.index}
-                            className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 pointer-coarse:py-2 text-sm"
+                            className="w-full text-left rounded-rc-md bg-rc-moonlight/10 hover:bg-rc-moonlight/20 px-3 py-1 pointer-coarse:py-2 text-sm transition-colors"
                             onClick={() => {
                               detachToken(token.tileKey, token.index);
                               onClose();
@@ -3241,7 +3198,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           return (
                             <div
                               key={token.index}
-                              className="w-full text-left text-xs text-white/50 px-3 py-1 pointer-coarse:py-2"
+                              className="w-full text-left text-xs text-rc-fg-subtle px-3 py-1 pointer-coarse:py-2"
                             >
                               {token.name} (opponent&apos;s)
                             </div>
@@ -3250,7 +3207,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         return (
                           <div key={token.index} className="space-y-1">
                             <button
-                              className="w-full text-left rounded bg-amber-900/20 hover:bg-amber-900/40 px-3 py-1 pointer-coarse:py-2 text-sm"
+                              className="w-full text-left rounded-rc-md bg-rc-accent/12 hover:bg-rc-accent/24 px-3 py-1 pointer-coarse:py-2 text-sm transition-colors"
                               onClick={() => {
                                 detachToken(token.tileKey, token.index);
                                 onClose();
@@ -3259,7 +3216,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                               Drop {token.name}
                             </button>
                             <button
-                              className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 pointer-coarse:py-2 text-sm"
+                              className="w-full text-left rounded-rc-md bg-rc-danger/18 hover:bg-rc-danger/32 px-3 py-1 pointer-coarse:py-2 text-sm transition-colors"
                               onClick={() => {
                                 movePermanentToZone(
                                   token.tileKey,
@@ -3282,7 +3239,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           return (
                             <div
                               key={token.index}
-                              className="w-full text-left text-xs text-white/50 px-3 py-1 pointer-coarse:py-2"
+                              className="w-full text-left text-xs text-rc-fg-subtle px-3 py-1 pointer-coarse:py-2"
                             >
                               {token.name} (opponent&apos;s)
                             </div>
@@ -3291,7 +3248,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         return (
                           <button
                             key={token.index}
-                            className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 pointer-coarse:py-2 text-sm"
+                            className="w-full text-left rounded-rc-md bg-rc-danger/18 hover:bg-rc-danger/32 px-3 py-1 pointer-coarse:py-2 text-sm transition-colors"
                             onClick={() => {
                               const tokenInstanceId = token.card?.instanceId;
                               if (isStealth && tokenInstanceId) {
@@ -3352,7 +3309,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           return (
                             <div
                               key={token.index}
-                              className="w-full text-left text-xs text-white/50 px-3 py-1 pointer-coarse:py-2"
+                              className="w-full text-left text-xs text-rc-fg-subtle px-3 py-1 pointer-coarse:py-2"
                             >
                               {token.name} (opponent&apos;s)
                             </div>
@@ -3361,7 +3318,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         return (
                           <button
                             key={token.index}
-                            className="w-full text-left rounded bg-red-900/20 hover:bg-red-900/40 px-3 py-1 pointer-coarse:py-2 text-sm"
+                            className="w-full text-left rounded-rc-md bg-rc-danger/18 hover:bg-rc-danger/32 px-3 py-1 pointer-coarse:py-2 text-sm transition-colors"
                             onClick={() => {
                               detachToken(token.tileKey, token.index);
                               onClose();
@@ -3398,13 +3355,13 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
 
                   return (
                     <div className="space-y-2">
-                      <div className="text-xs text-white/70 px-3 py-1 pointer-coarse:py-2">
+                      <div className="rc-eyebrow px-3 py-1 pointer-coarse:py-2">
                         Stolen Cards ({pithImpEntry.hand.length}):
                       </div>
                       {pithImpEntry.hand.map((card, cardIdx) => (
                         <button
                           key={cardIdx}
-                          className="w-full text-left rounded bg-purple-900/20 hover:bg-purple-900/40 px-3 py-1 pointer-coarse:py-2 text-sm"
+                          className="w-full text-left rounded-rc-md bg-rc-moonlight/10 hover:bg-rc-moonlight/20 px-3 py-1 pointer-coarse:py-2 text-sm transition-colors"
                           onClick={() => {
                             // Drop stolen card onto the board at Pith Imp's location
                             useGameStore
@@ -3443,127 +3400,6 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                   className={iconMode ? "flex flex-wrap gap-1" : "space-y-2"}
                 >
                   {positionActions.concat(extraActions).map((action) => {
-                    const isAttackHere = action.actionId === "__attack_here__";
-                    const isAttackAdj =
-                      action.actionId.startsWith("__attack_adj_");
-                    if (isAttackHere) {
-                      return (
-                        <MenuBtn
-                          key={action.actionId}
-                          icon="game-icons:crossed-swords"
-                          label={action.displayText}
-                          title={action.description}
-                          className="bg-emerald-600/20 hover:bg-emerald-600/30"
-                          onClick={() => {
-                            if (t.kind === "permanent") {
-                              const [sx, sy] = t.at.split(",");
-                              const at = t.at as string;
-                              const idx = t.index as number;
-                              const px = Number(sx),
-                                py = Number(sy);
-                              const itm = (permanents[at] || [])[idx];
-                              if (itm) {
-                                setAttackTargetChoice({
-                                  tile: { x: px, y: py },
-                                  attacker: {
-                                    at,
-                                    index: idx,
-                                    instanceId: itm.instanceId ?? null,
-                                    owner: itm.owner as 1 | 2,
-                                  },
-                                  candidates: [],
-                                });
-                              }
-                            }
-                            onClose();
-                          }}
-                        />
-                      );
-                    }
-                    if (isAttackAdj) {
-                      return (
-                        <MenuBtn
-                          key={action.actionId}
-                          icon="game-icons:crosshair"
-                          label={action.displayText}
-                          title={action.description}
-                          className="bg-emerald-600/20 hover:bg-emerald-600/30"
-                          onClick={() => {
-                            const prefix = "__attack_adj_";
-                            const rest = action.actionId.startsWith(prefix)
-                              ? action.actionId.slice(prefix.length)
-                              : "";
-                            const coordsStr = rest.endsWith("__")
-                              ? rest.slice(0, -2)
-                              : rest;
-                            const parts = coordsStr.split("_");
-                            const ax = Number(parts[0]);
-                            const ay = Number(parts[1]);
-                            if (t.kind === "permanent") {
-                              const at = t.at as string;
-                              const idx = t.index as number;
-                              const itm = (permanents[at] || [])[idx];
-                              if (
-                                itm &&
-                                Number.isFinite(ax) &&
-                                Number.isFinite(ay)
-                              ) {
-                                setAttackTargetChoice({
-                                  tile: { x: ax, y: ay },
-                                  attacker: {
-                                    at,
-                                    index: idx,
-                                    instanceId: itm.instanceId ?? null,
-                                    owner: itm.owner as 1 | 2,
-                                  },
-                                  candidates: [],
-                                });
-                              }
-                            }
-                            onClose();
-                          }}
-                        />
-                      );
-                    }
-                    // Avatar attack here action
-                    if (action.actionId === "__avatar_attack_here__") {
-                      return (
-                        <MenuBtn
-                          key={action.actionId}
-                          icon="game-icons:crossed-swords"
-                          label={action.displayText}
-                          title={action.description}
-                          className="bg-emerald-600/20 hover:bg-emerald-600/30"
-                          onClick={() => {
-                            if (t.kind === "avatar") {
-                              const avatar = avatars[t.who];
-                              if (
-                                avatar &&
-                                Array.isArray(avatar.pos) &&
-                                avatar.pos.length === 2
-                              ) {
-                                const [avX, avY] = avatar.pos;
-                                const avatarOwner: 1 | 2 =
-                                  t.who === "p1" ? 1 : 2;
-                                setAttackTargetChoice({
-                                  tile: { x: avX, y: avY },
-                                  attacker: {
-                                    at: toCellKey(avX, avY),
-                                    index: -1,
-                                    instanceId: null,
-                                    owner: avatarOwner,
-                                    isAvatar: true,
-                                    avatarSeat: t.who,
-                                  },
-                                  candidates: [],
-                                });
-                              }
-                            }
-                            onClose();
-                          }}
-                        />
-                      );
-                    }
                     // Switch Site Position action
                     if (action.actionId === "__switch_site_position__") {
                       return (
@@ -3572,7 +3408,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           icon="game-icons:swap-bag"
                           label={action.displayText}
                           title={action.description}
-                          className="bg-amber-600/20 hover:bg-amber-600/30"
+                          className="bg-rc-accent/12 hover:bg-rc-accent/24"
                           onClick={() => {
                             if (t.kind === "site") {
                               setSwitchSiteSource({ x: t.x, y: t.y });
@@ -3591,7 +3427,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           icon="game-icons:water-drop"
                           label={action.displayText}
                           title={action.description}
-                          className="bg-cyan-600/20 hover:bg-cyan-600/30"
+                          className="bg-rc-info/18 hover:bg-rc-info/32"
                           onClick={() => {
                             if (t.kind === "site") {
                               floodSite(t.x, t.y);
@@ -3612,7 +3448,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           icon="game-icons:power-button"
                           label={action.displayText}
                           title={action.description}
-                          className="bg-violet-600/20 hover:bg-violet-600/30"
+                          className="bg-rc-moonlight/10 hover:bg-rc-moonlight/20"
                           onClick={() => {
                             if (t.kind === "site") {
                               disableSite(t.x, t.y);
@@ -3633,7 +3469,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           icon="game-icons:mute"
                           label={action.displayText}
                           title={action.description}
-                          className="bg-purple-600/20 hover:bg-purple-600/30"
+                          className="bg-rc-moonlight/10 hover:bg-rc-moonlight/20"
                           onClick={() => {
                             if (t.kind === "site") {
                               silenceSite(t.x, t.y);
@@ -3654,7 +3490,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           icon="game-icons:mute"
                           label={action.displayText}
                           title={action.description}
-                          className="bg-purple-600/20 hover:bg-purple-600/30"
+                          className="bg-rc-moonlight/10 hover:bg-rc-moonlight/20"
                           onClick={() => {
                             if (t.kind === "site") {
                               const key = toCellKey(t.x, t.y);
@@ -3684,7 +3520,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           icon="game-icons:power-button"
                           label={action.displayText}
                           title={action.description}
-                          className="bg-violet-600/20 hover:bg-violet-600/30"
+                          className="bg-rc-moonlight/10 hover:bg-rc-moonlight/20"
                           onClick={() => {
                             if (t.kind === "site") {
                               const key = toCellKey(t.x, t.y);
@@ -3714,7 +3550,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           icon="game-icons:calendar"
                           label={action.displayText}
                           title={action.description}
-                          className="bg-amber-600/20 hover:bg-amber-600/30"
+                          className="bg-rc-accent/12 hover:bg-rc-accent/24"
                           onClick={() => {
                             if (t.kind === "site") {
                               const key = toCellKey(t.x, t.y);
@@ -3737,7 +3573,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           icon="game-icons:magic-broom"
                           label={action.displayText}
                           title={action.description}
-                          className="bg-red-600/20 hover:bg-red-600/30"
+                          className="bg-rc-danger/18 hover:bg-rc-danger/32"
                           onClick={() => {
                             if (t.kind === "site") {
                               transformSite(t.x, t.y);
@@ -3758,7 +3594,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           icon="game-icons:mute"
                           label={action.displayText}
                           title={action.description}
-                          className="bg-violet-600/20 hover:bg-violet-600/30"
+                          className="bg-rc-moonlight/10 hover:bg-rc-moonlight/20"
                           onClick={() => {
                             if (t.kind === "permanent") {
                               silencePermanent(t.at, t.index);
@@ -3779,7 +3615,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           icon="game-icons:fire-shrine"
                           label={action.displayText}
                           title={action.description}
-                          className="bg-red-600/20 hover:bg-red-600/30"
+                          className="bg-rc-danger/18 hover:bg-rc-danger/32"
                           onClick={() => {
                             if (t.kind === "permanent") {
                               sacrificeToTempleOfMoloch(t.at, t.index);
@@ -3800,7 +3636,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           icon="game-icons:anchor"
                           label={action.displayText}
                           title={action.description}
-                          className="bg-cyan-600/20 hover:bg-cyan-600/30"
+                          className="bg-rc-info/18 hover:bg-rc-info/32"
                           onClick={() => {
                             if (t.kind === "permanent") {
                               const itm = (permanents[t.at] || [])[t.index];
@@ -3837,7 +3673,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           icon="game-icons:sunglasses"
                           label={action.displayText}
                           title={action.description}
-                          className="bg-purple-600/20 hover:bg-purple-600/30"
+                          className="bg-rc-moonlight/10 hover:bg-rc-moonlight/20"
                           onClick={() => {
                             if (t.kind === "avatar") {
                               unmask(t.who);
@@ -3855,7 +3691,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           icon="game-icons:sunglasses"
                           label={action.displayText}
                           title={action.description}
-                          className="bg-purple-600/20 hover:bg-purple-600/30"
+                          className="bg-rc-moonlight/10 hover:bg-rc-moonlight/20"
                           onClick={() => {
                             if (t.kind === "avatar") {
                               window.dispatchEvent(
@@ -3880,8 +3716,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           disabled={!action.isEnabled}
                           className={
                             action.isEnabled
-                              ? "bg-emerald-600/20 hover:bg-emerald-600/30"
-                              : "bg-gray-600/20"
+                              ? "bg-rc-success/18 hover:bg-rc-success/32"
+                              : "bg-rc-line/4"
                           }
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
@@ -3903,8 +3739,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           disabled={!action.isEnabled}
                           className={
                             action.isEnabled
-                              ? "bg-red-600/20 hover:bg-red-600/30"
-                              : "bg-gray-600/20"
+                              ? "bg-rc-danger/18 hover:bg-rc-danger/32"
+                              : "bg-rc-line/4"
                           }
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
@@ -3926,8 +3762,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           disabled={!action.isEnabled}
                           className={
                             action.isEnabled
-                              ? "bg-emerald-600/20 hover:bg-emerald-600/30"
-                              : "bg-gray-600/20"
+                              ? "bg-rc-success/18 hover:bg-rc-success/32"
+                              : "bg-rc-line/4"
                           }
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
@@ -3949,8 +3785,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           disabled={!action.isEnabled}
                           className={
                             action.isEnabled
-                              ? "bg-amber-600/20 hover:bg-amber-600/30"
-                              : "bg-gray-600/20"
+                              ? "bg-rc-accent/12 hover:bg-rc-accent/24"
+                              : "bg-rc-line/4"
                           }
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
@@ -3972,8 +3808,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           disabled={!action.isEnabled}
                           className={
                             action.isEnabled
-                              ? "bg-cyan-600/20 hover:bg-cyan-600/30"
-                              : "bg-gray-600/20"
+                              ? "bg-rc-info/18 hover:bg-rc-info/32"
+                              : "bg-rc-line/4"
                           }
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
@@ -3995,8 +3831,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           disabled={!action.isEnabled}
                           className={
                             action.isEnabled
-                              ? "bg-amber-600/20 hover:bg-amber-600/30"
-                              : "bg-gray-600/20"
+                              ? "bg-rc-accent/12 hover:bg-rc-accent/24"
+                              : "bg-rc-line/4"
                           }
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
@@ -4018,8 +3854,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           disabled={!action.isEnabled}
                           className={
                             action.isEnabled
-                              ? "bg-teal-600/20 hover:bg-teal-600/30"
-                              : "bg-gray-600/20"
+                              ? "bg-rc-success/18 hover:bg-rc-success/32"
+                              : "bg-rc-line/4"
                           }
                           onClick={() => {
                             if (t.kind === "avatar" && action.isEnabled) {
@@ -4054,8 +3890,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                           disabled={!action.isEnabled}
                           className={
                             action.isEnabled
-                              ? "bg-green-600/20 hover:bg-green-600/30"
-                              : "bg-gray-600/20"
+                              ? "bg-rc-success/18 hover:bg-rc-success/32"
+                              : "bg-rc-line/4"
                           }
                           onClick={() => {
                             if (t.kind === "permanent" && action.isEnabled) {
@@ -4097,8 +3933,8 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                         disabled={!action.isEnabled}
                         className={
                           action.isEnabled
-                            ? "bg-blue-600/20 hover:bg-blue-600/30"
-                            : "bg-gray-600/20"
+                            ? "bg-rc-info/18 hover:bg-rc-info/32"
+                            : "bg-rc-line/4"
                         }
                         onClick={() => {
                           if (action.isEnabled && action.newPositionState) {
@@ -4168,6 +4004,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     <MenuBtn
                       icon="game-icons:broken-skull"
                       label="Move to Cemetery"
+                      className="bg-rc-danger/18 hover:bg-rc-danger/32"
                       onClick={doToGY}
                     />
                   )}
@@ -4189,6 +4026,7 @@ export default function ContextMenu({ onClose }: ContextMenuProps) {
                     <MenuBtn
                       icon="game-icons:fire-zone"
                       label="Banish Card"
+                      className="bg-rc-danger/18 hover:bg-rc-danger/32"
                       onClick={doBanish}
                     />
                   )}

@@ -46,6 +46,13 @@ type PreferenceSlice = Pick<
   | "setActionNotifications"
 >;
 
+/** vs-CPU matches always run the combat and magic guides: the bot has no toggle of its own to agree on. */
+export const guidesForcedOn = (
+  state: Pick<GameState, "actorKey" | "opponentPlayerId">,
+): boolean =>
+  (state.actorKey === "p1" || state.actorKey === "p2") &&
+  !!state.opponentPlayerId?.startsWith("cpu_");
+
 const initialInteractionGuides = readInitialInteractionGuides();
 const initialMagicGuides = readInitialMagicGuides();
 const initialActionNotifications = readInitialActionNotifications();
@@ -92,7 +99,7 @@ export const createPreferenceSlice: StateCreator<
           p2: !!state.combatGuideSeatPrefs?.p2,
         };
         prefs[actorKey] = next;
-        const active = prefs.p1 && prefs.p2;
+        const active = guidesForcedOn(state) || (prefs.p1 && prefs.p2);
         nextActive = active;
         return {
           interactionGuides: next,
@@ -144,7 +151,7 @@ export const createPreferenceSlice: StateCreator<
           p2: !!state.magicGuideSeatPrefs?.p2,
         };
         prefs[actorKey] = next;
-        const active = prefs.p1 && prefs.p2;
+        const active = guidesForcedOn(state) || (prefs.p1 && prefs.p2);
         nextActive = active;
         return {
           magicGuides: next,

@@ -2,6 +2,8 @@
 
 import React from "react";
 import CpuAssistBar from "@/components/game/CpuAssistBar";
+import CpuPlayReveal from "@/components/game/CpuPlayReveal";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import {
   getCellNumber,
@@ -16,7 +18,7 @@ import { useSmallScreen } from "@/lib/hooks/useTouchDevice";
 
 export default function MagicHudOverlay() {
   const cpuMatch = useGameStore(s => s.opponentPlayerId?.startsWith("cpu_") === true);
-  if (cpuMatch) return <CpuAssistBar />;
+  if (cpuMatch) return <><CpuAssistBar /><CpuPlayReveal /></>;
   return <TabletopMagicHudOverlay />;
 }
 
@@ -180,7 +182,7 @@ function TabletopMagicHudOverlay() {
     })();
 
     const modeChip = (
-      <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-200">
+      <span className="px-2 py-0.5 rounded-rc-sm border border-rc-accent/35 bg-rc-accent/12 text-rc-spark">
         {describeMagicMode(pm.hints)}
       </span>
     );
@@ -192,7 +194,7 @@ function TabletopMagicHudOverlay() {
       if (!c) return null;
       if (c.kind === "avatar")
         return (
-          <span className="px-2 py-0.5 rounded bg-white/10">
+          <span className="px-2 py-0.5 rounded-rc-sm border border-rc-line/18 bg-black/35">
             Caster: Avatar {c.seat.toUpperCase()}
           </span>
         );
@@ -202,13 +204,13 @@ function TabletopMagicHudOverlay() {
             permanents?.[c.at]?.[Number(c.index)]?.card?.name || null;
           const at = c.at;
           return (
-            <span className="px-2 py-0.5 rounded bg-white/10">
+            <span className="px-2 py-0.5 rounded-rc-sm border border-rc-line/18 bg-black/35">
               Caster: {name ? name : "Permanent"} @{at}
             </span>
           );
         } catch {}
         return (
-          <span className="px-2 py-0.5 rounded bg-white/10">
+          <span className="px-2 py-0.5 rounded-rc-sm border border-rc-line/18 bg-black/35">
             Caster: Permanent @{c.at}
           </span>
         );
@@ -216,7 +218,7 @@ function TabletopMagicHudOverlay() {
       if (c.kind === "site") {
         const name = board?.sites?.[c.at]?.card?.name || "Site";
         return (
-          <span className="px-2 py-0.5 rounded bg-white/10">
+          <span className="px-2 py-0.5 rounded-rc-sm border border-rc-line/18 bg-black/35">
             Caster: {name}
           </span>
         );
@@ -224,26 +226,26 @@ function TabletopMagicHudOverlay() {
       return null;
     })();
     const cardChip = (
-      <span className="px-2 py-0.5 rounded bg-white/10">Spell: {cardName}</span>
+      <span className="px-2 py-0.5 rounded-rc-sm border border-rc-line/18 bg-black/35">Spell: {cardName}</span>
     );
     const targetChip = (() => {
       const t = pm.target;
       if (!t) return null;
       if (t.kind === "location")
         return (
-          <span className="px-2 py-0.5 rounded bg-white/10">
+          <span className="px-2 py-0.5 rounded-rc-sm border border-rc-line/18 bg-black/35">
             Target: {t.at}
           </span>
         );
       if (t.kind === "permanent") {
         const nm = permanents?.[t.at]?.[t.index]?.card?.name || "Permanent";
         return (
-          <span className="px-2 py-0.5 rounded bg-white/10">Target: {nm}</span>
+          <span className="px-2 py-0.5 rounded-rc-sm border border-rc-line/18 bg-black/35">Target: {nm}</span>
         );
       }
       if (t.kind === "avatar")
         return (
-          <span className="px-2 py-0.5 rounded bg-white/10">
+          <span className="px-2 py-0.5 rounded-rc-sm border border-rc-line/18 bg-black/35">
             Target: Avatar {t.seat.toUpperCase()}
           </span>
         );
@@ -277,11 +279,11 @@ function TabletopMagicHudOverlay() {
           }
         }
         return (
-          <span className="px-2 py-0.5 rounded bg-white/10">
+          <span className="px-2 py-0.5 rounded-rc-sm border border-rc-line/18 bg-black/35">
             {label ? (
               <>
                 Target: {label}{" "}
-                <span className="opacity-70">({t.direction})</span>
+                <span className="text-rc-fg-subtle">({t.direction})</span>
               </>
             ) : (
               <>Direction: {t.direction}</>
@@ -294,45 +296,47 @@ function TabletopMagicHudOverlay() {
 
     return (
       <div
-        className={`fixed inset-x-0 ${isMobileScreen ? "top-[calc(env(safe-area-inset-top,0px)+2.5rem)] px-3" : "top-6"} z-[100] pointer-events-none flex justify-center`}
+        className={`fixed inset-x-0 ${isMobileScreen ? "top-[calc(env(safe-area-inset-top,0px)+2.5rem)] px-3" : "top-16"} z-[100] pointer-events-none flex justify-center`}
       >
         <div
-          className={`pointer-events-auto bg-black/90 text-white ring-1 ring-white/20 shadow-lg flex items-center select-none ${
+          className={`pointer-events-auto border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel flex items-center select-none ${
             isMobileScreen
-              ? "px-3 py-2 rounded-2xl text-xs flex-wrap gap-1.5 max-w-[95vw]"
+              ? "px-3 py-2 rounded-rc-lg text-xs flex-wrap gap-1.5 max-w-[95vw]"
               : "px-5 py-3 rounded-full text-lg md:text-xl gap-2"
           }`}
         >
-          <span className="opacity-80">
+          <span className="text-rc-fg-muted">
             {tileNum ? `[T${tileNum}] ` : ""}
-            <span className="font-fantaisie">{stepsText}</span>
+            <span className="font-rc-display text-rc-fg-strong">{stepsText}</span>
           </span>
           {/* Always show target chip when available, hide other chips on mobile */}
           {targetChip && (
-            <span className="inline-flex items-center gap-2 text-sm opacity-90">
+            <span className="inline-flex items-center gap-2 text-sm">
               {targetChip}
             </span>
           )}
-          <span className="hidden md:inline-flex items-center gap-2 text-sm opacity-90">
+          <span className="hidden md:inline-flex items-center gap-2 text-sm">
             {modeChip}
             {casterChip}
             {cardChip}
           </span>
           {actorIsActive && status === "choosingCaster" ? (
-            <button
-              className="mx-1 rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1 select-none"
+            <RcButton
+              size="xs"
+              className="mx-1 h-auto px-3 py-1 text-[length:inherit]"
               onClick={() =>
                 setMagicCasterChoice({ kind: "avatar", seat: ownerSeat })
               }
             >
               Cast with Avatar
-            </button>
+            </RcButton>
           ) : null}
           {actorIsActive && status === "choosingTarget" ? (
             <>
               {pm.target || !needsTarget ? (
-                <button
-                  className="mx-1 rounded bg-emerald-600/90 hover:bg-emerald-500 px-3 py-1 select-none"
+                <RcButton
+                  size="xs"
+                  className="mx-1 h-auto px-3 py-1 text-[length:inherit]"
                   onClick={() => {
                     try {
                       confirmMagic();
@@ -340,40 +344,47 @@ function TabletopMagicHudOverlay() {
                   }}
                 >
                   Confirm
-                </button>
+                </RcButton>
               ) : null}
-              <button
-                className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1 select-none"
+              <RcButton
+                variant="quiet"
+                size="xs"
+                className="mx-1 h-auto px-3 py-1 text-[length:inherit]"
                 onClick={() => setMagicCasterChoice(null)}
               >
                 Back
-              </button>
+              </RcButton>
             </>
           ) : null}
           {actorIsActive && status === "confirm" ? (
-            <button
-              className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1 select-none"
+            <RcButton
+              variant="quiet"
+              size="xs"
+              className="mx-1 h-auto px-3 py-1 text-[length:inherit]"
               onClick={() => setMagicTargetChoice(null)}
             >
               Back
-            </button>
+            </RcButton>
           ) : null}
           {!actorIsActive && iAmDefender && status === "confirm" ? (
-            <button
-              className="mx-1 rounded bg-amber-600/90 hover:bg-amber-500 px-3 py-1 select-none"
+            <RcButton
+              size="xs"
+              className="mx-1 h-auto px-3 py-1 text-[length:inherit]"
               onClick={() => resolveMagic()}
               title="Confirms the effect has been applied; sends the spell to the cemetery"
             >
               Done
-            </button>
+            </RcButton>
           ) : null}
           {actorIsActive ? (
-            <button
-              className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1 select-none"
+            <RcButton
+              variant="quiet"
+              size="xs"
+              className="mx-1 h-auto px-3 py-1 text-[length:inherit]"
               onClick={() => cancelMagic()}
             >
               Cancel
-            </button>
+            </RcButton>
           ) : null}
         </div>
       </div>
@@ -492,7 +503,7 @@ function TabletopMagicHudOverlay() {
         hitName = seat ? `Avatar ${seat.toUpperCase()}` : "an avatar";
       }
       return (
-        <div className="mt-2 text-amber-300/90 text-sm">
+        <div className="mt-2 text-rc-warning text-sm">
           Warning: projectile will hit {hitName} first and may not reach{" "}
           {intendedName}.
         </div>
@@ -510,17 +521,17 @@ function TabletopMagicHudOverlay() {
         className={`fixed inset-x-0 ${isMobileScreen ? "top-[calc(env(safe-area-inset-top,0px)+5.5rem)] px-3" : "top-24 px-4"} z-[100] pointer-events-none flex justify-center`}
       >
         <div
-          className={`pointer-events-auto max-w-3xl w-full rounded-xl bg-black/85 text-white ring-1 ring-white/20 shadow-xl overflow-y-auto ${
+          className={`pointer-events-auto max-w-3xl w-full rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] font-rc-sans text-rc-fg shadow-rc-panel overflow-y-auto thin-scrollbar ${
             isMobileScreen
               ? "p-3 text-sm max-h-[calc(100dvh-9rem)]"
               : "p-4 max-h-[70vh]"
           }`}
         >
           <div className="text-base md:text-lg mb-2">
-            <span className="font-fantaisie">{cardName}</span>
-            <span className="opacity-75">&nbsp;[T{tileNo}]</span>
+            <span className="font-rc-display text-rc-fg-strong">{cardName}</span>
+            <span className="font-rc-mono tabular-nums text-rc-fg-subtle">&nbsp;[T{tileNo}]</span>
             {targetLabel ? (
-              <span className="opacity-80">&nbsp;{targetLabel}</span>
+              <span className="text-rc-fg-muted">&nbsp;{targetLabel}</span>
             ) : null}
           </div>
           <div className="whitespace-pre-wrap leading-relaxed">
@@ -531,7 +542,7 @@ function TabletopMagicHudOverlay() {
                 : "No rules text available."}
           </div>
           {projectileMismatchWarning}
-          <div className="mt-3 text-xs opacity-70">
+          <div className="mt-3 text-xs text-rc-fg-subtle">
             {actorIsActive
               ? "The app does not apply this effect for you: carry it out on the board (damage, moves, cards). Your opponent presses Done once it is applied."
               : "The app does not apply this effect automatically: apply it on the board together, then press Done to send the spell to the cemetery."}

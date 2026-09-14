@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import {
   MessageCircle,
   ScrollText,
@@ -10,6 +11,7 @@ import {
 import { useSession } from "next-auth/react";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { RcButton } from "@/components/ui/rc-button";
 import { useRealtimeTournamentsOptional } from "@/contexts/RealtimeTournamentContext";
 import { useTournamentSocket } from "@/hooks/useTournamentSocket";
 
@@ -77,8 +79,8 @@ export default function FloatingChat({
         kind: "phases",
         ts: Date.now(),
         text: `Phase changed → ${d.newStatus}`,
-        icon: "🔄",
-        color: "text-blue-400"
+        icon: "game-icons:cycle",
+        color: "text-rc-info"
       }),
     onPlayerJoined: (d) =>
       pushEvent({
@@ -86,8 +88,8 @@ export default function FloatingChat({
         ts: Date.now(),
         text: `${d.playerName} joined (${d.currentPlayerCount} players)`,
         mine: myId != null && d.playerId === myId,
-        icon: "✅",
-        color: "text-green-400"
+        icon: "game-icons:entry-door",
+        color: "text-rc-success"
       }),
     onPlayerLeft: (d) =>
       pushEvent({
@@ -95,16 +97,16 @@ export default function FloatingChat({
         ts: Date.now(),
         text: `${d.playerName} left (${d.currentPlayerCount} players)`,
         mine: myId != null && d.playerId === myId,
-        icon: "👋",
-        color: "text-slate-400"
+        icon: "game-icons:exit-door",
+        color: "text-rc-fg-subtle"
       }),
     onRoundStarted: (d) => {
       pushEvent({
         kind: "matches",
         ts: Date.now(),
         text: `Round ${d.roundNumber} started`,
-        icon: "🔔",
-        color: "text-purple-400"
+        icon: "game-icons:ringing-bell",
+        color: "text-rc-moonlight"
       });
       notifyCollapsed(`Round ${d.roundNumber} started`);
     },
@@ -113,8 +115,8 @@ export default function FloatingChat({
         kind: "matches",
         ts: Date.now(),
         text: `Match assigned${d.opponentName ? ` vs ${d.opponentName}` : ""}`,
-        icon: "⚔️",
-        color: "text-cyan-400"
+        icon: "game-icons:crossed-swords",
+        color: "text-rc-ember"
       });
       notifyCollapsed(
         `Match assigned${d.opponentName ? ` vs ${d.opponentName}` : ""}`
@@ -126,8 +128,8 @@ export default function FloatingChat({
         ts: Date.now(),
         text: `${d.readyPlayerCount}/${d.totalPlayerCount} players ready`,
         mine: myId != null && d.playerId === myId,
-        icon: "⏳",
-        color: "text-amber-400"
+        icon: "game-icons:hourglass",
+        color: "text-rc-warning"
       }),
     // Do not log presence-only updates to reduce noise
     onPresenceUpdated: () => {},
@@ -214,8 +216,8 @@ export default function FloatingChat({
           ts: Date.now(),
           text: `Match ended in a draw${data.player1Name && data.player2Name ? ` (${data.player1Name} vs ${data.player2Name})` : ''}`,
           mine: isMine,
-          icon: "🤝",
-          color: "text-slate-300"
+          icon: "game-icons:shaking-hands",
+          color: "text-rc-fg-muted"
         });
       } else if (data.winnerName) {
         const text = data.loserName
@@ -227,8 +229,8 @@ export default function FloatingChat({
           ts: Date.now(),
           text,
           mine: isMine,
-          icon: "🏆",
-          color: myId === data.winnerId ? "text-amber-400" : "text-slate-300"
+          icon: "game-icons:laurels-trophy",
+          color: myId === data.winnerId ? "text-rc-accent-link" : "text-rc-fg-muted"
         });
 
         if (isMine) {
@@ -247,8 +249,8 @@ export default function FloatingChat({
         kind: "system",
         ts: Date.now(),
         text: `Round ${data.roundNumber} completed`,
-        icon: "✓",
-        color: "text-emerald-400"
+        icon: "game-icons:check-mark",
+        color: "text-rc-success"
       });
     };
 
@@ -268,8 +270,8 @@ export default function FloatingChat({
         ts: Date.now(),
         text,
         mine: !!(myId && myId === data.winnerId),
-        icon: "🎉",
-        color: "text-yellow-400"
+        icon: "game-icons:podium",
+        color: "text-rc-spark"
       });
 
       notifyCollapsed(text);
@@ -299,7 +301,7 @@ export default function FloatingChat({
 
   const content = (
     <div
-      className={`fixed ${positionClasses} z-[5000] text-white w-80 pointer-events-auto`}
+      className={`fixed ${positionClasses} z-[5000] text-rc-fg w-80 pointer-events-auto`}
       style={{
         left: `calc(env(safe-area-inset-left, 0px) + 16px)`,
         bottom: `calc(env(safe-area-inset-bottom, 0px) + 16px)`,
@@ -313,9 +315,10 @@ export default function FloatingChat({
               <button
                 className={`flex cursor-pointer items-center gap-1 rounded-rc-sm px-2 py-1 font-rc-mono text-[11px] uppercase tracking-[0.14em] transition-colors ${
                   activeTab === "chat"
-                    ? "bg-rc-accent text-rc-accent-fg"
-                    : "hover:bg-white/10 opacity-70"
+                    ? "bg-rc-accent/14 text-rc-spark ring-1 ring-inset ring-rc-accent/60"
+                    : "text-rc-fg-muted hover:bg-rc-line/6 hover:text-rc-fg-strong"
                 }`}
+                aria-pressed={activeTab === "chat"}
                 onClick={() => {
                   setActiveTab("chat");
                   if (!open) setOpen(true);
@@ -331,9 +334,10 @@ export default function FloatingChat({
               <button
                 className={`flex cursor-pointer items-center gap-1 rounded-rc-sm px-2 py-1 font-rc-mono text-[11px] uppercase tracking-[0.14em] transition-colors ${
                   activeTab === "events"
-                    ? "bg-rc-accent text-rc-accent-fg"
-                    : "hover:bg-white/10 opacity-70"
+                    ? "bg-rc-accent/14 text-rc-spark ring-1 ring-inset ring-rc-accent/60"
+                    : "text-rc-fg-muted hover:bg-rc-line/6 hover:text-rc-fg-strong"
                 }`}
+                aria-pressed={activeTab === "events"}
                 onClick={() => {
                   setActiveTab("events");
                   if (!open) setOpen(true);
@@ -349,9 +353,10 @@ export default function FloatingChat({
               <button
                 className={`flex cursor-pointer items-center gap-1 rounded-rc-sm px-2 py-1 font-rc-mono text-[11px] uppercase tracking-[0.14em] transition-colors ${
                   activeTab === "players"
-                    ? "bg-rc-accent text-rc-accent-fg"
-                    : "hover:bg-white/10 opacity-70"
+                    ? "bg-rc-accent/14 text-rc-spark ring-1 ring-inset ring-rc-accent/60"
+                    : "text-rc-fg-muted hover:bg-rc-line/6 hover:text-rc-fg-strong"
                 }`}
+                aria-pressed={activeTab === "players"}
                 onClick={() => {
                   setActiveTab("players");
                   if (!open) setOpen(true);
@@ -383,8 +388,8 @@ export default function FloatingChat({
                     <div className="rc-hint">no messages</div>
                   )}
                   {chat.slice(-200).map((m, i) => (
-                    <div key={i} className="opacity-90">
-                      <span className="font-medium">{m.from}</span>: {m.content}
+                    <div key={i} className="text-rc-fg">
+                      <span className="font-medium text-rc-fg-strong">{m.from}</span>: {m.content}
                     </div>
                   ))}
                 </div>
@@ -399,13 +404,14 @@ export default function FloatingChat({
                     }}
                     disabled={!tournamentId}
                   />
-                  <button
-                    className="cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent px-3 py-1 font-rc-sans text-xs font-medium text-rc-accent-fg transition-transform hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+                  <RcButton
+                    size="xs"
+                    className="h-8 px-3"
                     onClick={send}
                     disabled={!tournamentId || !chatInput.trim()}
                   >
                     Send
-                  </button>
+                  </RcButton>
                 </div>
               </div>
             )}
@@ -429,8 +435,10 @@ export default function FloatingChat({
                         key={i}
                         className={`opacity-90 ${ev.color || ''} ${ev.mine ? 'font-medium' : ''}`}
                       >
-                        {ev.icon ? `${ev.icon} ` : '• '}
-                        <span className="opacity-70">
+                        {ev.icon ? (
+                          <Icon icon={ev.icon} width={12} height={12} className="mr-1 inline-block align-[-2px]" aria-hidden="true" />
+                        ) : '• '}
+                        <span className="text-rc-fg-subtle">
                           {new Date(ev.ts).toLocaleTimeString([], {
                             hour: "2-digit",
                             minute: "2-digit",
@@ -450,7 +458,7 @@ export default function FloatingChat({
                     <div className="flex items-center gap-2 min-w-0">
                       <span
                         className={`inline-block w-2 h-2 rounded-full ${
-                          p.isConnected ? "bg-emerald-500" : "bg-slate-500"
+                          p.isConnected ? "bg-rc-success" : "bg-rc-fg-dim"
                         }`}
                       />
                       <span className="truncate">{p.name}</span>
@@ -495,7 +503,7 @@ export default function FloatingChat({
       {mode === "bubble" && !open && (
         <button
           aria-label="Open tournament chat"
-          className="fixed bottom-4 left-4 z-[5001] flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-rc-line/22 bg-black/70 backdrop-blur transition-colors hover:border-rc-accent"
+          className="fixed bottom-4 left-4 z-[5001] flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.85)] backdrop-blur transition-colors hover:border-rc-accent"
           style={{
             left: `calc(env(safe-area-inset-left, 0px) + 16px)`,
             bottom: `calc(env(safe-area-inset-bottom, 0px) + 16px)`,

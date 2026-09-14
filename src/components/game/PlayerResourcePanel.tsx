@@ -129,7 +129,7 @@ function ThresholdRow({
 
   if (activeElements.length === 0) {
     return compact ? null : (
-      <div className="text-xs text-gray-500" title={JSON.stringify(thresholds)}>
+      <div className="font-rc-sans text-xs text-rc-fg-subtle" title={JSON.stringify(thresholds)}>
         (no thresh)
       </div>
     );
@@ -149,7 +149,7 @@ function ThresholdRow({
             >
               <img src={el.icon} alt={el.key} width={8} height={8} />
               <span
-                className="text-[8px] font-bold leading-none"
+                className="font-rc-mono text-[8px] font-bold leading-none tabular-nums"
                 style={{ color: el.color }}
               >
                 {count}
@@ -202,7 +202,7 @@ function ManaRow({
 }: ManaRowProps & { compact?: boolean }) {
   const isTouchDevice = useTouchDevice();
   const manaColor =
-    mana === 0 ? "#ef4444" : mana < baseMana ? "#fbbf24" : "#ffffff";
+    mana === 0 ? "#ef4444" : mana < baseMana ? "#fbbf24" : "#fbf6e8";
 
   return (
     <div className="group flex flex-col items-center gap-0.5">
@@ -212,7 +212,7 @@ function ManaRow({
         title={`${mana} available / ${baseMana} total mana`}
       >
         <span
-          className={`${compact ? "text-[9px] leading-none" : "text-sm"} font-bold tabular-nums font-fantaisie`}
+          className={`${compact ? "text-[9px] leading-none" : "text-sm"} font-rc-mono font-bold tabular-nums`}
           style={{ color: manaColor }}
         >
           {mana}/{baseMana}
@@ -228,7 +228,7 @@ function ManaRow({
           <button
             type="button"
             onClick={onDecrement}
-            className={`${compact ? "w-5 h-5 text-[9px]" : "w-4 h-4 text-[10px]"} flex items-center justify-center rounded-full bg-rose-600/80 hover:bg-rose-500 text-white font-bold transition-colors`}
+            className={`${compact ? "w-5 h-5 text-[9px]" : "w-4 h-4 text-[10px]"} flex items-center justify-center rounded-full bg-black/35 font-bold text-rc-fg-muted ring-1 ring-rc-line/22 transition-colors hover:text-rc-accent-ring hover:ring-rc-accent`}
             title="Decrease mana"
           >
             −
@@ -236,7 +236,7 @@ function ManaRow({
           <button
             type="button"
             onClick={onIncrement}
-            className={`${compact ? "w-5 h-5 text-[9px]" : "w-4 h-4 text-[10px]"} flex items-center justify-center rounded-full bg-emerald-600/80 hover:bg-emerald-500 text-white font-bold transition-colors`}
+            className={`${compact ? "w-5 h-5 text-[9px]" : "w-4 h-4 text-[10px]"} flex items-center justify-center rounded-full bg-black/35 font-bold text-rc-fg-muted ring-1 ring-rc-line/22 transition-colors hover:text-rc-accent-ring hover:ring-rc-accent`}
             title="Increase mana"
           >
             +
@@ -397,7 +397,7 @@ export function PlayerResourceColumn({
 
   return (
     <div
-      className={`flex flex-col items-center ${isMobileScreen ? "gap-0 px-1 py-0.5 rounded bg-black/30" : "gap-1 p-1.5 rounded-lg bg-black/40"}`}
+      className={`flex flex-col items-center ${isMobileScreen ? "gap-0 px-1 py-0.5 rounded-rc-sm bg-[rgba(9,13,25,0.82)]" : "gap-1 p-1.5 rounded-rc-lg bg-[rgba(9,13,25,0.82)] shadow-rc-panel"}`}
       style={
         isMobileScreen
           ? { borderLeft: `2px solid ${PLAYER_COLORS[player]}` }
@@ -458,7 +458,7 @@ export default function PlayerResourcePanels({
           : "gap-6"
       } ${
         dragFromHand ? "pointer-events-none" : "pointer-events-auto"
-      } text-white select-none`}
+      } text-rc-fg select-none`}
     >
       {/* Opponent resources (top) */}
       <PlayerResourceColumn

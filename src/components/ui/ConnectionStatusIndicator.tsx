@@ -38,9 +38,9 @@ export const ConnectionStatusIndicator: React.FC<
       case "idle":
         return {
           color: "gray",
-          bgColor: "bg-gray-100",
-          textColor: "text-gray-600",
-          borderColor: "border-gray-200",
+          bgColor: "bg-[rgba(7,10,20,0.85)]",
+          textColor: "text-rc-fg-muted",
+          borderColor: "border-rc-line/22",
           icon: (
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z" />
@@ -53,9 +53,9 @@ export const ConnectionStatusIndicator: React.FC<
       case "joining":
         return {
           color: "blue",
-          bgColor: "bg-blue-100",
-          textColor: "text-blue-600",
-          borderColor: "border-blue-200",
+          bgColor: "bg-[rgba(7,10,20,0.85)]",
+          textColor: "text-rc-info",
+          borderColor: "border-rc-info/40",
           icon: (
             <svg
               className="w-4 h-4 animate-spin"
@@ -78,9 +78,9 @@ export const ConnectionStatusIndicator: React.FC<
       case "negotiating":
         return {
           color: "yellow",
-          bgColor: "bg-yellow-100",
-          textColor: "text-yellow-600",
-          borderColor: "border-yellow-200",
+          bgColor: "bg-[rgba(7,10,20,0.85)]",
+          textColor: "text-rc-warning",
+          borderColor: "border-rc-warning/40",
           icon: (
             <svg
               className="w-4 h-4 animate-pulse"
@@ -103,11 +103,11 @@ export const ConnectionStatusIndicator: React.FC<
       case "connected":
         return {
           color: colorBlindEnabled ? "blue" : "green",
-          bgColor: colorBlindEnabled ? "bg-sky-100" : "bg-green-100",
-          textColor: colorBlindEnabled ? "text-sky-600" : "text-green-600",
+          bgColor: "bg-[rgba(7,10,20,0.85)]",
+          textColor: colorBlindEnabled ? "text-rc-info" : "text-rc-success",
           borderColor: colorBlindEnabled
-            ? "border-sky-200"
-            : "border-green-200",
+            ? "border-rc-info/40"
+            : "border-rc-success/40",
           icon: (
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
               <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -120,11 +120,11 @@ export const ConnectionStatusIndicator: React.FC<
       case "failed":
         return {
           color: colorBlindEnabled ? "yellow" : "red",
-          bgColor: colorBlindEnabled ? "bg-amber-100" : "bg-red-100",
-          textColor: colorBlindEnabled ? "text-amber-600" : "text-red-600",
+          bgColor: "bg-[rgba(7,10,20,0.85)]",
+          textColor: colorBlindEnabled ? "text-rc-warning" : "text-rc-danger",
           borderColor: colorBlindEnabled
-            ? "border-amber-200"
-            : "border-red-200",
+            ? "border-rc-warning/40"
+            : "border-rc-danger/40",
           icon: (
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
               <path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -137,9 +137,9 @@ export const ConnectionStatusIndicator: React.FC<
       case "closed":
         return {
           color: "gray",
-          bgColor: "bg-gray-100",
-          textColor: "text-gray-600",
-          borderColor: "border-gray-200",
+          bgColor: "bg-[rgba(7,10,20,0.85)]",
+          textColor: "text-rc-fg-muted",
+          borderColor: "border-rc-line/22",
           icon: (
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
               <path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728" />
@@ -152,9 +152,9 @@ export const ConnectionStatusIndicator: React.FC<
       default:
         return {
           color: "gray",
-          bgColor: "bg-gray-100",
-          textColor: "text-gray-600",
-          borderColor: "border-gray-200",
+          bgColor: "bg-[rgba(7,10,20,0.85)]",
+          textColor: "text-rc-fg-muted",
+          borderColor: "border-rc-line/22",
           icon: (
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
               <path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -185,13 +185,13 @@ export const ConnectionStatusIndicator: React.FC<
             flex items-center gap-2 px-2 py-1
             ${config.bgColor} ${config.borderColor} ${config.textColor}
             border rounded-full
-            hover:shadow-sm transition-all duration-200
-            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1
+            hover:shadow-rc-sm transition-all duration-200
+            focus:outline-none focus:ring-1 focus:ring-rc-accent-ring
           `}
           title={config.description}
         >
           {config.icon}
-          <span className="text-xs font-medium">{config.label}</span>
+          <span className="font-rc-sans text-xs font-medium">{config.label}</span>
         </button>
 
         {/* Tooltip */}
@@ -199,12 +199,12 @@ export const ConnectionStatusIndicator: React.FC<
           <div
             className="
             absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2
-            px-2 py-1 bg-gray-900 text-white text-xs rounded
+            px-2 py-1 bg-[rgba(7,10,20,0.95)] text-rc-fg font-rc-sans text-xs rounded-rc-sm shadow-rc-md
             whitespace-nowrap z-50
           "
           >
             {config.description}
-            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-[rgba(7,10,20,0.95)]" />
           </div>
         )}
       </div>
@@ -216,7 +216,7 @@ export const ConnectionStatusIndicator: React.FC<
     <div
       className={`
       ${config.bgColor} ${config.borderColor}
-      border rounded-lg shadow-sm
+      border rounded-rc-md shadow-rc-panel text-rc-fg
       transition-all duration-200 ease-out
     `}
     >
@@ -230,7 +230,7 @@ export const ConnectionStatusIndicator: React.FC<
       >
         <div className="flex items-center gap-2">
           {config.icon}
-          <span className={`text-sm font-medium ${config.textColor}`}>
+          <span className={`font-rc-sans text-sm font-medium ${config.textColor}`}>
             {config.label}
           </span>
         </div>
@@ -244,9 +244,9 @@ export const ConnectionStatusIndicator: React.FC<
                 onRetry();
               }}
               className="
-                text-xs px-2 py-1 bg-white border border-gray-300 rounded
-                hover:bg-gray-50 transition-colors duration-200
-                focus:outline-none focus:ring-2 focus:ring-blue-500
+                font-rc-mono text-xs px-2 py-1 bg-black/35 border border-rc-line/22 rounded-rc-sm text-rc-fg-muted
+                hover:border-rc-accent hover:text-rc-accent-ring transition-colors duration-200
+                focus:outline-none focus:ring-1 focus:ring-rc-accent-ring
               "
             >
               Retry
@@ -260,8 +260,8 @@ export const ConnectionStatusIndicator: React.FC<
                 setIsExpanded(!isExpanded);
               }}
               className={`
-                p-1 rounded hover:bg-white/50 transition-colors duration-200
-                focus:outline-none focus:ring-2 focus:ring-blue-500
+                p-1 rounded-rc-sm hover:bg-rc-line/6 transition-colors duration-200
+                focus:outline-none focus:ring-1 focus:ring-rc-accent-ring
                 ${config.textColor}
               `}
             >
@@ -287,19 +287,19 @@ export const ConnectionStatusIndicator: React.FC<
 
       {/* Details */}
       {(isExpanded || !compact) && (
-        <div className="px-3 pb-3 border-t border-white/20">
-          <p className={`text-xs ${config.textColor} opacity-80 mt-2`}>
+        <div className="px-3 pb-3 border-t border-rc-line/12">
+          <p className={`font-rc-sans text-xs ${config.textColor} mt-2`}>
             {config.description}
           </p>
 
           {lastError && connectionState === "failed" && (
-            <div className="mt-2 p-2 bg-white/50 rounded text-xs text-red-700">
+            <div className="rc-alert mt-2 p-2 text-xs" data-tone="danger">
               <strong>Error:</strong> {lastError}
             </div>
           )}
 
           {/* Additional status info */}
-          <div className="mt-2 flex items-center gap-4 text-xs opacity-60">
+          <div className="rc-hint mt-2 flex items-center gap-4">
             <span>Status: {connectionState}</span>
             <span>•</span>
             <span>{new Date().toLocaleTimeString()}</span>

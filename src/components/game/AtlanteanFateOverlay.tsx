@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useMemo } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import {
   calculate2x2Area,
@@ -72,11 +73,11 @@ export default function AtlanteanFateOverlay() {
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top status bar */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-cyan-500/50 shadow-lg text-lg flex items-center gap-3">
-          <span className="text-cyan-400 font-fantaisie">
-            🌊 Atlantean Fate
+        <div className="pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg flex items-center gap-3">
+          <span className="font-rc-display text-rc-accent-link">
+            Atlantean Fate
           </span>
-          <span className="opacity-80">
+          <span className="text-rc-fg-muted">
             {phase === "selectingCorner" &&
               "Click on the board to select the aura area"}
             {phase === "confirming" && "Confirm to apply flood effects"}
@@ -87,23 +88,23 @@ export default function AtlanteanFateOverlay() {
       {/* Confirmation panel */}
       {isCaster && phase === "confirming" && previewInfo && (
         <div className="fixed left-6 top-24 z-[201] pointer-events-auto">
-          <div className="bg-black/90 rounded-xl p-4 ring-1 ring-cyan-500/30 max-w-sm">
-            <h3 className="text-cyan-400 font-semibold mb-2">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-4 max-w-sm font-rc-sans text-rc-fg shadow-rc-panel">
+            <h3 className="mb-2 font-rc-display text-[18px] leading-tight text-rc-fg-strong">
               Apply Flood Effects?
             </h3>
             <div className="space-y-2 text-sm">
-              <p className="text-gray-300">
+              <p className="text-rc-fg-muted">
                 <strong>Area:</strong> {previewInfo.coveredCells.length} tiles
                 around intersection
               </p>
-              <p className="text-gray-300">
+              <p className="text-rc-fg-muted">
                 <strong>Sites to flood:</strong>{" "}
                 {previewInfo.floodCount === 0 ? (
-                  <span className="text-gray-400">
+                  <span className="text-rc-fg-subtle">
                     None (no non-ordinary sites)
                   </span>
                 ) : (
-                  <span className="text-cyan-300">
+                  <span className="text-rc-fg-strong">
                     {previewInfo.floodCount} (
                     {previewInfo.sitesToFlood.join(", ")})
                   </span>
@@ -111,25 +112,19 @@ export default function AtlanteanFateOverlay() {
               </p>
             </div>
             <div className="flex gap-2 mt-4">
-              <button
-                onClick={handleCancel}
-                className="px-3 py-2 rounded bg-gray-600/20 hover:bg-gray-600/30 text-gray-300"
-              >
+              <RcButton variant="outline" onClick={handleCancel}>
                 Skip
-              </button>
-              <button
+              </RcButton>
+              <RcButton
+                variant="secondary"
                 onClick={handleReplace}
-                className="px-3 py-2 rounded bg-amber-600/20 hover:bg-amber-600/30 text-amber-300"
                 title="Choose a different position for the aura"
               >
                 Re-place
-              </button>
-              <button
-                onClick={handleConfirm}
-                className="flex-1 px-3 py-2 rounded bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 font-semibold"
-              >
+              </RcButton>
+              <RcButton className="flex-1" onClick={handleConfirm}>
                 Apply
-              </button>
+              </RcButton>
             </div>
           </div>
         </div>
@@ -138,7 +133,7 @@ export default function AtlanteanFateOverlay() {
       {/* Opponent waiting indicator */}
       {!isCaster && phase !== "complete" && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="px-4 py-2 rounded-lg bg-black/90 text-sm text-cyan-300">
+          <div className="rc-toast">
             {casterSeat.toUpperCase()} is deciding on Atlantean Fate effects...
           </div>
         </div>

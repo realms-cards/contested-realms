@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import CardWithPreview from "./CardWithPreview";
 
@@ -32,11 +33,11 @@ export default function PigsOfTheSounderOverlay() {
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-pink-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
-          <span className="text-pink-400 font-fantaisie">
-            🐷 {triggerCardName}
+        <div className="pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg md:text-xl flex items-center gap-3 select-none">
+          <span className="font-rc-display text-rc-accent-link">
+            {triggerCardName}
           </span>
-          <span className="opacity-80">
+          <span className="text-rc-fg-muted">
             {phase === "revealing" &&
               `${ownerSeat.toUpperCase()} reveals top 5 spells`}
             {phase === "summoning" &&
@@ -50,17 +51,17 @@ export default function PigsOfTheSounderOverlay() {
 
       {/* Reveal display - shown to BOTH players */}
       {showReveal && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-6 max-w-2xl w-full mx-4 ring-1 ring-pink-500/30">
-            <h2 className="text-2xl font-fantaisie text-pink-400 mb-2 text-center">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-2xl w-full mx-4 font-rc-sans text-rc-fg shadow-rc-panel">
+            <h2 className="mb-2 text-center font-rc-display text-[26px] leading-tight text-rc-fg-strong">
               {triggerCardName} Deathrite
             </h2>
-            <p className="text-gray-500 text-sm text-center mb-4">
+            <p className="text-rc-fg-subtle text-sm text-center mb-4">
               {ownerSeat.toUpperCase()}&apos;s spellbook — looking for{" "}
               {formatCardName(targetCardName)}
             </p>
 
-            <p className="text-gray-400 text-center mb-4">
+            <p className="text-rc-fg-muted text-center mb-4">
               Revealed {revealedCards.length} cards:
             </p>
 
@@ -85,17 +86,17 @@ export default function PigsOfTheSounderOverlay() {
             {/* Summary */}
             <div className="text-center mb-6">
               {pigsToSummon.length > 0 ? (
-                <p className="text-pink-300">
+                <p className="text-rc-accent-link">
                   Found {pigsToSummon.length} {formatCardName(targetCardName)}{" "}
                   to summon!
                 </p>
               ) : (
-                <p className="text-gray-400">
+                <p className="text-rc-fg-muted">
                   No {formatCardName(targetCardName)} found among revealed
                   cards.
                 </p>
               )}
-              <p className="text-gray-500 text-sm mt-2">
+              <p className="text-rc-fg-subtle text-sm mt-2">
                 Other cards will be put on the bottom in random order.
               </p>
             </div>
@@ -103,17 +104,17 @@ export default function PigsOfTheSounderOverlay() {
             {/* Dismiss button - only owner can resolve */}
             {isOwner ? (
               <div className="flex justify-center">
-                <button
+                <RcButton
                   onClick={resolve}
-                  className="px-6 py-2 bg-pink-600 hover:bg-pink-500 text-white rounded-lg font-medium transition-colors"
+                  className="h-auto whitespace-normal py-2"
                 >
                   {pigsToSummon.length > 0
                     ? `Summon ${formatCardName(targetCardName)} & Continue`
                     : "Continue"}
-                </button>
+                </RcButton>
               </div>
             ) : (
-              <div className="text-center text-gray-500 text-sm">
+              <div className="text-center text-rc-fg-subtle text-sm">
                 Waiting for {ownerSeat.toUpperCase()} to continue...
               </div>
             )}

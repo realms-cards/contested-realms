@@ -1,14 +1,19 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-export type BadgeTone = "default" | "gold" | "warn" | "ok" | "danger";
+export type BadgeTone = "default" | "gold" | "info" | "warn" | "ok" | "danger";
 
+/**
+ * `gold` is an accent: use it for genuinely special tags (patrons, "this
+ * page"), not for ordinary status. Status reads as info / ok / warn / danger.
+ */
 const TONES: Record<BadgeTone, string> = {
   default: "border-rc-line/7 bg-rc-line/8 text-rc-fg-muted",
   gold: "border-rc-accent/35 bg-rc-accent/16 text-rc-accent-link",
-  warn: "border-rc-accent/35 bg-[rgba(112,65,22,0.45)] text-[#f3e0b3]",
-  ok: "border-rc-success/35 bg-rc-success/18 text-[#c5d6a8]",
-  danger: "border-rc-danger/40 bg-rc-danger/15 text-[#f0c2b5]",
+  info: "border-rc-info/40 bg-rc-info/15 text-rc-info-ink",
+  warn: "border-rc-accent/35 bg-[rgba(112,65,22,0.45)] text-rc-warning-ink",
+  ok: "border-rc-success/35 bg-rc-success/18 text-rc-success-ink",
+  danger: "border-rc-danger/40 bg-rc-danger/15 text-rc-danger-ink",
 };
 
 /**

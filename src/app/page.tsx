@@ -80,7 +80,7 @@ export default function Home() {
 
       <div className="relative z-10 w-full max-w-6xl space-y-6 pb-10 pt-8 text-center md:space-y-7 md:pb-12 md:pt-10">
         {showAlphaBanner && (
-          <div className="relative z-30 mx-auto flex max-w-5xl items-center justify-between gap-3.5 rounded-rc-md border border-rc-accent/35 bg-[rgba(112,65,22,0.45)] px-3.5 py-2.5 text-left font-rc-sans text-[13px] text-[#f3e0b3]">
+          <div className="relative z-30 mx-auto flex max-w-5xl items-center justify-between gap-3.5 rounded-rc-md border border-rc-accent/35 bg-[rgba(112,65,22,0.45)] px-3.5 py-2.5 text-left font-rc-sans text-[13px] text-rc-warning-ink">
             <div className="flex flex-wrap items-center gap-3">
               <Badge tone="warn">Open Beta</Badge>
               <span className="text-rc-fg-muted">
@@ -91,7 +91,7 @@ export default function Home() {
             <button
               type="button"
               onClick={dismissAlpha}
-              className="cursor-pointer rounded-rc-sm p-1 text-lg leading-none text-[#f3e0b3] transition-colors hover:text-rc-fg-strong focus:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring"
+              className="cursor-pointer rounded-rc-sm p-1 text-lg leading-none text-rc-warning-ink transition-colors hover:text-rc-fg-strong focus:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring"
               aria-label="Dismiss banner"
             >
               ×
@@ -227,11 +227,8 @@ export default function Home() {
       {/* Cookie/Privacy notice toast */}
       {showCookieNotice && (
         <div className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-[380px] -translate-x-1/2">
-          <div className="rounded-rc-lg border border-rc-line/14 bg-gradient-to-b from-[rgba(26,36,58,0.96)] to-[rgba(17,26,46,0.96)] p-[18px] font-rc-sans text-[13px] leading-[1.55] text-rc-fg shadow-[0_18px_40px_rgba(0,0,0,0.55)] backdrop-blur-[8px]">
+          <div className="rc-toast p-[18px] leading-[1.55]">
             <div className="mb-2.5 flex items-center gap-2">
-              <span className="text-rc-spark [text-shadow:0_0_8px_rgba(253,225,160,0.5)]">
-                ✦
-              </span>
               <span className="rc-eyebrow">cookies</span>
             </div>
             <p className="m-0 mb-3.5 text-rc-fg-muted">
@@ -239,7 +236,7 @@ export default function Home() {
               simulator functionality. You can delete your data at any time.
             </p>
             <div className="flex justify-end gap-2">
-              <RcButton size="sm" onClick={dismissCookies}>
+              <RcButton variant="outline" size="sm" onClick={dismissCookies}>
                 Got it
               </RcButton>
             </div>

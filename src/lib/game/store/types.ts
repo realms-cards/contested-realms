@@ -1982,6 +1982,8 @@ export type GameState = {
   } | null;
   attackTargetChoice: {
     tile: { x: number; y: number };
+    /** A Ranged strike: only `candidates` are legal, and it resolves without defenders or a strike back. */
+    ranged?: boolean;
     attacker: {
       at: CellKey;
       index: number;
@@ -1999,6 +2001,7 @@ export type GameState = {
   } | null;
   attackConfirm: {
     tile: { x: number; y: number };
+    ranged?: boolean;
     attacker: {
       at: CellKey;
       index: number;
@@ -2017,6 +2020,11 @@ export type GameState = {
   setAttackChoice: (v: GameState["attackChoice"]) => void;
   setAttackTargetChoice: (v: GameState["attackTargetChoice"]) => void;
   setAttackConfirm: (v: GameState["attackConfirm"]) => void;
+  /** Tap a Ranged unit and strike the target: vs CPU this client applies the result, otherwise the target's owner does. */
+  rangedStrike: (
+    attacker: NonNullable<GameState["attackConfirm"]>["attacker"],
+    target: NonNullable<GameState["attackConfirm"]>["target"],
+  ) => void;
   // Signal Board to revert last cross-tile move (handled locally there)
   revertCrossMoveTick: number;
   requestRevertCrossMove: () => void;

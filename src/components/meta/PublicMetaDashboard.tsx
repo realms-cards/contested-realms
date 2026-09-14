@@ -1284,7 +1284,7 @@ export default function PublicMetaDashboard() {
               : undefined
           }
         >
-          <RcButton size="sm" onClick={refreshAll}>
+          <RcButton variant="outline" size="sm" onClick={refreshAll}>
             Refresh All
           </RcButton>
           <RcButton

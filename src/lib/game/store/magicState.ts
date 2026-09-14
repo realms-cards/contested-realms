@@ -3,6 +3,8 @@ import { extractMagicTargetingHintsSync } from "@/lib/game/cardAbilities";
 import { abilityChoices } from "@/lib/game/cpu/abilities";
 import { applySpellChoice } from "@/lib/game/cpu/applySpellChoice";
 import { luckyCharmCount } from "@/lib/game/cpu/luckyCharm";
+import { cpuTriggerName, useCpuReveals } from "@/lib/game/cpu/revealQueue";
+import { CPU_TRIGGERS_IN_ORDER } from "@/lib/game/cpu/spellTypes";
 import { getSpellChoice, getSpellChoices, supportsSpell } from "@/lib/game/cpu/spells";
 import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import type { CustomMessage } from "@/lib/net/transport";
@@ -46,12 +48,23 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
     }
     const privateCpuChoice = pending.cpuEvent?.kind === "genesis" && seatFromOwner(pending.spell.owner) !== get().actorKey &&
       ["Observatory","Autumn River","Spring River","Summer River"].includes(pending.spell.card.name);
-    get().log(`${pending.spell.card.name}: ${privateCpuChoice ? "resolved its private deck choice" : label}`);
+    const detail = privateCpuChoice ? "resolved its private deck choice" : label;
+    get().log(`${pending.spell.card.name}: ${detail}`);
+    // Show what the CPU's effect did before the resolve releases the bot (the reveal pauses it first).
+    const ownerSeat = seatFromOwner(pending.spell.owner), mySeat = get().actorKey;
+    if (mySeat && ownerSeat !== mySeat && get().opponentPlayerId?.startsWith("cpu_")) {
+      const reveals = useCpuReveals.getState();
+      if (pending.cpuEvent) {
+        reveals.show({id:pending.id,seat:ownerSeat,card:pending.spell.card,kind:"trigger",
+          action:cpuTriggerName(pending.cpuEvent.kind,pending.cpuEvent.kind === "auraEnd" ? pending.cpuEvent.counter : undefined),detail});
+      } else reveals.update(pending.id,{detail});
+    }
     get().flushPendingPatches();
     get().transport?.sendMessage?.({type:"magicResolve",id:pending.id,spell:pending.spell,tile:pending.tile} as unknown as CustomMessage);
   },
   chooseCpuTrigger: (id) => {
-    if (get().cpuTriggerOptions?.some(option => option.id === id)) set({cpuChosenTrigger:id});
+    const options = get().cpuTriggerOptions;
+    if (id === CPU_TRIGGERS_IN_ORDER ? options?.length : options?.some(option => option.id === id)) set({cpuChosenTrigger:id});
   },
   activateCpuAbility: (key, requestedSeat, requestId) => {
     const state = get(), seat = requestedSeat || state.actorKey;
@@ -68,6 +81,9 @@ export const createMagicSlice: StateCreator<GameState, [], [], MagicSlice> = (
       const source = choice.source, [x,y] = source.at.split(",").map(Number);
       // Hold the normal resolution lock while paying costs and applying effects.
       const spell = {at:source.at,index:-1,owner:seat === "p1" ? 1 as const : 2 as const,instanceId:id,card:source.card};
+      if (state.actorKey && seat !== state.actorKey) {
+        useCpuReveals.getState().show({id,seat,card:source.card,kind:"ability",action:"activates",detail:choice.label});
+      }
       set({pendingMagic:{id,tile:{x,y},spell,status:"confirm",createdAt:Date.now()}});
       state.transport?.sendMessage?.({type:"magicBegin",id,tile:{x,y},spell} as unknown as CustomMessage);
       const pending = get().pendingMagic;

@@ -253,7 +253,7 @@ export default function CpuMatchSetup({ mode }: { mode: "precon" | "goldfish" })
           </div>
 
           <div>
-            <div className="rc-eyebrow mb-2" id="cpu-precon-label">
+            <div className="rc-field-label mb-2" id="cpu-precon-label">
               Opponent&rsquo;s deck
             </div>
             <div

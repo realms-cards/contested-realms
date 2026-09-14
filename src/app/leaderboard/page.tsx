@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
@@ -176,7 +177,7 @@ export default function LeaderboardPage() {
       <section className="rc-panel">
         <div className="flex flex-col gap-4 px-[18px] py-3.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="rc-eyebrow">Format</span>
+            <span className="rc-field-label">Format</span>
             <div className="rc-segment">
               {(["constructed", "sealed", "draft"] as const).map((f) => (
                 <button
@@ -193,7 +194,7 @@ export default function LeaderboardPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="rc-eyebrow">Period</span>
+            <span className="rc-field-label">Period</span>
             <div className="rc-segment">
               {(["all_time", "monthly", "weekly"] as const).map((t) => (
                 <button
@@ -362,7 +363,12 @@ export default function LeaderboardPage() {
                                   className="flex items-center gap-1 font-rc-mono text-xs tabular-nums text-rc-accent-link"
                                   title={`${entry.tournamentWins} tournament ${entry.tournamentWins === 1 ? "win" : "wins"}`}
                                 >
-                                  <span aria-hidden>🏆</span>
+                                  <Icon
+                                    icon="game-icons:laurels-trophy"
+                                    width={14}
+                                    height={14}
+                                    aria-hidden="true"
+                                  />
                                   {entry.tournamentWins}
                                 </span>
                               )}

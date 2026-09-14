@@ -425,7 +425,7 @@ export default function PlayerDetailPage({
                             {getMatchResultText(match.isWin, match.isDraw)}
                           </Badge>
                           {match.tournamentId && (
-                            <Badge tone="gold">Tournament</Badge>
+                            <Badge tone="info">Tournament</Badge>
                           )}
                         </div>
                         {ladderNote && (

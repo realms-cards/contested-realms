@@ -46,11 +46,11 @@ export default function TournamentControls({
 
   return (
     <div className="absolute bottom-6 right-6 z-30 pointer-events-auto">
-      <div className="bg-black/90 backdrop-blur-sm rounded-lg p-4 ring-1 ring-white/30 shadow-xl max-w-sm">
+      <div className="max-w-sm rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-4 text-rc-fg shadow-rc-panel backdrop-blur-sm">
         <div className="flex items-center justify-end mb-3">
           <button
             onClick={onClose}
-            className="text-white/60 hover:text-white text-xl leading-none mr-2"
+            className="mr-2 cursor-pointer rounded-rc-md px-2 py-0.5 text-xl leading-none text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
             title="Close"
           >
             ×
@@ -61,16 +61,16 @@ export default function TournamentControls({
           <>
             {/* Spellslinger Avatar - Display as card */}
             <div className="mb-4">
-              <div className="text-xs uppercase opacity-70 text-white mb-2">
+              <div className="rc-eyebrow mb-2">
                 Default Avatar
               </div>
               <div className="flex justify-center">
                 <button
                   onClick={onAddSpellslinger}
-                  className="group relative hover:bg-white/10 rounded p-1 transition-colors"
+                  className="group relative cursor-pointer rounded-rc-md p-1 transition-colors hover:bg-rc-accent/8 hover:ring-1 hover:ring-rc-accent/35"
                   title="Add Spellslinger avatar to your deck"
                 >
-                  <div className="relative aspect-[3/4] rounded overflow-hidden bg-black/40">
+                  <div className="relative aspect-[3/4] rounded-rc-sm overflow-hidden bg-black/40">
                     <Image
                       src={
                         spellslingerCard?.slug
@@ -83,7 +83,7 @@ export default function TournamentControls({
                       sizes="120px"
                     />
                   </div>
-                  <div className="mt-1 text-[10px] text-center opacity-80 text-white">
+                  <div className="mt-1 text-center font-rc-sans text-[10px] text-rc-fg-muted transition-colors group-hover:text-rc-fg-strong">
                     Spellslinger
                   </div>
                 </button>
@@ -91,7 +91,7 @@ export default function TournamentControls({
             </div>
 
             {/* Standard Sites */}
-            <div className="text-xs uppercase opacity-70 text-white mb-2">
+            <div className="rc-eyebrow mb-2">
               Standard Sites
             </div>
             <div className="grid grid-cols-4 gap-2">
@@ -101,10 +101,10 @@ export default function TournamentControls({
                   <button
                     key={name}
                     onClick={() => onAddStandardSite(name)}
-                    className="group relative hover:bg-white/10 rounded p-1 transition-colors"
+                    className="group relative cursor-pointer rounded-rc-md p-1 transition-colors hover:bg-rc-accent/8 hover:ring-1 hover:ring-rc-accent/35"
                     title={`Add ${name} to your Atlas`}
                   >
-                    <div className="relative aspect-[4/3] rounded overflow-hidden bg-black/40 transform rotate-90">
+                    <div className="relative aspect-[4/3] rounded-rc-sm overflow-hidden bg-black/40 transform rotate-90">
                       <Image
                         src={
                           hit?.slug
@@ -117,7 +117,7 @@ export default function TournamentControls({
                         sizes="80px"
                       />
                     </div>
-                    <div className="mt-1 text-[10px] text-center opacity-80 text-white">
+                    <div className="mt-1 text-center font-rc-sans text-[10px] text-rc-fg-muted transition-colors group-hover:text-rc-fg-strong">
                       {name}
                     </div>
                   </button>
@@ -130,7 +130,7 @@ export default function TournamentControls({
         {/* Cube standard cards (optional) */}
         {showCubeExtras && Array.isArray(cubeStandardCards) && (
           <div className="mt-4">
-            <div className="text-xs uppercase opacity-70 text-white mb-2">
+            <div className="rc-eyebrow mb-2">
               Cube Extras
             </div>
             <div className="grid grid-cols-4 gap-2">
@@ -138,10 +138,10 @@ export default function TournamentControls({
                 <button
                   key={`${card.cardId}:${card.slug}`}
                   onClick={() => onAddCubeStandardCard?.(card)}
-                  className="group relative hover:bg-white/10 rounded p-1 transition-colors"
+                  className="group relative cursor-pointer rounded-rc-md p-1 transition-colors hover:bg-rc-accent/8 hover:ring-1 hover:ring-rc-accent/35"
                   title={`Add ${card.cardName} to your deck`}
                 >
-                  <div className="relative aspect-[3/4] rounded overflow-hidden bg-black/40">
+                  <div className="relative aspect-[3/4] rounded-rc-sm overflow-hidden bg-black/40">
                     <Image
                       src={
                         card.slug
@@ -154,7 +154,7 @@ export default function TournamentControls({
                       sizes="120px"
                     />
                   </div>
-                  <div className="mt-1 text-[10px] text-center opacity-80 text-white line-clamp-2">
+                  <div className="mt-1 text-center font-rc-sans text-[10px] text-rc-fg-muted transition-colors line-clamp-2 group-hover:text-rc-fg-strong">
                     {card.cardName}
                   </div>
                 </button>

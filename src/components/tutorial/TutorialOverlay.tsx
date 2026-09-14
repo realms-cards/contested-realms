@@ -5,9 +5,11 @@
  * on top of the 3D game scene during tutorial lessons.
  */
 
+import { Icon } from "@iconify/react";
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 import { NumberBadge, type Digit } from "@/components/game/manacost";
+import { RcButton } from "@/components/ui/rc-button";
 import type { TutorialStep } from "@/lib/tutorial/types";
 
 interface TutorialOverlayProps {
@@ -101,14 +103,19 @@ export function TutorialOverlay({
           it does not land on the narration panel */}
       {hint && (
         <div className="fixed top-[calc(var(--rc-nav-h,0px)+0.5rem)] left-1/2 -translate-x-1/2 z-[62] w-max max-w-[min(24rem,calc(100vw-1.5rem))] max-lg:landscape:left-auto max-lg:landscape:right-[max(0.75rem,env(safe-area-inset-right))] max-lg:landscape:translate-x-0">
-          <div className="bg-amber-600/90 text-white rounded-lg px-4 py-3 shadow-lg text-sm flex items-start gap-3">
-            <span className="shrink-0 text-lg">💡</span>
+          <div
+            className="rc-toast flex items-start gap-3 px-4 py-3 text-sm"
+            data-tone="info"
+          >
+            <span className="mt-0.5 shrink-0 text-rc-spark">
+              <Icon icon="game-icons:light-bulb" width={18} height={18} aria-hidden="true" />
+            </span>
             <div className="flex-1">
               <p>{hint}</p>
             </div>
             <button
               onClick={onDismissHint}
-              className="shrink-0 text-amber-200 hover:text-white text-xs ml-2"
+              className="ml-2 shrink-0 font-rc-mono text-xs tracking-[0.08em] text-rc-accent-link transition-colors hover:text-rc-accent-ring"
             >
               Dismiss
             </button>
@@ -132,7 +139,7 @@ export function TutorialOverlay({
                     src={`/api/images/${step.showCard.slug}`}
                     alt={step.showCard.name}
                     fill
-                    className="object-contain rounded-lg drop-shadow-[0_0_20px_rgba(139,92,246,0.4)]"
+                    className="object-contain rounded-rc-md drop-shadow-[0_0_20px_rgba(212,169,74,0.35)]"
                     unoptimized
                   />
                 </div>
@@ -144,12 +151,12 @@ export function TutorialOverlay({
                   src={`/api/images/${step.showCard.slug}`}
                   alt={step.showCard.name}
                   fill
-                  className="object-contain rounded-lg drop-shadow-[0_0_20px_rgba(139,92,246,0.4)]"
+                  className="object-contain rounded-rc-md drop-shadow-[0_0_20px_rgba(212,169,74,0.35)]"
                   unoptimized
                 />
               </div>
             )}
-            <p className="text-center text-sm text-slate-300 mt-3 font-medium drop-shadow-lg">
+            <p className="mt-3 text-center font-rc-display text-[18px] leading-tight text-rc-fg drop-shadow-lg">
               {step.showCard.name}
             </p>
           </div>
@@ -173,27 +180,27 @@ export function TutorialOverlay({
             : ""
         } ${visible ? "translate-x-0 opacity-100" : "-translate-x-4 opacity-0"}`}
       >
-        <div className="flex max-h-[60vh] flex-col overflow-hidden rounded-xl bg-slate-900/80 shadow-2xl ring-1 ring-slate-600/60 backdrop-blur-md max-lg:landscape:max-h-[calc(100dvh-var(--rc-nav-h,0px)-4.5rem)] max-lg:portrait:max-h-[45dvh]">
+        <div className="flex max-h-[60vh] flex-col overflow-hidden rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.8)] text-rc-fg shadow-rc-panel backdrop-blur-md max-lg:landscape:max-h-[calc(100dvh-var(--rc-nav-h,0px)-4.5rem)] max-lg:portrait:max-h-[45dvh]">
           {/* Progress */}
-          <div className="h-1 shrink-0 bg-slate-800/70">
+          <div className="h-1 shrink-0 bg-black/45">
             <div
-              className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 transition-all duration-500"
+              className="h-full bg-gradient-to-r from-rc-accent to-rc-accent-hover transition-all duration-500"
               style={{ width: `${progress}%` }}
             />
           </div>
 
           {/* Title row with step counter and skip */}
-          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-700/50 px-4 py-2 max-lg:px-3">
-            <h3 className="min-w-0 pt-0.5 text-sm font-semibold text-white">
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-rc-line/12 px-4 py-2 max-lg:px-3">
+            <h3 className="m-0 min-w-0 pt-0.5 font-rc-display text-[18px] leading-tight text-rc-fg-strong">
               {step.title ?? ""}
             </h3>
             <div className="flex shrink-0 items-center gap-1 text-xs">
-              <span className="tabular-nums text-slate-400">
+              <span className="font-rc-mono tabular-nums text-rc-fg-subtle">
                 Step {stepIndex + 1} / {stepCount}
               </span>
               <button
                 onClick={onSkip}
-                className="rounded px-2 py-1 text-slate-400 transition-colors hover:bg-slate-700/60 hover:text-white"
+                className="rounded-rc-sm px-2 py-1 font-rc-sans text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
               >
                 Skip Lesson
               </button>
@@ -202,19 +209,19 @@ export function TutorialOverlay({
 
           {/* Body text — scrollable */}
           {step.text && (
-            <div className="overflow-y-auto px-4 py-3 max-lg:px-3 max-lg:py-2">
+            <div className="thin-scrollbar overflow-y-auto px-4 py-3 max-lg:px-3 max-lg:py-2">
               <TutorialText text={step.text} />
             </div>
           )}
 
           {/* Action bar */}
-          <div className="flex items-center justify-between border-t border-slate-700/50 px-4 py-2.5 shrink-0 max-lg:px-3 max-lg:py-2">
+          <div className="flex items-center justify-between border-t border-rc-line/12 px-4 py-2.5 shrink-0 max-lg:px-3 max-lg:py-2">
             <div className="flex items-center gap-2">
               <StepTypeIndicator type={step.type} />
               {canGoBack && (
                 <button
                   onClick={onBack}
-                  className="rounded px-2 py-1 text-xs text-slate-400 hover:text-white hover:bg-slate-700/60 transition-colors"
+                  className="rounded-rc-sm px-2 py-1 font-rc-sans text-xs text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
                   title="Previous step (Left arrow)"
                 >
                   &larr; Back
@@ -223,22 +230,19 @@ export function TutorialOverlay({
             </div>
 
             {isInteractive && (
-              <button
-                onClick={onAdvance}
-                className="rounded-lg bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-4 py-1.5 text-sm font-semibold text-white transition-all shadow-md hover:shadow-lg"
-              >
+              <RcButton size="sm" className="px-4" onClick={onAdvance}>
                 {step.type === "checkpoint" ? "Continue" : "Next"}
-              </button>
+              </RcButton>
             )}
 
             {step.type === "forced_action" && (
-              <span className="text-xs text-amber-400 italic">
+              <span className="font-rc-sans text-xs italic text-rc-spark">
                 Perform the action to continue
               </span>
             )}
 
             {step.type === "scripted_action" && (
-              <span className="text-xs text-blue-400 italic">
+              <span className="font-rc-sans text-xs italic text-rc-info">
                 Watching...
               </span>
             )}
@@ -255,14 +259,14 @@ export function TutorialOverlay({
 function TutorialText({ text }: { text: string }) {
   const lines = text.split("\n");
   return (
-    <div className="space-y-2 text-sm text-slate-200 leading-relaxed">
+    <div className="space-y-2 font-rc-sans text-sm leading-relaxed text-rc-fg">
       {lines.map((line, i) => {
         const trimmed = line.trim();
         if (trimmed === "") return <div key={i} className="h-1" />;
         if (trimmed.startsWith("- ")) {
           return (
             <div key={i} className="flex gap-2 pl-2">
-              <span className="text-violet-400 shrink-0">•</span>
+              <span className="text-rc-accent-link shrink-0">•</span>
               <span>{renderBold(trimmed.slice(2))}</span>
             </div>
           );
@@ -272,7 +276,7 @@ function TutorialText({ text }: { text: string }) {
           if (match) {
             return (
               <div key={i} className="flex gap-2 pl-2">
-                <span className="text-violet-400 shrink-0 w-4 text-right">
+                <span className="font-rc-mono tabular-nums text-rc-accent-link shrink-0 w-4 text-right">
                   {match[1]}.
                 </span>
                 <span>{renderBold(match[2])}</span>
@@ -301,7 +305,7 @@ function renderBold(text: string): React.ReactNode {
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return (
-        <span key={i} className="font-semibold text-white">
+        <span key={i} className="font-semibold text-rc-fg-strong">
           {part.slice(2, -2)}
         </span>
       );
@@ -338,16 +342,16 @@ function renderBold(text: string): React.ReactNode {
 /** Small indicator showing the step type. */
 function StepTypeIndicator({ type }: { type: string }) {
   const labels: Record<string, { label: string; color: string }> = {
-    narration: { label: "Info", color: "text-blue-400" },
-    highlight: { label: "Look", color: "text-emerald-400" },
-    forced_action: { label: "Your Turn", color: "text-amber-400" },
+    narration: { label: "Info", color: "text-rc-info" },
+    highlight: { label: "Look", color: "text-rc-success" },
+    forced_action: { label: "Your Turn", color: "text-rc-spark" },
     scripted_action: { label: "Opponent", color: "text-red-400" },
-    wait: { label: "Wait", color: "text-slate-400" },
-    checkpoint: { label: "Checkpoint", color: "text-violet-400" },
+    wait: { label: "Wait", color: "text-rc-fg-subtle" },
+    checkpoint: { label: "Checkpoint", color: "text-rc-moonlight" },
   };
-  const info = labels[type] ?? { label: type, color: "text-slate-400" };
+  const info = labels[type] ?? { label: type, color: "text-rc-fg-subtle" };
   return (
-    <span className={`text-xs font-medium uppercase tracking-wider ${info.color}`}>
+    <span className={`font-rc-mono text-xs font-medium uppercase tracking-[0.14em] ${info.color}`}>
       {info.label}
     </span>
   );

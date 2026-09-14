@@ -272,7 +272,7 @@ export default function CollectionImportExport({
                 </div>
 
                 <div className="space-y-2">
-                  <div className="rc-eyebrow">Format</div>
+                  <div className="rc-field-label">Format</div>
                   <div className="rc-segment">
                     <button
                       type="button"
@@ -301,6 +301,7 @@ export default function CollectionImportExport({
                   className="rc-textarea h-32 w-full"
                 />
                 <RcButton
+                  variant="outline"
                   className="w-full"
                   onClick={handleImport}
                   disabled={loading || !text.trim()}

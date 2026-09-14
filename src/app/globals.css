@@ -504,6 +504,12 @@ body[data-colorblind="true"] *[class*="ring-rose-"] {
   --color-rc-success: #7a9d52;
   --color-rc-info: #6f8bb3;
   --color-rc-gold-ink: #3a2c08;
+  /* Light status inks for text on dark surfaces (Badge, soft buttons, toasts):
+     text-rc-success-ink, text-rc-danger-ink ... */
+  --color-rc-success-ink: #c5d6a8;
+  --color-rc-warning-ink: #f3e0b3;
+  --color-rc-danger-ink: #f0c2b5;
+  --color-rc-info-ink: #d5deec;
 
   --font-rc-display:
     var(--font-fantaisie), "UnifrakturCook", "Luminari", ui-serif, Georgia,
@@ -657,9 +663,91 @@ body[data-colorblind="true"] *[class*="ring-rose-"] {
   .rc-segment > button:hover {
     color: #f3cf6a;
   }
+  /* Gold is an accent: the pressed option is tinted, never filled */
   .rc-segment > button[aria-pressed="true"] {
-    background: #d4a94a;
-    color: #1a1407;
+    background: rgba(212, 169, 74, 0.16);
+    color: #fde1a0;
+  }
+  /* Optional semantic tone per option: <button data-tone="success" aria-pressed> */
+  .rc-segment > button[aria-pressed="true"][data-tone="success"] {
+    background: rgba(122, 157, 82, 0.18);
+    color: #c5d6a8;
+  }
+  .rc-segment > button[aria-pressed="true"][data-tone="info"] {
+    background: rgba(111, 139, 179, 0.2);
+    color: #d5deec;
+  }
+  .rc-segment > button[aria-pressed="true"][data-tone="moonlight"] {
+    background: rgba(201, 214, 234, 0.12);
+    color: #c9d6ea;
+  }
+  .rc-segment > button[aria-pressed="true"][data-tone="ember"] {
+    background: rgba(201, 124, 61, 0.18);
+    color: #c97c3d;
+  }
+  .rc-segment > button[aria-pressed="true"][data-tone="warning"] {
+    background: rgba(217, 155, 44, 0.16);
+    color: #f3e0b3;
+  }
+  .rc-segment > button[aria-pressed="true"][data-tone="danger"] {
+    background: rgba(185, 84, 61, 0.18);
+    color: #f0c2b5;
+  }
+  .rc-segment > button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  .rc-segment > button:disabled:hover {
+    color: #b9b4a2;
+  }
+
+  /* Form field label: quiet mono caps. The gold rc-eyebrow is for section
+     headings, not for every input label. */
+  .rc-field-label {
+    display: block;
+    font-family: var(--font-rc-mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #8a8675;
+  }
+
+  /* Floating toast / notice over the board or a page. Opaque so it reads
+     over card art (rc-alert is for inline banners).
+     data-tone="info|success|warning|danger" */
+  .rc-toast {
+    border: 1px solid rgba(236, 231, 215, 0.22);
+    border-left-width: 3px;
+    border-radius: 6px;
+    background: rgba(9, 13, 25, 0.94);
+    box-shadow: var(--shadow-rc-panel);
+    padding: 10px 14px;
+    font-family: var(--font-rc-sans);
+    font-size: 13px;
+    line-height: 1.45;
+    color: #ece7d7;
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+  .rc-toast[data-tone="info"] {
+    border-color: rgba(111, 139, 179, 0.45);
+    border-left-color: #6f8bb3;
+    color: #d5deec;
+  }
+  .rc-toast[data-tone="success"] {
+    border-color: rgba(122, 157, 82, 0.45);
+    border-left-color: #7a9d52;
+    color: #c5d6a8;
+  }
+  .rc-toast[data-tone="warning"] {
+    border-color: rgba(212, 169, 74, 0.45);
+    border-left-color: #d99b2c;
+    color: #f3e0b3;
+  }
+  .rc-toast[data-tone="danger"] {
+    border-color: rgba(185, 84, 61, 0.5);
+    border-left-color: #b9543d;
+    color: #f0c2b5;
   }
   .rc-segment > button:focus-visible {
     outline: 1px solid #f3cf6a;

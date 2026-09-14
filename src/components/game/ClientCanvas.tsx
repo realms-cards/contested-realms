@@ -4,26 +4,16 @@ import { Canvas, type CanvasProps } from "@react-three/fiber";
 import {
   useEffect,
   useState,
-  type CSSProperties,
   type ReactNode,
 } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 
 export interface ClientCanvasProps extends CanvasProps {
   children?: ReactNode;
 }
 
-const shellStyle: CSSProperties = {
-  width: "100%",
-  height: "100%",
-  background: "#0b0b0c",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  color: "#cbd5e1",
-  fontSize: "14px",
-  padding: "24px",
-  textAlign: "center",
-};
+const shellClass =
+  "flex h-full w-full items-center justify-center bg-rc-floor p-6 text-center font-rc-sans text-sm text-rc-fg-muted";
 
 /**
  * Result of probing the browser/GPU for a usable WebGL2 context.
@@ -130,6 +120,8 @@ function SoftwareRendererWarning() {
 
   return (
     <div
+      className="rc-toast flex items-center gap-3"
+      data-tone="warning"
       style={{
         position: "fixed",
         bottom: 16,
@@ -137,16 +129,6 @@ function SoftwareRendererWarning() {
         transform: "translateX(-50%)",
         zIndex: 90,
         maxWidth: 460,
-        padding: "10px 14px",
-        borderRadius: 10,
-        background: "rgba(120, 53, 15, 0.92)",
-        color: "#fef3c7",
-        fontSize: 13,
-        lineHeight: 1.45,
-        boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
-        display: "flex",
-        gap: 12,
-        alignItems: "center",
         pointerEvents: "auto",
       }}
     >
@@ -155,25 +137,19 @@ function SoftwareRendererWarning() {
         causes low frame rates and high CPU usage. Enable hardware acceleration
         in your browser settings, then restart the browser.
       </span>
-      <button
+      <RcButton
+        variant="quiet"
+        size="xs"
+        className="h-[26px] flex-none px-2 font-rc-mono"
         onClick={() => {
           setDismissed(true);
           try {
             localStorage.setItem(SW_WARNING_DISMISS_KEY, "true");
           } catch {}
         }}
-        style={{
-          flexShrink: 0,
-          border: "1px solid rgba(254,243,199,0.4)",
-          borderRadius: 6,
-          background: "transparent",
-          color: "#fef3c7",
-          padding: "4px 8px",
-          cursor: "pointer",
-        }}
       >
         Dismiss
-      </button>
+      </RcButton>
     </div>
   );
 }
@@ -195,19 +171,17 @@ export function ClientCanvas({
 
   if (status === "pending") {
     // Keep a visible scene shell during client hydration to avoid blank flashes.
-    return <div style={shellStyle}>Loading 3D scene…</div>;
+    return <div className={shellClass}>Loading 3D scene…</div>;
   }
 
   if (status === "unsupported") {
     return (
-      <div style={shellStyle}>
+      <div className={shellClass}>
         <div style={{ maxWidth: 420, lineHeight: 1.5 }}>
-          <div
-            style={{ fontSize: "16px", color: "#f1f5f9", marginBottom: "10px" }}
-          >
+          <div className="mb-2.5 font-rc-display text-[22px] leading-none text-rc-fg-strong">
             3D board unavailable
           </div>
-          <div style={{ color: "#94a3b8" }}>
+          <div className="text-rc-fg-muted">
             Your browser or graphics hardware doesn’t support WebGL2, which the 3D
             board requires. Try the following:
             <ul

@@ -53,24 +53,24 @@ function Spotlight({ target }: { target: TutorialHighlightTarget }) {
     <div className="pointer-events-none fixed inset-0 z-[55]">
       {/* Spotlight cutout — transparent window with dark surroundings */}
       <div
-        className="absolute rounded-lg transition-all duration-500 ease-out"
+        className="absolute rounded-rc-lg transition-all duration-500 ease-out"
         style={{
           top: `${region.top}%`,
           left: `${region.left}%`,
           width: `${region.width}%`,
           height: `${region.height}%`,
-          boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.55)",
+          boxShadow: "0 0 0 9999px rgba(6, 10, 20, 0.55)",
         }}
       >
         {/* Pulsing glow border */}
-        <div className="absolute inset-0 rounded-lg ring-2 ring-violet-400/60 animate-pulse" />
+        <div className="absolute inset-0 rounded-rc-lg ring-2 ring-rc-accent-ring/60 shadow-[0_0_18px_rgba(243,207,106,0.35)] animate-pulse" />
       </div>
 
       {/* Label */}
       <div className="absolute" style={labelPlacement.style}>
         <div className="flex items-center gap-2 animate-pulse">
-          <div className="rounded-full bg-violet-500/90 shadow-lg shadow-violet-500/40 px-3 py-1.5">
-            <span className="text-xs font-semibold text-white whitespace-nowrap">
+          <div className="rounded-full border border-rc-accent-ring/60 bg-[rgba(7,10,20,0.85)] shadow-[0_0_14px_rgba(243,207,106,0.3)] px-3 py-1.5">
+            <span className="font-rc-sans text-xs font-semibold text-rc-spark whitespace-nowrap">
               {label}
             </span>
           </div>

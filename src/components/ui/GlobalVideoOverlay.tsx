@@ -118,11 +118,11 @@ export const GlobalVideoOverlay: React.FC<
             className={`
               relative flex items-center justify-center
               w-8 h-8 rounded-full 
-              bg-gradient-to-br from-blue-500 to-purple-600
-              hover:from-blue-600 hover:to-purple-700
+              border border-rc-accent/45 bg-[rgba(7,10,20,0.85)]
+              hover:border-rc-accent
               transition-all duration-200 ease-out
-              focus:outline-none focus:ring-1 focus:ring-blue-400 focus:ring-offset-1
-              shadow-md hover:shadow-lg
+              focus:outline-none focus:ring-1 focus:ring-rc-accent-ring
+              shadow-rc-sm hover:shadow-rc-md
               overflow-hidden
             `}
             title={isMinimized ? "Show video controls" : "Hide video controls"}
@@ -137,7 +137,7 @@ export const GlobalVideoOverlay: React.FC<
                 priority
               />
             ) : (
-              <span className="text-white text-xs font-semibold">
+              <span className="font-rc-mono text-rc-fg-strong text-xs font-semibold">
                 {userDisplayName
                   ? userDisplayName.slice(0, 2).toUpperCase()
                   : "ME"}
@@ -154,7 +154,7 @@ export const GlobalVideoOverlay: React.FC<
             <div className="pointer-events-auto">
               <SeatMediaControls
                 rtc={rtc}
-                className="shadow-lg"
+                className="shadow-rc-md"
                 playbackEnabled={playbackEnabled}
                 onTogglePlayback={setPlaybackEnabled}
                 renderAudioElement={!voiceFeatureEnabled}
@@ -182,15 +182,15 @@ export const GlobalVideoOverlay: React.FC<
             <div className="pointer-events-auto">
               <div
                 className="
-                bg-gray-900/80 backdrop-blur-sm rounded-lg p-3
-                shadow-lg border border-gray-700/50
+                rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] backdrop-blur-sm p-3
+                shadow-rc-panel
               "
               >
-                <div className="flex flex-col gap-3 text-white text-sm">
+                <div className="flex flex-col gap-3 font-rc-sans text-rc-fg text-sm">
                   <div className="flex items-center gap-2">
                     <div
                       className="
-                      w-2 h-2 rounded-full bg-green-400
+                      w-2 h-2 rounded-full bg-rc-success
                     "
                     />
                     <span>You are online</span>
@@ -198,11 +198,11 @@ export const GlobalVideoOverlay: React.FC<
 
                   <div className="flex flex-col gap-2">
                     <label
-                      className="flex items-center justify-between text-xs uppercase tracking-wide text-white/60"
+                      className="flex items-center justify-between font-rc-mono text-[10px] uppercase tracking-[0.18em] text-rc-accent-link"
                       htmlFor={volumeSliderId}
                     >
                       <span>Sound Volume</span>
-                      <span>{sliderValue}%</span>
+                      <span className="tabular-nums text-rc-fg-muted">{sliderValue}%</span>
                     </label>
                     <input
                       id={volumeSliderId}
@@ -220,7 +220,7 @@ export const GlobalVideoOverlay: React.FC<
                           playCardShuffle();
                         }
                       }}
-                      className="w-44 accent-purple-400"
+                      className="rc-range w-44"
                     />
                   </div>
                 </div>
@@ -235,7 +235,7 @@ export const GlobalVideoOverlay: React.FC<
                 stream={rtc.remoteStream}
                 playerId={"remote-player"}
                 displayName="Remote Player"
-                className="shadow-lg rounded-lg overflow-hidden"
+                className="shadow-rc-md rounded-rc-lg overflow-hidden"
               />
             </div>
           )}
@@ -251,7 +251,7 @@ export const GlobalVideoOverlay: React.FC<
                   playerId="local-player"
                   displayName="You"
                   muted={true} // Always mute local stream to prevent echo
-                  className="shadow-lg rounded-lg overflow-hidden w-32 h-24"
+                  className="shadow-rc-md rounded-rc-lg overflow-hidden w-32 h-24"
                 />
               </div>
             )}

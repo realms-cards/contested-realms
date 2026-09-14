@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import type { ChaosTwisterAccuracy } from "@/lib/game/store/types";
 import { getCellNumber } from "@/lib/game/store/utils/boardHelpers";
@@ -192,11 +193,11 @@ export default function ChaosTwisterOverlay({
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-purple-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
-          <span className="text-purple-400 font-fantaisie">
-            🌪️ Chaos Twister
+        <div className="pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg md:text-xl flex items-center gap-3 select-none">
+          <span className="font-rc-display text-rc-accent-link">
+            Chaos Twister
           </span>
-          <span className="opacity-80">
+          <span className="text-rc-fg-muted">
             {phase === "selectingMinion" &&
               (isCaster
                 ? "Select a minion to blow"
@@ -213,12 +214,14 @@ export default function ChaosTwisterOverlay({
           </span>
           {isCaster &&
             (phase === "selectingMinion" || phase === "selectingSite") && (
-              <button
-                className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1 select-none"
+              <RcButton
+                variant="outline"
+                size="xs"
+                className="mx-1"
                 onClick={() => cancelChaosTwister()}
               >
                 Cancel
-              </button>
+              </RcButton>
             )}
         </div>
       </div>
@@ -227,12 +230,12 @@ export default function ChaosTwisterOverlay({
       {(phase === "selectingMinion" || phase === "selectingSite") &&
         pending.targetMinion && (
           <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-            <div className="pointer-events-auto px-4 py-2 rounded-lg bg-black/90 text-white/80 text-sm ring-1 ring-purple-500/30">
+            <div className="rc-toast pointer-events-auto">
               Selected:{" "}
-              <span className="text-purple-300 font-medium">
+              <span className="font-rc-display text-rc-accent-link">
                 {pending.targetMinion.card.name}
               </span>
-              <span className="text-white/60 ml-2">
+              <span className="font-rc-mono tabular-nums text-rc-fg-subtle ml-2">
                 (Power: {pending.targetMinion.power})
               </span>
             </div>
@@ -241,29 +244,29 @@ export default function ChaosTwisterOverlay({
 
       {/* Minigame phase - the dexterity slider */}
       {phase === "minigame" && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-8 max-w-lg w-full ring-1 ring-purple-500/30">
-            <h2 className="text-2xl font-fantaisie text-purple-400 mb-2 text-center">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-8 max-w-lg w-full font-rc-sans text-rc-fg shadow-rc-panel">
+            <h2 className="mb-2 text-center font-rc-display text-[26px] leading-tight text-rc-fg-strong">
               Dexterity Test!
             </h2>
-            <p className="text-white/70 text-sm mb-6 text-center">
+            <p className="text-rc-fg-muted text-sm mb-6 text-center">
               {isCaster
                 ? "Stop the slider in the GREEN zone for a perfect landing!"
                 : `Waiting for ${pending.casterSeat.toUpperCase()} to complete the test...`}
             </p>
 
             {/* Info about selected targets */}
-            <div className="mb-6 p-3 rounded bg-white/5 text-sm">
+            <div className="mb-6 p-3 rounded-rc-md border border-rc-line/12 bg-black/30 text-sm">
               <div className="flex justify-between">
-                <span className="text-white/60">Minion:</span>
-                <span className="text-purple-300">
+                <span className="text-rc-fg-subtle">Minion:</span>
+                <span className="text-rc-fg-strong">
                   {pending.targetMinion?.card.name} (Power:{" "}
                   {pending.targetMinion?.power})
                 </span>
               </div>
               <div className="flex justify-between mt-1">
-                <span className="text-white/60">Target Site:</span>
-                <span className="text-purple-300">
+                <span className="text-rc-fg-subtle">Target Site:</span>
+                <span className="font-rc-mono tabular-nums text-rc-fg-strong">
                   #
                   {pending.targetSite
                     ? getCellNumber(
@@ -278,7 +281,7 @@ export default function ChaosTwisterOverlay({
             </div>
 
             {/* The slider bar */}
-            <div className="relative h-16 rounded-lg overflow-hidden mb-6">
+            <div className="relative h-16 rounded-rc-md overflow-hidden mb-6">
               {/* Red zones (left and right) */}
               <div
                 className="absolute inset-y-0 left-0 bg-red-600/80"
@@ -326,7 +329,7 @@ export default function ChaosTwisterOverlay({
 
               {/* Zone labels */}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <span className="text-white font-bold text-xs opacity-70">
+                <span className="text-rc-fg-strong/70 font-bold text-xs">
                   GREEN = Perfect • YELLOW = 1 tile off • RED = 2 tiles off
                 </span>
               </div>
@@ -334,13 +337,16 @@ export default function ChaosTwisterOverlay({
 
             {/* Stop button (only for caster) */}
             {isCaster && isRunning && (
-              <button
-                className="w-full py-4 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xl transition-colors"
+              <RcButton
+                size="lg"
+                className="w-full h-auto py-4 font-bold text-xl"
                 onClick={handleStop}
               >
                 STOP!{" "}
-                <span className="text-sm opacity-70">(or press Space)</span>
-              </button>
+                <span className="text-sm text-rc-accent-fg/70">
+                  (or press Space)
+                </span>
+              </RcButton>
             )}
           </div>
         </div>
@@ -350,16 +356,16 @@ export default function ChaosTwisterOverlay({
       {phase === "resolving" && pending.minigameResult && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
           <div
-            className={`pointer-events-auto px-6 py-3 rounded-full ring-1 shadow-lg flex items-center gap-4 ${
+            className={`pointer-events-auto px-6 py-3 rounded-full border bg-[rgba(7,10,20,0.9)] font-rc-sans shadow-rc-panel flex items-center gap-4 ${
               pending.minigameResult.accuracy === "green"
-                ? "bg-green-900/90 ring-green-500/50"
+                ? "border-green-500/50"
                 : pending.minigameResult.accuracy === "yellow"
-                  ? "bg-yellow-900/90 ring-yellow-500/50"
-                  : "bg-red-900/90 ring-red-500/50"
+                  ? "border-yellow-500/50"
+                  : "border-red-500/50"
             }`}
           >
             <span
-              className={`font-fantaisie text-lg ${
+              className={`font-rc-display text-lg ${
                 pending.minigameResult.accuracy === "green"
                   ? "text-green-400"
                   : pending.minigameResult.accuracy === "yellow"
@@ -368,13 +374,13 @@ export default function ChaosTwisterOverlay({
               }`}
             >
               {pending.minigameResult.accuracy === "green"
-                ? "🎯 Perfect!"
+                ? "Perfect!"
                 : pending.minigameResult.accuracy === "yellow"
-                  ? "🌀 Close!"
+                  ? "Close!"
                   : "Missed!"}
             </span>
-            <span className="text-white/80 text-sm">
-              <span className="text-red-400 font-bold">
+            <span className="text-rc-fg-muted text-sm">
+              <span className="font-rc-mono font-bold tabular-nums text-rc-danger">
                 {pending.targetMinion?.power} dmg
               </span>{" "}
               → Site #
@@ -388,12 +394,13 @@ export default function ChaosTwisterOverlay({
                 : "?"}
             </span>
             {isCaster && (
-              <button
-                className="ml-2 px-4 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white font-medium text-sm transition-colors"
+              <RcButton
+                size="xs"
+                className="ml-2"
                 onClick={() => resolveChaosTwister()}
               >
                 Resolve
-              </button>
+              </RcButton>
             )}
           </div>
         </div>

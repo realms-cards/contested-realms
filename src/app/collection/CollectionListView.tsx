@@ -424,6 +424,7 @@ export default function CollectionListView({
             />
 
             <RcButton
+              variant="outline"
               size="sm"
               onClick={handleBulkAction}
               disabled={!bulkAction || isProcessing}

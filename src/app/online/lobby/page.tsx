@@ -19,7 +19,8 @@ import PracticeMatchControls from "@/components/online/lobby/PracticeMatchContro
 import AppShell from "@/components/ui/AppShell";
 import CustomSelect from "@/components/ui/CustomSelect";
 import Modal from "@/components/ui/Modal";
-import { RcButton } from "@/components/ui/rc-button";
+import { Badge } from "@/components/ui/badge";
+import { RcButton, rcButtonVariants } from "@/components/ui/rc-button";
 import { useRealtimeTournaments } from "@/contexts/RealtimeTournamentContext";
 import { tournamentFeatures } from "@/lib/config/features";
 import {
@@ -1604,6 +1605,7 @@ function LobbyPageContent({
                 aria-label="Invite link"
               />
               <RcButton
+                variant="outline"
                 className="h-10 shrink-0"
                 onClick={() => void copyLobbyInvite()}
                 disabled={!lobbyInviteUrl}
@@ -1685,9 +1687,8 @@ function LobbyPageContent({
                   an enter action, so keep a compact way back out. */}
               {autoJoinIn === null && !matchCta.disabled && (
                 <RcButton
-                  variant="ghost"
+                  variant="danger-soft"
                   size="sm"
-                  className="text-rc-danger hover:text-rc-danger-hover"
                   onClick={() => setLeaveConfirmOpen(true)}
                   title="Leave current match"
                 >
@@ -1699,9 +1700,9 @@ function LobbyPageContent({
         )}
         {/* SOATC League Match indicator */}
         {lobby?.soatcLeagueMatch?.isLeagueMatch && (
-          <div className="flex items-center gap-3.5 rounded-rc-lg border border-rc-warning/45 bg-gradient-to-br from-rc-warning/16 to-[rgba(9,13,25,0.85)] to-60% px-[18px] py-3.5 shadow-rc-panel">
+          <div className="flex items-center gap-3.5 rounded-rc-lg border border-rc-accent/35 bg-gradient-to-br from-rc-accent/12 to-[rgba(9,13,25,0.85)] to-60% px-[18px] py-3.5 shadow-rc-panel">
             <div className="min-w-0 flex-1">
-              <div className="font-rc-mono text-[11px] uppercase tracking-[0.24em] text-rc-warning">
+              <div className="font-rc-mono text-[11px] uppercase tracking-[0.24em] text-rc-accent-link">
                 SATC league match
               </div>
               <div className="mt-1 truncate font-rc-display text-[22px] leading-none text-rc-fg-strong">
@@ -1781,7 +1782,7 @@ function LobbyPageContent({
                     Accept
                   </RcButton>
                   <RcButton
-                    variant="destructive"
+                    variant="danger-soft"
                     size="sm"
                     onClick={() =>
                       voice.respondToRequest(
@@ -1994,7 +1995,7 @@ function LobbyPageContent({
         {leaveConfirmOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div
-              className="absolute inset-0 bg-black/60"
+              className="absolute inset-0 bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px]"
               onClick={() => setLeaveConfirmOpen(false)}
             />
             <div className="rc-panel relative w-full max-w-md p-5">
@@ -2066,20 +2067,21 @@ function LobbyPageContent({
         {isHost && configOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div
-              className="absolute inset-0 bg-black/60"
+              className="absolute inset-0 bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px]"
               onClick={() => setConfigOpen(false)}
             />
             <div className="relative rc-panel w-full max-w-xl p-5">
               <div className="flex items-center justify-between">
-                <div className="text-base font-semibold">
+                <div className="font-rc-display text-[26px] leading-none text-rc-fg-strong">
                   Match Configuration
                 </div>
-                <button
-                  className="text-slate-300 hover:text-white text-sm"
+                <RcButton
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setConfigOpen(false)}
                 >
                   Close
-                </button>
+                </RcButton>
               </div>
               <div className="mt-3 space-y-4">
                 {/* Tournament Match Mode - show if player is in a SOATC tournament matching the selected game type */}
@@ -2098,7 +2100,7 @@ function LobbyPageContent({
                     lobby?.soatcLeagueMatch?.isLeagueMatch === true;
 
                   return (
-                    <div className="p-3 rounded-lg bg-amber-900/20 ring-1 ring-amber-500/30">
+                    <div className="rounded-rc-md border border-rc-accent/35 bg-rc-accent/8 p-3">
                       <label className="flex items-start gap-3 cursor-pointer">
                         <input
                           type="checkbox"
@@ -2129,20 +2131,20 @@ function LobbyPageContent({
                               }
                             }
                           }}
-                          className="mt-0.5 rounded"
+                          className="mt-0.5 accent-rc-accent"
                         />
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 text-sm font-semibold text-amber-200">
-                            <Trophy className="w-4 h-4 shrink-0" />
+                          <div className="flex items-center gap-2 font-rc-sans text-sm font-medium text-rc-fg-strong">
+                            <Trophy className="w-4 h-4 shrink-0 text-rc-accent" />
                             <span>Tournament Match</span>
                           </div>
-                          <div className="text-xs text-amber-300/80 mt-1">
+                          <div className="mt-1 font-rc-sans text-xs text-rc-fg-muted">
                             {selectedTournament.name}
                           </div>
-                          <div className="text-xs text-amber-300/60 mt-0.5 flex items-center gap-2">
+                          <div className="mt-0.5 flex items-center gap-2 font-rc-mono text-[11px] tracking-[0.06em] text-rc-fg-subtle">
                             <span>Invite-only • Spectators enabled</span>
                             {selectedTournament.playersCount && (
-                              <span className="text-amber-400/70">
+                              <span className="text-rc-fg-muted">
                                 • {selectedTournament.playersCount} players
                               </span>
                             )}
@@ -2152,8 +2154,8 @@ function LobbyPageContent({
 
                       {/* Tournament Invite Link - show when tournament mode is enabled */}
                       {isTournamentMode && lobby && (
-                        <div className="mt-3 pt-3 border-t border-amber-500/20">
-                          <label className="block text-xs font-medium mb-2 text-amber-200">
+                        <div className="mt-3 border-t border-rc-accent/25 pt-3">
+                          <label className="rc-field-label mb-2">
                             Tournament Invite Link
                           </label>
                           <div className="flex gap-2">
@@ -2165,10 +2167,11 @@ function LobbyPageContent({
                                 lobby.id,
                                 { tournamentId: selectedTournament.id },
                               )}
-                              className="flex-1 bg-slate-900/60 ring-1 ring-amber-500/30 rounded px-2 py-1.5 text-xs font-mono text-slate-200"
+                              className="rc-input h-8 min-w-0 flex-1 text-xs"
                             />
-                            <button
-                              className="rounded-lg bg-amber-600/20 hover:bg-amber-600/30 ring-1 ring-amber-500/50 px-3 py-1.5 text-xs font-medium text-amber-200 transition-colors"
+                            <RcButton
+                              variant="outline"
+                              size="sm"
                               onClick={() => {
                                 const inviteUrl = buildLobbyInviteUrl(
                                   window.location.origin,
@@ -2180,7 +2183,7 @@ function LobbyPageContent({
                               }}
                             >
                               Copy
-                            </button>
+                            </RcButton>
                           </div>
                         </div>
                       )}
@@ -2190,12 +2193,13 @@ function LobbyPageContent({
 
                 {/* Open Lobby section - applies to all lobbies */}
                 {lobby && !lobby.hostReady && (
-                  <div className="rounded-lg bg-slate-800/50 ring-1 ring-slate-700 p-3">
-                    <p className="text-xs text-slate-300 mb-2">
+                  <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-3">
+                    <p className="mb-2 font-rc-sans text-xs text-rc-fg-muted">
                       Other players cannot join until you open the lobby.
                     </p>
-                    <button
-                      className="w-full rounded-lg bg-emerald-600/80 hover:bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors"
+                    <RcButton
+                      variant="outline"
+                      className="w-full"
                       onClick={() => {
                         if (transport?.openLobby) {
                           transport.openLobby();
@@ -2203,33 +2207,30 @@ function LobbyPageContent({
                       }}
                     >
                       Open Lobby for Players
-                    </button>
+                    </RcButton>
                   </div>
                 )}
                 {lobby && lobby.hostReady && (
-                  <div className="rounded-lg bg-emerald-900/30 ring-1 ring-emerald-700/50 p-3">
-                    <p className="text-xs text-emerald-400">
+                  <div className="rc-alert" data-tone="success">
+                    <p>
                       ✓ Lobby is open - waiting for players to join
                     </p>
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-xs font-medium mb-2">
+                  <label className="rc-field-label mb-2">
                     Match Type
                     {isQuickMatch && (
-                      <span className="ml-2 text-xs text-slate-400">
+                      <span className="rc-hint ml-2 normal-case text-rc-fg-subtle">
                         (locked for Quick Play)
                       </span>
                     )}
                   </label>
-                  <div className="flex gap-2">
+                  <div className="rc-segment">
                     <button
-                      className={`px-3 py-2 text-sm rounded transition-colors ${
-                        matchType === "constructed"
-                          ? "bg-indigo-600/80 text-white"
-                          : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-                      } ${isQuickMatch ? "opacity-60 cursor-not-allowed" : ""}`}
+                      aria-pressed={matchType === "constructed"}
+                      data-tone="info"
                       onClick={() => {
                         if (isQuickMatch) return;
                         setMatchType("constructed");
@@ -2240,11 +2241,8 @@ function LobbyPageContent({
                       Constructed
                     </button>
                     <button
-                      className={`px-3 py-2 text-sm rounded transition-colors ${
-                        matchType === "sealed"
-                          ? "bg-indigo-600/80 text-white"
-                          : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-                      } ${isQuickMatch ? "opacity-60 cursor-not-allowed" : ""}`}
+                      aria-pressed={matchType === "sealed"}
+                      data-tone="info"
                       onClick={() => {
                         if (isQuickMatch) return;
                         setMatchType("sealed");
@@ -2255,11 +2253,8 @@ function LobbyPageContent({
                       Sealed
                     </button>
                     <button
-                      className={`px-3 py-2 text-sm rounded transition-colors ${
-                        matchType === "draft"
-                          ? "bg-indigo-600/80 text-white"
-                          : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-                      } ${isQuickMatch ? "opacity-60 cursor-not-allowed" : ""}`}
+                      aria-pressed={matchType === "draft"}
+                      data-tone="info"
                       onClick={() => {
                         if (isQuickMatch) return;
                         setMatchType("draft");
@@ -2273,36 +2268,35 @@ function LobbyPageContent({
                 </div>
                 {matchType === "draft" && (
                   <div>
-                    <label className="block text-xs font-medium mb-3">
+                    <label className="rc-field-label mb-3">
                       Draft Configuration
                     </label>
                     <div className="space-y-3">
                       <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-sm">
+                        <label className="rc-check flex">
                           <input
                             type="checkbox"
                             checked={draftUseCube}
                             onChange={(e) => handleCubeToggle(e.target.checked)}
-                            className="rounded"
                           />
                           <span>
                             Use one of your cubes as the booster source
                           </span>
                         </label>
                         {draftUseCube ? (
-                          <div className="space-y-2 rounded-lg bg-slate-800/60 ring-1 ring-slate-700 p-3 text-sm">
+                          <div className="space-y-2 rounded-rc-md border border-rc-line/12 bg-black/30 p-3 text-sm">
                             {cubesLoading ? (
-                              <div className="text-xs text-slate-300">
+                              <div className="rc-hint">
                                 Loading cubes...
                               </div>
                             ) : null}
                             {cubeError ? (
-                              <div className="text-xs text-red-300 bg-red-900/30 rounded px-3 py-2 ring-1 ring-red-800/40">
+                              <div className="rc-alert" data-tone="danger">
                                 {cubeError}
                               </div>
                             ) : (
                               <>
-                                <label className="block text-xs font-medium mb-1">
+                                <label className="rc-field-label mb-1">
                                   Select cube
                                 </label>
                                 <CustomSelect
@@ -2318,7 +2312,7 @@ function LobbyPageContent({
                                   }))}
                                 />
                                 {selectedCubeId && !cubeError ? (
-                                  <div className="text-xs text-slate-300/90">
+                                  <div className="font-rc-sans text-xs text-rc-fg-muted">
                                     Packs will be generated from{" "}
                                     {availableCubes.find(
                                       (cube) => cube.id === selectedCubeId,
@@ -2326,20 +2320,19 @@ function LobbyPageContent({
                                     .
                                   </div>
                                 ) : null}
-                                <p className="text-xs text-slate-400">
+                                <p className="font-rc-sans text-xs text-rc-fg-subtle">
                                   Manage cubes on the{" "}
                                   <Link
                                     href="/cubes"
-                                    className="underline text-slate-200 hover:text-white"
+                                    className="rc-link underline"
                                   >
                                     Cubes page
                                   </Link>
                                   .
                                 </p>
-                                <label className="mt-2 flex items-center gap-2 text-xs">
+                                <label className="rc-check mt-2 flex">
                                   <input
                                     type="checkbox"
-                                    className="rounded"
                                     checked={
                                       !!draftConfig.includeCubeSideboardInStandard
                                     }
@@ -2361,14 +2354,14 @@ function LobbyPageContent({
                             )}
                           </div>
                         ) : (
-                          <p className="text-xs text-slate-400">
+                          <p className="font-rc-sans text-xs text-rc-fg-subtle">
                             Draft from official set boosters. Adjust the pack
                             mix below.
                           </p>
                         )}
                       </div>
                       <div>
-                        <label className="block text-xs font-medium mb-2">
+                        <label className="rc-field-label mb-2">
                           Number of Packs
                         </label>
                         <CustomSelect
@@ -2392,15 +2385,12 @@ function LobbyPageContent({
                       </div>
                       {!draftUseCube && (
                         <div>
-                          <label className="block text-xs font-medium mb-2">
+                          <label className="rc-field-label mb-2">
                             Exact Pack Mix (sum must equal{" "}
                             {draftConfig.packCount})
-                            <span
-                              className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] ring-1 ${
-                                draftValid
-                                  ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
-                                  : "bg-amber-500/15 text-amber-300 ring-amber-500/30"
-                              }`}
+                            <Badge
+                              tone={draftValid ? "ok" : "warn"}
+                              className="ml-2"
                             >
                               {draftValid
                                 ? "OK"
@@ -2411,7 +2401,7 @@ function LobbyPageContent({
                                   : `Remove ${
                                       draftAssigned - draftConfig.packCount
                                     }`}
-                            </span>
+                            </Badge>
                           </label>
                           <div className="space-y-2">
                             {draftableSets.map((set) => {
@@ -2426,10 +2416,12 @@ function LobbyPageContent({
                                   key={set}
                                   className="flex items-center justify-between"
                                 >
-                                  <span className="text-sm">{set}</span>
+                                  <span className="font-rc-sans text-sm text-rc-fg">{set}</span>
                                   <div className="flex items-center gap-2">
-                                    <button
-                                      className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
+                                    <RcButton
+                                      variant="quiet"
+                                      size="icon-xs"
+                                      className="rounded-rc-sm font-rc-mono"
                                       onClick={() =>
                                         setDraftConfig((prev) => ({
                                           ...prev,
@@ -2451,12 +2443,14 @@ function LobbyPageContent({
                                       disabled={!canDec}
                                     >
                                       −
-                                    </button>
-                                    <span className="w-8 text-center text-sm font-medium">
+                                    </RcButton>
+                                    <span className="w-8 text-center font-rc-mono text-sm tabular-nums text-rc-fg-strong">
                                       {count}
                                     </span>
-                                    <button
-                                      className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
+                                    <RcButton
+                                      variant="quiet"
+                                      size="icon-xs"
+                                      className="rounded-rc-sm font-rc-mono"
                                       onClick={() =>
                                         setDraftConfig((prev) => ({
                                           ...prev,
@@ -2478,7 +2472,7 @@ function LobbyPageContent({
                                       disabled={!canInc}
                                     >
                                       +
-                                    </button>
+                                    </RcButton>
                                   </div>
                                 </div>
                               );
@@ -2486,7 +2480,7 @@ function LobbyPageContent({
                           </div>
                         </div>
                       )}
-                      <label className="flex items-center gap-2 text-sm mt-2">
+                      <label className="rc-check mt-2 flex">
                         <input
                           type="checkbox"
                           checked={draftConfig.enableSeer}
@@ -2496,11 +2490,10 @@ function LobbyPageContent({
                               enableSeer: e.target.checked,
                             }))
                           }
-                          className="rounded"
                         />
                         <span>Enable Second Seer (2nd player scries 1)</span>
                       </label>
-                      <label className="flex items-center gap-2 text-sm mt-2">
+                      <label className="rc-check mt-2 flex">
                         <input
                           type="checkbox"
                           checked={draftConfig.freeAvatars}
@@ -2510,7 +2503,6 @@ function LobbyPageContent({
                               freeAvatars: e.target.checked,
                             }))
                           }
-                          className="rounded"
                         />
                         <span>
                           Free Avatars (remove from packs, all available in deck
@@ -2523,11 +2515,11 @@ function LobbyPageContent({
                 {matchType === "sealed" && (
                   <>
                     <div>
-                      <label className="block text-xs font-medium mb-3">
+                      <label className="rc-field-label mb-3">
                         Sealed Configuration
                       </label>
                       <div className="space-y-3">
-                        <label className="flex items-center gap-2 text-sm">
+                        <label className="rc-check flex">
                           <input
                             type="checkbox"
                             checked={sealedUseCube}
@@ -2557,25 +2549,24 @@ function LobbyPageContent({
                                 }));
                               }
                             }}
-                            className="rounded"
                           />
                           <span>
                             Use one of your cubes as the booster source
                           </span>
                         </label>
                         {sealedUseCube ? (
-                          <div className="space-y-2 rounded-lg bg-slate-800/60 ring-1 ring-slate-700 p-3 text-sm">
+                          <div className="space-y-2 rounded-rc-md border border-rc-line/12 bg-black/30 p-3 text-sm">
                             {cubesLoading ? (
-                              <div className="text-xs text-slate-300">
+                              <div className="rc-hint">
                                 Loading cubes...
                               </div>
                             ) : cubeError ? (
-                              <div className="text-xs text-red-300 bg-red-900/30 rounded px-3 py-2 ring-1 ring-red-800/40">
+                              <div className="rc-alert" data-tone="danger">
                                 {cubeError}
                               </div>
                             ) : (
                               <>
-                                <label className="block text-xs font-medium mb-1">
+                                <label className="rc-field-label mb-1">
                                   Select cube
                                 </label>
                                 <CustomSelect
@@ -2604,25 +2595,24 @@ function LobbyPageContent({
                                   }))}
                                 />
                                 {sealedConfig.cubeId && (
-                                  <div className="text-xs text-slate-300/90">
+                                  <div className="font-rc-sans text-xs text-rc-fg-muted">
                                     Packs will be generated from{" "}
                                     {sealedConfig.cubeName ?? "your cube"}.
                                   </div>
                                 )}
-                                <p className="text-xs text-slate-400">
+                                <p className="font-rc-sans text-xs text-rc-fg-subtle">
                                   Manage cubes on the{" "}
                                   <Link
                                     href="/cubes"
-                                    className="underline text-slate-200 hover:text-white"
+                                    className="rc-link underline"
                                   >
                                     Cubes page
                                   </Link>
                                   .
                                 </p>
-                                <label className="mt-2 flex items-center gap-2 text-xs">
+                                <label className="rc-check mt-2 flex">
                                   <input
                                     type="checkbox"
-                                    className="rounded"
                                     checked={
                                       !!sealedConfig.includeCubeSideboardInStandard
                                     }
@@ -2645,17 +2635,14 @@ function LobbyPageContent({
                           </div>
                         ) : (
                           <div>
-                            <label className="block text-xs font-medium mb-2">
+                            <label className="rc-field-label mb-2">
                               Pack Configuration
-                              <span className="text-xs opacity-70 ml-2">
+                              <span className="rc-hint ml-2 normal-case text-rc-fg-subtle">
                                 (Total: {sealedTotalPacks} packs, 3-8 required)
                               </span>
-                              <span
-                                className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] ring-1 ${
-                                  sealedValid
-                                    ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
-                                    : "bg-rose-500/15 text-rose-300 ring-rose-500/30"
-                                }`}
+                              <Badge
+                                tone={sealedValid ? "ok" : "danger"}
+                                className="ml-2"
                               >
                                 {sealedValid
                                   ? "OK"
@@ -2664,7 +2651,7 @@ function LobbyPageContent({
                                     : sealedTotalPacks < 3
                                       ? `Need ${3 - sealedTotalPacks} more`
                                       : `Remove ${sealedTotalPacks - 8}`}
-                              </span>
+                              </Badge>
                             </label>
                             <div className="space-y-2">
                               {Object.entries(sealedConfig.packCounts).map(
@@ -2673,10 +2660,12 @@ function LobbyPageContent({
                                     key={set}
                                     className="flex items-center justify-between"
                                   >
-                                    <span className="text-sm">{set}</span>
+                                    <span className="font-rc-sans text-sm text-rc-fg">{set}</span>
                                     <div className="flex items-center gap-2">
-                                      <button
-                                        className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
+                                      <RcButton
+                                        variant="quiet"
+                                        size="icon-xs"
+                                        className="rounded-rc-sm font-rc-mono"
                                         onClick={() =>
                                           setSealedConfig((prev) => ({
                                             ...prev,
@@ -2689,12 +2678,14 @@ function LobbyPageContent({
                                         disabled={count <= 0}
                                       >
                                         −
-                                      </button>
-                                      <span className="w-8 text-center text-sm font-medium">
+                                      </RcButton>
+                                      <span className="w-8 text-center font-rc-mono text-sm tabular-nums text-rc-fg-strong">
                                         {count}
                                       </span>
-                                      <button
-                                        className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-xs flex items-center justify-center transition-colors disabled:opacity-40"
+                                      <RcButton
+                                        variant="quiet"
+                                        size="icon-xs"
+                                        className="rounded-rc-sm font-rc-mono"
                                         onClick={() =>
                                           setSealedConfig((prev) => ({
                                             ...prev,
@@ -2707,7 +2698,7 @@ function LobbyPageContent({
                                         disabled={sealedTotalPacks >= 8}
                                       >
                                         +
-                                      </button>
+                                      </RcButton>
                                     </div>
                                   </div>
                                 ),
@@ -2718,7 +2709,7 @@ function LobbyPageContent({
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-2">
+                      <label className="rc-field-label mb-2">
                         Deck Construction Time Limit (minutes)
                       </label>
                       <input
@@ -2733,10 +2724,10 @@ function LobbyPageContent({
                             timeLimit: parseInt(e.target.value) || 40,
                           }))
                         }
-                        className="w-24 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                        className="rc-input h-9 w-24"
                       />
                     </div>
-                    <label className="flex items-center gap-2 text-sm">
+                    <label className="rc-check flex">
                       <input
                         type="checkbox"
                         checked={sealedConfig.replaceAvatars}
@@ -2746,11 +2737,10 @@ function LobbyPageContent({
                             replaceAvatars: e.target.checked,
                           }))
                         }
-                        className="rounded"
                       />
                       <span>Replace Sorcerer with Beta avatars</span>
                     </label>
-                    <label className="flex items-center gap-2 text-sm mt-2">
+                    <label className="rc-check mt-2 flex">
                       <input
                         type="checkbox"
                         checked={sealedConfig.allowDragonlordChampion}
@@ -2760,11 +2750,10 @@ function LobbyPageContent({
                             allowDragonlordChampion: e.target.checked,
                           }))
                         }
-                        className="rounded"
                       />
                       <span>Allow Dragonlord Champion selection</span>
                     </label>
-                    <label className="flex items-center gap-2 text-sm mt-2">
+                    <label className="rc-check mt-2 flex">
                       <input
                         type="checkbox"
                         checked={sealedConfig.enableSeer}
@@ -2774,11 +2763,10 @@ function LobbyPageContent({
                             enableSeer: e.target.checked,
                           }))
                         }
-                        className="rounded"
                       />
                       <span>Enable Second Seer (2nd player scries 1)</span>
                     </label>
-                    <label className="flex items-center gap-2 text-sm mt-2">
+                    <label className="rc-check mt-2 flex">
                       <input
                         type="checkbox"
                         checked={sealedConfig.freeAvatars}
@@ -2788,7 +2776,6 @@ function LobbyPageContent({
                             freeAvatars: e.target.checked,
                           }))
                         }
-                        className="rounded"
                       />
                       <span>
                         Free Avatars (remove from packs, all available in deck
@@ -2800,13 +2787,12 @@ function LobbyPageContent({
 
                 {/* Second Player Seer (sealed/draft have their own toggle in their config sections) */}
                 {(matchType === "constructed" || matchType === "precon") && (
-                  <div className="mt-4 pt-4 border-t border-slate-700">
-                    <label className="flex items-center gap-2 text-sm">
+                  <div className="mt-4 border-t border-rc-line/12 pt-4">
+                    <label className="rc-check flex">
                       <input
                         type="checkbox"
                         checked={seerEnabled}
                         onChange={(e) => setSeerEnabled(e.target.checked)}
-                        className="rounded"
                       />
                       <span>Enable Second Seer (2nd player scries 1)</span>
                     </label>
@@ -2814,13 +2800,12 @@ function LobbyPageContent({
                 )}
 
                 {/* Match timer + tiebreak options (applies to all match types) */}
-                <div className="mt-4 pt-4 border-t border-slate-700">
-                  <label className="flex items-center gap-2 text-sm">
+                <div className="mt-4 border-t border-rc-line/12 pt-4">
+                  <label className="rc-check flex">
                     <input
                       type="checkbox"
                       checked={timerEnabled}
                       onChange={(e) => setTimerEnabled(e.target.checked)}
-                      className="rounded"
                     />
                     <span>Timed match</span>
                   </label>
@@ -2828,7 +2813,7 @@ function LobbyPageContent({
                     <div className="mt-3 space-y-3 pl-6">
                       <div className="flex flex-wrap items-end gap-4">
                         <div>
-                          <label className="block text-xs font-medium mb-1">
+                          <label className="rc-field-label mb-1">
                             Match time (minutes)
                           </label>
                           <CustomSelect
@@ -2844,7 +2829,7 @@ function LobbyPageContent({
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium mb-1">
+                          <label className="rc-field-label mb-1">
                             Warning at (minutes left)
                           </label>
                           <CustomSelect
@@ -2860,18 +2845,17 @@ function LobbyPageContent({
                           />
                         </div>
                       </div>
-                      <label className="flex items-center gap-2 text-sm">
+                      <label className="rc-check flex">
                         <input
                           type="checkbox"
                           checked={tiebreakEnabled}
                           onChange={(e) => setTiebreakEnabled(e.target.checked)}
-                          className="rounded"
                         />
                         <span>Tiebreak when time expires</span>
                       </label>
                       {tiebreakEnabled ? (
                         <div>
-                          <label className="block text-xs font-medium mb-1">
+                          <label className="rc-field-label mb-1">
                             Extra turns after time
                           </label>
                           <CustomSelect
@@ -2884,14 +2868,14 @@ function LobbyPageContent({
                               { value: "10", label: "10 turns" },
                             ]}
                           />
-                          <p className="text-xs opacity-60 mt-1">
+                          <p className="mt-1 font-rc-sans text-xs text-rc-fg-subtle">
                             After the extra turns a winner is decided by
                             Death&apos;s Door, then life, then spellbook size,
                             then a coin flip.
                           </p>
                         </div>
                       ) : (
-                        <p className="text-xs opacity-60">
+                        <p className="font-rc-sans text-xs text-rc-fg-subtle">
                           Timer is informational only — the match continues
                           when time runs out.
                         </p>
@@ -2902,7 +2886,7 @@ function LobbyPageContent({
 
                 {/* SOATC League Match option - show when both players are in same tournament */}
                 {sharedTournament?.shared && (
-                  <div className="mt-4 pt-4 border-t border-slate-700">
+                  <div className="mt-4 border-t border-rc-line/12 pt-4">
                     <SoatcLeagueCheckbox
                       checked={!!lobby?.soatcLeagueMatch?.isLeagueMatch}
                       onChange={(checked) => {
@@ -2929,18 +2913,18 @@ function LobbyPageContent({
                 )}
               </div>
               <div className="mt-5 flex items-center justify-between">
-                <div className="text-xs opacity-70 truncate">
+                <div className="truncate font-rc-mono text-xs text-rc-fg-subtle">
                   {plannedSummary}
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1.5 text-sm"
+                  <RcButton
+                    variant="outline"
                     onClick={() => setConfigOpen(false)}
                   >
                     Cancel
-                  </button>
-                  <button
-                    className="rounded bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-4 py-1.5 text-sm font-semibold disabled:opacity-40"
+                  </RcButton>
+                  <RcButton
+                    className="disabled:pointer-events-auto disabled:cursor-not-allowed"
                     onClick={() => {
                       // If there aren't enough players yet or not all are ready,
                       // treat this as "confirm setup" only: close the overlay and
@@ -3084,7 +3068,7 @@ function LobbyPageContent({
                     }
                   >
                     Confirm Setup
-                  </button>
+                  </RcButton>
                 </div>
               </div>
             </div>
@@ -3117,69 +3101,71 @@ function LobbyPageContent({
         <Modal
           onClose={declineMatchmaking}
           closeOnBackdrop={false}
+          backdropClassName="bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px]"
           className="w-full max-w-lg"
         >
-          <div className="rounded-2xl border border-amber-400/30 bg-gradient-to-br from-slate-950 via-slate-900 to-amber-950/60 p-6 shadow-2xl">
+          <div className="rc-panel p-6 shadow-[0_18px_40px_rgba(0,0,0,0.55),0_0_18px_rgba(243,207,106,0.2)]">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-[11px] uppercase tracking-[0.28em] text-amber-200/80">
+                <div className="rc-eyebrow">
                   Match Found
                 </div>
-                <h3 className="mt-2 text-2xl font-semibold text-white">
+                <h3 className="mt-2 font-rc-display text-[28px] leading-none text-rc-fg-strong">
                   {matchmakingOpponentName}
                 </h3>
-                <p className="mt-2 text-sm text-slate-300">
+                <p className="mt-2 font-rc-sans text-sm text-rc-fg-muted">
                   Accept to reserve your place. If either player declines or
                   runs out of time, the seat is released back into the queue.
                 </p>
               </div>
-              <div className="rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-right">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-amber-100/70">
+              <div className="rounded-rc-md border border-rc-accent/35 bg-rc-accent/8 px-3 py-2 text-right">
+                <div className="font-rc-mono text-[10px] uppercase tracking-[0.2em] text-rc-accent-link">
                   Time Left
                 </div>
-                <div className="mt-1 text-2xl font-semibold text-amber-100">
+                <div className="mt-1 font-rc-mono text-2xl tabular-nums text-rc-spark">
                   {matchmakingConfirmSeconds ?? "--"}s
                 </div>
               </div>
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
+              <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-3">
+                <div className="font-rc-mono text-[10px] uppercase tracking-[0.18em] text-rc-fg-subtle">
                   Queue Size
                 </div>
-                <div className="mt-1 text-lg font-semibold text-white">
+                <div className="rc-stat mt-1 text-lg">
                   {matchmaking.queueSize ?? 0}
                 </div>
               </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
+              <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-3">
+                <div className="font-rc-mono text-[10px] uppercase tracking-[0.18em] text-rc-fg-subtle">
                   Your Status
                 </div>
-                <div className="mt-1 text-lg font-semibold text-white">
+                <div className="mt-1 font-rc-sans text-lg font-medium text-rc-fg-strong">
                   {matchmaking.youAccepted ? "Accepted" : "Awaiting Response"}
                 </div>
               </div>
             </div>
 
             <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <button
+              <RcButton
                 type="button"
+                variant="danger-soft"
+                size="lg"
                 onClick={declineMatchmaking}
-                className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100 transition hover:bg-red-500/20"
               >
                 Decline Match
-              </button>
-              <button
+              </RcButton>
+              <RcButton
                 type="button"
+                size="lg"
                 onClick={acceptMatchmaking}
                 disabled={matchmaking.youAccepted}
-                className="rounded-xl border border-emerald-300/40 bg-emerald-500/20 px-4 py-3 text-sm font-semibold text-emerald-50 transition hover:bg-emerald-500/30 disabled:cursor-default disabled:opacity-60"
               >
                 {matchmaking.youAccepted
                   ? "Accepted - Waiting"
                   : "Accept Match"}
-              </button>
+              </RcButton>
             </div>
           </div>
         </Modal>
@@ -3190,42 +3176,44 @@ function LobbyPageContent({
         <Modal
           onClose={() => setRematchOffer(null)}
           closeOnBackdrop={false}
+          backdropClassName="bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px]"
           className="w-full max-w-md"
         >
-          <div className="rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950/60 p-6 shadow-2xl">
-            <div className="text-[11px] uppercase tracking-[0.28em] text-emerald-200/80">
+          <div className="rc-panel p-6 shadow-[0_18px_40px_rgba(0,0,0,0.55),0_0_18px_rgba(243,207,106,0.2)]">
+            <div className="rc-eyebrow">
               Rematch Offer
             </div>
-            <h3 className="mt-2 text-2xl font-semibold text-white">
+            <h3 className="mt-2 font-rc-display text-[28px] leading-none text-rc-fg-strong">
               {rematchOffer.requesterName} wants a rematch!
             </h3>
-            <p className="mt-2 text-sm text-slate-300">
+            <p className="mt-2 font-rc-sans text-sm text-rc-fg-muted">
               Accept to start a fresh match against the same opponent.
             </p>
             <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <button
+              <RcButton
                 type="button"
+                variant="danger-soft"
+                size="lg"
                 onClick={() => {
                   transport?.emit("declineRematch", {
                     matchId: rematchOffer.matchId,
                   });
                   setRematchOffer(null);
                 }}
-                className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100 transition hover:bg-red-500/20"
               >
                 Decline
-              </button>
-              <button
+              </RcButton>
+              <RcButton
                 type="button"
+                size="lg"
                 onClick={() =>
                   transport?.emit("requestRematch", {
                     matchId: rematchOffer.matchId,
                   })
                 }
-                className="rounded-xl border border-emerald-300/40 bg-emerald-500/20 px-4 py-3 text-sm font-semibold text-emerald-50 transition hover:bg-emerald-500/30"
               >
                 Accept Rematch
-              </button>
+              </RcButton>
             </div>
           </div>
         </Modal>
@@ -3233,15 +3221,15 @@ function LobbyPageContent({
 
       {/* SOATC Tournament Invite Ineligibility Modal */}
       {showIneligibleModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px] flex items-center justify-center z-50 p-4">
           <div className="rc-panel w-full max-w-md p-6">
             <div className="flex items-start gap-3 mb-4">
-              <AlertCircle className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
+              <AlertCircle className="w-6 h-6 text-rc-warning shrink-0 mt-0.5" />
               <div>
-                <h3 className="text-lg font-semibold text-slate-100 mb-2">
+                <h3 className="mb-2 font-rc-display text-[22px] leading-tight text-rc-fg-strong">
                   Sorcerers at the Core Tournament Match
                 </h3>
-                <p className="text-sm text-slate-300 leading-relaxed">
+                <p className="font-rc-sans text-sm leading-relaxed text-rc-fg-muted">
                   {ineligibleReason === "no-uuid" && (
                     <>
                       You need to link your Sorcerers at the Core account to
@@ -3260,7 +3248,7 @@ function LobbyPageContent({
                     <>
                       This match format doesn&apos;t match the tournament
                       format. This tournament requires{" "}
-                      <strong className="text-amber-300">
+                      <strong className="text-rc-accent-link">
                         {ineligibleReason.split(":")[1]}
                       </strong>{" "}
                       format matches.
@@ -3276,11 +3264,11 @@ function LobbyPageContent({
                 </p>
               </div>
             </div>
-            <div className="flex gap-2 justify-end mt-6">
+            <div className="flex flex-wrap gap-2 justify-end mt-6">
               {ineligibleReason === "no-uuid" && (
                 <Link
                   href="/settings/soatc"
-                  className="rounded-lg bg-amber-600 hover:bg-amber-700 px-4 py-2 text-sm font-medium transition-colors inline-flex items-center gap-2"
+                  className={rcButtonVariants()}
                   onClick={() => setShowIneligibleModal(false)}
                 >
                   Go to Sorcerers at the Core Settings
@@ -3292,21 +3280,21 @@ function LobbyPageContent({
                   href="https://sorcerersatthecore.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded-lg bg-amber-600 hover:bg-amber-700 px-4 py-2 text-sm font-medium transition-colors inline-flex items-center gap-2"
+                  className={rcButtonVariants()}
                 >
                   Visit SOATC
                   <ExternalLink className="w-4 h-4" />
                 </a>
               )}
-              <button
+              <RcButton
+                variant="outline"
                 onClick={() => {
                   setShowIneligibleModal(false);
                   router.push("/online/lobby");
                 }}
-                className="rounded-lg bg-slate-700 hover:bg-slate-600 px-4 py-2 text-sm font-medium transition-colors"
               >
                 Close
-              </button>
+              </RcButton>
             </div>
           </div>
         </div>

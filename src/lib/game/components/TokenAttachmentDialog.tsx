@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import type { CardRef } from "@/lib/game/store";
 
 interface TokenAttachmentDialogProps {
@@ -37,23 +38,17 @@ export default function TokenAttachmentDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-      <div className="bg-zinc-900 border border-white/20 rounded-lg p-4 shadow-xl pointer-events-auto">
-        <div className="text-sm font-medium mb-3">
+      <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-4 font-rc-sans text-rc-fg shadow-rc-panel pointer-events-auto">
+        <div className="mb-3 font-rc-display text-[18px] leading-tight text-rc-fg-strong">
           Attach {token.name} to {targetPermanent.card.name}?
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={onConfirm}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm"
-          >
+          <RcButton size="sm" onClick={onConfirm}>
             Attach
-          </button>
-          <button
-            onClick={onCancel}
-            className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded text-sm"
-          >
+          </RcButton>
+          <RcButton variant="outline" size="sm" onClick={onCancel}>
             Play Separately
-          </button>
+          </RcButton>
         </div>
       </div>
     </div>

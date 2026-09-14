@@ -140,7 +140,20 @@ export function useTileDropHandler({
   const fKeyHeldRef = useRef(false);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "f" || e.key === "F") {
+      // Cmd/Ctrl+F opens the find bar, which swallows the key-up, and typing
+      // an "f" is not a play modifier: either left the flag stuck on.
+      const target = e.target;
+      const typing =
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+      if (
+        (e.key === "f" || e.key === "F") &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !typing
+      ) {
         fKeyHeldRef.current = true;
       }
     };
@@ -149,18 +162,27 @@ export function useTileDropHandler({
         fKeyHeldRef.current = false;
       }
     };
+    // A key released while the window is unfocused never reports its key-up.
+    const release = () => {
+      fKeyHeldRef.current = false;
+    };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", release);
+    document.addEventListener("visibilitychange", release);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", release);
+      document.removeEventListener("visibilitychange", release);
     };
   }, []);
 
   return useCallback(
     ({ event, tileX, tileY, tileWorldPosition }: HandleTilePointerUpArgs) => {
       const e = event;
-      // Accept left-click (0) or right-click (2) - right-click triggers face-down play
+      // Accept left-click (0) or right-click (2). A right-click release plays the card
+      // normally: trackpad secondary clicks turned plays face down by accident. Hold F instead.
       const isRightClick = e.button === 2;
       if (e.button !== 0 && e.button !== 2) return;
       if (isSpectator) return;
@@ -589,8 +611,8 @@ export function useTileDropHandler({
 
         if (dragFromPile?.card) {
           const type = (dragFromPile.card.type || "").toLowerCase();
-          // If F key is held or right-click release, play the card face-down (except sites)
-          if ((fKeyHeldRef.current || isRightClick) && !type.includes("site")) {
+          // If F key is held, play the card face-down (except sites)
+          if (fKeyHeldRef.current && !type.includes("site")) {
             setDragFaceDown(true);
           }
           playFromPileTo(tileX, tileY);
@@ -609,8 +631,8 @@ export function useTileDropHandler({
             setPermanentOffset(dropKey, newIndex, [offX, offZ]);
           }
         } else if (selectedCard) {
-          // If F key is held or right-click release, play the card face-down
-          if (fKeyHeldRef.current || isRightClick) {
+          // If F key is held, play the card face-down
+          if (fKeyHeldRef.current) {
             setDragFaceDown(true);
           }
 

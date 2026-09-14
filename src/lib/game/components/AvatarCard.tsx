@@ -483,10 +483,17 @@ export function AvatarCard({
         !!pos &&
         pos[0] === combatContext.attackTargetChoice.tile.x &&
         pos[1] === combatContext.attackTargetChoice.tile.y;
-      if (seat === enemySeat && onTile && pos) {
+      const reached = combatContext.attackTargetChoice.ranged
+        ? !!pos &&
+          combatContext.attackTargetChoice.candidates.some(
+            (c) => c.kind === "avatar" && c.at === `${pos[0]},${pos[1]}`,
+          )
+        : onTile;
+      if (seat === enemySeat && reached && pos) {
         const label = avatar.card?.name || "Avatar";
         setAttackConfirm({
           tile: combatContext.attackTargetChoice.tile,
+          ranged: combatContext.attackTargetChoice.ranged,
           attacker: combatContext.attackTargetChoice.attacker,
           target: {
             kind: "avatar",

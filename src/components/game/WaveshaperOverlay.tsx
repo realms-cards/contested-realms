@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 
 /**
@@ -24,25 +25,27 @@ export default function WaveshaperOverlay() {
   return (
     <div className="fixed left-4 bottom-28 z-[201] pointer-events-auto">
       <div
-        className="rounded-xl bg-black/85 backdrop-blur-sm ring-1 ring-cyan-500/60 shadow-2xl overflow-hidden"
+        className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] backdrop-blur-sm font-rc-sans text-rc-fg shadow-rc-panel overflow-hidden"
         style={{ width: 207 }}
       >
         <div className="px-3 py-2 flex flex-col gap-1">
-          <div className="text-cyan-400 font-medium text-sm">
+          <div className="font-rc-display text-rc-accent-link text-sm">
             Waveshaper — Flood
           </div>
-          <div className="text-gray-400 text-[11px] leading-tight">
+          <div className="text-rc-fg-muted text-[11px] leading-tight">
             {isOwner
               ? "Click a highlighted site near your body of water. Minions without submerge there are tapped and skip their next untap."
               : `${ownerSeat.toUpperCase()} is flooding a site…`}
           </div>
           {isOwner && (
-            <button
+            <RcButton
+              variant="outline"
+              size="xs"
               onClick={cancel}
-              className="mt-1 w-full px-2 py-1 rounded-lg bg-gray-700/60 hover:bg-gray-600/60 text-gray-300 text-xs font-medium transition-colors"
+              className="mt-1 w-full h-6 px-2"
             >
               Cancel
-            </button>
+            </RcButton>
           )}
         </div>
       </div>

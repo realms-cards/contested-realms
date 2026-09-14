@@ -33,15 +33,15 @@ export default function DeckValidation({
     : spellbookCount;
 
   return (
-    <div className="flex items-center gap-6 text-sm">
+    <div className="flex items-center gap-6 text-sm tabular-nums">
       <div
         className={`flex items-center gap-2 transition-colors ${
-          validation.avatar ? "text-green-400" : "text-red-400"
+          validation.avatar ? "text-rc-success" : "text-rc-danger"
         }`}
       >
         <div
           className={`w-2 h-2 rounded-full ${
-            validation.avatar ? "bg-green-400" : "bg-red-400"
+            validation.avatar ? "bg-rc-success" : "bg-rc-danger"
           }`}
         />
         Avatar: {avatarCount} / 1
@@ -49,21 +49,21 @@ export default function DeckValidation({
       {sitesInSpellbook ? (
         // No atlas for this avatar — sites are shuffled into the spellbook
         <div
-          className="flex items-center gap-2 text-white/60"
+          className="flex items-center gap-2 text-rc-fg-muted"
           title="This avatar has no atlas: its sites go in the spellbook"
         >
-          <div className="w-2 h-2 rounded-full bg-white/40" />
+          <div className="w-2 h-2 rounded-full bg-rc-fg-subtle" />
           Sites: {atlasCount} (in spellbook)
         </div>
       ) : (
         <div
           className={`flex items-center gap-2 transition-colors ${
-            validation.atlas ? "text-green-400" : "text-red-400"
+            validation.atlas ? "text-rc-success" : "text-rc-danger"
           }`}
         >
           <div
             className={`w-2 h-2 rounded-full ${
-              validation.atlas ? "bg-green-400" : "bg-red-400"
+              validation.atlas ? "bg-rc-success" : "bg-rc-danger"
             }`}
           />
           Atlas: {atlasCount} / {atlasTarget}+
@@ -71,12 +71,12 @@ export default function DeckValidation({
       )}
       <div
         className={`flex items-center gap-2 transition-colors ${
-          validation.spellbook ? "text-green-400" : "text-red-400"
+          validation.spellbook ? "text-rc-success" : "text-rc-danger"
         }`}
       >
         <div
           className={`w-2 h-2 rounded-full ${
-            validation.spellbook ? "bg-green-400" : "bg-red-400"
+            validation.spellbook ? "bg-rc-success" : "bg-rc-danger"
           }`}
         />
         Spellbook: {spellbookTotal} / {spellbookTarget}+

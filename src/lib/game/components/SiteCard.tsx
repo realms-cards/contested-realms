@@ -351,6 +351,8 @@ export function SiteCard({
   function handleAttackTargeting(e: ThreeEvent<PointerEvent>) {
     if (!attackTargetChoice) return;
     e.stopPropagation();
+    // Projectiles strike units, never sites.
+    if (attackTargetChoice.ranged) return;
     const isEnemySite =
       site.owner === (attackTargetChoice.attacker.owner === 1 ? 2 : 1);
     const onTile =

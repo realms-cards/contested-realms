@@ -172,7 +172,7 @@ describe("CPU resolution lifecycle", () => {
       expect(emit).not.toHaveBeenCalledWith("action",expect.anything());
       bot._game.zones = state.zones;
       bot._maybeAct();
-      vi.advanceTimersByTime(1600);
+      vi.advanceTimersByTime(2000);
       expect(emit).toHaveBeenCalledWith("action",expect.objectContaining({action:expect.objectContaining({phase:"Main"})}));
     } finally {bot.stop();}
   });

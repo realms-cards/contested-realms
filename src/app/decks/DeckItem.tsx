@@ -148,8 +148,8 @@ export default function DeckItem({
     // Show loading tag for pending decks
     if (deck.isPending) {
       items.push(
-        <Badge key="loading" tone="gold">
-          <span className="h-3 w-3 animate-spin rounded-full border border-rc-accent-link border-t-transparent" />
+        <Badge key="loading" tone="info">
+          <span className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
           Loading...
         </Badge>
       );
@@ -166,7 +166,7 @@ export default function DeckItem({
     }
     if (deck.imported) {
       items.push(
-        <Badge key="imported" tone="gold">
+        <Badge key="imported" tone="info">
           Imported
         </Badge>
       );
@@ -286,7 +286,7 @@ export default function DeckItem({
               {effectiveIsPublic ? "Public" : "Private"}
             </Badge>
           )}
-          {deck.imported && <Badge tone="gold">Imported</Badge>}
+          {deck.imported && <Badge tone="info">Imported</Badge>}
           {deck.avatarState === "multiple" && <Badge tone="warn">WIP</Badge>}
           {deck.avatarState === "none" && !deck.isPending && (
             <Badge tone="danger">No Avatar</Badge>
@@ -325,13 +325,14 @@ export default function DeckItem({
           )}>
           {/* Edit */}
           <RcButton
+            variant="outline"
             size="icon"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               router.push(`/decks/editor-3d?id=${encodeURIComponent(deck.id)}`);
             }}
-            className="h-7 w-7"
+            className={ROW_ACTION}
             aria-label="Edit"
             title="Edit Deck"
           >
@@ -559,7 +560,7 @@ export default function DeckItem({
               className={clsx(
                 ROW_ACTION,
                 effectiveIsPublic &&
-                  "border-rc-success/40 bg-rc-success/15 text-[#c5d6a8]"
+                  "border-rc-success/40 bg-rc-success/15 text-rc-success-ink"
               )}
               aria-label="Toggle public/private"
               title={effectiveIsPublic ? "Make private" : "Make public"}
@@ -617,9 +618,8 @@ export default function DeckItem({
           {/* Delete */}
           {isOwner && (
             <RcButton
-              variant="destructive"
-              size="icon"
-              className="h-7 w-7"
+              variant="danger-soft"
+              size="icon-xs"
               onClick={handleDelete}
               disabled={deleting}
               aria-label="Delete"
@@ -692,6 +692,8 @@ export default function DeckItem({
 
         {/* Edit Deck - prominent button */}
         <RcButton
+          variant="outline"
+          className="bg-black/35"
           aria-label="Edit Deck"
           data-tooltip="Edit Deck"
           onClick={(e: MouseEvent<HTMLButtonElement>) => {
@@ -963,7 +965,7 @@ export default function DeckItem({
             className={clsx(
               "bg-black/35",
               effectiveIsPublic &&
-                "border-rc-success/40 bg-rc-success/15 text-[#c5d6a8]"
+                "border-rc-success/40 bg-rc-success/15 text-rc-success-ink"
             )}
             aria-label="Toggle public/private"
             data-tooltip={effectiveIsPublic ? "Make private" : "Make public"}
@@ -1029,7 +1031,7 @@ export default function DeckItem({
 
         {isOwner && (
           <RcButton
-            variant="destructive"
+            variant="danger-soft"
             size="icon"
             aria-label="Delete deck"
             data-tooltip="Delete"

@@ -166,12 +166,10 @@ export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps 
       <div className="relative flex flex-col items-center gap-2">
         {/* Turn number */}
         <div
-          className="text-6xl sm:text-7xl md:text-8xl font-bold tracking-wider"
+          className="font-rc-display text-6xl sm:text-7xl md:text-8xl tracking-wider text-rc-fg-strong"
           style={{
-            color: "#f5f0e1",
             textShadow:
-              "0 0 40px rgba(212,175,55,0.8), 0 0 80px rgba(212,175,55,0.4), 0 2px 4px rgba(0,0,0,0.8)",
-            fontFamily: "serif",
+              "0 0 40px rgba(212,169,74,0.8), 0 0 80px rgba(212,169,74,0.4), 0 2px 4px rgba(0,0,0,0.8)",
             transform: fading === "in" ? "scale(1)" : "scale(0.95)",
             transition: "transform 0.4s ease-out",
           }}
@@ -182,13 +180,10 @@ export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps 
         {/* Draw reminder */}
         {showDrawReminder && (
           <div
-            className="text-xl sm:text-2xl md:text-3xl tracking-wide"
+            className="font-rc-display text-xl sm:text-2xl md:text-3xl tracking-wide text-rc-accent-link"
             style={{
-              color: "#d4af37",
               textShadow:
-                "0 0 20px rgba(212,175,55,0.6), 0 1px 3px rgba(0,0,0,0.8)",
-              fontFamily: "serif",
-              fontStyle: "italic",
+                "0 0 20px rgba(212,169,74,0.6), 0 1px 3px rgba(0,0,0,0.8)",
               opacity: fading === "in" ? 1 : 0,
               transform:
                 fading === "in" ? "translateY(0)" : "translateY(8px)",
@@ -206,7 +201,7 @@ export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps 
             width: fading === "in" ? "200px" : "0px",
             height: "2px",
             background:
-              "linear-gradient(90deg, transparent, rgba(212,175,55,0.8), transparent)",
+              "linear-gradient(90deg, transparent, rgba(212,169,74,0.8), transparent)",
             transition: "width 0.6s ease-out 0.1s",
           }}
         />

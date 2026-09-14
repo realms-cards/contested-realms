@@ -2,6 +2,7 @@
 
 import { AlertTriangle, Camera, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { getLogsAsText } from "@/lib/debug/consoleCapture";
 
 interface BugReportModalProps {
@@ -184,24 +185,24 @@ export default function BugReportModal({
   return (
     <div
       id="bug-report-modal"
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(6,10,20,0.7)] backdrop-blur-[4px]"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className="relative w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto bg-zinc-900 rounded-2xl ring-1 ring-white/10 shadow-2xl"
+        className="thin-scrollbar relative w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto rounded-rc-lg border border-rc-line/18 bg-[rgb(9,13,25)] text-rc-fg shadow-rc-panel"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-zinc-900 border-b border-white/10">
-          <div className="flex items-center gap-2 text-amber-400">
+        <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-[rgb(9,13,25)] border-b border-rc-line/12">
+          <div className="flex items-center gap-2 text-rc-warning">
             <AlertTriangle className="w-5 h-5" />
-            <h2 className="text-lg font-semibold">Report a Bug</h2>
+            <h2 className="m-0 font-rc-display text-[22px] leading-none text-rc-fg-strong">Report a Bug</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-white transition-colors"
+            className="cursor-pointer p-1 rounded-rc-md text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -212,21 +213,21 @@ export default function BugReportModal({
         <div className="p-4 space-y-4">
           {submitState === "success" ? (
             <div className="text-center py-6">
-              <div className="text-emerald-400 text-lg font-medium mb-4">
+              <div className="mb-4 font-rc-sans text-lg font-medium text-rc-success">
                 ✓ {resultMessage}
               </div>
-              <button
+              <RcButton
+                variant="outline"
                 onClick={onClose}
-                className="px-4 py-2 rounded bg-white/10 hover:bg-white/20 text-white"
               >
                 Close
-              </button>
+              </RcButton>
               {issueUrl && (
                 <a
                   href={issueUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block mt-4 text-blue-400 hover:text-blue-300 underline text-sm"
+                  className="rc-link block mt-4 font-rc-sans text-sm underline"
                 >
                   View issue on GitHub →
                 </a>
@@ -236,7 +237,7 @@ export default function BugReportModal({
             <>
               {/* Title */}
               <div>
-                <label className="block text-sm text-zinc-400 mb-1">
+                <label className="rc-field-label mb-1">
                   Bug Title *
                 </label>
                 <input
@@ -244,14 +245,14 @@ export default function BugReportModal({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Brief description of the issue..."
-                  className="w-full px-3 py-2 rounded-lg bg-black/40 ring-1 ring-white/10 text-white placeholder:text-zinc-500 focus:ring-amber-500/50 focus:outline-none"
+                  className="rc-input h-9 w-full placeholder:text-rc-fg-dim"
                   disabled={submitState === "submitting"}
                 />
               </div>
 
               {/* Description */}
               <div>
-                <label className="block text-sm text-zinc-400 mb-1">
+                <label className="rc-field-label mb-1">
                   Description *
                 </label>
                 <textarea
@@ -259,34 +260,34 @@ export default function BugReportModal({
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="What happened? What did you expect to happen? Steps to reproduce..."
                   rows={4}
-                  className="w-full px-3 py-2 rounded-lg bg-black/40 ring-1 ring-white/10 text-white placeholder:text-zinc-500 focus:ring-amber-500/50 focus:outline-none resize-none"
+                  className="rc-textarea w-full resize-none placeholder:text-rc-fg-dim"
                   disabled={submitState === "submitting"}
                 />
               </div>
 
               {/* Options */}
               <div className="space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="rc-check flex">
                   <input
                     type="checkbox"
                     checked={includeScreenshot}
                     onChange={(e) => setIncludeScreenshot(e.target.checked)}
-                    className="w-4 h-4 rounded bg-white/10 border-white/20 text-amber-500 focus:ring-amber-500/50"
+                    className="w-4 h-4"
                     disabled={submitState === "submitting"}
                   />
-                  <span className="text-sm text-zinc-300">
+                  <span>
                     Include screenshot
                   </span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="rc-check flex">
                   <input
                     type="checkbox"
                     checked={includeLogs}
                     onChange={(e) => setIncludeLogs(e.target.checked)}
-                    className="w-4 h-4 rounded bg-white/10 border-white/20 text-amber-500 focus:ring-amber-500/50"
+                    className="w-4 h-4"
                     disabled={submitState === "submitting"}
                   />
-                  <span className="text-sm text-zinc-300">
+                  <span>
                     Include console logs
                   </span>
                 </label>
@@ -294,14 +295,14 @@ export default function BugReportModal({
 
               {/* Screenshot Preview */}
               {includeScreenshot && (
-                <div className="rounded-lg bg-black/40 ring-1 ring-white/10 p-2">
+                <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-2">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-zinc-400">
+                    <span className="rc-field-label">
                       Screenshot Preview
                     </span>
                     <button
                       onClick={handleRetakeScreenshot}
-                      className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300"
+                      className="flex cursor-pointer items-center gap-1 font-rc-mono text-xs text-rc-accent-link transition-colors hover:text-rc-accent-ring"
                       disabled={submitState === "capturing"}
                     >
                       <Camera className="w-3 h-3" />
@@ -309,7 +310,7 @@ export default function BugReportModal({
                     </button>
                   </div>
                   {submitState === "capturing" ? (
-                    <div className="flex items-center justify-center h-32 text-zinc-500">
+                    <div className="flex items-center justify-center h-32 font-rc-mono text-xs text-rc-fg-subtle">
                       <Loader2 className="w-5 h-5 animate-spin mr-2" />
                       Capturing...
                     </div>
@@ -317,10 +318,10 @@ export default function BugReportModal({
                     <img
                       src={screenshotPreview}
                       alt="Screenshot preview"
-                      className="w-full rounded border border-white/10"
+                      className="w-full rounded-rc-sm border border-rc-line/12"
                     />
                   ) : (
-                    <div className="flex items-center justify-center h-32 text-zinc-500 text-sm">
+                    <div className="flex items-center justify-center h-32 font-rc-mono text-xs text-rc-fg-subtle">
                       No screenshot captured
                     </div>
                   )}
@@ -329,18 +330,18 @@ export default function BugReportModal({
 
               {/* Error Message */}
               {resultMessage && submitState === "error" && (
-                <div className="text-red-400 text-sm bg-red-500/10 rounded-lg px-3 py-2">
+                <div className="rc-alert" data-tone="danger">
                   {resultMessage}
                 </div>
               )}
 
               {/* Submit Button */}
-              <button
+              <RcButton
                 onClick={handleSubmit}
                 disabled={
                   submitState === "submitting" || submitState === "capturing"
                 }
-                className="w-full py-2.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:bg-amber-600/50 disabled:cursor-not-allowed text-white font-medium flex items-center justify-center gap-2 transition-colors"
+                className="w-full"
               >
                 {submitState === "submitting" ? (
                   <>
@@ -353,9 +354,9 @@ export default function BugReportModal({
                     Submit Bug Report
                   </>
                 )}
-              </button>
+              </RcButton>
 
-              <p className="text-xs text-zinc-500 text-center">
+              <p className="font-rc-sans text-xs text-rc-fg-subtle text-center">
                 Your report will be submitted to our public GitHub issues
                 repository.
               </p>

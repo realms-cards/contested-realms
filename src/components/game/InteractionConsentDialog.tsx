@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import type {
   InteractionDecision,
@@ -106,7 +107,7 @@ export function InteractionConsentDialog({
           className ?? ""
         }`.trim()}
       >
-        <div className="pointer-events-auto rounded-lg bg-slate-800/90 px-4 py-2 text-sm text-slate-100 shadow-lg ring-1 ring-slate-700/70">
+        <div className="pointer-events-auto rounded-rc-md border border-rc-line/22 bg-[rgba(7,10,20,0.9)] px-4 py-2 font-rc-sans text-sm text-rc-fg shadow-rc-md">
           Waiting for opponent consent &middot; {outboundWaitingCount}
         </div>
       </div>
@@ -141,54 +142,55 @@ export function InteractionConsentDialog({
 
   return (
     <div
-      className={`absolute inset-0 z-40 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm px-4 ${
+      className={`absolute inset-0 z-40 flex items-center justify-center bg-[rgba(6,10,20,0.7)] backdrop-blur-[4px] px-4 ${
         className ?? ""
       }`.trim()}
     >
-      <div className="max-w-lg rounded-xl bg-slate-900/95 p-6 text-slate-100 shadow-2xl ring-1 ring-slate-700/70">
+      <div className="max-w-lg rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 text-rc-fg shadow-rc-panel">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-400">
+            <p className="rc-eyebrow">
               Consent Request
             </p>
-            <h2 className="mt-1 text-lg font-semibold text-slate-50">
+            <h2 className="mb-0 mt-1 font-rc-display text-[22px] leading-none text-rc-fg-strong">
               {kindLabel}
             </h2>
           </div>
         </div>
-        <div className="mt-4 space-y-2 text-sm">
+        <div className="mt-4 space-y-2 font-rc-sans text-sm">
           <p>
-            <span className="text-slate-400">Requester:</span>{" "}
-            <span className="font-medium text-slate-100">{requesterName}</span>
+            <span className="text-rc-fg-subtle">Requester:</span>{" "}
+            <span className="font-medium text-rc-fg-strong">{requesterName}</span>
           </p>
-          {note && <p className="text-slate-200">{note}</p>}
+          {note && <p className="text-rc-fg">{note}</p>}
           {grantSummary && (
-            <p className="text-slate-300">
-              <span className="text-slate-400">This will allow them to</span>{" "}
+            <p className="text-rc-fg-muted">
+              <span className="text-rc-fg-subtle">This will allow them to</span>{" "}
               {grantSummary}.
             </p>
           )}
           {createdAt && (
-            <p className="text-xs text-slate-500">
+            <p className="rc-hint">
               Requested at {createdAt.toLocaleTimeString()}
             </p>
           )}
         </div>
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <button
+          <RcButton
             type="button"
-            className="w-full rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500 hover:bg-slate-800 sm:w-auto"
+            variant="outline"
+            className="w-full sm:w-auto"
             onClick={() => handleDecision("declined")}
           >
             Decline
-          </button>
-          <button
+          </RcButton>
+          <RcButton
             type="button"
-            className="w-full rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 sm:w-auto"
+            className="w-full sm:w-auto"
             onClick={() => handleDecision("approved")}
           >
             Approve
-          </button>
+          </RcButton>
         </div>
       </div>
     </div>

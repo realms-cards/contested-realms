@@ -194,9 +194,9 @@ async function sendMagicLinkEmail({
   theme,
 }: SendVerificationRequestParams): Promise<void> {
   const transport = createTransport(provider.server);
-  const brandColor = theme?.brandColor || "#7c3aed";
-  const buttonTextColor = theme?.buttonText || "#ffffff";
-  const backgroundColor = "#0f172a";
+  const brandColor = theme?.brandColor || "#d4a94a";
+  const buttonTextColor = theme?.buttonText || "#1a1407";
+  const backgroundColor = "#070a14";
   const previewText = "Use this link to finish signing in to Realms.cards";
   const subject = "Realms.cards — Your secure sign-in link";
   const confirmUrl = buildConfirmMagicLink(url, identifier);
@@ -220,31 +220,31 @@ King Arthur
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Realms.cards Sign-in</title>
   </head>
-  <body style="margin:0;padding:0;background:${backgroundColor};font-family:Inter,Segoe UI,Helvetica,Arial,sans-serif;color:#e2e8f0;">
+  <body style="margin:0;padding:0;background:${backgroundColor};font-family:Inter,Segoe UI,Helvetica,Arial,sans-serif;color:#ece7d7;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${backgroundColor};padding:32px 0;">
       <tr>
         <td align="center">
-          <table role="presentation" width="480" cellspacing="0" cellpadding="0" style="background:#111827;border-radius:16px;padding:32px;text-align:left;">
+          <table role="presentation" width="480" cellspacing="0" cellpadding="0" style="background:#0b1020;border:1px solid #33363f;border-radius:10px;padding:32px;text-align:left;">
             <tr>
-              <td style="font-size:28px;font-weight:700;color:#f8fafc;">Welcome to Realms.cards - your fan simulator for Sorcery: Contested Realm!</td>
+              <td style="font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:400;line-height:1.2;color:#fbf6e8;">Welcome to Realms.cards - your fan simulator for Sorcery: Contested Realm!</td>
             </tr>
             <tr>
-              <td style="padding-top:12px;font-size:15px;line-height:1.6;color:#cbd5f5;">
+              <td style="padding-top:12px;font-size:15px;line-height:1.6;color:#b9b4a2;">
                 Use the secure button below to finish signing in.
               </td>
             </tr>
             <tr>
               <td style="padding-top:24px;padding-bottom:32px;">
-                <a href="${escapedUrl}" style="display:inline-block;padding:14px 28px;background:${brandColor};color:${buttonTextColor};text-decoration:none;border-radius:12px;font-weight:600;">Complete sign-in</a>
+                <a href="${escapedUrl}" style="display:inline-block;padding:14px 28px;background:${brandColor};color:${buttonTextColor};text-decoration:none;border-radius:6px;font-weight:600;">Complete sign-in</a>
               </td>
             </tr>
             <tr>
-              <td style="font-size:13px;line-height:1.6;color:#94a3b8;">
+              <td style="font-size:13px;line-height:1.6;color:#8a8675;">
                 Link expires in 24 hours. If you didn’t request this, you can ignore this message.
               </td>
             </tr>
           </table>
-          <p style="margin-top:16px;font-size:12px;color:#475569;">Do not reply, this is an automated message. Sent securely from Realms.cards • ${previewText}</p>
+          <p style="margin-top:16px;font-size:12px;color:#5f5c50;">Do not reply, this is an automated message. Sent securely from Realms.cards • ${previewText}</p>
         </td>
       </tr>
     </table>

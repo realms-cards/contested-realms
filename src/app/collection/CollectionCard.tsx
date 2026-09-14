@@ -28,13 +28,13 @@ const TAG_PATTERNS = [
   {
     tag: "mint",
     pattern: /\bmint\b/i,
-    color: "border border-rc-success/35 bg-rc-success/22 text-[#c5d6a8]",
+    color: "border border-rc-success/35 bg-rc-success/22 text-rc-success-ink",
     label: "Mint",
   },
   {
     tag: "nm",
     pattern: /\b(near[- ]?mint|nm)\b/i,
-    color: "border border-rc-success/25 bg-rc-success/14 text-[#c5d6a8]",
+    color: "border border-rc-success/25 bg-rc-success/14 text-rc-success-ink",
     label: "NM",
   },
   {
@@ -46,19 +46,19 @@ const TAG_PATTERNS = [
   {
     tag: "poor",
     pattern: /\bpoor\b/i,
-    color: "border border-rc-danger/40 bg-rc-danger/20 text-[#f0c2b5]",
+    color: "border border-rc-danger/40 bg-rc-danger/20 text-rc-danger-ink",
     label: "Poor",
   },
   {
     tag: "wanted",
     pattern: /\bwanted\b/i,
-    color: "border border-rc-info/40 bg-rc-info/18 text-[#d5deec]",
+    color: "border border-rc-info/40 bg-rc-info/18 text-rc-info-ink",
     label: "Wanted",
   },
   {
     tag: "selling",
     pattern: /\b(selling|for sale|fs)\b/i,
-    color: "border border-rc-accent/35 bg-[rgba(112,65,22,0.55)] text-[#f3e0b3]",
+    color: "border border-rc-accent/35 bg-[rgba(112,65,22,0.55)] text-rc-warning-ink",
     label: "Selling",
   },
 ] as const;
@@ -323,6 +323,7 @@ function CollectionCardInner({
               </div>
               <div className="mt-1 flex gap-1">
                 <RcButton
+                  variant="outline"
                   size="sm"
                   className="h-7 px-2 text-[11px]"
                   onClick={() => {
@@ -493,6 +494,7 @@ function CollectionCardInner({
                 </div>
                 <div className="mt-2 flex gap-2">
                   <RcButton
+                    variant="outline"
                     className="flex-1"
                     onClick={() => {
                       onNotesChange?.(notesValue);

@@ -233,7 +233,7 @@ export default function SealedPage() {
         <PanelHeader title="Open a pool" meta={setName} />
         <div className="flex flex-wrap items-end gap-4 px-[18px] py-3.5">
           <label className="flex flex-col gap-1.5">
-            <span className="rc-eyebrow">Set</span>
+            <span className="rc-field-label">Set</span>
             <CustomSelect
               value={setName}
               onChange={(v) => setSetName(v)}
@@ -246,7 +246,7 @@ export default function SealedPage() {
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="rc-eyebrow">Packs</span>
+            <span className="rc-field-label">Packs</span>
             <input
               type="number"
               min={1}
@@ -257,7 +257,11 @@ export default function SealedPage() {
             />
           </label>
 
-          <RcButton onClick={openPacks} disabled={!canOpen || opening}>
+          <RcButton
+            variant={pickEntries.length > 0 ? "outline" : "default"}
+            onClick={openPacks}
+            disabled={!canOpen || opening}
+          >
             {opening ? "Opening…" : "Open packs"}
           </RcButton>
         </div>
@@ -399,7 +403,7 @@ export default function SealedPage() {
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1.5">
-          <span className="rc-eyebrow">Deck name</span>
+          <span className="rc-field-label">Deck name</span>
           <input
             value={deckName}
             onChange={(e) => setDeckName(e.target.value)}
@@ -407,6 +411,7 @@ export default function SealedPage() {
           />
         </label>
         <RcButton
+          variant={pickEntries.length > 0 ? "default" : "outline"}
           onClick={saveDeck}
           disabled={!pickEntries.length || saving}
           className="h-10"

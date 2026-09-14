@@ -717,9 +717,7 @@ export default function PlaymatSettingsPage() {
                       variant="outline"
                       onClick={() => void loadPlaymatForEditing(p)}
                       title="Edit"
-                      className={
-                        editingPlaymatId === p.id ? "border-rc-accent" : ""
-                      }
+                      data-active={editingPlaymatId === p.id}
                     >
                       Edit
                     </RcButton>

@@ -2,6 +2,7 @@
 
 import React from "react";
 import { createPortal } from "react-dom";
+import { RcButton } from "@/components/ui/rc-button";
 import type { LobbyInvitePayloadT } from "@/lib/net/protocol";
 
 export type InviteOverlayProps = {
@@ -22,20 +23,20 @@ export default function InviteOverlay({
     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px]"
         onClick={onDecline}
       />
 
       {/* Modal */}
-      <div className="relative z-10 w-full max-w-md mx-4 rounded-2xl bg-gradient-to-b from-slate-800 to-slate-900 ring-1 ring-slate-700 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative z-10 w-full max-w-md mx-4 rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] text-rc-fg shadow-rc-panel overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Header glow */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500" />
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rc-accent-press via-rc-accent-ring to-rc-accent-press" />
 
         <div className="p-6 text-center">
           {/* Icon */}
-          <div className="mx-auto w-16 h-16 rounded-full bg-indigo-500/20 flex items-center justify-center mb-4">
+          <div className="mx-auto w-16 h-16 rounded-full border border-rc-accent/35 bg-rc-accent/12 flex items-center justify-center mb-4">
             <svg
-              className="w-8 h-8 text-indigo-400"
+              className="w-8 h-8 text-rc-accent-link"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -50,35 +51,29 @@ export default function InviteOverlay({
           </div>
 
           {/* Title */}
-          <h2 className="text-xl font-bold text-white mb-2">
+          <h2 className="mb-2 font-rc-display text-[26px] leading-none text-rc-fg-strong">
             Lobby Invitation
           </h2>
 
           {/* Invite details */}
-          <p className="text-slate-300 mb-1">
-            <span className="font-semibold text-indigo-300">
+          <p className="font-rc-sans text-rc-fg-muted mb-1">
+            <span className="font-semibold text-rc-accent-link">
               {invite.from.displayName}
             </span>{" "}
             has invited you to join their lobby
           </p>
-          <p className="text-sm text-slate-500 mb-6">
-            {invite.visibility === "private" ? "🔒 Private" : "🌐 Public"} lobby
+          <p className="font-rc-sans text-sm text-rc-fg-subtle mb-6">
+            {invite.visibility === "private" ? "Private" : "Public"} lobby
           </p>
 
           {/* Actions */}
           <div className="flex gap-3 justify-center">
-            <button
-              onClick={onDecline}
-              className="px-6 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium transition-colors"
-            >
+            <RcButton variant="danger-soft" onClick={onDecline} className="px-6">
               Decline
-            </button>
-            <button
-              onClick={() => void onAccept()}
-              className="px-6 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-colors shadow-lg shadow-indigo-500/25"
-            >
+            </RcButton>
+            <RcButton onClick={() => void onAccept()} className="px-6">
               Accept & Join
-            </button>
+            </RcButton>
           </div>
         </div>
       </div>

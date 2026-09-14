@@ -152,12 +152,7 @@ export default function MusicPlayer() {
 
             {/* Play/Pause */}
             <button
-              onClick={() => {
-                if (!state.isEnabled) {
-                  controls.toggleEnabled();
-                }
-                controls.togglePlay();
-              }}
+              onClick={controls.togglePlay}
               className="
                 flex items-center justify-center w-10 h-10 rounded-full
                 bg-slate-700/50 hover:bg-slate-600/50 transition-colors

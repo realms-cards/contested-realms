@@ -3,6 +3,7 @@
 import { Gem } from "lucide-react";
 import { useState, useEffect } from "react";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
+import { RcButton } from "@/components/ui/rc-button";
 import { isImposter } from "@/lib/game/avatarAbilities";
 import { useGameStore, type PlayerKey, type CardRef } from "@/lib/game/store";
 import { isAvatarCard } from "@/lib/game/store/imposterMaskState";
@@ -82,18 +83,20 @@ export default function CollectionButton({ mySeat }: CollectionButtonProps) {
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <button
-          className="rounded bg-amber-600/80 hover:bg-amber-500 p-1.5 ring-1 ring-white/10 shadow-lg transition-colors"
+        <RcButton
+          variant="quiet"
+          size="icon-xs"
+          className="h-[30px] w-[30px] rounded-rc-sm shadow-rc-md"
           onClick={handleClick}
           aria-label="Open collection"
           title={`Collection (${count} cards)`}
         >
-          <Gem className="w-4 h-4 text-white" />
-        </button>
+          <Gem className="w-4 h-4" />
+        </RcButton>
 
         {/* Card count tooltip on hover */}
         {isHovered && (
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black/80 rounded text-xs text-white whitespace-nowrap pointer-events-none">
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-rc-sm border border-rc-line/22 bg-[rgba(7,10,20,0.85)] font-rc-mono text-xs text-rc-fg whitespace-nowrap pointer-events-none">
             Collection ({count} cards)
           </div>
         )}

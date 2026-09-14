@@ -3,6 +3,7 @@
 import { Skull } from "lucide-react";
 import { useState } from "react";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore, type PlayerKey, type CardRef } from "@/lib/game/store";
 
 export type BanishedButtonProps = {
@@ -48,17 +49,19 @@ export default function BanishedButton({ mySeat }: BanishedButtonProps) {
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <button
-          className="rounded bg-purple-700/80 hover:bg-purple-600 p-1.5 ring-1 ring-white/10 shadow-lg transition-colors"
+        <RcButton
+          variant="quiet"
+          size="icon-xs"
+          className="h-[30px] w-[30px] rounded-rc-sm shadow-rc-md"
           onClick={() => setSearchOpen(true)}
           aria-label="Open banished zone"
           title={`Banished (${count} cards)`}
         >
-          <Skull className="w-4 h-4 text-white" />
-        </button>
+          <Skull className="w-4 h-4" />
+        </RcButton>
 
         {isHovered && (
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black/80 rounded text-xs text-white whitespace-nowrap pointer-events-none">
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-rc-sm border border-rc-line/22 bg-[rgba(7,10,20,0.85)] font-rc-mono text-xs text-rc-fg whitespace-nowrap pointer-events-none">
             Banished ({count} cards)
           </div>
         )}
@@ -74,25 +77,24 @@ export default function BanishedButton({ mySeat }: BanishedButtonProps) {
       )}
 
       {pendingCard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-zinc-900 border border-purple-700/50 rounded-lg shadow-2xl p-6 max-w-sm w-full mx-4">
-            <p className="text-white text-sm mb-1">Return to hand?</p>
-            <p className="text-purple-300 font-semibold mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.6)]">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 font-rc-sans text-rc-fg shadow-rc-panel max-w-sm w-full mx-4">
+            <p className="mb-1 font-rc-sans text-sm text-rc-fg">Return to hand?</p>
+            <p className="mb-4 font-rc-display text-[20px] leading-tight text-rc-fg-strong">
               {pendingCard.name}
             </p>
             <div className="flex gap-3 justify-end">
-              <button
-                className="px-4 py-2 rounded bg-zinc-700 hover:bg-zinc-600 text-white text-sm transition-colors"
+              <RcButton
+                variant="outline"
                 onClick={handleCancel}
               >
                 Cancel
-              </button>
-              <button
-                className="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors"
+              </RcButton>
+              <RcButton
                 onClick={handleConfirm}
               >
                 Return to Hand
-              </button>
+              </RcButton>
             </div>
           </div>
         </div>

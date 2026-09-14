@@ -104,7 +104,8 @@ export default function RandomSpellPage() {
               Draw again
             </RcButton>
             <RcButton
-              variant={showInfo ? "secondary" : "outline"}
+              variant="outline"
+              aria-pressed={showInfo}
               onClick={() => setShowInfo((v) => !v)}
               title={showInfo ? "Hide card details" : "Show card details"}
             >
@@ -136,7 +137,7 @@ export default function RandomSpellPage() {
               {/* Stats */}
               <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2">
                 {spell.cost !== null && (
-                  <Badge tone="gold">Cost {spell.cost}</Badge>
+                  <Badge tone="info">Cost {spell.cost}</Badge>
                 )}
                 {spell.attack !== null && (
                   <Badge tone="warn">Atk {spell.attack}</Badge>

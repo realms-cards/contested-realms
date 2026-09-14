@@ -2,6 +2,7 @@
 
 import { Copy, Download, Check, Trophy, ExternalLink } from "lucide-react";
 import { useState } from "react";
+import { RcButton, rcButtonVariants } from "@/components/ui/rc-button";
 import type { LeagueMatchResult } from "@/lib/soatc/types";
 
 interface SoatcLeagueResultCardProps {
@@ -42,40 +43,41 @@ export function SoatcLeagueResultCard({
   };
 
   return (
-    <div className="bg-gradient-to-b from-amber-900/30 to-stone-900/50 rounded-lg border border-amber-600/50 p-4 max-w-md">
+    <div className="rounded-rc-md border border-rc-accent/35 bg-rc-accent/8 p-4 max-w-md">
       <div className="flex items-center gap-2 mb-3">
-        <Trophy className="w-5 h-5 text-amber-400" />
-        <h3 className="font-semibold text-amber-100">Sorcerers at the Core</h3>
+        <Trophy className="w-5 h-5 text-rc-accent" />
+        <h3 className="m-0 font-rc-display text-[18px] leading-none text-rc-fg-strong">Sorcerers at the Core</h3>
       </div>
 
-      <div className="text-sm text-stone-300 mb-4 space-y-1">
+      <div className="font-rc-sans text-sm text-rc-fg-muted mb-4 space-y-1">
         <p>
-          <span className="text-stone-500">Tournament:</span>{" "}
+          <span className="text-rc-fg-subtle">Tournament:</span>{" "}
           {result.tournamentName}
         </p>
         <p>
-          <span className="text-stone-500">Result:</span>{" "}
+          <span className="text-rc-fg-subtle">Result:</span>{" "}
           {result.isDraw ? (
-            <span className="text-stone-300">Draw</span>
+            <span className="text-rc-fg-muted">Draw</span>
           ) : isWinner ? (
-            <span className="text-green-400">You won!</span>
+            <span className="text-rc-success">You won!</span>
           ) : (
-            <span className="text-red-400">You lost</span>
+            <span className="text-rc-danger">You lost</span>
           )}
         </p>
         <p>
-          <span className="text-stone-500">Duration:</span>{" "}
-          {Math.floor(result.durationSeconds / 60)}m{" "}
-          {result.durationSeconds % 60}s
+          <span className="text-rc-fg-subtle">Duration:</span>{" "}
+          <span className="font-rc-mono tabular-nums">
+            {Math.floor(result.durationSeconds / 60)}m{" "}
+            {result.durationSeconds % 60}s
+          </span>
         </p>
       </div>
 
       <div className="flex gap-2 mb-4">
-        <button
+        <RcButton
+          variant="outline"
           onClick={handleCopy}
-          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 
-                     bg-amber-600 hover:bg-amber-500 rounded-lg text-sm font-medium
-                     transition-colors"
+          className="flex-1 px-3"
         >
           {copied ? (
             <>
@@ -88,15 +90,14 @@ export function SoatcLeagueResultCard({
               Copy to Clipboard
             </>
           )}
-        </button>
-        <button
+        </RcButton>
+        <RcButton
+          variant="outline"
           onClick={handleDownload}
-          className="flex items-center justify-center gap-2 px-3 py-2 
-                     bg-stone-700 hover:bg-stone-600 rounded-lg text-sm font-medium
-                     transition-colors"
+          className="px-3"
         >
           <Download className="w-4 h-4" />
-        </button>
+        </RcButton>
       </div>
 
       {/* Direct link to add match result with prefilled data */}
@@ -104,9 +105,7 @@ export function SoatcLeagueResultCard({
         href={buildSoatcFormUrl(result, viewerSoatcUuid)}
         target="_blank"
         rel="noopener noreferrer"
-        className="block w-full text-center px-3 py-2 mb-3
-                   bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 
-                   rounded-lg text-sm font-semibold transition-colors"
+        className={rcButtonVariants({ className: "mb-3 w-full" })}
       >
         <span className="flex items-center justify-center gap-2">
           <ExternalLink className="w-4 h-4" />
@@ -114,7 +113,7 @@ export function SoatcLeagueResultCard({
         </span>
       </a>
 
-      <p className="text-xs text-stone-500 text-center">
+      <p className="font-rc-sans text-xs text-rc-fg-subtle text-center">
         Opens the ranking submission form with prefilled data
       </p>
     </div>

@@ -1,7 +1,9 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import Image from "next/image";
 import React from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import {
   parseCellKey,
@@ -33,11 +35,11 @@ export default function FrontierSettlersOverlay() {
   if (!isOwner && phase === "selecting_target") {
     return (
       <div className="fixed left-4 bottom-28 z-[201] pointer-events-none">
-        <div className="rounded-xl bg-black/85 backdrop-blur-sm ring-1 ring-green-500/40 shadow-lg px-3 py-2">
-          <div className="text-green-400 font-medium text-sm">
+        <div className="rc-toast px-3 py-2">
+          <div className="font-rc-display text-rc-accent-link text-sm">
             Frontier Settlers
           </div>
-          <div className="text-gray-400 text-[11px]">
+          <div className="text-rc-fg-muted text-[11px]">
             {ownerSeat.toUpperCase()} is placing{" "}
             {revealedSite?.name || "a site"}…
           </div>
@@ -53,7 +55,7 @@ export default function FrontierSettlersOverlay() {
   return (
     <div className="fixed left-4 bottom-28 z-[201] pointer-events-auto">
       <div
-        className="rounded-xl bg-black/85 backdrop-blur-sm ring-1 ring-green-500/60 shadow-2xl overflow-hidden"
+        className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] backdrop-blur-sm font-rc-sans text-rc-fg shadow-rc-panel overflow-hidden"
         style={{ width: 190 }}
       >
         {/* Revealed site card image */}
@@ -72,14 +74,14 @@ export default function FrontierSettlersOverlay() {
 
         <div className="px-3 py-2 flex flex-col gap-1.5">
           {/* Site name */}
-          <div className="text-green-400 font-medium text-sm truncate">
+          <div className="font-rc-display text-rc-accent-link text-sm truncate">
             {revealedSite?.name || "Site"}
           </div>
 
           {/* Target selection */}
           {phase === "selecting_target" && (
             <>
-              <div className="text-gray-400 text-[11px] leading-tight">
+              <div className="text-rc-fg-muted text-[11px] leading-tight">
                 Select a tile:
               </div>
               <div className="flex flex-wrap gap-1">
@@ -95,49 +97,53 @@ export default function FrontierSettlersOverlay() {
                   const isSelected = selectedTarget === cellKey;
 
                   return (
-                    <button
+                    <RcButton
                       key={cellKey}
+                      variant="quiet"
+                      size="xs"
+                      tone="success"
+                      aria-pressed={isSelected}
                       onClick={() => selectTarget(cellKey)}
-                      className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
-                        isSelected
-                          ? "bg-green-600 text-white ring-1 ring-green-400"
-                          : "bg-gray-700/60 hover:bg-gray-600/60 text-gray-300"
-                      }`}
+                      className="h-auto gap-1 rounded-rc-sm px-2 py-1 font-rc-mono text-[11px] tabular-nums"
                     >
-                      #{cellNum} {isRubble ? "🪨" : "◻️"}
-                    </button>
+                      #{cellNum}{" "}
+                      <Icon
+                        icon={isRubble ? "game-icons:stone-pile" : "game-icons:hole"}
+                        width={12}
+                        height={12}
+                      />
+                    </RcButton>
                   );
                 })}
               </div>
 
               {/* Action buttons */}
-              <button
+              <RcButton
+                size="xs"
                 onClick={resolve}
                 disabled={!selectedTarget}
-                className={`w-full mt-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
-                  selectedTarget
-                    ? "bg-green-600 hover:bg-green-500 text-white"
-                    : "bg-gray-700 text-gray-500 cursor-not-allowed"
-                }`}
+                className="w-full mt-1 h-6 px-2"
               >
                 Place & Move
-              </button>
+              </RcButton>
             </>
           )}
 
           {/* Revealing phase — just waiting */}
           {phase === "revealing" && (
-            <div className="text-gray-400 text-[11px]">
+            <div className="text-rc-fg-muted text-[11px]">
               Revealing from atlas…
             </div>
           )}
 
-          <button
+          <RcButton
+            variant="outline"
+            size="xs"
             onClick={cancel}
-            className="w-full px-2 py-1 rounded-lg bg-gray-700/60 hover:bg-gray-600/60 text-gray-300 text-xs font-medium transition-colors"
+            className="w-full h-6 px-2"
           >
             Cancel
-          </button>
+          </RcButton>
         </div>
       </div>
     </div>

@@ -106,7 +106,7 @@ export type OverlayLayout = {
 /** Tailwind classes for each slot position (static strings for JIT) */
 const SLOT_CLASSES: Record<OverlaySlot, string> = {
   full: "fixed inset-0",
-  left: "fixed top-0 left-0 bottom-0 w-1/2 border-r border-white/10",
+  left: "fixed top-0 left-0 bottom-0 w-1/2 border-r border-rc-line/12",
   right: "fixed top-0 right-0 bottom-0 w-1/2",
 };
 

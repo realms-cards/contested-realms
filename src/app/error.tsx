@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect } from "react";
+import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
 
 export default function Error({
   error,
@@ -25,19 +25,10 @@ export default function Error({
         {error.message || "An unexpected error occurred."}
       </p>
       <div className="mt-7 flex flex-wrap justify-center gap-2">
-        <button
-          type="button"
-          onClick={reset}
-          className="inline-flex h-[38px] cursor-pointer items-center justify-center rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent px-[18px] font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px"
-        >
-          Try again
-        </button>
-        <Link
-          href="/"
-          className="inline-flex h-[38px] items-center justify-center rounded-rc-md border border-rc-line/28 px-[18px] font-rc-sans text-sm font-medium text-rc-fg transition-colors hover:border-rc-accent hover:bg-rc-accent/8"
-        >
+        <RcButton onClick={reset}>Try again</RcButton>
+        <RcLinkButton href="/" variant="outline">
           Go home
-        </Link>
+        </RcLinkButton>
       </div>
     </div>
   );

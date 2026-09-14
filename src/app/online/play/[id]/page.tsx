@@ -45,6 +45,7 @@ import CombatHudOverlay from "@/components/game/CombatHudOverlay";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
 import ContextMenu from "@/components/game/ContextMenu";
 import CorpseExplosionOverlay from "@/components/game/CorpseExplosionOverlay";
+import CpuAbilityButtons from "@/components/game/CpuAbilityButtons";
 import CpuBoardReady from "@/components/game/CpuBoardReady";
 import CrossroadsOverlay from "@/components/game/CrossroadsOverlay";
 import DemonicContractOverlay from "@/components/game/DemonicContractOverlay";
@@ -124,6 +125,7 @@ import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import KeyboardShortcutsHelp, {
   useHelpShortcut,
 } from "@/components/ui/KeyboardShortcutsHelp";
+import { RcButton } from "@/components/ui/rc-button";
 import { GameSoundEffects } from "@/lib/audio/gameSfx";
 import { soundManager } from "@/lib/audio/soundManager";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
@@ -149,6 +151,7 @@ import {
   MAT_PIXEL_H,
   BASE_TILE_SIZE,
   MAT_RATIO,
+  PLAYER_COLORS,
   TILE_SIZE,
 } from "@/lib/game/constants";
 import { useCardHover } from "@/lib/game/hooks/useCardHover";
@@ -3291,13 +3294,13 @@ export default function OnlineMatchPage() {
           }
         >
           <div
-            className={`bg-black/50 rounded-lg ${isMobile ? "p-0.5" : "p-1"} ring-1 ring-white/10 flex items-center`}
+            className={`bg-[rgba(7,10,20,0.85)] rounded-rc-md ${isMobile ? "p-0.5" : "p-1"} ring-1 ring-rc-line/22 flex items-center`}
           >
             <button
               onClick={resetCamera}
               aria-label="Reset camera"
               title="Reset camera (Tab)"
-              className={`${isMobile ? "p-1" : "p-2"} rounded-full hover:bg-white/10 text-white`}
+              className={`${isMobile ? "p-1" : "p-2"} rounded-full text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-accent-ring`}
             >
               <svg
                 className={isMobile ? "w-3 h-3" : "w-4 h-4"}
@@ -3319,9 +3322,10 @@ export default function OnlineMatchPage() {
             <button
               className={`${isMobile ? "ml-0.5 px-1 py-0.5 text-[10px]" : "ml-1 px-2 py-1 text-xs"} rounded-rc-sm font-rc-mono uppercase tracking-[0.14em] transition-colors ${
                 cameraMode === "topdown"
-                  ? "bg-rc-accent text-rc-accent-fg"
+                  ? "bg-rc-info/18 text-rc-info-ink ring-1 ring-inset ring-rc-info/60"
                   : "bg-transparent text-rc-fg-muted hover:text-rc-accent-ring"
               }`}
+              aria-pressed={cameraMode === "topdown"}
               onClick={() => {
                 setCameraMode("topdown");
               }}
@@ -3332,9 +3336,10 @@ export default function OnlineMatchPage() {
             <button
               className={`${isMobile ? "ml-0.5 px-1 py-0.5 text-[10px]" : "ml-1 px-2 py-1 text-xs"} rounded-rc-sm font-rc-mono uppercase tracking-[0.14em] transition-colors ${
                 cameraMode === "orbit"
-                  ? "bg-rc-accent text-rc-accent-fg"
+                  ? "bg-rc-info/18 text-rc-info-ink ring-1 ring-inset ring-rc-info/60"
                   : "bg-transparent text-rc-fg-muted hover:text-rc-accent-ring"
               }`}
+              aria-pressed={cameraMode === "orbit"}
               onClick={() => {
                 setCameraMode("orbit");
               }}
@@ -3349,10 +3354,10 @@ export default function OnlineMatchPage() {
         </div>
       )}
       {!inThisMatch && (
-        <div className="absolute inset-0 z-30 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="text-center">
-            <div className="text-xl font-semibold mb-2">Joining Match</div>
-            <div className="text-sm opacity-60">Match ID: {matchId}</div>
+        <div className="absolute inset-0 z-30 bg-[rgba(6,10,20,0.7)] backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="text-center text-rc-fg">
+            <div className="mb-2 font-rc-display text-[28px] leading-none text-rc-fg-strong">Joining Match</div>
+            <div className="rc-hint">Match ID: {matchId}</div>
           </div>
         </div>
       )}
@@ -3360,23 +3365,27 @@ export default function OnlineMatchPage() {
       {inThisMatch && isSpectatorView && (
         <div className="absolute top-2 right-2 z-30">
           <div className="flex items-center gap-2">
-            <div className="px-2 py-1 rounded bg-purple-600/80 text-white text-xs font-semibold shadow">
+            <div className="px-2 py-1 rounded-rc-sm bg-purple-600/80 font-rc-mono text-xs font-semibold tracking-[0.08em] text-rc-fg-strong shadow-rc-sm">
               Spectating
               {typeof spectatorCount === "number" ? ` (${spectatorCount})` : ""}
             </div>
-            <div className="bg-black/40 rounded-md p-0.5">
+            <div className="rounded-rc-md bg-[rgba(7,10,20,0.85)] p-0.5 ring-1 ring-rc-line/22">
               <button
-                className={`px-2 py-1 text-xs rounded ${
-                  spectatorSeat === "p1" ? "bg-white/20" : "hover:bg-white/10"
+                className={`px-2 py-1 text-xs rounded-rc-sm font-rc-mono uppercase tracking-[0.14em] transition-colors ${
+                  spectatorSeat === "p1" ? "bg-rc-line/10 ring-1 ring-inset ring-current" : "text-rc-fg-muted hover:text-rc-accent-ring"
                 }`}
+                style={spectatorSeat === "p1" ? { color: PLAYER_COLORS.p1 } : undefined}
+                aria-pressed={spectatorSeat === "p1"}
                 onClick={() => setSpectatorSeat("p1")}
               >
                 P1
               </button>
               <button
-                className={`ml-1 px-2 py-1 text-xs rounded ${
-                  spectatorSeat === "p2" ? "bg-white/20" : "hover:bg-white/10"
+                className={`ml-1 px-2 py-1 text-xs rounded-rc-sm font-rc-mono uppercase tracking-[0.14em] transition-colors ${
+                  spectatorSeat === "p2" ? "bg-rc-line/10 ring-1 ring-inset ring-current" : "text-rc-fg-muted hover:text-rc-accent-ring"
                 }`}
+                style={spectatorSeat === "p2" ? { color: PLAYER_COLORS.p2 } : undefined}
+                aria-pressed={spectatorSeat === "p2"}
                 onClick={() => setSpectatorSeat("p2")}
               >
                 P2
@@ -3418,15 +3427,13 @@ export default function OnlineMatchPage() {
             // For tournament matches (any mode), never show deck loaders/selectors.
             // Decks come from the tournament submission and are auto-loaded via match.playerDecks.
             tournamentId ? (
-              <div className="w-full max-w-xl mx-auto bg-slate-900/95 rounded-xl p-6">
-                <div className="text-center">
-                  <h2 className="text-2xl font-bold text-white mb-3">
-                    Preparing Tournament Deck…
-                  </h2>
-                  <div className="text-slate-300">
-                    Waiting for the server to attach your submitted deck. This
-                    may take a moment.
-                  </div>
+              <div className="mx-auto w-full max-w-xl rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-center text-rc-fg shadow-rc-panel">
+                <h2 className="m-0 font-rc-display text-[28px] leading-none text-rc-fg-strong">
+                  Preparing Tournament Deck…
+                </h2>
+                <div className="mt-3 font-rc-sans text-sm text-rc-fg-muted">
+                  Waiting for the server to attach your submitted deck. This
+                  may take a moment.
                 </div>
               </div>
             ) : match?.matchType === "sealed" ? (
@@ -3439,15 +3446,13 @@ export default function OnlineMatchPage() {
                   autoStart
                 />
               ) : (
-                <div className="w-full max-w-2xl mx-auto bg-slate-900/95 rounded-xl p-6">
-                  <div className="text-center">
-                    <h2 className="text-2xl font-bold text-white mb-4">
-                      Sealed Deck Construction
-                    </h2>
-                    <div className="text-slate-300">
-                      Redirecting you to the deck editor to build and submit
-                      your sealed deck...
-                    </div>
+                <div className="mx-auto w-full max-w-2xl rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-center text-rc-fg shadow-rc-panel">
+                  <h2 className="m-0 font-rc-display text-[28px] leading-none text-rc-fg-strong">
+                    Sealed Deck Construction
+                  </h2>
+                  <div className="mt-4 font-rc-sans text-sm text-rc-fg-muted">
+                    Redirecting you to the deck editor to build and submit
+                    your sealed deck...
                   </div>
                 </div>
               )
@@ -3461,26 +3466,24 @@ export default function OnlineMatchPage() {
                   autoStart
                 />
               ) : (
-                <div className="w-full max-w-2xl mx-auto bg-slate-900/95 rounded-xl p-6">
-                  <div className="text-center">
-                    <h2 className="text-2xl font-bold text-white mb-4">
-                      Draft Deck Construction
-                    </h2>
-                    <div className="text-slate-300">
-                      Redirecting you to the deck editor to build and submit
-                      your draft deck...
-                    </div>
+                <div className="mx-auto w-full max-w-2xl rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-center text-rc-fg shadow-rc-panel">
+                  <h2 className="m-0 font-rc-display text-[28px] leading-none text-rc-fg-strong">
+                    Draft Deck Construction
+                  </h2>
+                  <div className="mt-4 font-rc-sans text-sm text-rc-fg-muted">
+                    Redirecting you to the deck editor to build and submit
+                    your draft deck...
                   </div>
                 </div>
               )
             ) : (
               <div className="w-full max-w-2xl mx-auto space-y-4">
                 {opponentPlayerId?.startsWith("cpu_") && (
-                  <div className="bg-amber-950/60 border border-amber-700/40 rounded-xl px-5 py-4 space-y-2">
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-amber-300">
+                  <div className="rc-alert space-y-2 px-5 py-4" data-tone="warning">
+                    <h3 className="m-0 text-[11px] font-semibold uppercase tracking-[0.2em] text-rc-spark">
                       {match?.matchType === "precon" ? "VS CPU Precons — Experimental" : "Goldfish — Experimental"}
                     </h3>
-                    <ul className="text-xs text-amber-200/80 space-y-1 list-disc list-inside">
+                    <ul className="list-inside list-disc space-y-1 leading-relaxed">
                       <li>
                         The bot can perform basic actions but will make many
                         rules errors, especially regarding card-specific rules
@@ -3760,7 +3763,8 @@ export default function OnlineMatchPage() {
           {/* Toolbox and Collection buttons (bottom-right) */}
           {showToolbox && (
             <div className="absolute bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-[max(0.75rem,env(safe-area-inset-right))] z-20 flex flex-wrap justify-end items-end gap-2 max-w-[60vw]">
-              {opponentPlayerId?.startsWith("cpu_") && <AttackHereButton />}
+              {!isSpectatorView && <AttackHereButton />}
+              {!isSpectatorView && opponentPlayerId?.startsWith("cpu_") && <CpuAbilityButtons />}
               {!isSpectatorView && !matchEnded && !tournamentId && opponentPlayerId?.startsWith("cpu_") && match?.matchType === "constructed" && <GoldfishTestControls
                 paused={pausedGoldfishMatchId === matchId}
                 onPauseChange={paused => setPausedGoldfishMatchId(paused ? matchId : null)}
@@ -4268,18 +4272,18 @@ export default function OnlineMatchPage() {
 
       {/* Incoming Voice Request Dialog */}
       {voice?.incomingRequest && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-slate-800 border border-slate-600 rounded-lg p-6 shadow-2xl max-w-md">
-            <h3 className="text-lg font-bold text-white mb-2">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(6,10,20,0.5)] backdrop-blur-sm">
+          <div className="max-w-md rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 text-rc-fg shadow-rc-panel">
+            <h3 className="m-0 mb-2 font-rc-display text-[22px] leading-none text-rc-fg-strong">
               Incoming Voice Call
             </h3>
-            <p className="text-slate-300 mb-4">
+            <p className="mb-4 font-rc-sans text-sm text-rc-fg-muted">
               {voice.incomingRequest.from.displayName || "A player"} wants to
               connect via voice chat.
             </p>
             <div className="flex gap-3 justify-end">
-              <button
-                className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white font-medium"
+              <RcButton
+                variant="outline"
                 onClick={() => {
                   if (voice.respondToRequest && voice.incomingRequest) {
                     voice.respondToRequest(
@@ -4291,9 +4295,8 @@ export default function OnlineMatchPage() {
                 }}
               >
                 Decline
-              </button>
-              <button
-                className="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white font-medium"
+              </RcButton>
+              <RcButton
                 onClick={() => {
                   if (voice.respondToRequest && voice.incomingRequest) {
                     voice.respondToRequest(
@@ -4305,7 +4308,7 @@ export default function OnlineMatchPage() {
                 }}
               >
                 Accept
-              </button>
+              </RcButton>
             </div>
           </div>
         </div>

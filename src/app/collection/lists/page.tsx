@@ -151,7 +151,10 @@ export default function ListsPage() {
           title="No lists yet."
           action={
             <>
-              <RcButton onClick={() => setShowCreateModal(true)}>
+              <RcButton
+                variant="outline"
+                onClick={() => setShowCreateModal(true)}
+              >
                 Create Your First List
               </RcButton>
               <RcButton
@@ -257,7 +260,7 @@ export default function ListsPage() {
                       Export
                     </RcButton>
                     <RcButton
-                      variant="destructive"
+                      variant="danger-soft"
                       size="sm"
                       onClick={() => handleDelete(list.id, list.name)}
                       title="Delete"
@@ -374,7 +377,7 @@ function CreateListModal({
     >
       <form id="create-list-form" onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="rc-eyebrow mb-1 block">Name *</label>
+          <label className="rc-field-label mb-1">Name *</label>
           <input
             type="text"
             value={name}
@@ -387,7 +390,7 @@ function CreateListModal({
         </div>
 
         <div>
-          <label className="rc-eyebrow mb-1 block">Description</label>
+          <label className="rc-field-label mb-1">Description</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -510,7 +513,7 @@ function ImportListModal({
     >
       <form id="import-list-form" onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="rc-eyebrow mb-1 block">List Name *</label>
+          <label className="rc-field-label mb-1">List Name *</label>
           <input
             type="text"
             value={name}
@@ -523,7 +526,7 @@ function ImportListModal({
         </div>
 
         <div>
-          <label className="rc-eyebrow mb-1 block">Description</label>
+          <label className="rc-field-label mb-1">Description</label>
           <input
             type="text"
             value={description}
@@ -534,7 +537,7 @@ function ImportListModal({
         </div>
 
         <div>
-          <label className="rc-eyebrow mb-1 block">Card List *</label>
+          <label className="rc-field-label mb-1">Card List *</label>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}

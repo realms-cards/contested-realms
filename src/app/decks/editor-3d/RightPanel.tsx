@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import YourDeckList from "@/app/decks/editor-3d/YourDeckList";
+import { RcButton } from "@/components/ui/rc-button";
 import type { Pick3D, CardMeta } from "@/lib/game/cardSorting";
 
 type RightPanelProps = {
@@ -87,8 +88,8 @@ export default function RightPanel(props: RightPanelProps) {
       : "w-[64rem]";
 
   const dropHighlight = isCardDragging
-    ? "ring-2 ring-cyan-400/60 bg-black/90"
-    : "ring-1 ring-white/30 bg-black/80";
+    ? "ring-2 ring-rc-accent/60 bg-[rgba(9,13,25,0.95)]"
+    : "ring-1 ring-rc-line/18 bg-[rgba(9,13,25,0.9)]";
 
   const sharedListProps = {
     yourCounts,
@@ -114,32 +115,34 @@ export default function RightPanel(props: RightPanelProps) {
         className={`${panelWidth} transition-all duration-300 ease-in-out ml-auto space-y-2`}
       >
         {/* Deck Summary — always visible, collapsed by default */}
-        <div data-drop-zone="Deck" className={`rounded p-3 ${dropHighlight} shadow-lg pointer-events-auto transition-all`}>
-          <div className="font-medium text-white flex items-center justify-between">
-            <span className="text-sm">Deck</span>
-            <button
+        <div data-drop-zone="Deck" className={`rounded-rc-lg p-3 ${dropHighlight} text-rc-fg shadow-rc-panel pointer-events-auto transition-all`}>
+          <div className="text-rc-fg-strong flex items-center justify-between">
+            <span className="font-rc-display text-[18px] leading-none">Deck</span>
+            <RcButton
+              variant="quiet"
+              size="xs"
               onClick={() => setDeckExpanded(!deckExpanded)}
-              className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20"
+              className="px-2 font-rc-mono"
             >
               {deckExpanded ? "Collapse" : "Expand"}
-            </button>
+            </RcButton>
           </div>
-          <div className="flex items-center gap-3 mt-1.5 text-xs pointer-events-none">
+          <div className="flex items-center gap-3 mt-1.5 font-rc-mono text-xs tabular-nums pointer-events-none">
             <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 bg-green-600 rounded" />
+              <div className="w-2.5 h-2.5 bg-green-600 rounded-rc-sm" />
               <span className="text-green-300">
                 Deck: {picksByType.deck}
               </span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 bg-blue-600 rounded" />
+              <div className="w-2.5 h-2.5 bg-blue-600 rounded-rc-sm" />
               <span className="text-blue-300">
                 Sideboard: {picksByType.sideboard}
               </span>
             </div>
             {!isDraftOrSealed && collectionTotal > 0 && (
               <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 bg-purple-600 rounded" />
+                <div className="w-2.5 h-2.5 bg-purple-600 rounded-rc-sm" />
                 <span className="text-purple-300">
                   Collection: {collectionTotal}
                 </span>
@@ -157,21 +160,23 @@ export default function RightPanel(props: RightPanelProps) {
         </div>
 
         {/* Sideboard — main panel, expanded by default */}
-        <div data-drop-zone="Sideboard" className={`rounded p-3 ${dropHighlight} shadow-lg pointer-events-auto transition-all`}>
-          <div className="font-medium text-white flex items-center justify-between">
-            <span className="text-sm">
+        <div data-drop-zone="Sideboard" className={`rounded-rc-lg p-3 ${dropHighlight} text-rc-fg shadow-rc-panel pointer-events-auto transition-all`}>
+          <div className="text-rc-fg-strong flex items-center justify-between">
+            <span className="font-rc-display text-[18px] leading-none">
               {isDraftOrSealed ? "Card Pool" : "Sideboard"} (
               {isDraftOrSealed
                 ? picksByType.sideboard + picksByType.collection
                 : picksByType.sideboard}
               )
             </span>
-            <button
+            <RcButton
+              variant="quiet"
+              size="xs"
               onClick={() => setSideboardOpen(!sideboardOpen)}
-              className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20"
+              className="px-2 font-rc-mono"
             >
               {sideboardOpen ? "Hide" : "Show"}
-            </button>
+            </RcButton>
           </div>
           {sideboardOpen && (
             <div className="mt-2">
@@ -188,17 +193,19 @@ export default function RightPanel(props: RightPanelProps) {
         {!isDraftOrSealed &&
           (picksByType.collection > 0 ||
             (showCollectionZone && collectionCount > 0)) && (
-            <div data-drop-zone="Collection" className={`rounded p-3 ${dropHighlight} shadow-lg pointer-events-auto transition-all`}>
-              <div className="font-medium text-white flex items-center justify-between">
-                <span className="text-sm">
+            <div data-drop-zone="Collection" className={`rounded-rc-lg p-3 ${dropHighlight} text-rc-fg shadow-rc-panel pointer-events-auto transition-all`}>
+              <div className="text-rc-fg-strong flex items-center justify-between">
+                <span className="font-rc-display text-[18px] leading-none">
                   Collection ({collectionTotal})
                 </span>
-                <button
+                <RcButton
+                  variant="quiet"
+                  size="xs"
                   onClick={() => setCollectionOpen(!collectionOpen)}
-                  className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20"
+                  className="px-2 font-rc-mono"
                 >
                   {collectionOpen ? "Hide" : "Show"}
-                </button>
+                </RcButton>
               </div>
               {collectionOpen && (
                 <div className="mt-2">

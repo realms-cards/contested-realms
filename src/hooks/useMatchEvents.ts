@@ -54,86 +54,87 @@ export function useMatchEvents() {
 }
 
 /**
- * Format a match event for display
+ * Format a match event for display.
+ * `icon` is an Iconify game-icons name; when absent the line renders a bullet.
  */
-export function formatMatchEvent(event: MatchEvent): { text: string; icon: string; color?: string } {
+export function formatMatchEvent(event: MatchEvent): { text: string; icon?: string; color?: string } {
   switch (event.type) {
     case 'player_joined':
       return {
         text: event.message,
-        icon: '✅',
-        color: 'text-green-400'
+        icon: 'game-icons:entry-door',
+        color: 'text-rc-success'
       };
     case 'player_left':
       return {
         text: event.message,
-        icon: '👋',
-        color: 'text-slate-400'
+        icon: 'game-icons:exit-door',
+        color: 'text-rc-fg-subtle'
       };
     case 'player_disconnected':
       return {
         text: event.message,
-        icon: '⚠️',
-        color: 'text-yellow-400'
+        icon: 'game-icons:unplugged',
+        color: 'text-rc-warning'
       };
     case 'player_reconnected':
       return {
         text: event.message,
-        icon: '🔄',
-        color: 'text-blue-400'
+        icon: 'game-icons:plug',
+        color: 'text-rc-info'
       };
     case 'match_started':
       return {
         text: event.message,
-        icon: '🎮',
-        color: 'text-cyan-400'
+        icon: 'game-icons:crossed-swords',
+        color: 'text-rc-ember'
       };
     case 'match_ended':
       return {
         text: event.message,
-        icon: event.metadata?.isDraw ? '🤝' : '🏆',
-        color: event.metadata?.isDraw ? 'text-slate-300' : 'text-amber-400'
+        icon: event.metadata?.isDraw ? 'game-icons:shaking-hands' : 'game-icons:laurels-trophy',
+        color: event.metadata?.isDraw ? 'text-rc-fg-muted' : 'text-rc-accent-link'
       };
     case 'game_started':
       return {
         text: event.message,
-        icon: '▶️',
-        color: 'text-blue-400'
+        icon: 'game-icons:play-button',
+        color: 'text-rc-info'
       };
     case 'game_ended':
       return {
         text: event.message,
-        icon: '⏸️',
-        color: 'text-slate-400'
+        icon: 'game-icons:pause-button',
+        color: 'text-rc-fg-subtle'
       };
     case 'round_started':
       return {
         text: event.message,
-        icon: '🔔',
-        color: 'text-purple-400'
+        icon: 'game-icons:ringing-bell',
+        color: 'text-rc-moonlight'
       };
     case 'pairings_announced':
       return {
         text: event.message,
-        icon: '📋',
-        color: 'text-indigo-400'
+        icon: 'game-icons:scroll-unfurled',
+        color: 'text-rc-fg-muted'
       };
     case 'tournament_started':
       return {
         text: event.message,
-        icon: '🏁',
-        color: 'text-green-400'
+        icon: 'game-icons:checkered-flag',
+        color: 'text-rc-success'
       };
     case 'player_eliminated':
       return {
         text: event.message,
-        icon: '❌',
-        color: 'text-red-400'
+        icon: 'game-icons:broken-skull',
+        color: 'text-rc-danger'
       };
     default:
       return {
         text: event.message,
-        icon: '•',
+        icon: undefined,
         color: undefined
       };
   }

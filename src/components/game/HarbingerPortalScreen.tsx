@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
+import { RcButton } from "@/components/ui/rc-button";
 import D20Dice from "@/lib/game/components/D20Dice";
+import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { PlayerKey } from "@/lib/game/store";
 import {
@@ -19,12 +21,6 @@ interface HarbingerPortalScreenProps {
 
 // Green color for Harbinger portal dice
 const PORTAL_DICE_COLOR = "#22c55e"; // green-500
-
-// Player colors (matching game conventions)
-const PLAYER_COLORS = {
-  p1: "text-blue-400",
-  p2: "text-red-400",
-} as const;
 
 export default function HarbingerPortalScreen({
   myPlayerKey,
@@ -253,16 +249,17 @@ export default function HarbingerPortalScreen({
   }
 
   return (
-    <div className="w-full max-w-[92vw] sm:max-w-4xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-4 sm:p-6">
+    <div className="w-full max-w-[92vw] rounded-rc-md border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-4 text-rc-fg shadow-rc-panel sm:max-w-4xl sm:rounded-rc-lg sm:p-6">
       <div className="mb-6 text-center">
-        <div className="text-base sm:text-lg font-semibold mb-1 font-fantaisie sm:text-xl text-green-400">
+        <div className="mb-1 font-rc-display text-[22px] leading-none text-rc-fg-strong sm:text-[28px]">
           Harbinger Portal Setup
         </div>
-        <div className="text-sm opacity-80">
+        <div className="font-rc-sans text-sm text-rc-fg-muted">
           {currentRoller && (
             <>
               <span
-                className={`font-medium font-fantaisie ${PLAYER_COLORS[currentRoller]}`}
+                className="font-rc-mono font-medium"
+                style={{ color: PLAYER_COLORS[currentRoller] }}
               >
                 {harbingerPlayerName}
               </span>{" "}
@@ -270,16 +267,16 @@ export default function HarbingerPortalScreen({
             </>
           )}
           {isCompleting && !setupComplete && (
-            <span className="text-yellow-400">Finalizing portal setup...</span>
+            <span className="text-rc-warning">Finalizing portal setup...</span>
           )}
           {setupComplete && (
-            <span className="text-green-400">Portals established!</span>
+            <span className="text-rc-success">Portals established!</span>
           )}
         </div>
-        <div className="mt-2 text-xs opacity-75">
-          Your Avatar: <span className="font-fantaisie">{myAvatarName}</span>
+        <div className="mt-2 font-rc-sans text-xs text-rc-fg-subtle">
+          Your Avatar: <span className="font-rc-display text-rc-fg-strong">{myAvatarName}</span>
         </div>
-        <div className="text-xs opacity-60 mt-2">
+        <div className="mt-2 font-rc-sans text-xs text-rc-fg-subtle">
           {isMyTurn &&
             !allRolled &&
             "Click each die to roll for portal tile locations."}
@@ -299,7 +296,7 @@ export default function HarbingerPortalScreen({
       </div>
 
       {/* 3D Canvas for dice rolling */}
-      <div className="bg-black/30 rounded-xl ring-1 ring-white/10 mb-6 h-[42vh] min-h-[240px] sm:h-[300px]">
+      <div className="mb-6 h-[42vh] min-h-[240px] overflow-hidden rounded-rc-md border border-rc-line/12 bg-black/30 sm:h-[300px]">
         <ClientCanvas camera={{ position: [0, 0, 5], fov: 60 }}>
           <ambientLight intensity={0.4} />
           <directionalLight position={[5, 5, 5]} intensity={0.8} />
@@ -342,20 +339,20 @@ export default function HarbingerPortalScreen({
             return (
               <div
                 key={index}
-                className={`flex items-center gap-2 px-3 py-1 rounded ${
+                className={`flex items-center gap-2 px-3 py-1 rounded-rc-md ${
                   isRerollTarget
-                    ? "bg-yellow-500/20 ring-1 ring-yellow-500"
+                    ? "bg-rc-warning/20 ring-1 ring-rc-warning"
                     : roll !== undefined
-                    ? "bg-green-500/20"
-                    : "bg-zinc-700/50"
+                    ? "bg-rc-success/15 ring-1 ring-rc-success/35"
+                    : "bg-black/30 ring-1 ring-rc-line/12"
                 }`}
               >
-                <span className="text-xs opacity-70">Die {index + 1}:</span>
-                <span className="font-fantaisie text-lg">
+                <span className="font-rc-mono text-xs text-rc-fg-muted">Die {index + 1}:</span>
+                <span className="rc-stat text-lg">
                   {roll !== undefined ? roll : "—"}
                 </span>
                 {isRerollTarget && (
-                  <span className="text-xs text-yellow-400">(reroll)</span>
+                  <span className="font-rc-mono text-xs text-rc-warning">(reroll)</span>
                 )}
               </div>
             );
@@ -364,9 +361,9 @@ export default function HarbingerPortalScreen({
 
         {/* Portal tile preview */}
         {allUnique && (
-          <div className="text-center text-sm">
-            <span className="text-green-400">Portal Tiles: </span>
-            <span className="font-fantaisie">
+          <div className="text-center font-rc-sans text-sm">
+            <span className="text-rc-success">Portal Tiles: </span>
+            <span className="rc-stat">
               {rolls.sort((a, b) => a - b).join(", ")}
             </span>
           </div>
@@ -375,41 +372,38 @@ export default function HarbingerPortalScreen({
         {/* Confirm button - shown when all dice are unique and it's my turn */}
         {isMyTurn && allUnique && rollPhase !== "complete" && (
           <div className="flex justify-center mt-4">
-            <button
-              onClick={handleConfirmPortals}
-              className="px-6 py-2 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-lg transition-colors shadow-lg"
-            >
+            <RcButton onClick={handleConfirmPortals}>
               Confirm Portal Locations
-            </button>
+            </RcButton>
           </div>
         )}
 
         {/* Instructions */}
         {isMyTurn && !allRolled && (
-          <div className="text-center text-sm opacity-70">
+          <div className="text-center font-rc-sans text-sm text-rc-fg-muted">
             Click each die to determine your portal locations (tiles 1-20)
           </div>
         )}
 
         {/* Waiting message for opponent */}
         {!isMyTurn && currentRoller && (
-          <div className="text-center text-sm opacity-70">
+          <div className="text-center font-rc-sans text-sm text-rc-fg-muted">
             {harbingerPlayerName} is setting up their portals...
           </div>
         )}
 
         {/* Completion messages */}
         {myPortalState?.rollPhase === "complete" && !setupComplete && (
-          <div className="text-center text-sm text-green-400">
+          <div className="text-center font-rc-sans text-sm text-rc-success">
             Your portals are set at tiles:{" "}
-            <span className="font-fantaisie">
+            <span className="font-rc-mono tabular-nums">
               {myPortalState.tileNumbers.join(", ")}
             </span>
           </div>
         )}
 
         {setupComplete && (
-          <div className="text-center text-sm text-green-400 font-semibold">
+          <div className="text-center font-rc-sans text-sm font-semibold text-rc-success">
             All portals established! Starting game...
           </div>
         )}

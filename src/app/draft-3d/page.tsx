@@ -16,6 +16,7 @@ import { DynamicBoard as Board } from "@/components/game/dynamic-3d";
 import type { Digit } from "@/components/game/manacost";
 import { NumberBadge } from "@/components/game/manacost";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { RcButton } from "@/components/ui/rc-button";
 import {
   BoosterCard,
   Pick3D,
@@ -1122,12 +1123,12 @@ export default function Draft3DPage() {
         {/* Minimal Navigation (top-right) */}
         {status !== "authenticated" && (
           <div className="absolute top-3 right-4 z-[60] pointer-events-auto text-xs flex items-center gap-3">
-            <Link href="/" className="underline text-white/80 hover:text-white">
+            <Link href="/" className="rc-link">
               Home
             </Link>
             <Link
               href="/online/lobby"
-              className="underline text-white/80 hover:text-white"
+              className="rc-link"
             >
               Lobby
             </Link>
@@ -1136,21 +1137,27 @@ export default function Draft3DPage() {
         {/* Top controls */}
         <div className="max-w-7xl mx-auto p-4 flex flex-wrap items-end gap-4 pointer-events-auto select-none relative">
           <div className="flex items-center gap-3">
-            <div className="text-3xl font-fantaisie text-white">Draft</div>
-            <button
+            <div className="font-rc-display text-[28px] leading-none text-rc-fg-strong">
+              Draft
+            </div>
+            <RcButton
+              variant="quiet"
+              size="icon"
               onClick={() => setHelpOpen(true)}
-              className="h-9 w-9 grid place-items-center rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-all"
+              className="h-9 w-9"
               title="How to use Draft mode"
               aria-label="How to use Draft mode"
             >
-              <span className="font-fantaisie text-xl font-bold">?</span>
-            </button>
+              <span className="font-rc-display text-xl font-bold">?</span>
+            </RcButton>
           </div>
 
           {/* Sorting controls */}
           {pick3D.length > 0 && (
             <div className="flex items-center gap-2">
-              <button
+              <RcButton
+                variant="quiet"
+                size="icon"
                 onClick={() => setIsSortingEnabled(!isSortingEnabled)}
                 title={
                   isSortingEnabled
@@ -1162,11 +1169,9 @@ export default function Draft3DPage() {
                     ? "Disable auto-stacking"
                     : "Enable auto-stacking"
                 }
-                className={`h-9 w-9 rounded-full grid place-items-center ring-1 transition ${
-                  isSortingEnabled
-                    ? "bg-emerald-500 text-black ring-emerald-400 hover:bg-emerald-400"
-                    : "bg-white/15 text-white ring-white/30 hover:bg-white/25"
-                }`}
+                tone="success"
+                aria-pressed={isSortingEnabled}
+                className="h-9 w-9 rounded-full"
               >
                 {/* Shuffle/stack icon (same as editor) */}
                 <svg
@@ -1177,30 +1182,30 @@ export default function Draft3DPage() {
                 >
                   <path d="M3 7h3.586a2 2 0 0 1 1.414.586l6.828 6.828A2 2 0 0 0 16.242 15H21v2h-4.758a4 4 0 0 1-2.829-1.172L6.586 9.414A2 2 0 0 0 5.172 9H3V7zm0 10h5l2 2H3v-2zm18-8h-5l-2-2H21v2z" />
                 </svg>
-              </button>
+              </RcButton>
             </div>
           )}
           {inProgress && (
             <div className="absolute left-1/2 -translate-x-1/2 top-4 z-[55] pointer-events-auto text-center">
-              <button
+              <RcButton
                 onClick={() =>
                   staged && commitPickAndPass(staged.idx, staged.x, staged.z)
                 }
                 disabled={!staged}
-                className="h-10 px-4 rounded border border-emerald-500 text-emerald-400 font-semibold disabled:opacity-50 bg-transparent hover:text-emerald-300 hover:border-emerald-400"
+                className="h-10 px-4"
               >
                 {staged ? (
                   <>
                     Pick & Pass:{" "}
-                    <span className="font-fantaisie text-lg md:text-xl">
+                    <span className="font-rc-display text-lg md:text-xl">
                       {currentPacks[0]?.[staged.idx]?.cardName ?? "Card"}
                     </span>
                   </>
                 ) : (
                   "Pick & Pass"
                 )}
-              </button>
-              <div className="mt-1 text-[11px] text-white/40 pointer-events-none">
+              </RcButton>
+              <div className="rc-hint mt-1 tabular-nums pointer-events-none">
                 Pack {packIndex + 1} / 3 • Pick {pickNumber} / 15 • Passing{" "}
                 {dir === 1 ? "Left" : "Right"}
               </div>
@@ -1208,19 +1213,18 @@ export default function Draft3DPage() {
           )}
           {!inProgress && (
             <>
-              <label className="flex items-center gap-2 text-white">
+              <label className="rc-check flex text-[13px]">
                 <input
                   type="checkbox"
                   checked={useCube}
                   onChange={(e) => setUseCube(e.target.checked)}
-                  className="rounded"
                 />
-                <span className="text-sm">Use Cube for draft</span>
+                <span>Use Cube for draft</span>
               </label>
 
               {useCube ? (
-                <label className="flex flex-col gap-1 text-white">
-                  <span className="text-xs opacity-80">Select Cube</span>
+                <label className="flex flex-col gap-1 text-rc-fg">
+                  <span className="rc-field-label">Select Cube</span>
                   <CustomSelect
                     value={cubeId}
                     onChange={(v) => setCubeId(v)}
@@ -1233,10 +1237,10 @@ export default function Draft3DPage() {
                   />
                 </label>
               ) : (
-                <div className="flex flex-wrap items-end gap-3 text-white">
+                <div className="flex flex-wrap items-end gap-3 text-rc-fg">
                   {[0, 1, 2].map((i) => (
                     <label key={`set-${i}`} className="flex flex-col gap-1">
-                      <span className="text-xs opacity-80">
+                      <span className="rc-field-label">
                         Pack {i + 1} Set
                       </span>
                       <CustomSelect
@@ -1258,8 +1262,8 @@ export default function Draft3DPage() {
                 </div>
               )}
 
-              <label className="flex flex-col gap-1 text-white">
-                <span className="text-xs opacity-80">Players</span>
+              <label className="flex flex-col gap-1 text-rc-fg">
+                <span className="rc-field-label">Players</span>
                 <input
                   type="number"
                   min={2}
@@ -1270,32 +1274,35 @@ export default function Draft3DPage() {
                       Math.max(2, Math.min(12, Number(e.target.value)))
                     )
                   }
-                  className="rounded px-3 py-2 bg-black/70 text-white w-28 ring-1 ring-white/20 backdrop-blur"
+                  className="rc-input h-9 w-28 backdrop-blur"
                 />
               </label>
 
-              <label className="flex items-center gap-2 text-white">
+              <label className="rc-check flex text-[13px]">
                 <input
                   type="checkbox"
                   checked={replaceAvatars}
                   onChange={(e) => setReplaceAvatars(e.target.checked)}
-                  className="rounded"
                 />
-                <span className="text-sm">
+                <span>
                   Replace Sorcerer with Beta avatars
                 </span>
               </label>
 
-              <button
+              <RcButton
+                size="lg"
+                variant={yourPicks.length > 0 ? "outline" : "default"}
                 onClick={startDraft}
                 disabled={starting}
-                className="h-12 px-6 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-semibold shadow-lg ring-1 ring-black/20 disabled:opacity-50"
+                className="h-12 px-6"
               >
                 {starting ? "Starting..." : "Start Draft"}
-              </button>
+              </RcButton>
 
               {error && (
-                <div className="text-red-300 text-sm">Error: {error}</div>
+                <div className="rc-alert" data-tone="danger">
+                  Error: {error}
+                </div>
               )}
             </>
           )}
@@ -1307,30 +1314,36 @@ export default function Draft3DPage() {
             <div className="grid grid-cols-12 gap-3 lg:gap-4">
               <div className="col-span-12 lg:col-span-8" />
               <div className="col-span-12 lg:col-span-4 justify-self-end pr-0">
-                <div className="rounded p-3 bg-black/80 ring-1 ring-white/30 shadow-lg pointer-events-none">
-                  <div className="font-medium mb-2 text-white flex items-center justify-between">
-                    <span>Your Picks ({yourPicks.length})</span>
+                <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-3 text-rc-fg shadow-rc-panel pointer-events-none">
+                  <div className="mb-2 flex items-center justify-between text-rc-fg-strong">
+                    <span className="font-rc-display text-[18px] leading-none">
+                      Your Picks ({yourPicks.length})
+                    </span>
                     <div className="flex items-center gap-2">
-                      <button
+                      <RcButton
+                        variant="quiet"
+                        size="xs"
                         onClick={() => setCompactPicks((v) => !v)}
-                        className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20 pointer-events-auto"
+                        className="h-auto px-2 py-1 font-rc-mono pointer-events-auto"
                         title="Toggle compact view"
                       >
                         {compactPicks ? "Comfort" : "Compact"}
-                      </button>
-                      <button
+                      </RcButton>
+                      <RcButton
+                        variant="quiet"
+                        size="xs"
                         onClick={() => setPicksOpen((v) => !v)}
-                        className="text-xs px-2 py-1 bg-white/10 rounded hover:bg-white/20 pointer-events-auto"
+                        className="h-auto px-2 py-1 font-rc-mono pointer-events-auto"
                       >
                         {picksOpen ? "Hide" : "Show"}
-                      </button>
+                      </RcButton>
                     </div>
                   </div>
                   {/* Slim stats row */}
                   {yourPicks.length > 0 && (
-                    <div className="mb-2 text-[11px] text-white/90 flex flex-wrap items-center gap-3 pointer-events-auto">
+                    <div className="mb-2 flex flex-wrap items-center gap-3 font-rc-mono text-[11px] tabular-nums text-rc-fg pointer-events-auto">
                       <div className="flex items-center gap-2">
-                        <span className="opacity-80">Types:</span>
+                        <span className="text-rc-fg-muted">Types:</span>
                         <span>C {picksByType.creatures}</span>
                         <span>S {picksByType.spells}</span>
                         <span>Sites {picksByType.sites}</span>
@@ -1338,7 +1351,7 @@ export default function Draft3DPage() {
                       </div>
                       {thresholdSummary.elements.length > 0 && (
                         <div className="flex items-center gap-2">
-                          <span className="opacity-80">Thresholds:</span>
+                          <span className="text-rc-fg-muted">Thresholds:</span>
                           {thresholdSummary.elements.map((element) => (
                             <span
                               key={element}
@@ -1366,7 +1379,7 @@ export default function Draft3DPage() {
                   )}
                   {picksOpen && (
                     <div
-                      className={`max-h-[52vh] overflow-auto pr-2 grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-2 gap-2 text-xs pointer-events-auto`}
+                      className={`thin-scrollbar max-h-[52vh] overflow-auto pr-2 grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-2 gap-2 text-xs pointer-events-auto`}
                     >
                       {yourCounts.map((it) => {
                         const meta = metaByCardId[it.cardId];
@@ -1388,9 +1401,9 @@ export default function Draft3DPage() {
                         return (
                           <div
                             key={it.cardId}
-                            className={`rounded ${
+                            className={`rounded-rc-md ${
                               compactPicks ? "p-1" : "p-2"
-                            } bg-black/70 ring-1 ring-white/25 text-white`}
+                            } bg-black/45 ring-1 ring-rc-line/18 text-rc-fg`}
                             onMouseEnter={() => {
                               if (slug) {
                                 showCardPreview({
@@ -1406,7 +1419,7 @@ export default function Draft3DPage() {
                           >
                             {compactPicks ? (
                               <div className="flex items-center justify-between gap-2">
-                                <div className="truncate max-w-[60%] font-medium">
+                                <div className="truncate max-w-[60%] font-rc-display text-[13px] leading-4">
                                   {it.name}
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -1447,7 +1460,7 @@ export default function Draft3DPage() {
                                         {meta.cost}
                                       </span>
                                     ))}
-                                  <div className="text-right font-semibold">
+                                  <div className="text-right font-rc-mono font-semibold tabular-nums text-rc-fg-strong">
                                     x{it.count}
                                   </div>
                                 </div>
@@ -1460,7 +1473,7 @@ export default function Draft3DPage() {
                                       isSite
                                         ? "aspect-[4/3] w-14"
                                         : "aspect-[3/4] w-12"
-                                    } rounded overflow-hidden ring-1 ring-white/10 bg-black/40`}
+                                    } rounded-rc-sm overflow-hidden ring-1 ring-rc-line/18 bg-black/40`}
                                   >
                                     <Image
                                       src={`/api/images/${slug}`}
@@ -1481,16 +1494,16 @@ export default function Draft3DPage() {
                                   <div className="flex items-start justify-between">
                                     <div className="min-w-0">
                                       <div
-                                        className="font-semibold truncate"
+                                        className="truncate font-rc-display text-[14px] leading-4 text-rc-fg-strong"
                                         title={it.name}
                                       >
                                         {it.name}
                                       </div>
-                                      <div className="opacity-90 text-xs">
+                                      <div className="font-rc-sans text-xs text-rc-fg-muted">
                                         {it.rarity}
                                       </div>
                                     </div>
-                                    <div className="text-right font-semibold">
+                                    <div className="text-right font-rc-mono font-semibold tabular-nums text-rc-fg-strong">
                                       x{it.count}
                                     </div>
                                   </div>
@@ -1555,8 +1568,8 @@ export default function Draft3DPage() {
         {/* Pack selection overlay at start of each round */}
         {needsPackChoice && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-auto select-none">
-            <div className="rounded-xl p-6 bg-black/80 ring-1 ring-white/30 text-white w-[min(92vw,720px)] shadow-2xl">
-              <div className="text-lg font-semibold mb-3">
+            <div className="w-[min(92vw,720px)] rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-rc-fg shadow-rc-panel">
+              <div className="mb-3 font-rc-display text-[22px] leading-none text-rc-fg-strong">
                 Choose a pack to crack (Round {packIndex + 1}/3)
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1572,14 +1585,14 @@ export default function Draft3DPage() {
                       key={`pack-opt-${i}`}
                       onClick={() => choosePackToCrack(i)}
                       disabled={usedElsewhere}
-                      className={`group rounded-lg p-3 bg-black/60 ring-1 ring-white/25 hover:bg-black/50 text-left ${
+                      className={`group rounded-rc-md border border-rc-line/12 bg-black/30 p-3 text-left transition-colors hover:border-rc-accent/40 hover:bg-rc-accent/8 ${
                         usedElsewhere ? "opacity-40 cursor-not-allowed" : ""
                       }`}
                       aria-label={`Open ${setName || "pack"} option ${i + 1}`}
                     >
                       <div
-                        className={`relative w-full h-40 sm:h-48 md:h-56 rounded-md overflow-hidden ring-1 ring-white/15 bg-black/40 ${
-                          usedElsewhere ? "" : "group-hover:ring-white/30"
+                        className={`relative w-full h-40 sm:h-48 md:h-56 rounded-rc-md overflow-hidden ring-1 ring-rc-line/12 bg-black/40 ${
+                          usedElsewhere ? "" : "group-hover:ring-rc-accent/45"
                         }`}
                       >
                         {assetName ? (
@@ -1593,16 +1606,16 @@ export default function Draft3DPage() {
                             unoptimized
                           />
                         ) : (
-                          <div className="flex items-center justify-center w-full h-full text-sm opacity-70">
+                          <div className="flex items-center justify-center w-full h-full font-rc-sans text-sm text-rc-fg-muted">
                             {setName || "Booster"}
                           </div>
                         )}
                         {/* Set label badge */}
-                        <div className="absolute bottom-1 left-1 right-1 text-[11px] px-2 py-1 rounded bg-black/60 text-white text-center pointer-events-none">
+                        <div className="absolute bottom-1 left-1 right-1 rounded-rc-sm bg-[rgba(7,10,20,0.85)] px-2 py-1 text-center font-rc-mono text-[11px] text-rc-fg pointer-events-none">
                           {setName || "Booster"}
                         </div>
                       </div>
-                      <div className="mt-2 text-xs opacity-70">
+                      <div className="rc-hint mt-2">
                         {usedElsewhere
                           ? "Already used this round"
                           : "Click to open"}
@@ -1621,24 +1634,26 @@ export default function Draft3DPage() {
         {helpOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-auto">
             <div
-              className="absolute inset-0 bg-black/70"
+              className="absolute inset-0 bg-[rgba(6,10,20,0.7)] backdrop-blur-[4px]"
               onClick={() => setHelpOpen(false)}
             />
-            <div className="relative bg-slate-900 text-white rounded-lg p-6 w-[min(90vw,720px)] ring-1 ring-white/20 shadow-2xl">
+            <div className="relative w-[min(90vw,720px)] rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 text-rc-fg shadow-rc-panel">
               <div className="flex items-center justify-between mb-4">
-                <div className="text-lg font-semibold">Draft Help</div>
+                <div className="font-rc-display text-[22px] leading-none text-rc-fg-strong">
+                  Draft Help
+                </div>
                 <button
                   onClick={() => setHelpOpen(false)}
-                  className="h-8 w-8 grid place-items-center rounded bg-white/10 hover:bg-white/20"
+                  className="h-8 w-8 grid place-items-center rounded-rc-md text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
                   aria-label="Close help"
                   title="Close"
                 >
                   ×
                 </button>
               </div>
-              <div className="space-y-4 text-sm opacity-90">
+              <div className="space-y-4 font-rc-sans text-sm text-rc-fg-muted">
                 <div>
-                  <div className="font-medium mb-1">Picking cards</div>
+                  <div className="rc-eyebrow mb-1">Picking cards</div>
                   <ul className="list-disc pl-5 space-y-1">
                     <li>
                       Hover a card in your hand to preview it (left side).
@@ -1657,7 +1672,7 @@ export default function Draft3DPage() {
                   </ul>
                 </div>
                 <div>
-                  <div className="font-medium mb-1">Keyboard controls</div>
+                  <div className="rc-eyebrow mb-1">Keyboard controls</div>
                   <ul className="list-disc pl-5 space-y-1">
                     <li>
                       <b>Left/Right</b>: browse cards in your hand (focus lifts
@@ -1673,7 +1688,7 @@ export default function Draft3DPage() {
                   </ul>
                 </div>
                 <div>
-                  <div className="font-medium mb-1">Sorting</div>
+                  <div className="rc-eyebrow mb-1">Sorting</div>
                   <ul className="list-disc pl-5 space-y-1">
                     <li>
                       Toggle <b>Sort Cards</b> to auto‑stack your picks by
@@ -1685,7 +1700,7 @@ export default function Draft3DPage() {
                   </ul>
                 </div>
                 <div>
-                  <div className="font-medium mb-1">Your Picks panel</div>
+                  <div className="rc-eyebrow mb-1">Your Picks panel</div>
                   <ul className="list-disc pl-5 space-y-1">
                     <li>Shows totals by type and your maximum thresholds.</li>
                     <li>Hover a row to preview the corresponding card.</li>
@@ -1705,25 +1720,27 @@ export default function Draft3DPage() {
         {/* Save deck panel */}
         {!inProgress && yourPicks.length > 0 && (
           <div className="max-w-7xl mx-auto px-4 pb-10 pointer-events-auto select-none">
-            <div className="rounded p-4 bg-black/80 ring-1 ring-white/30 text-white shadow-lg">
-              <div className="font-medium mb-2">Save Drafted Deck</div>
+            <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-4 text-rc-fg shadow-rc-panel">
+              <div className="mb-2 font-rc-display text-[22px] leading-none text-rc-fg-strong">
+                Save Drafted Deck
+              </div>
               <div className="flex flex-wrap items-end gap-3">
                 <label className="flex flex-col gap-1">
-                  <span className="text-sm opacity-80">Deck name</span>
+                  <span className="rc-field-label">Deck name</span>
                   <input
                     value={deckName}
                     onChange={(e) => setDeckName(e.target.value)}
-                    className="rounded px-3 py-2 bg-black/70 text-white ring-1 ring-white/20 backdrop-blur"
+                    className="rc-input h-10"
                   />
                 </label>
-                <button
+                <RcButton
                   onClick={saveDeck}
                   disabled={saving}
-                  className="h-10 px-4 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-semibold disabled:opacity-50"
+                  className="h-10 px-4"
                 >
                   {saving ? "Saving..." : "Save Deck & Continue to Editor"}
-                </button>
-                {saveMsg && <div className="text-sm">{saveMsg}</div>}
+                </RcButton>
+                {saveMsg && <div className="font-rc-sans text-sm text-rc-success">{saveMsg}</div>}
               </div>
             </div>
           </div>

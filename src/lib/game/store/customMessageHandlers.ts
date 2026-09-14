@@ -1,9 +1,16 @@
 import type { StateCreator } from "zustand";
 import { extractMagicTargetingHintsSync } from "@/lib/game/cardAbilities";
+import {
+  CPU_SPELL_RESOLVE_MAX_WAIT_MS,
+  CPU_SPELL_REVEAL_READ_MS,
+  cpuRevealReadyIn,
+  useCpuReveals,
+} from "@/lib/game/cpu/revealQueue";
 import { getSpellChoice } from "@/lib/game/cpu/spells";
 import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import type { CustomMessage } from "@/lib/net/transport";
 import { findInquisitionInCards } from "./inquisitionSummonState";
+import { guidesForcedOn } from "./preferenceState";
 import type {
   GameState,
   PlayerKey,
@@ -106,11 +113,19 @@ export function handleCustomMessage(
     const state = get();
     const pending = state.pendingMagic;
     const message = msg as { id?: unknown; key?: unknown; playerKey?: unknown };
-    if (!state.opponentPlayerId?.startsWith("cpu_") || !pending ||
-        pending.id !== message.id || typeof message.key !== "string" ||
-        message.playerKey !== seatFromOwner(pending.spell.owner)) return;
-    const choice = getSpellChoice(state, seatFromOwner(pending.spell.owner), pending.spell.card.name || "", message.key);
-    if (choice) set({ pendingMagic: { ...pending, cpuChoice: choice.key, caster: choice.caster, target: choice.target } });
+    if (!state.opponentPlayerId?.startsWith("cpu_") || typeof message.key !== "string") return;
+    // The CPU's announced choice names what its revealed spell does (no pending state needed).
+    const reveal = useCpuReveals.getState().queue.find(item => item.id === message.id);
+    const forPending = !!pending && pending.id === message.id && message.playerKey === seatFromOwner(pending.spell.owner);
+    const forReveal = !!reveal && message.playerKey === reveal.seat && reveal.seat !== state.actorKey;
+    if (!forPending && !forReveal) return;
+    const seat = forPending && pending ? seatFromOwner(pending.spell.owner) : reveal?.seat;
+    const name = forPending && pending ? pending.spell.card.name || "" : reveal?.card.name || "";
+    if (!seat) return;
+    const choice = getSpellChoice(state, seat, name, message.key);
+    if (!choice) return;
+    if (forReveal && reveal) useCpuReveals.getState().update(reveal.id,{detail:choice.label});
+    if (forPending && pending) set({ pendingMagic: { ...pending, cpuChoice: choice.key, caster: choice.caster, target: choice.target } });
     return;
   }
   if (t === "boardPing") {
@@ -193,8 +208,10 @@ export function handleCustomMessage(
         PlayerKey,
         boolean
       >;
-      const nextCombatActive = nextCombatPrefs.p1 && nextCombatPrefs.p2;
-      const nextMagicActive = nextMagicPrefs.p1 && nextMagicPrefs.p2;
+      const forced = guidesForcedOn(s);
+      const nextCombatActive =
+        forced || (nextCombatPrefs.p1 && nextCombatPrefs.p2);
+      const nextMagicActive = forced || (nextMagicPrefs.p1 && nextMagicPrefs.p2);
       return {
         combatGuideSeatPrefs: nextCombatPrefs,
         magicGuideSeatPrefs: nextMagicPrefs,
@@ -312,6 +329,13 @@ export function handleCustomMessage(
         guidesSuppressed: !magicGuidesActive || hasCustomResolver(cardName),
       },
     } as Partial<GameState> as GameState);
+    // A spell the CPU bot casts is revealed big; its effect label follows with cpuMagicChoice.
+    const from = (msg as { playerKey?: unknown }).playerKey;
+    const mySeat = get().actorKey;
+    if (get().opponentPlayerId?.startsWith("cpu_") && mySeat && (from === "p1" || from === "p2") &&
+        from !== mySeat && seatFromOwner(ownerVal as 1 | 2) === from) {
+      useCpuReveals.getState().show({id:magicId,seat:from,card:card as CardRef,kind:"spell",action:"casts",detail:null});
+    }
     // The relayed card may lack rules text (e.g. cast by the CPU bot); fetch
     // it so this side shows the same intention as the caster.
     if (!hints.fromText && cardName && typeof fetch === "function") {
@@ -465,16 +489,25 @@ export function handleCustomMessage(
     // so auto-resolve after a brief delay to simulate opponent acknowledgment.
     const oppId = get().opponentPlayerId;
     if (typeof oppId === "string" && oppId.startsWith("cpu_")) {
-      setTimeout(() => {
+      // A revealed CPU spell stays up a moment before its effect lands (bounded, never stuck).
+      let waited = 0;
+      const attempt = () => {
         const state = get();
         if (
-          state.pendingMagic &&
-          state.pendingMagic.id === id &&
-          state.pendingMagic.status === "confirm"
-        ) {
-          state.resolveMagic();
+          !state.pendingMagic ||
+          state.pendingMagic.id !== id ||
+          state.pendingMagic.status !== "confirm"
+        ) return;
+        const wait = id ? cpuRevealReadyIn(id, CPU_SPELL_REVEAL_READ_MS) : 0;
+        if (wait !== 0 && waited < CPU_SPELL_RESOLVE_MAX_WAIT_MS) {
+          const step = Math.min(wait ?? 250, 250);
+          waited += step;
+          setTimeout(attempt, step);
+          return;
         }
-      }, 800);
+        state.resolveMagic();
+      };
+      setTimeout(attempt, 800);
     }
     return;
   }
@@ -625,6 +658,15 @@ export function handleCustomMessage(
     try {
       get().log("Intercept opportunity: choose interceptors");
     } catch {}
+    return;
+  }
+  if (t === "botActionToast") {
+    // The bot has no store of its own: the human client records the bot's
+    // marked-up line in the event log (its toast text is shown by useBotActionToastListener).
+    const line = (msg as { log?: unknown }).log;
+    if (typeof line === "string" && line.trim() && get().actorKey && get().opponentPlayerId?.startsWith("cpu_")) {
+      get().log(line);
+    }
     return;
   }
   if (t === "toast") {

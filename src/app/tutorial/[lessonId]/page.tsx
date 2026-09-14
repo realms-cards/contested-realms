@@ -7,6 +7,7 @@
  * The player follows scripted steps to learn the game rules.
  */
 
+import { Icon } from "@iconify/react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -17,6 +18,7 @@ import PlayerResourcePanels from "@/components/game/PlayerResourcePanel";
 import { TutorialHighlight } from "@/components/tutorial/TutorialHighlight";
 import { TutorialOverlay } from "@/components/tutorial/TutorialOverlay";
 import { useTutorialSession } from "@/components/tutorial/useTutorialSession";
+import { RcLinkButton } from "@/components/ui/rc-button";
 import { isFeatureEnabled } from "@/lib/config/features";
 import { createCardPreviewData } from "@/lib/game/card-preview.types";
 import { useGameStore } from "@/lib/game/store";
@@ -47,14 +49,14 @@ function TutorialLessonContent() {
   // Lesson not found
   if (session.stepCount === 0) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center bg-slate-950 text-white">
-        <h1 className="text-xl font-bold">Lesson Not Found</h1>
-        <p className="mt-2 text-sm text-slate-400">
+      <main className="flex min-h-screen flex-col items-center justify-center text-rc-fg">
+        <h1 className="m-0 font-rc-display text-[26px] leading-none text-rc-fg-strong">Lesson Not Found</h1>
+        <p className="mt-2 font-rc-sans text-sm text-rc-fg-muted">
           The lesson &quot;{lessonId}&quot; doesn&apos;t exist.
         </p>
         <Link
           href="/tutorial"
-          className="mt-4 text-sm text-violet-400 hover:text-violet-300"
+          className="rc-link mt-4 font-rc-sans text-sm"
         >
           Back to Lessons
         </Link>
@@ -65,46 +67,50 @@ function TutorialLessonContent() {
   // Lesson complete screen
   if (session.isComplete) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+      <main className="flex min-h-screen flex-col items-center justify-center text-rc-fg">
         <div className="mx-auto max-w-md text-center">
-          <div className="mb-4 text-5xl">&#127942;</div>
-          <h1 className="text-2xl font-bold text-white">
+          <div className="mb-4 flex justify-center text-rc-accent">
+            <Icon icon="game-icons:laurels-trophy" width={48} height={48} aria-hidden="true" />
+          </div>
+          <h1 className="m-0 font-rc-display text-[28px] leading-[1.1] text-rc-fg-strong">
             {session.lessonTitle} — Complete!
           </h1>
-          <p className="mt-3 text-sm text-slate-400">
+          <p className="mt-3 font-rc-sans text-sm text-rc-fg-muted">
             You&apos;ve successfully completed this lesson.
           </p>
 
           <div className="mt-8 flex flex-col gap-3">
             {session.nextLessonId ? (
               <>
-                <Link
+                <RcLinkButton
                   href={`/tutorial/${session.nextLessonId}`}
-                  className="rounded-lg bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-6 py-3 text-sm font-semibold text-white transition-all shadow-md"
+                  size="lg"
                 >
                   Next Lesson
-                </Link>
-                <Link
+                </RcLinkButton>
+                <RcLinkButton
                   href="/tutorial"
-                  className="rounded-lg bg-slate-800 hover:bg-slate-700 px-6 py-3 text-sm text-slate-300 transition-colors"
+                  variant="outline"
+                  size="lg"
                 >
                   Back to All Lessons
-                </Link>
+                </RcLinkButton>
               </>
             ) : (
               <>
-                <Link
+                <RcLinkButton
                   href="/online/lobby"
-                  className="rounded-lg bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 px-6 py-3 text-sm font-semibold text-white transition-all shadow-md"
+                  size="lg"
                 >
                   Go to Online Lobby
-                </Link>
-                <Link
+                </RcLinkButton>
+                <RcLinkButton
                   href="/tutorial"
-                  className="rounded-lg bg-slate-800 hover:bg-slate-700 px-6 py-3 text-sm text-slate-300 transition-colors"
+                  variant="outline"
+                  size="lg"
                 >
                   Back to All Lessons
-                </Link>
+                </RcLinkButton>
               </>
             )}
           </div>
@@ -125,7 +131,7 @@ function TutorialLessonContent() {
         !!session.currentStep?.showHint));
 
   return (
-    <main className="fixed inset-0 z-20 overflow-hidden bg-slate-950">
+    <main className="fixed inset-0 z-20 overflow-hidden bg-rc-floor">
       {/* 3D game board — always mounted to avoid WebGL context loss */}
       <TutorialBoard3D
         visibleHud={visibleHud}
@@ -195,8 +201,8 @@ export default function TutorialLessonPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center bg-slate-950">
-          <div className="text-sm text-slate-400">Loading tutorial...</div>
+        <main className="flex min-h-screen items-center justify-center">
+          <div className="font-rc-mono text-sm text-rc-fg-muted">Loading tutorial...</div>
         </main>
       }
     >

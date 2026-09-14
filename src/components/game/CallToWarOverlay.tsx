@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import CardWithPreview, { CardGrid } from "./CardWithPreview";
 
@@ -49,9 +50,9 @@ export default function CallToWarOverlay() {
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-red-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
-          <span className="text-red-400 font-fantaisie">⚔️ Call to War</span>
-          <span className="opacity-80">
+        <div className="pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg md:text-xl flex items-center gap-3 select-none">
+          <span className="font-rc-display text-rc-accent-link">Call to War</span>
+          <span className="text-rc-fg-muted">
             {phase === "loading" && "Searching spellbook..."}
             {phase === "selecting" &&
               (isCaster
@@ -60,25 +61,27 @@ export default function CallToWarOverlay() {
             {phase === "resolving" && "Resolving..."}
           </span>
           {isCaster && phase === "selecting" && (
-            <button
-              className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1 select-none"
+            <RcButton
+              variant="outline"
+              size="xs"
+              className="mx-1"
               onClick={handleCancel}
             >
               Cancel
-            </button>
+            </RcButton>
           )}
         </div>
       </div>
 
       {/* Main content area - only for caster */}
       {isCaster && phase === "selecting" && eligibleCards.length > 0 && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-6 max-w-4xl w-full mx-4 ring-1 ring-red-500/30 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-fantaisie text-red-400 mb-2 text-center">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="thin-scrollbar rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-4xl w-full mx-4 font-rc-sans text-rc-fg shadow-rc-panel max-h-[90vh] overflow-y-auto">
+            <h2 className="mb-2 text-center font-rc-display text-[26px] leading-tight text-rc-fg-strong">
               {eligibleCards.length} Exceptional Mortal
               {eligibleCards.length !== 1 ? "s" : ""} Found
             </h2>
-            <p className="text-white/70 text-sm mb-6 text-center">
+            <p className="text-rc-fg-muted text-sm mb-6 text-center">
               Click a card to select it for your hand. Your spellbook will be
               shuffled.
             </p>
@@ -99,19 +102,15 @@ export default function CallToWarOverlay() {
 
             {/* Action buttons */}
             <div className="flex gap-3 justify-center">
-              <button
-                className="px-6 py-3 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 font-medium transition-colors"
-                onClick={handleCancel}
-              >
+              <RcButton variant="outline" onClick={handleCancel}>
                 Cancel
-              </button>
-              <button
-                className="px-6 py-3 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              </RcButton>
+              <RcButton
                 onClick={handleResolve}
                 disabled={selectedIndex === null}
               >
                 Confirm Selection
-              </button>
+              </RcButton>
             </div>
           </div>
         </div>
@@ -120,8 +119,8 @@ export default function CallToWarOverlay() {
       {/* Opponent view - just a waiting indicator */}
       {!isCaster && phase === "selecting" && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="pointer-events-auto px-4 py-2 rounded-lg bg-black/90 text-white/80 text-sm ring-1 ring-red-500/30">
-            <span className="text-red-300">
+          <div className="rc-toast pointer-events-auto">
+            <span className="text-rc-accent-link">
               {pending.casterSeat.toUpperCase()}
             </span>{" "}
             is searching their spellbook for warriors...

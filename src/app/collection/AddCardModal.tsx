@@ -154,7 +154,7 @@ export default function AddCardModal({
 
         {/* Quantity */}
         <div>
-          <div className="rc-eyebrow mb-2">Quantity</div>
+          <div className="rc-field-label mb-2">Quantity</div>
           <div className="flex items-center gap-3">
             <RcButton
               variant="outline"
@@ -192,7 +192,7 @@ export default function AddCardModal({
 
         {/* Finish */}
         <div>
-          <div className="rc-eyebrow mb-2">Finish</div>
+          <div className="rc-field-label mb-2">Finish</div>
           <div className="rc-segment">
             <button
               type="button"

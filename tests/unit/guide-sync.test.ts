@@ -157,6 +157,34 @@ describe("guide preference handshake", () => {
     expect(store.getState().combatGuidesActive).toBe(false);
     expect(store.getState().magicGuidesActive).toBe(false);
   });
+
+  it("keeps both guides on against a CPU opponent, whatever either seat prefers", () => {
+    store.setState({
+      opponentPlayerId: "cpu_bot",
+      interactionGuides: false,
+      magicGuides: false,
+    } as Partial<GameState>);
+    store.getState().setActorKey("p1");
+    expect(store.getState().combatGuidesActive).toBe(true);
+    expect(store.getState().magicGuidesActive).toBe(true);
+    store.getState().receiveCustomMessage({
+      type: "guidePref",
+      seat: "p2",
+      combatGuides: false,
+      magicGuides: false,
+      reply: true,
+    } as unknown as CustomMessage);
+    store.getState().setInteractionGuides(false);
+    store.getState().setMagicGuides(false);
+    expect(store.getState().combatGuidesActive).toBe(true);
+    expect(store.getState().magicGuidesActive).toBe(true);
+    // A rematch reset keeps the seat, so setActorKey never re-runs.
+    store.getState().resetGameState();
+    expect(store.getState().combatGuidesActive).toBe(true);
+    store.getState().setOpponentPlayerId("them");
+    expect(store.getState().combatGuidesActive).toBe(false);
+    expect(store.getState().magicGuidesActive).toBe(false);
+  });
 });
 
 describe("guide flow echo suppression", () => {

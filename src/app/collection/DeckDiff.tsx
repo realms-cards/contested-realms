@@ -415,7 +415,7 @@ export default function DeckDiff() {
                     <div className="rc-hint py-6 text-center">loading…</div>
                   ) : decks.length > 0 ? (
                     <div className="space-y-2">
-                      <label className="rc-eyebrow block">Select a deck</label>
+                      <label className="rc-field-label">Select a deck</label>
                       <CustomSelect
                         value={selectedDeckId}
                         onChange={(v) => setSelectedDeckId(v)}

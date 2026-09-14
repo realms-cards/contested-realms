@@ -456,6 +456,7 @@ export default function CollectionDeckEditor({
                     {available > 0 ? (
                       <div className="flex flex-none flex-col gap-1">
                         <RcButton
+                          variant="outline"
                           size="sm"
                           className="h-7 px-2 text-[11px]"
                           onClick={() =>

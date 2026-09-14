@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 
 /**
@@ -34,9 +35,9 @@ export default function MephistophelesOverlay() {
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top status bar */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-red-500/50 shadow-lg text-lg flex items-center gap-3">
-          <span className="text-red-400 font-fantaisie">Mephistopheles</span>
-          <span className="opacity-80">
+        <div className="pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg flex items-center gap-3">
+          <span className="font-rc-display text-rc-accent-link">Mephistopheles</span>
+          <span className="text-rc-fg-muted">
             {isCaster
               ? "Confirm avatar replacement?"
               : "Opponent is deciding..."}
@@ -46,37 +47,37 @@ export default function MephistophelesOverlay() {
 
       {/* Caster confirmation UI */}
       {isCaster && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-6 max-w-xl w-full mx-4 ring-1 ring-red-500/30">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-xl w-full mx-4 font-rc-sans text-rc-fg shadow-rc-panel">
             {/* Header */}
             <div className="text-center mb-6">
-              <h2 className="text-2xl font-fantaisie text-red-400 mb-2">
+              <h2 className="mb-2 font-rc-display text-[26px] leading-tight text-rc-fg-strong">
                 Mephistopheles
               </h2>
-              <p className="text-gray-300 text-sm">
+              <p className="text-rc-fg-muted text-sm">
                 A Unique Demon and aspirant avatar
               </p>
             </div>
 
             {/* Card effect description */}
-            <div className="bg-red-950/30 rounded-lg p-4 mb-6 text-sm text-gray-200 space-y-3">
+            <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-4 mb-6 text-sm text-rc-fg space-y-3">
               <p>
-                <strong className="text-red-400">Cast Effect:</strong>{" "}
+                <strong className="text-rc-fg-strong">Cast Effect:</strong>{" "}
                 Mephistopheles will replace{" "}
-                <span className="text-amber-400">{originalAvatarName}</span> as
+                <span className="font-rc-display text-rc-accent-link">{originalAvatarName}</span> as
                 your Avatar. Your original avatar will be banished.
               </p>
-              <p className="text-gray-400 text-xs">
+              <p className="text-rc-fg-muted text-xs">
                 Note: Mephistopheles retains Unique rarity, Demon type, and Air
                 element. You won&apos;t be able to play sites normally (no
                 tap-to-draw ability), but you can still cast spells.
               </p>
-              <hr className="border-red-900/50" />
+              <hr className="border-rc-line/12" />
               <p>
-                <strong className="text-red-400">Second Ability:</strong> Once
+                <strong className="text-rc-fg-strong">Second Ability:</strong> Once
                 on your turn, you may summon an Evil minion from your hand to an
                 adjacent site.
-                <span className="text-gray-400 text-xs ml-1">
+                <span className="text-rc-fg-muted text-xs ml-1">
                   (This ability works regardless of whether you replace your
                   avatar)
                 </span>
@@ -85,22 +86,16 @@ export default function MephistophelesOverlay() {
 
             {/* Action buttons */}
             <div className="flex gap-4 justify-center">
-              <button
-                onClick={cancel}
-                className="px-6 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 font-medium transition-colors"
-              >
+              <RcButton variant="outline" onClick={cancel}>
                 Keep as Minion
-              </button>
-              <button
-                onClick={resolve}
-                className="px-6 py-2.5 rounded-lg bg-red-700 hover:bg-red-600 text-white font-medium transition-colors ring-1 ring-red-500/50"
-              >
+              </RcButton>
+              <RcButton onClick={resolve}>
                 Replace Avatar
-              </button>
+              </RcButton>
             </div>
 
             {/* Helpful note */}
-            <p className="text-center text-gray-500 text-xs mt-4">
+            <p className="text-center text-rc-fg-subtle text-xs mt-4">
               If kept as minion, Mephistopheles stays on the board and you keep
               your original avatar.
             </p>
@@ -111,7 +106,7 @@ export default function MephistophelesOverlay() {
       {/* Opponent waiting indicator */}
       {!isCaster && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="px-4 py-2 rounded-lg bg-black/90 text-sm text-red-300">
+          <div className="rc-toast">
             {casterSeat.toUpperCase()} is deciding on Mephistopheles...
           </div>
         </div>

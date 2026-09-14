@@ -2,6 +2,7 @@
 
 import React, { useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { RcButton } from "@/components/ui/rc-button";
 
 export type KeyboardShortcutsHelpProps = {
   open: boolean;
@@ -60,13 +61,13 @@ const EDITOR_SHORTCUTS: ShortcutItem[] = [
 
 function ShortcutRow({ keys, description }: ShortcutItem) {
   return (
-    <div className="flex items-center justify-between py-1.5 border-b border-slate-700/40 last:border-b-0">
-      <span className="text-slate-300">{description}</span>
+    <div className="flex items-center justify-between py-1.5 border-b border-rc-line/8 last:border-b-0">
+      <span className="font-rc-sans text-rc-fg-muted">{description}</span>
       <div className="flex gap-1">
         {keys.map((key, i) => (
           <React.Fragment key={key}>
-            {i > 0 && <span className="text-slate-500 text-xs mx-0.5">or</span>}
-            <kbd className="px-2 py-0.5 bg-slate-700/60 border border-slate-600 rounded text-xs font-mono text-slate-200">
+            {i > 0 && <span className="rc-hint mx-0.5">or</span>}
+            <kbd className="px-2 py-0.5 bg-black/35 border border-rc-line/22 rounded-rc-sm text-xs font-rc-mono text-rc-fg-strong">
               {key}
             </kbd>
           </React.Fragment>
@@ -123,28 +124,28 @@ export default function KeyboardShortcutsHelp({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm grid justify-items-center p-4 min-h-[100svh]"
+      className="fixed inset-0 z-[9999] bg-[rgba(6,10,20,0.72)] backdrop-blur-[4px] grid justify-items-center p-4 min-h-[100svh]"
       onMouseDown={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="shortcuts-help-title"
-        className="relative place-self-center w-full max-w-md bg-slate-900/95 text-white rounded-xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col"
+        className="relative place-self-center w-full max-w-md bg-[rgba(9,13,25,0.95)] text-rc-fg rounded-rc-lg border border-rc-line/18 shadow-rc-panel overflow-hidden flex flex-col"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-rc-line/14">
           <h2
             id="shortcuts-help-title"
-            className="text-lg md:text-xl font-semibold"
+            className="m-0 font-rc-display text-[22px] md:text-[26px] leading-none text-rc-fg-strong"
           >
             Keyboard Shortcuts
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="ml-3 text-slate-300 hover:text-white rounded-md px-2 py-1 border border-transparent hover:border-slate-600"
+            className="ml-3 text-rc-fg-muted hover:text-rc-fg-strong hover:bg-rc-line/6 rounded-rc-md px-2 py-1 transition-colors"
             aria-label="Close"
           >
             ✕
@@ -152,10 +153,10 @@ export default function KeyboardShortcutsHelp({
         </div>
 
         {/* Body */}
-        <div className="px-5 py-4 max-h-[70svh] overflow-auto space-y-4 prose-font">
+        <div className="thin-scrollbar px-5 py-4 max-h-[70svh] overflow-auto space-y-4 font-rc-sans">
           {/* Context-specific shortcuts */}
           <div>
-            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
+            <h3 className="rc-eyebrow mb-2">
               {contextLabel}
             </h3>
             <div className="space-y-0">
@@ -168,7 +169,7 @@ export default function KeyboardShortcutsHelp({
           {/* TTS-specific shortcuts (game context only) */}
           {isTTS && context === "game" && (
             <div>
-              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
+              <h3 className="rc-eyebrow mb-2">
                 TTS Control Scheme
               </h3>
               <div className="space-y-0">
@@ -181,7 +182,7 @@ export default function KeyboardShortcutsHelp({
 
           {/* Common shortcuts */}
           <div>
-            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
+            <h3 className="rc-eyebrow mb-2">
               Camera & Navigation
             </h3>
             <div className="space-y-0">
@@ -193,7 +194,7 @@ export default function KeyboardShortcutsHelp({
 
           {/* Mouse controls */}
           <div>
-            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
+            <h3 className="rc-eyebrow mb-2">
               Mouse Controls
             </h3>
             <div className="space-y-0">
@@ -217,14 +218,10 @@ export default function KeyboardShortcutsHelp({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-700/60">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-3 py-1.5 rounded-md border border-slate-600 text-slate-200 hover:bg-slate-700/70"
-          >
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-rc-line/14">
+          <RcButton type="button" variant="outline" size="sm" onClick={onClose}>
             Close
-          </button>
+          </RcButton>
         </div>
       </div>
     </div>,

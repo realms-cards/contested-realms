@@ -2,10 +2,12 @@ import type { StoreApi } from "zustand";
 import { applySpellChoice } from "@/lib/game/cpu/applySpellChoice";
 import { hasCpuGenesis } from "@/lib/game/cpu/genesis";
 import { movementAllowance, movementRoutes } from "@/lib/game/cpu/movement";
-import type { UnitTarget } from "@/lib/game/cpu/spellTypes";
+import { useCpuReveals } from "@/lib/game/cpu/revealQueue";
+import { CPU_TRIGGERS_IN_ORDER, type UnitTarget } from "@/lib/game/cpu/spellTypes";
 import { cardText, getSpellChoices, inRange, isDisabled, sameTarget, unitsInRealm } from "@/lib/game/cpu/spells";
 import { treasures } from "@/lib/game/cpu/treasure";
-import type { CardRef, GameState, PendingMagic } from "@/lib/game/store/types";
+import type { CardRef, GameState, PendingMagic, PlayerKey } from "@/lib/game/store/types";
+import { getCellNumber } from "@/lib/game/store/utils/boardHelpers";
 import type { CustomMessage } from "@/lib/net/transport";
 
 /** The human client adjudicates CPU matches; tabletop stores are untouched. */
@@ -63,7 +65,7 @@ export function installCpuController(store: StoreApi<GameState>) {
       const candidates = queue.filter(pending => batches.get(pending.id) === batch && pending.spell.owner === owner);
       const seat = owner === 1 ? "p1" : "p2";
       if (seat === state.actorKey && candidates.length > 1) {
-        const chosen = candidates.find(candidate => candidate.id === state.cpuChosenTrigger);
+        const chosen = state.cpuChosenTrigger === CPU_TRIGGERS_IN_ORDER ? candidates[0] : candidates.find(candidate => candidate.id === state.cpuChosenTrigger);
         if (!chosen) {
           const options = candidates.map(candidate => ({id:candidate.id,label:`${candidate.spell.card.name} — ${candidate.cpuEvent?.kind === "unitEnd" ? "end-of-turn projectile" : candidate.cpuEvent?.kind === "auraEnd" ? candidate.cpuEvent.counter ? "duration counter" : "end effect" : candidate.cpuEvent?.kind === "genesis" ? "Genesis" : candidate.cpuEvent?.kind === "fightChoice" ? "fight after arrival" : candidate.cpuEvent?.kind === "treasureRecover" ? "recover treasure" : candidate.cpuEvent?.kind === "treasurePlace" ? "underwater placement" : candidate.cpuEvent?.kind === "drawChoice" ? "choose draws" : candidate.cpuEvent?.kind === "randomChoice" ? "choose random outcome" : "fire trail"}`}));
           if (JSON.stringify(state.cpuTriggerOptions) !== JSON.stringify(options)) store.setState({cpuTriggerOptions:options});
@@ -75,8 +77,11 @@ export function installCpuController(store: StoreApi<GameState>) {
     }
     const pending = queue.shift();
     if (!pending) return;
+    const pendingBatch = batches.get(pending.id);
     batches.delete(pending.id);
-    store.setState({pendingMagic:pending,cpuPendingTriggerCount:queue.length,cpuTriggerOptions:[],cpuChosenTrigger:null});
+    // A dismissed list keeps the listed order until its batch is done, instead of asking again.
+    const inOrder = state.cpuChosenTrigger === CPU_TRIGGERS_IN_ORDER && queue.some(event => batches.get(event.id) === pendingBatch);
+    store.setState({pendingMagic:pending,cpuPendingTriggerCount:queue.length,cpuTriggerOptions:[],cpuChosenTrigger:inOrder ? CPU_TRIGGERS_IN_ORDER : null});
     state.transport?.sendMessage?.({type:"magicBegin",id:pending.id,tile:pending.tile,spell:pending.spell} as unknown as CustomMessage);
     const seat = pending.spell.owner === 1 ? "p1" : "p2";
     const choices = getSpellChoices(store.getState(),seat,pending.spell.card.name);
@@ -97,10 +102,33 @@ export function installCpuController(store: StoreApi<GameState>) {
       endRequested = null;
       if (state.cpuEffectContinuations?.length) store.setState({cpuEffectContinuations:[]});
       if (state.cpuPendingTriggerCount || state.cpuTriggerOptions?.length) store.setState({cpuPendingTriggerCount:0,cpuTriggerOptions:[],cpuChosenTrigger:null});
+      if (useCpuReveals.getState().queue.length) useCpuReveals.getState().reset();
       return;
     }
     const endKey = `${state.turn}:${state.currentPlayer}`;
     const restored = (state.cpuSnapshotRevision || 0) !== (previous.cpuSnapshotRevision || 0);
+    /** Reveal a card the CPU just played from its hand (never the human's own plays). */
+    const revealPlay = (card: CardRef, at: string, seat: PlayerKey, kind: "site" | "permanent") => {
+      if (seat === state.actorKey) return;
+      const [x,y] = at.split(",").map(Number);
+      const verb = kind === "permanent" && (card.type || "").toLowerCase().includes("minion") ? "summons" : "plays";
+      useCpuReveals.getState().show({id:`cpu_play_${card.instanceId || `${at}_${card.name}`}`,seat,card,kind,
+        action:`${verb} at Tile #${getCellNumber(x,y,state.board.size.w,state.board.size.h)}`});
+    };
+    if (!restored && state.permanents !== previous.permanents) {
+      const cpuSeat: PlayerKey = state.actorKey === "p1" ? "p2" : "p1";
+      const inHand = new Set((previous.zones[cpuSeat]?.hand || []).flatMap(card => card.instanceId ? [card.instanceId] : []));
+      if (inHand.size) {
+        const onBoard = new Set<string>(), stillInHand = new Set((state.zones[cpuSeat]?.hand || []).map(card => card.instanceId));
+        for (const items of Object.values(previous.permanents)) for (const item of items || []) if (item.card.instanceId) onBoard.add(item.card.instanceId);
+        for (const [at,items] of Object.entries(state.permanents)) for (const item of items || []) {
+          const id = item.card.instanceId;
+          // Effect-placed cards (not from hand) and Magic (revealed by its cast) are skipped.
+          if (!id || !inHand.has(id) || onBoard.has(id) || stillInHand.has(id) || (item.card.type || "").toLowerCase().includes("magic")) continue;
+          revealPlay(item.card,at,cpuSeat,"permanent");
+        }
+      }
+    }
     // Pure realm scans of this snapshot, shared by the genesis/trail and Stealth checks below.
     let realm: ReturnType<typeof unitsInRealm> | undefined;
     const unitsNow = () => realm ||= unitsInRealm(state);
@@ -170,6 +198,7 @@ export function installCpuController(store: StoreApi<GameState>) {
         const seat = tile.owner === 1 ? "p1" : "p2";
         const avatar = state.avatars[seat];
         const fromHand = tile.card.instanceId && previous.zones[seat].hand.some(card => card.instanceId === tile.card?.instanceId) && !state.zones[seat].hand.some(card => card.instanceId === tile.card?.instanceId);
+        if (fromHand) revealPlay(tile.card,at,seat,"site");
         if (fromHand && avatar.card?.name === "Geomancer" && Number(tile.card.thresholds?.earth || 0)>0) {
           const id = `cpu_geomancer_${Date.now()}_${Math.random().toString(36).slice(2)}`, [x,y] = avatar.pos || [0,0];
           fills.push({id,tile:{x,y},spell:{at:`${x},${y}`,index:-1,owner:tile.owner,card:avatar.card},cpuEvent:{kind:"geomancerFill",seat},status:"choosingTarget",createdAt:Date.now()});

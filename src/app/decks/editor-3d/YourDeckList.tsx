@@ -4,6 +4,7 @@ import Image from "next/image";
 import React, { useState } from "react";
 import { NumberBadge } from "@/components/game/manacost";
 import type { Digit } from "@/components/game/manacost";
+import { RcButton } from "@/components/ui/rc-button";
 import type { Pick3D, CardMeta } from "@/lib/game/cardSorting";
 
 export type YourDeckListProps = {
@@ -245,7 +246,7 @@ export default function YourDeckList(props: YourDeckListProps) {
     return (
       <div
         key={it.cardId}
-        className="flex items-center gap-2 px-2 py-1 rounded bg-black/50 ring-1 ring-white/15 text-white text-xs cursor-pointer hover:bg-black/30"
+        className="flex items-center gap-2 px-2 py-1 rounded-rc-sm bg-black/45 ring-1 ring-rc-line/15 text-rc-fg text-xs cursor-pointer transition-colors hover:bg-rc-accent/8 hover:ring-rc-accent/35"
         onMouseEnter={() => {
           if (slug) onHoverPreview(slug, it.name, pickInfo?.type || null);
         }}
@@ -262,10 +263,10 @@ export default function YourDeckList(props: YourDeckListProps) {
       >
         {/* Count before name (only when > 1) */}
         {zoneCount > 1 && (
-          <span className="text-white/60 flex-none">{zoneCount}</span>
+          <span className="font-rc-mono tabular-nums text-rc-fg-subtle flex-none">{zoneCount}</span>
         )}
         {/* Name */}
-        <span className="flex-1 truncate font-medium min-w-0">{it.name}</span>
+        <span className="flex-1 truncate font-rc-display text-[13px] leading-4 min-w-0">{it.name}</span>
         {/* Threshold pips (clusters per element, like match display) */}
         <div className="flex items-center gap-0.5 flex-none">
           {order.map((k) =>
@@ -331,7 +332,7 @@ export default function YourDeckList(props: YourDeckListProps) {
     return (
       <div
         key={it.cardId}
-        className="rounded p-2 bg-black/70 ring-1 ring-white/25 text-white cursor-pointer hover:bg-black/50"
+        className="rounded-rc-md p-2 bg-black/45 ring-1 ring-rc-line/18 text-rc-fg cursor-pointer transition-colors hover:bg-rc-accent/8 hover:ring-rc-accent/35"
         onMouseEnter={() => {
           if (slug) onHoverPreview(slug, it.name, pickInfo?.type || null);
         }}
@@ -351,7 +352,7 @@ export default function YourDeckList(props: YourDeckListProps) {
             <div
               className={`relative flex-none ${
                 isSite ? "aspect-[4/3] w-14" : "aspect-[3/4] w-12"
-              } rounded overflow-hidden ring-1 ring-white/10 bg-black/40`}
+              } rounded-rc-sm overflow-hidden ring-1 ring-rc-line/18 bg-black/40`}
             >
               <Image
                 src={`/api/images/${slug}`}
@@ -368,23 +369,23 @@ export default function YourDeckList(props: YourDeckListProps) {
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between">
               <div className="min-w-0">
-                <div className="font-semibold truncate" title={it.name}>
-                  {zoneCount > 1 && <span className="text-white/60 mr-1">{zoneCount}</span>}
+                <div className="font-rc-display text-[14px] leading-4 text-rc-fg-strong truncate" title={it.name}>
+                  {zoneCount > 1 && <span className="font-rc-mono tabular-nums text-rc-fg-subtle mr-1">{zoneCount}</span>}
                   {it.name}
                 </div>
                 <div className="text-xs opacity-90 flex items-center gap-2">
                   {cardInDeck > 0 && (
-                    <span className="bg-green-600/20 text-green-300 px-1 py-0.5 rounded text-[10px]">
+                    <span className="bg-green-600/20 text-green-300 px-1 py-0.5 rounded-rc-sm font-rc-mono text-[10px]">
                       Deck: {cardInDeck}
                     </span>
                   )}
                   {cardInSideboard > 0 && (
-                    <span className="bg-blue-600/20 text-blue-300 px-1 py-0.5 rounded text-[10px]">
+                    <span className="bg-blue-600/20 text-blue-300 px-1 py-0.5 rounded-rc-sm font-rc-mono text-[10px]">
                       Sideboard: {cardInSideboard}
                     </span>
                   )}
                   {cardInCollection > 0 && (
-                    <span className="bg-purple-600/20 text-purple-300 px-1 py-0.5 rounded text-[10px]">
+                    <span className="bg-purple-600/20 text-purple-300 px-1 py-0.5 rounded-rc-sm font-rc-mono text-[10px]">
                       Collection: {cardInCollection}
                     </span>
                   )}
@@ -428,9 +429,10 @@ export default function YourDeckList(props: YourDeckListProps) {
               (cardInSideboard > 0 || cardInCollection > 0) && (
                 <div className="mt-1 flex flex-wrap gap-1 text-[10px] opacity-90">
                   {cardInSideboard > 0 && (
-                    <button
-                      type="button"
-                      className="px-1.5 py-0.5 rounded bg-purple-700/30 text-purple-200 hover:bg-purple-700/50 border border-purple-500/40"
+                    <RcButton
+                      variant="quiet"
+                      size="xs"
+                      className="h-auto px-1.5 py-0.5 rounded-rc-sm text-[10px]"
                       onClick={(e) => {
                         e.stopPropagation();
                         moveOneFromSideboardToCollection(it.cardId);
@@ -440,12 +442,13 @@ export default function YourDeckList(props: YourDeckListProps) {
                       }}
                     >
                       +1 to Collection
-                    </button>
+                    </RcButton>
                   )}
                   {cardInCollection > 0 && (
-                    <button
-                      type="button"
-                      className="px-1.5 py-0.5 rounded bg-purple-700/30 text-purple-200 hover:bg-purple-700/50 border border-purple-500/40"
+                    <RcButton
+                      variant="quiet"
+                      size="xs"
+                      className="h-auto px-1.5 py-0.5 rounded-rc-sm text-[10px]"
                       onClick={(e) => {
                         e.stopPropagation();
                         moveOneFromCollectionToSideboard(it.cardId);
@@ -455,7 +458,7 @@ export default function YourDeckList(props: YourDeckListProps) {
                       }}
                     >
                       -1 from Collection
-                    </button>
+                    </RcButton>
                   )}
                 </div>
               )}
@@ -475,58 +478,55 @@ export default function YourDeckList(props: YourDeckListProps) {
       : "grid-cols-5";
 
   return (
-    <div className="max-h-[calc(100vh-16rem)] overflow-auto pr-2 text-xs pointer-events-auto space-y-3">
+    <div className="thin-scrollbar max-h-[calc(100vh-16rem)] overflow-auto pr-2 text-xs pointer-events-auto space-y-3">
       {/* Controls */}
-      <div className="sticky top-0 z-10 bg-black/90 backdrop-blur-sm p-2 rounded space-y-2 border border-white/10">
+      <div className="sticky top-0 z-10 bg-[rgba(9,13,25,0.95)] backdrop-blur-sm p-2 rounded-rc-md space-y-2 border border-rc-line/12">
         {/* View mode + Column selector */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-white/60 text-[10px] uppercase tracking-wide">
+            <span className="font-rc-mono text-rc-fg-subtle text-[10px] uppercase tracking-[0.14em]">
               View:
             </span>
             <div className="flex gap-1">
-              <button
+              <RcButton
+                variant="quiet"
+                size="xs"
                 onClick={() => handleViewModeChange("list")}
-                className={`px-2 py-0.5 rounded text-[10px] ${
-                  viewMode === "list"
-                    ? "bg-blue-600 text-white"
-                    : "bg-white/10 text-white/70 hover:bg-white/20"
-                }`}
+                aria-pressed={viewMode === "list"}
+                className="h-auto px-2 py-0.5 rounded-rc-sm font-rc-mono text-[10px]"
               >
                 List
-              </button>
-              <button
+              </RcButton>
+              <RcButton
+                variant="quiet"
+                size="xs"
                 onClick={() => handleViewModeChange("card")}
-                className={`px-2 py-0.5 rounded text-[10px] ${
-                  viewMode === "card"
-                    ? "bg-blue-600 text-white"
-                    : "bg-white/10 text-white/70 hover:bg-white/20"
-                }`}
+                aria-pressed={viewMode === "card"}
+                className="h-auto px-2 py-0.5 rounded-rc-sm font-rc-mono text-[10px]"
               >
                 Card
-              </button>
+              </RcButton>
             </div>
           </div>
 
           {/* Column selector — only in card view */}
           {viewMode === "card" && (
             <div className="flex items-center gap-2">
-              <span className="text-white/60 text-[10px] uppercase tracking-wide">
+              <span className="font-rc-mono text-rc-fg-subtle text-[10px] uppercase tracking-[0.14em]">
                 Columns:
               </span>
               <div className="flex gap-1">
                 {([2, 3, 4, 5] as const).map((col) => (
-                  <button
+                  <RcButton
                     key={col}
+                    variant="quiet"
+                    size="xs"
                     onClick={() => handleColumnsChange(col)}
-                    className={`px-2 py-0.5 rounded text-[10px] ${
-                      columns === col
-                        ? "bg-blue-600 text-white"
-                        : "bg-white/10 text-white/70 hover:bg-white/20"
-                    }`}
+                    aria-pressed={columns === col}
+                    className="h-auto px-2 py-0.5 rounded-rc-sm font-rc-mono text-[10px]"
                   >
                     {col}
-                  </button>
+                  </RcButton>
                 ))}
               </div>
             </div>
@@ -535,7 +535,7 @@ export default function YourDeckList(props: YourDeckListProps) {
 
         {/* Sort selector */}
         <div className="flex items-center gap-2">
-          <span className="text-white/60 text-[10px] uppercase tracking-wide">
+          <span className="font-rc-mono text-rc-fg-subtle text-[10px] uppercase tracking-[0.14em]">
             Sort:
           </span>
           <div className="flex gap-1 flex-wrap">
@@ -546,17 +546,16 @@ export default function YourDeckList(props: YourDeckListProps) {
               { value: "type", label: "Type" },
               { value: "element", label: "Element" },
             ].map((option) => (
-              <button
+              <RcButton
                 key={option.value}
+                variant="quiet"
+                size="xs"
                 onClick={() => setSortMode(option.value as SortMode)}
-                className={`px-2 py-0.5 rounded text-[10px] ${
-                  sortMode === option.value
-                    ? "bg-green-600 text-white"
-                    : "bg-white/10 text-white/70 hover:bg-white/20"
-                }`}
+                aria-pressed={sortMode === option.value}
+                className="h-auto px-2 py-0.5 rounded-rc-sm font-rc-mono text-[10px]"
               >
                 {option.label}
-              </button>
+              </RcButton>
             ))}
           </div>
         </div>
@@ -568,7 +567,7 @@ export default function YourDeckList(props: YourDeckListProps) {
           <div key={g.key}>
             {/* Only show group label when not in "none" mode */}
             {g.key !== "all" && (
-              <div className="mb-1 text-white/70 text-[11px] uppercase tracking-wide">
+              <div className="rc-eyebrow mb-1">
                 {g.key === "avatar"
                   ? "Avatar"
                   : g.key === "spellbook"

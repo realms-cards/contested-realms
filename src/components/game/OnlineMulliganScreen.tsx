@@ -1,7 +1,9 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import Image from "next/image";
 import { useEffect, useState, useCallback } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { cardbackAtlasUrl } from "@/lib/assets";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
@@ -261,8 +263,9 @@ export default function OnlineMulliganScreen({
                 </div>
                 {myChampion &&
                   myAvatar.name?.toLowerCase() === "dragonlord" && (
-                    <div className="rc-alert mt-1 px-2 py-0.5 text-[10px]" data-tone="warning">
-                      ⚔ {myChampion.name}
+                    <div className="rc-alert mt-1 flex items-center gap-1 px-2 py-0.5 text-[10px]" data-tone="warning">
+                      <Icon icon="game-icons:crossed-swords" width={10} height={10} aria-hidden="true" />
+                      {myChampion.name}
                     </div>
                   )}
               </div>
@@ -288,8 +291,9 @@ export default function OnlineMulliganScreen({
                 </div>
                 {opponentChampion &&
                   opponentAvatar.name?.toLowerCase() === "dragonlord" && (
-                    <div className="rc-alert mt-1 px-2 py-0.5 text-[10px]" data-tone="warning">
-                      ⚔ {opponentChampion.name}
+                    <div className="rc-alert mt-1 flex items-center gap-1 px-2 py-0.5 text-[10px]" data-tone="warning">
+                      <Icon icon="game-icons:crossed-swords" width={10} height={10} aria-hidden="true" />
+                      {opponentChampion.name}
                     </div>
                   )}
               </div>
@@ -394,23 +398,24 @@ export default function OnlineMulliganScreen({
 
             <div className="flex gap-2 order-1 sm:order-2 w-full sm:w-auto justify-center sm:justify-end">
               {!done && myMulligans > 0 && (
-                <button
-                  className="cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px disabled:pointer-events-none disabled:opacity-50 flex-1 px-3 py-2 sm:flex-none sm:px-4"
+                <RcButton
+                  className="flex-1 px-3 sm:flex-none sm:px-4"
                   onClick={handleMulligan}
                 >
                   {selected.length === 0
                     ? "Keep Hand"
                     : `Mulligan ${selected.length}`}
-                </button>
+                </RcButton>
               )}
 
               {/* Show finalize button only when seer phase is complete (or not needed) */}
               {(done || myMulligans === 0) && (
-                <button
-                  className={`flex-1 px-3 py-2 sm:flex-none ${
+                <RcButton
+                  variant={submitted ? "quiet" : "default"}
+                  className={`flex-1 px-3 sm:flex-none ${
                     submitted
-                      ? "cursor-not-allowed rounded-rc-md border border-rc-line/22 bg-black/35 font-rc-mono text-xs tracking-[0.08em] text-rc-fg-muted"
-                      : "cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px disabled:pointer-events-none disabled:opacity-50"
+                      ? "cursor-not-allowed font-rc-mono text-xs tracking-[0.08em] disabled:opacity-100"
+                      : ""
                   }`}
                   onClick={handleFinalize}
                   disabled={submitted}
@@ -421,7 +426,7 @@ export default function OnlineMulliganScreen({
                   }
                 >
                   {submitted ? "Waiting…" : finalizeLabel}
-                </button>
+                </RcButton>
               )}
             </div>
           </div>
@@ -513,12 +518,9 @@ export default function OnlineMulliganScreen({
               {/* Reveal Button or Card Display */}
               {!seerRevealed ? (
                 <div className="text-center">
-                  <button
-                    className="cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px disabled:pointer-events-none disabled:opacity-50 px-4 py-2"
-                    onClick={handleSeerReveal}
-                  >
+                  <RcButton onClick={handleSeerReveal}>
                     Reveal Top Card
-                  </button>
+                  </RcButton>
                 </div>
               ) : (
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -566,18 +568,15 @@ export default function OnlineMulliganScreen({
                       <div className="mb-1 text-center font-rc-display text-[17px] leading-tight text-rc-fg-strong">
                         {topCard.name}
                       </div>
-                      <button
-                        className="cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px disabled:pointer-events-none disabled:opacity-50 px-4 py-2"
-                        onClick={() => handleSeerComplete("top")}
-                      >
+                      <RcButton onClick={() => handleSeerComplete("top")}>
                         Keep on Top
-                      </button>
-                      <button
-                        className="cursor-pointer rounded-rc-md border border-rc-line/22 bg-black/35 font-rc-sans text-sm text-rc-fg-muted transition-colors hover:border-rc-accent hover:text-rc-accent-ring px-4 py-2"
+                      </RcButton>
+                      <RcButton
+                        variant="quiet"
                         onClick={() => handleSeerComplete("bottom")}
                       >
                         Put on Bottom
-                      </button>
+                      </RcButton>
                     </div>
                   )}
                 </div>

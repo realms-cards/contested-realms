@@ -27,6 +27,11 @@ const SUPPORTED_SPELLS = new Set([
 ]);
 const PROJECTILES = new Set(['Fireball', 'Firebolts', 'Heat Ray', 'Ice Lance']);
 const DIRECTIONS = { N: [0,-1], E: [1,0], S: [0,1], W: [-1,0] };
+// Ranged cards cards.json lacks (verified against data/cards_raw.json); every other unit reads its keyword line.
+/** @type {Record<string, number>} */
+const RANGED_UNITS = { 'Hunting Party': 1, 'Sherwood Huntress': 1, 'Sir Bors the Younger': 2, 'Stygian Archers': 1, 'Yourke Crossbowmen': 1 };
+/** @type {Record<string, number>} */
+const RANGED_ARTIFACTS = { 'Fail-not Bow': 3, 'Peacemaker Arbalest': 1, 'Truesight Crossbow': 1 };
 
 /** @param {string} name */
 function supportsSpell(name) { return SUPPORTED_SPELLS.has(name); }
@@ -434,6 +439,64 @@ function getAttackTargets(state, attacker, at = attacker.at) {
   } finally { leaveScope(); }
 }
 
+/** X of a keyword on the keyword line ("Airborne, Ranged", "Ranged 2"), else 0. A sentence that merely names the
+ * keyword (Ribble Boggart's random mutations) is not a keyword line. @param {string} text @param {string} keyword */
+function keywordValue(text, keyword) {
+  const tokens = text.split(/\r?\n/)[0].split(',').map(token => token.trim());
+  if (!tokens.every(token => /^[A-Z][\w+-]*(?: [\w+-]+)*$/.test(token))) return 0;
+  const match = tokens.map(token => new RegExp(`^${keyword}(?: (\\d+))?$`).exec(token)).find(Boolean);
+  return match ? Number(match[1] || 1) : 0;
+}
+
+/** Steps a Ranged projectile flies: the unit's own Ranged X, a carried "Bearer has Ranged X" artifact or Spire Lich atop
+ * a Tower, +1 atop Vantage Hills. 0 without Ranged. @param {SpellState} state @param {LocatedUnit} unit @returns {number} */
+function reachOf(state, unit) {
+  if (disabledOf(state,unit)) return 0;
+  const atop = unit.region === 'surface' ? state.board.sites[unit.at]?.card?.name || '' : '';
+  let reach = unit.card.name === 'Spire Lich' ? (/Tower/i.test(atop) ? 1 : 0) : RANGED_UNITS[unit.card.name] || keywordValue(cardText(unit.card),'Ranged');
+  // Both avatars' attachments use index -1, so those also need the bearer's owner.
+  const index = unit.target.kind === 'avatar' ? -1 : unit.target.index, owner = unit.owner === 'p1' ? 1 : 2;
+  for (const item of state.permanents[unit.at] || []) {
+    if (item.attachedTo?.at !== unit.at || item.attachedTo.index !== index || (index === -1 && item.owner !== owner)) continue;
+    const granted = /Bearer has Ranged(?: (\d+))?/.exec(cardText(item.card));
+    reach = Math.max(reach, RANGED_ARTIFACTS[item.card.name] || (granted ? Number(granted[1] || 1) : 0));
+  }
+  return reach && atop === 'Vantage Hills' ? reach+1 : reach;
+}
+
+/**
+ * Ranged X: "Tap → Shoot a projectile that stops after X steps. Strike the impacted unit." Each direction impacts the
+ * first location within reach holding a unit the projectile can hit (allies at the origin are ignored, Stealth is never
+ * hit). Enemies there are offered; an ally there stops that direction. Sites are never struck.
+ * @param {SpellState} state @param {LocatedUnit} attacker
+ * @returns {{target: {kind: 'permanent' | 'avatar', at: string, index: number | null}, direction: 'N' | 'E' | 'S' | 'W', steps: number}[]}
+ */
+function getRangedTargets(state, attacker) {
+  enterScope();
+  try {
+    const reach = reachOf(state,attacker);
+    if (!reach) return [];
+    const units = realmUnits(state), offered = new Set(), targets = [];
+    for (const direction of /** @type {('N' | 'E' | 'S' | 'W')[]} */ (['N','E','S','W'])) {
+      const path = flightPath(state,attacker.at,attacker.region,direction).slice(0,reach+1);
+      for (let steps = 0; steps < path.length; steps++) {
+        const at = path[steps];
+        const impacted = units.filter(unit => unit.at === at && unit.region === attacker.region &&
+          !(steps === 0 && unit.owner === attacker.owner) && !stealthOf(state,unit));
+        if (!impacted.length) continue;
+        for (const unit of impacted) {
+          // Enemies at the origin are reached from every direction; offer them once.
+          if (unit.owner === attacker.owner || offered.has(targetKey(unit.target))) continue;
+          offered.add(targetKey(unit.target));
+          targets.push({ target: unit.target.kind === 'avatar' ? { kind: 'avatar', at, index: null } : { kind: 'permanent', at, index: unit.target.index }, direction, steps });
+        }
+        break;
+      }
+    }
+    return targets;
+  } finally { leaveScope(); }
+}
+
 /**
  * Plan each impact in order. Firebolts retrace the ray after each casualty;
  * piercing projectiles choose ONE unit per location, not every occupant.
@@ -796,4 +859,4 @@ function sameTarget(a, b) {
     (a.instanceId && b.instanceId ? a.instanceId === b.instanceId : a.at === b.at && a.index === b.index);
 }
 
-module.exports = { supportsSpell, getSpellChoices, getSpellChoice, projectileKey, unitsInRealm, inRange, isWater, bodyOfWater, cardText, sameTarget, unitDefence, unitStats, getAttackTargets, scoreOperations,isDisabled,hasStealth,hasAirborne,expandAreaOperation,projectileImpactChoices,projectilePath };
+module.exports = { supportsSpell, getSpellChoices, getSpellChoice, projectileKey, unitsInRealm, inRange, isWater, bodyOfWater, cardText, sameTarget, unitDefence, unitStats, getAttackTargets, getRangedTargets, scoreOperations,isDisabled,hasStealth,hasAirborne,expandAreaOperation,projectileImpactChoices,projectilePath };

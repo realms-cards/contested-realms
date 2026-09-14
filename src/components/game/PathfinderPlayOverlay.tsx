@@ -3,7 +3,9 @@
 import Image from "next/image";
 import React, { useMemo, useState } from "react";
 import CardPreview from "@/components/game/CardPreview";
+import { RcButton } from "@/components/ui/rc-button";
 import { cardRefToPreview } from "@/lib/game/card-preview.types";
+import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import { getImageSlug } from "@/lib/utils/cardSlug";
 
@@ -47,13 +49,8 @@ export default function PathfinderPlayOverlay() {
   // Online: only show owner UI if we're the owner
   const isOwner = actorKey === null || ownerSeat === actorKey;
 
-  const accentColor =
-    ownerSeat === "p2" ? "ring-red-500/60" : "ring-blue-500/60";
-  const btnClass =
-    ownerSeat === "p2"
-      ? "bg-red-900/60 hover:bg-red-800/60 text-red-200"
-      : "bg-blue-900/60 hover:bg-blue-800/60 text-blue-200";
-  const playerBgClass = ownerSeat === "p2" ? "bg-red-900/30" : "bg-blue-900/30";
+  // Seat identity colour (P1 blue / P2 red): ring = 50% alpha border
+  const seatRingStyle = { borderColor: `${PLAYER_COLORS[ownerSeat]}80` };
 
   return (
     <>
@@ -64,8 +61,8 @@ export default function PathfinderPlayOverlay() {
 
       <div className="fixed left-4 bottom-28 z-[201] pointer-events-auto">
       <div
-        className={`rounded-xl bg-black/85 backdrop-blur-sm ring-1 ${accentColor} shadow-2xl overflow-hidden`}
-        style={{ width: 207 }}
+        className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] backdrop-blur-sm font-rc-sans text-rc-fg shadow-rc-panel overflow-hidden"
+        style={{ width: 207, ...seatRingStyle }}
       >
         {/* Card image — landscape preview (sites are stored portrait, rotated 90°) */}
         <div
@@ -84,9 +81,9 @@ export default function PathfinderPlayOverlay() {
             />
           ) : (
             <div
-              className={`w-full h-full ${playerBgClass} flex items-center justify-center`}
+              className="w-full h-full bg-black/30 flex items-center justify-center"
             >
-              <span className="text-amber-400 font-medium text-sm text-center px-3">
+              <span className="font-rc-display text-rc-fg text-sm text-center px-3">
                 {topSite?.name || "Unknown"}
               </span>
             </div>
@@ -95,21 +92,23 @@ export default function PathfinderPlayOverlay() {
 
         {/* Info strip */}
         <div className="px-3 py-2 flex flex-col gap-1">
-          <div className="text-amber-400 font-medium text-sm truncate">
+          <div className="font-rc-display text-rc-accent-link text-sm truncate">
             {topSite?.name || "Unknown"}
           </div>
-          <div className="text-gray-400 text-[11px] leading-tight">
+          <div className="text-rc-fg-muted text-[11px] leading-tight">
             {isOwner
               ? "Click a highlighted tile"
               : "Opponent selecting target\u2026"}
           </div>
           {isOwner && (
-            <button
+            <RcButton
+              variant="outline"
+              size="xs"
               onClick={cancel}
-              className={`mt-1 w-full px-2 py-1 rounded-lg ${btnClass} text-xs font-medium transition-colors`}
+              className="mt-1 w-full h-6 px-2"
             >
               Cancel
-            </button>
+            </RcButton>
           )}
         </div>
       </div>

@@ -102,7 +102,7 @@ import { createPigsOfTheSounderSlice } from "./store/pigsOfTheSounderState";
 import { createPithImpSlice } from "./store/pithImpState";
 import { createPortalSlice } from "./store/portalState";
 import { createPositionSlice } from "./store/positionState";
-import { createPreferenceSlice } from "./store/preferenceState";
+import { createPreferenceSlice, guidesForcedOn } from "./store/preferenceState";
 import { createRaiseDeadSlice } from "./store/raiseDeadState";
 import { createRealmFloodSlice } from "./store/realmFloodState";
 import { createRemoteCursorSlice } from "./store/remoteCursorState";
@@ -385,8 +385,9 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
         magicGuides: false,
         combatGuideSeatPrefs: { p1: false, p2: false },
         magicGuideSeatPrefs: { p1: false, p2: false },
-        combatGuidesActive: false,
-        magicGuidesActive: false,
+        // vs CPU keeps its always-on guides: setActorKey does not re-run for an unchanged seat.
+        combatGuidesActive: guidesForcedOn(state),
+        magicGuidesActive: guidesForcedOn(state),
         snapshots: preservedSnapshots,
         pendingMagic: null,
         pendingChaosTwister: null,

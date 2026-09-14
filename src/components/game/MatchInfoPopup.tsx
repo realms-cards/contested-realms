@@ -2,6 +2,7 @@
 
 import { X, Users, Hash, Eye, Check, Copy } from "lucide-react";
 import { useState, useCallback } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 
 interface MatchInfoPopupProps {
@@ -54,7 +55,7 @@ export default function MatchInfoPopup({
   const guideHint = (local: boolean, active: boolean) => {
     if (!local || active) return null;
     return (
-      <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-300/80">
+      <span className="ml-2 font-rc-mono text-[10px] uppercase tracking-[0.14em] text-rc-warning">
         {hasSeat ? "waiting for opponent" : "online only"}
       </span>
     );
@@ -85,14 +86,14 @@ export default function MatchInfoPopup({
   if (!isOpen) return null;
 
   return (
-    <div className="absolute inset-0 z-30 bg-black/50 backdrop-blur-sm flex items-center justify-center p-6">
-      <div className="bg-zinc-900/95 text-white rounded-2xl ring-1 ring-white/10 shadow-2xl w-full max-w-md">
+    <div className="absolute inset-0 z-30 bg-[rgba(6,10,20,0.5)] backdrop-blur-[4px] flex items-center justify-center p-6">
+      <div className="w-full max-w-md rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] text-rc-fg shadow-rc-panel">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-white/10">
-          <h2 className="text-lg font-semibold">Match Info</h2>
+        <div className="flex items-center justify-between p-4 border-b border-rc-line/12">
+          <h2 className="m-0 font-rc-display text-[22px] leading-none text-rc-fg-strong">Match Info</h2>
           <button
             onClick={onClose}
-            className="rounded-full bg-white/10 hover:bg-white/20 p-1 transition-colors"
+            className="cursor-pointer rounded-rc-md p-1 text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
           >
             <X className="w-4 h-4" />
           </button>
@@ -103,16 +104,17 @@ export default function MatchInfoPopup({
           {/* Spectate Link */}
           {!spectatorMode && (
             <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm">
-                <Eye className="w-4 h-4 opacity-60" />
-                <span className="opacity-70">Share Spectate Link:</span>
+              <div className="flex items-center gap-2 font-rc-sans text-sm">
+                <Eye className="w-4 h-4 text-rc-fg-subtle" />
+                <span className="text-rc-fg-muted">Share Spectate Link:</span>
               </div>
-              <button
+              <RcButton
+                variant="outline"
                 onClick={copySpectateLink}
-                className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`w-full ${
                   linkCopied
-                    ? "bg-green-600/90 text-white"
-                    : "bg-purple-600/80 hover:bg-purple-500 text-white"
+                    ? "border-rc-success/45 bg-rc-success/15 text-rc-success-ink hover:border-rc-success/45 hover:bg-rc-success/15 hover:text-rc-success-ink"
+                    : ""
                 }`}
               >
                 {linkCopied ? (
@@ -126,8 +128,8 @@ export default function MatchInfoPopup({
                     Copy Spectate Link
                   </>
                 )}
-              </button>
-              <p className="text-xs opacity-50 text-center">
+              </RcButton>
+              <p className="font-rc-sans text-xs text-rc-fg-subtle text-center">
                 Anyone with this link can watch your match live
               </p>
             </div>
@@ -135,68 +137,68 @@ export default function MatchInfoPopup({
 
           {/* Match Details */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm">
-              <Hash className="w-4 h-4 opacity-60" />
-              <span className="opacity-70">Match ID:</span>
-              <span className="font-mono text-xs bg-black/30 px-2 py-1 rounded">
+            <div className="flex items-center gap-2 font-rc-sans text-sm">
+              <Hash className="w-4 h-4 text-rc-fg-subtle" />
+              <span className="text-rc-fg-muted">Match ID:</span>
+              <span className="rounded-rc-sm border border-rc-line/12 bg-black/30 px-2 py-1 font-rc-mono text-xs text-rc-fg">
                 {matchId}
               </span>
             </div>
 
-            <div className="flex items-center gap-2 text-sm">
-              <Users className="w-4 h-4 opacity-60" />
-              <span className="opacity-70">Players:</span>
+            <div className="flex items-center gap-2 font-rc-sans text-sm">
+              <Users className="w-4 h-4 text-rc-fg-subtle" />
+              <span className="text-rc-fg-muted">Players:</span>
             </div>
-            <div className="ml-6 space-y-2 text-sm">
+            <div className="ml-6 space-y-2 font-rc-sans text-sm">
               <div className="flex items-center gap-2">
                 <span className="text-blue-400">{playerNames.p1}</span>
                 {myPlayerNumber === 1 && (
-                  <span className="text-green-400 text-xs">(You)</span>
+                  <span className="font-rc-mono text-rc-accent-link text-xs">(You)</span>
                 )}
-                <span className="opacity-50">•</span>
-                <span className="opacity-70">
+                <span className="text-rc-fg-dim">•</span>
+                <span className="font-rc-mono tabular-nums text-rc-fg-muted">
                   Life: {players.p1?.life || 20}
                 </span>
-                <span className="opacity-50">•</span>
-                <span className="opacity-70">Mana: {p1Mana}</span>
+                <span className="text-rc-fg-dim">•</span>
+                <span className="font-rc-mono tabular-nums text-rc-fg-muted">Mana: {p1Mana}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-red-400">{playerNames.p2}</span>
                 {myPlayerNumber === 2 && (
-                  <span className="text-green-400 text-xs">(You)</span>
+                  <span className="font-rc-mono text-rc-accent-link text-xs">(You)</span>
                 )}
-                <span className="opacity-50">•</span>
-                <span className="opacity-70">
+                <span className="text-rc-fg-dim">•</span>
+                <span className="font-rc-mono tabular-nums text-rc-fg-muted">
                   Life: {players.p2?.life || 20}
                 </span>
-                <span className="opacity-50">•</span>
-                <span className="opacity-70">Mana: {p2Mana}</span>
+                <span className="text-rc-fg-dim">•</span>
+                <span className="font-rc-mono tabular-nums text-rc-fg-muted">Mana: {p2Mana}</span>
               </div>
             </div>
           </div>
 
           {/* Game State */}
-          <div className="space-y-2 pt-2 border-t border-white/10">
-            <h3 className="font-medium text-sm">Game State</h3>
-            <div className="text-sm space-y-1 opacity-80">
+          <div className="space-y-2 pt-2 border-t border-rc-line/12">
+            <h3 className="rc-eyebrow m-0">Game State</h3>
+            <div className="font-rc-sans text-sm space-y-1 text-rc-fg-muted">
               <div className="flex justify-between">
                 <span>Current Turn:</span>
-                <span className="font-medium">
+                <span className="font-medium text-rc-fg">
                   {currentPlayer === 1 ? playerNames.p1 : playerNames.p2} (P
                   {currentPlayer})
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>Phase:</span>
-                <span className="font-medium">{phase}</span>
+                <span className="font-medium text-rc-fg">{phase}</span>
               </div>
               <div className="flex justify-between">
                 <span>Events:</span>
-                <span className="font-medium">{eventSeq}</span>
+                <span className="font-rc-mono font-medium tabular-nums text-rc-fg">{eventSeq}</span>
               </div>
               <div className="flex justify-between">
                 <span>Server Sync:</span>
-                <span className="font-medium">{lastServerTs || 0}</span>
+                <span className="font-rc-mono font-medium tabular-nums text-rc-fg">{lastServerTs || 0}</span>
               </div>
               {!spectatorMode && (
                 <>
@@ -205,66 +207,62 @@ export default function MatchInfoPopup({
                       Combat Guides
                       {guideHint(interactionGuides, combatGuidesActive)}
                     </span>
-                    <button
-                      className={`rounded-full px-3 py-1 text-xs transition-colors ${
-                        interactionGuides
-                          ? "bg-emerald-600/90 hover:bg-emerald-500"
-                          : "bg-white/15 hover:bg-white/25"
-                      }`}
+                    <RcButton
+                      variant="quiet"
+                      size="xs"
+                      tone="success"
+                      className="h-[26px] rounded-full px-3 font-rc-mono tracking-[0.08em]"
                       onClick={() => setInteractionGuides(!interactionGuides)}
                       aria-pressed={interactionGuides}
                     >
                       {interactionGuides ? "On" : "Off"}
-                    </button>
+                    </RcButton>
                   </div>
                   <div className="flex items-center justify-between pt-1">
                     <span>
                       Magic Guides
                       {guideHint(magicGuides, magicGuidesActive)}
                     </span>
-                    <button
-                      className={`rounded-full px-3 py-1 text-xs transition-colors ${
-                        magicGuides
-                          ? "bg-indigo-600/90 hover:bg-indigo-500"
-                          : "bg-white/15 hover:bg-white/25"
-                      }`}
+                    <RcButton
+                      variant="quiet"
+                      size="xs"
+                      tone="moonlight"
+                      className="h-[26px] rounded-full px-3 font-rc-mono tracking-[0.08em]"
                       onClick={() => setMagicGuides(!magicGuides)}
                       aria-pressed={magicGuides}
                     >
                       {magicGuides ? "On" : "Off"}
-                    </button>
+                    </RcButton>
                   </div>
                   <div className="flex items-center justify-between pt-1">
                     <span>Action Notifications</span>
-                    <button
-                      className={`rounded-full px-3 py-1 text-xs transition-colors ${
-                        actionNotifications
-                          ? "bg-amber-600/90 hover:bg-amber-500"
-                          : "bg-white/15 hover:bg-white/25"
-                      }`}
+                    <RcButton
+                      variant="quiet"
+                      size="xs"
+                      tone="success"
+                      className="h-[26px] rounded-full px-3 font-rc-mono tracking-[0.08em]"
                       onClick={() =>
                         setActionNotifications(!actionNotifications)
                       }
                       aria-pressed={actionNotifications}
                     >
                       {actionNotifications ? "On" : "Off"}
-                    </button>
+                    </RcButton>
                   </div>
                   <div className="flex items-center justify-between pt-1">
                     <span>Card Previews (P)</span>
-                    <button
-                      className={`rounded-full px-3 py-1 text-xs transition-colors ${
-                        cardPreviewsEnabled
-                          ? "bg-cyan-600/90 hover:bg-cyan-500"
-                          : "bg-white/15 hover:bg-white/25"
-                      }`}
+                    <RcButton
+                      variant="quiet"
+                      size="xs"
+                      tone="info"
+                      className="h-[26px] rounded-full px-3 font-rc-mono tracking-[0.08em]"
                       onClick={() =>
                         setCardPreviewsEnabled(!cardPreviewsEnabled)
                       }
                       aria-pressed={cardPreviewsEnabled}
                     >
                       {cardPreviewsEnabled ? "On" : "Off"}
-                    </button>
+                    </RcButton>
                   </div>
                 </>
               )}
@@ -272,33 +270,35 @@ export default function MatchInfoPopup({
           </div>
 
           {/* Connection Status */}
-          <div className="space-y-2 pt-2 border-t border-white/10">
-            <h3 className="font-medium text-sm">Connection</h3>
+          <div className="space-y-2 pt-2 border-t border-rc-line/12">
+            <h3 className="rc-eyebrow m-0">Connection</h3>
             <div className="flex items-center justify-between">
-              <span className="text-sm opacity-80">Status:</span>
+              <span className="font-rc-sans text-sm text-rc-fg-muted">Status:</span>
               <div className="flex items-center gap-2">
                 <div
                   className={`w-2 h-2 rounded-full ${
-                    connected ? "bg-green-400" : "bg-red-400"
+                    connected ? "bg-rc-success" : "bg-rc-danger"
                   }`}
                 />
-                <span className="text-sm font-medium">
+                <span className="font-rc-sans text-sm font-medium text-rc-fg">
                   {connected ? "Connected" : "Disconnected"}
                 </span>
               </div>
             </div>
             {pendingCount > 0 && (
               <div className="flex items-center justify-between">
-                <span className="text-sm opacity-80">Pending Updates:</span>
+                <span className="font-rc-sans text-sm text-rc-fg-muted">Pending Updates:</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{pendingCount}</span>
-                  <button
-                    className="px-2 py-0.5 text-xs rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-40 transition-colors"
+                  <span className="font-rc-mono text-sm font-medium tabular-nums text-rc-fg">{pendingCount}</span>
+                  <RcButton
+                    variant="quiet"
+                    size="xs"
+                    className="h-[22px] rounded-rc-sm px-2 font-rc-mono disabled:opacity-40"
                     onClick={() => flushPending()}
                     disabled={!connected || pendingCount === 0}
                   >
                     Sync
-                  </button>
+                  </RcButton>
                 </div>
               </div>
             )}
@@ -306,13 +306,14 @@ export default function MatchInfoPopup({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-white/10">
-          <button
+        <div className="p-4 border-t border-rc-line/12">
+          <RcButton
+            variant="outline"
             onClick={onClose}
-            className="w-full bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+            className="w-full"
           >
             Close
-          </button>
+          </RcButton>
         </div>
       </div>
     </div>

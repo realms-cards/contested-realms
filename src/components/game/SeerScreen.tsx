@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useCallback } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { cardbackAtlasUrl, cardbackSpellbookUrl } from "@/lib/assets";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { useGameStore } from "@/lib/game/store";
@@ -99,47 +100,52 @@ export default function SeerScreen({
   // If not the second seat, show waiting screen
   if (!isSecondSeat) {
     return (
-      <div className="w-full max-w-md bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-6 text-center">
-        <div className="text-lg font-semibold mb-2">Waiting for Opponent</div>
-        <div className="text-sm opacity-80 mb-4">
+      <div className="w-full max-w-md rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-center text-rc-fg shadow-rc-panel">
+        <div className="mb-2 font-rc-display text-[22px] leading-none text-rc-fg-strong">
+          Waiting for Opponent
+        </div>
+        <div className="mb-4 font-rc-sans text-sm text-rc-fg-muted">
           {playerNames[secondSeat]} is using their Seer ability...
         </div>
-        <div className="animate-pulse text-cyan-400">⏳</div>
+        <div
+          className="mx-auto h-2.5 w-2.5 animate-rc-blink bg-rc-accent shadow-[0_0_10px_#d4a94a]"
+          aria-hidden="true"
+        />
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-2xl bg-zinc-900/90 text-white rounded-2xl ring-1 ring-cyan-500/30 shadow-lg shadow-cyan-500/10 p-6">
+    <div className="w-full max-w-2xl rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-rc-fg shadow-rc-panel">
       {/* Header */}
       <div className="text-center mb-6">
-        <div className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600/20 rounded-full ring-1 ring-cyan-500/40 mb-4">
-          <span className="text-lg font-bold text-cyan-300">
+        <div className="mb-4 inline-flex items-center gap-2">
+          <span className="font-rc-display text-[28px] leading-none text-rc-fg-strong">
             Second Player Seer
           </span>
         </div>
-        <div className="text-sm opacity-80">
+        <div className="font-rc-sans text-sm text-rc-fg-muted">
           As the second player, you may look at the top card of your Spellbook
           or Atlas and choose to keep it on top or put it on the bottom.
         </div>
       </div>
 
       {/* Pile Selection */}
-      <div className="bg-black/30 rounded-xl p-4 ring-1 ring-white/10 mb-4">
-        <div className="text-sm font-medium mb-3 text-center">
+      <div className="mb-4 rounded-rc-md border border-rc-line/12 bg-black/30 p-4">
+        <div className="rc-hint mb-3 text-center">
           Choose a pile to scry:
         </div>
         <div className="flex justify-center gap-6">
           <button
-            className={`flex flex-col items-center gap-2 p-3 rounded-lg transition-all ${
+            className={`flex flex-col items-center gap-2 rounded-rc-md p-3 transition-all ${
               chosenPile === "spellbook"
-                ? "bg-cyan-600/30 ring-2 ring-cyan-400"
-                : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10"
+                ? "border border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                : "border border-rc-line/12 bg-black/30 hover:border-rc-accent/40"
             } ${isRevealed ? "opacity-60 cursor-not-allowed" : ""}`}
             onClick={() => handlePileSelect("spellbook")}
             disabled={isRevealed}
           >
-            <div className="relative w-16 h-24 rounded overflow-hidden">
+            <div className="relative w-16 h-24 rounded-rc-sm overflow-hidden ring-1 ring-rc-line/18">
               <Image
                 src={cardbackSpellbookUrl()}
                 alt="Spellbook"
@@ -149,21 +155,23 @@ export default function SeerScreen({
                 unoptimized
               />
             </div>
-            <div className="text-sm font-medium">Spellbook</div>
-            <div className="text-xs opacity-60">
+            <div className="font-rc-mono text-xs uppercase tracking-[0.14em] text-rc-fg-strong">
+              Spellbook
+            </div>
+            <div className="rc-hint tabular-nums">
               {zones[secondSeat]?.spellbook?.length || 0} cards
             </div>
           </button>
           <button
-            className={`flex flex-col items-center gap-2 p-3 rounded-lg transition-all ${
+            className={`flex flex-col items-center gap-2 rounded-rc-md p-3 transition-all ${
               chosenPile === "atlas"
-                ? "bg-cyan-600/30 ring-2 ring-cyan-400"
-                : "bg-white/5 hover:bg-white/10 ring-1 ring-white/10"
+                ? "border border-rc-accent bg-rc-accent/12 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                : "border border-rc-line/12 bg-black/30 hover:border-rc-accent/40"
             } ${isRevealed ? "opacity-60 cursor-not-allowed" : ""}`}
             onClick={() => handlePileSelect("atlas")}
             disabled={isRevealed}
           >
-            <div className="relative w-24 h-16 rounded overflow-hidden">
+            <div className="relative w-24 h-16 rounded-rc-sm overflow-hidden ring-1 ring-rc-line/18">
               <Image
                 src={cardbackAtlasUrl()}
                 alt="Atlas"
@@ -173,8 +181,10 @@ export default function SeerScreen({
                 unoptimized
               />
             </div>
-            <div className="text-sm font-medium">Atlas</div>
-            <div className="text-xs opacity-60">
+            <div className="font-rc-mono text-xs uppercase tracking-[0.14em] text-rc-fg-strong">
+              Atlas
+            </div>
+            <div className="rc-hint tabular-nums">
               {zones[secondSeat]?.atlas?.length || 0} cards
             </div>
           </button>
@@ -182,18 +192,15 @@ export default function SeerScreen({
       </div>
 
       {/* Reveal / Decision Area */}
-      <div className="bg-black/30 rounded-xl p-4 ring-1 ring-white/10">
+      <div className="rounded-rc-md border border-rc-line/12 bg-black/30 p-4">
         {!isRevealed ? (
           <div className="text-center">
-            <div className="text-sm opacity-70 mb-4">
+            <div className="mb-4 font-rc-sans text-sm text-rc-fg-muted">
               Click below to reveal the top card of your {chosenPile}
             </div>
-            <button
-              className="px-6 py-3 bg-cyan-600 hover:bg-cyan-700 rounded-lg font-medium transition-colors"
-              onClick={handleReveal}
-            >
+            <RcButton size="lg" onClick={handleReveal}>
               Reveal Top Card
-            </button>
+            </RcButton>
           </div>
         ) : (
           <div className="flex flex-col sm:flex-row items-center gap-6">
@@ -201,7 +208,7 @@ export default function SeerScreen({
             <div className="flex-1 flex justify-center">
               {topCard ? (
                 <div
-                  className="relative rounded-lg overflow-hidden ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-500/20"
+                  className="relative overflow-hidden rounded-rc-md shadow-rc-md ring-2 ring-rc-accent/50"
                   onMouseEnter={() => setPreviewCard(topCard)}
                   onMouseLeave={() => setPreviewCard(null)}
                 >
@@ -227,8 +234,7 @@ export default function SeerScreen({
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-400">
-                  <div className="text-4xl mb-2">📭</div>
+                <div className="rc-hint py-8 text-center">
                   <div>Selected pile is empty</div>
                 </div>
               )}
@@ -236,23 +242,24 @@ export default function SeerScreen({
 
             {/* Decision Buttons */}
             <div className="flex flex-col gap-3">
-              <div className="text-sm font-medium text-center mb-2">
+              <div className="mb-2 text-center font-rc-display text-[17px] leading-tight text-rc-fg-strong">
                 {topCard ? topCard.name : "No card"}
               </div>
-              <button
-                className="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+              <RcButton
+                size="lg"
                 disabled={!topCard || isCompleted}
                 onClick={() => handleComplete("top")}
               >
                 Keep on Top
-              </button>
-              <button
-                className="px-6 py-3 bg-amber-600 hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+              </RcButton>
+              <RcButton
+                variant="outline"
+                size="lg"
                 disabled={!topCard || isCompleted}
                 onClick={() => handleComplete("bottom")}
               >
                 Put on Bottom
-              </button>
+              </RcButton>
             </div>
           </div>
         )}
@@ -260,11 +267,11 @@ export default function SeerScreen({
 
       {/* Footer with Skip Seer button */}
       <div className="mt-4 flex flex-col items-center gap-3">
-        <div className="text-xs opacity-60 text-center">
+        <div className="rc-hint text-center">
           This ability helps compensate for going second. Use it wisely!
         </div>
         <button
-          className="px-6 py-2 bg-red-600/80 hover:bg-red-700 rounded-lg font-medium transition-colors text-sm"
+          className="cursor-pointer rounded-rc-md border border-rc-danger/40 px-6 py-2 font-rc-mono text-xs tracking-[0.08em] text-rc-danger transition-colors hover:border-rc-danger hover:text-rc-danger-hover disabled:pointer-events-none disabled:opacity-50"
           disabled={isCompleted}
           onClick={() => handleComplete("skip")}
         >

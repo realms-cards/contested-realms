@@ -63,6 +63,10 @@ function formatLabel(type: string | null | undefined): string {
 
 /** Quiet mono hint text used in the action column when there is no action. */
 const HINT = "font-rc-mono text-[11px] tracking-[0.1em] text-rc-fg-dim";
+/** Modal backdrop for the lobby dialogs. */
+const BACKDROP = "bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px]";
+/** Muted help text under a form field. */
+const FIELD_HELP = "font-rc-sans text-xs text-rc-fg-subtle";
 
 export type CreateLobbyConfig = {
   name: string;
@@ -119,32 +123,31 @@ function TournamentMatchesModal({
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative rc-panel w-full max-w-3xl p-5">
+      <div className={`absolute inset-0 ${BACKDROP}`} onClick={onClose} />
+      <div className="relative rc-panel w-full max-w-3xl p-5 text-rc-fg">
         <div className="flex items-center justify-between mb-2">
-          <div className="text-base font-semibold">
+          <div className="font-rc-display text-[22px] leading-none text-rc-fg-strong">
             {data?.tournament?.name
               ? `Matches – ${data.tournament.name}`
               : "Tournament Matches"}
           </div>
-          <button
-            className="text-slate-300 hover:text-white text-sm"
-            onClick={onClose}
-          >
+          <RcButton variant="ghost" size="sm" onClick={onClose}>
             Close
-          </button>
+          </RcButton>
         </div>
         {loading && (
-          <div className="py-10 text-center text-sm opacity-80">
+          <div className="py-10 text-center font-rc-sans text-sm text-rc-fg-muted">
             Loading matches…
           </div>
         )}
         {!loading && error && (
-          <div className="py-6 text-center text-sm text-rose-300">{error}</div>
+          <div className="py-6 text-center font-rc-sans text-sm text-rc-danger">
+            {error}
+          </div>
         )}
         {!loading && !error && data && (
           <div className="space-y-4">
-            <div className="text-xs text-slate-300">
+            <div className="font-rc-mono text-xs tabular-nums text-rc-fg-muted">
               <span className="mr-3">Total: {data.summary.totalMatches}</span>
               <span className="mr-3">
                 Completed: {data.summary.completedMatches}
@@ -159,7 +162,7 @@ function TournamentMatchesModal({
                 <span>Avg duration: {data.summary.averageDuration}s</span>
               )}
             </div>
-            <div className="max-h-[60vh] overflow-auto pr-1">
+            <div className="thin-scrollbar max-h-[60vh] overflow-auto pr-1">
               {(() => {
                 const groups: Map<
                   number | "Unassigned",
@@ -185,12 +188,12 @@ function TournamentMatchesModal({
                       return (
                         <div
                           key={String(key)}
-                          className="border border-slate-700 rounded"
+                          className="overflow-hidden rounded-rc-md border border-rc-line/12 bg-black/30"
                         >
-                          <div className="px-3 py-2 text-xs font-medium bg-slate-800/70">
+                          <div className="rc-eyebrow border-b border-rc-line/12 bg-black/30 px-3 py-2">
                             Round {key === "Unassigned" ? "—" : key}
                           </div>
-                          <div className="divide-y divide-slate-800">
+                          <div className="divide-y divide-rc-line/8">
                             {group.map(
                               (
                                 m: TournamentMatchesResponse["matches"][number],
@@ -201,7 +204,7 @@ function TournamentMatchesModal({
                                 >
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
-                                      <span className="font-medium">
+                                      <span className="font-rc-sans font-medium text-rc-fg-strong">
                                         {m.players
                                           .map(
                                             (
@@ -210,11 +213,9 @@ function TournamentMatchesModal({
                                           )
                                           .join(" vs ")}
                                       </span>
-                                      <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-white/10 text-white/70 ring-1 ring-white/20">
-                                        {m.status}
-                                      </span>
+                                      <Badge>{m.status}</Badge>
                                     </div>
-                                    <div className="text-xs opacity-70">
+                                    <div className="font-rc-mono text-xs text-rc-fg-subtle">
                                       Games: {m.gameCount}{" "}
                                       {m.winnerId
                                         ? `• Winner: ${
@@ -228,7 +229,7 @@ function TournamentMatchesModal({
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <div className="text-xs text-slate-300 whitespace-nowrap">
+                                    <div className="whitespace-nowrap font-rc-mono text-xs tabular-nums text-rc-fg-muted">
                                       {m.startedAt
                                         ? new Date(m.startedAt).toLocaleString()
                                         : ""}
@@ -236,8 +237,9 @@ function TournamentMatchesModal({
                                     {/* Offer Join for current player's assignment */}
                                     {myId &&
                                       m.players.some((p) => p.id === myId) && (
-                                        <button
-                                          className="rounded bg-blue-600/80 hover:bg-blue-600 px-3 py-1 text-xs text-blue-100"
+                                        <RcButton
+                                          variant="outline"
+                                          size="sm"
                                           onClick={async () => {
                                             try {
                                               // Compute match type from tournament info without using 'any'
@@ -350,7 +352,7 @@ function TournamentMatchesModal({
                                           title="Join your match"
                                         >
                                           Join Match
-                                        </button>
+                                        </RcButton>
                                       )}
                                   </div>
                                 </div>
@@ -854,7 +856,7 @@ export default function LobbiesCentral({
           !!joinedLobbyId &&
           !(onEndPractice && joinedIsPractice) && (
           <RcButton
-            variant="destructive"
+            variant="danger-soft"
             size="sm"
             onClick={() => onLeaveLobby()}
             title={`Leave ${
@@ -1021,7 +1023,7 @@ export default function LobbiesCentral({
               <div
                 key={`lobby-${l.id}`}
                 className={`rc-games-grid items-center border-b border-rc-line/8 px-[18px] py-3 font-rc-mono text-[13px] text-rc-fg transition-colors hover:bg-rc-accent/6 ${
-                  isMine ? "bg-rc-accent/6 shadow-[inset_2px_0_0_#d4a94a]" : ""
+                  isMine ? "bg-rc-accent/6 shadow-[inset_2px_0_0_var(--color-rc-accent)]" : ""
                 }`}
               >
                 <div className="min-w-0">
@@ -1088,9 +1090,8 @@ export default function LobbiesCentral({
                         !!myId &&
                         l.players.some((p) => p.id === myId))) ? (
                       <RcButton
-                        variant="outline"
+                        variant="danger-soft"
                         size="sm"
-                        className="text-rc-danger hover:text-rc-danger-hover"
                         onClick={() => onEndPractice()}
                         title="End this practice game and close its lobby"
                       >
@@ -1105,6 +1106,7 @@ export default function LobbiesCentral({
                       l.hostId === myId &&
                       l.players.length < l.maxPlayers ? (
                         <RcButton
+                          variant="outline"
                           size="sm"
                           className="animate-pulse"
                           onClick={() => {
@@ -1201,7 +1203,7 @@ export default function LobbiesCentral({
                       {l.visibility === "open" && l.hostReady && open && (
                         <RcButton
                           size="sm"
-                          variant={full ? "secondary" : "default"}
+                          variant={full ? "secondary" : "outline"}
                           onClick={() => onJoin(l.id)}
                           disabled={joinDisabled}
                           title={joinTitle}
@@ -1219,7 +1221,7 @@ export default function LobbiesCentral({
                         (isRegisteredInTournament ? (
                           <RcButton
                             size="sm"
-                            variant={full ? "secondary" : "default"}
+                            variant={full ? "secondary" : "outline"}
                             onClick={() => onJoin(l.id)}
                             disabled={joinDisabled || !l.hostReady}
                             title={
@@ -1344,7 +1346,7 @@ export default function LobbiesCentral({
                   key={`tournament-${tournament.id}`}
                   className={`rc-games-grid items-center border-b border-rc-line/8 px-[18px] py-3 font-rc-mono text-[13px] text-rc-fg transition-colors hover:bg-rc-accent/6 ${
                     isRegistered
-                      ? "bg-rc-accent/6 shadow-[inset_2px_0_0_#d4a94a]"
+                      ? "bg-rc-accent/6 shadow-[inset_2px_0_0_var(--color-rc-accent)]"
                       : ""
                   }`}
                 >
@@ -1385,6 +1387,7 @@ export default function LobbiesCentral({
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     {canJoin && onJoinTournament && (
                       <RcButton
+                        variant="outline"
                         size="sm"
                         onClick={async () => {
                           if (pendingJoinT[tournament.id]) return;
@@ -1417,7 +1420,7 @@ export default function LobbiesCentral({
                       (tournament.status === "registering" || isOpenSeat) &&
                       onLeaveTournament && (
                         <RcButton
-                          variant="destructive"
+                          variant="danger-soft"
                           size="sm"
                           onClick={async () => {
                             if (pendingLeaveT[tournament.id]) return;
@@ -1505,6 +1508,7 @@ export default function LobbiesCentral({
                     )}
                     {canStart && onStartTournament && (
                       <RcButton
+                        variant="outline"
                         size="sm"
                         onClick={async () => {
                           if (pendingStartT[tournament.id]) return;
@@ -1535,7 +1539,7 @@ export default function LobbiesCentral({
                       tournament.status !== "completed" &&
                       onEndTournament && (
                         <RcButton
-                          variant="destructive"
+                          variant="danger-soft"
                           size="sm"
                           onClick={() => setEndTournamentConfirm(tournament.id)}
                         >
@@ -1544,6 +1548,7 @@ export default function LobbiesCentral({
                       )}
                     {isRegistered && tournament.status === "draft_phase" && (
                       <RcButton
+                        variant="outline"
                         size="sm"
                         onClick={() =>
                           (window.location.href = `/tournaments/${tournament.id}/draft`)
@@ -1560,6 +1565,7 @@ export default function LobbiesCentral({
                         </Badge>
                       ) : (
                         <RcButton
+                          variant="outline"
                           size="sm"
                           onClick={async () => {
                             try {
@@ -1721,22 +1727,25 @@ export default function LobbiesCentral({
       {overlayOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
-            className="absolute inset-0 bg-black/60"
+            className={`absolute inset-0 ${BACKDROP}`}
             onClick={() => setOverlayOpen(false)}
           />
-          <div className="relative rc-panel w-full max-w-md p-5">
+          <div className="relative rc-panel w-full max-w-md p-5 text-rc-fg">
             <div className="flex items-center justify-between">
-              <div className="text-base font-semibold">Create Match</div>
-              <button
-                className="text-slate-300 hover:text-white text-sm"
+              <div className="font-rc-display text-[22px] leading-none text-rc-fg-strong">
+                Create Match
+              </div>
+              <RcButton
+                variant="ghost"
+                size="sm"
                 onClick={() => setOverlayOpen(false)}
               >
                 Close
-              </button>
+              </RcButton>
             </div>
             <div className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-medium mb-2">
+                <label className="rc-field-label mb-2">
                   Match Name *
                 </label>
                 <div className="flex gap-2">
@@ -1744,42 +1753,43 @@ export default function LobbiesCentral({
                     type="text"
                     value={cfgName}
                     onChange={(e) => setCfgName(e.target.value)}
-                    className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                    className="rc-input h-9 min-w-0 flex-1"
                     placeholder="Enter match name"
                     maxLength={50}
                     required
                   />
-                  <button
+                  <RcButton
                     type="button"
+                    variant="outline"
+                    size="icon"
                     onClick={() => setCfgName(generateLobbyName())}
-                    className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-2 text-xs transition-colors"
+                    className="h-9 w-9"
                     title="Generate random name"
                   >
-                    🎲
-                  </button>
+                    <Icon
+                      icon="game-icons:perspective-dice-six-faces-random"
+                      width={16}
+                      height={16}
+                      aria-hidden
+                    />
+                  </RcButton>
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-2">
+                <label className="rc-field-label mb-2">
                   Visibility
                 </label>
-                <div className="flex gap-2">
+                <div className="rc-segment">
                   <button
-                    className={`px-3 py-2 text-sm rounded transition-colors ${
-                      cfgVisibility === "open"
-                        ? "bg-emerald-600/80 text-white"
-                        : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-                    }`}
+                    aria-pressed={cfgVisibility === "open"}
+                    data-tone="success"
                     onClick={() => setCfgVisibility("open")}
                   >
                     Open
                   </button>
                   <button
-                    className={`px-3 py-2 text-sm rounded transition-colors ${
-                      cfgVisibility === "private"
-                        ? "bg-amber-600/80 text-white"
-                        : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-                    }`}
+                    aria-pressed={cfgVisibility === "private"}
+                    data-tone="warning"
                     onClick={() => setCfgVisibility("private")}
                   >
                     Private
@@ -1787,7 +1797,7 @@ export default function LobbiesCentral({
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-2">
+                <label className="rc-field-label mb-2">
                   Max Players
                 </label>
                 <input
@@ -1796,18 +1806,19 @@ export default function LobbiesCentral({
                   disabled
                   aria-disabled
                   title="Currently limited to two players"
-                  className="w-24 bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm opacity-60 cursor-not-allowed"
+                  className="rc-input h-8 w-24 cursor-not-allowed px-2 opacity-60"
                 />
               </div>
               <div className="flex justify-end gap-2">
-                <button
-                  className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1.5 text-sm"
+                <RcButton
+                  variant="outline"
+                  size="sm"
                   onClick={() => setOverlayOpen(false)}
                 >
                   Cancel
-                </button>
-                <button
-                  className="rounded bg-gradient-to-r from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700 px-4 py-1.5 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                </RcButton>
+                <RcButton
+                  size="sm"
                   disabled={!cfgName.trim()}
                   onClick={() => {
                     const trimmedName = cfgName.trim();
@@ -1822,7 +1833,7 @@ export default function LobbiesCentral({
                   }}
                 >
                   Create
-                </button>
+                </RcButton>
               </div>
             </div>
           </div>
@@ -1833,22 +1844,25 @@ export default function LobbiesCentral({
       {tournamentsEnabled && tournamentOverlayOpen && onCreateTournament && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
-            className="absolute inset-0 bg-black/60"
+            className={`absolute inset-0 ${BACKDROP}`}
             onClick={() => setTournamentOverlayOpen(false)}
           />
-          <div className="relative rc-panel w-full max-w-md p-5">
+          <div className="relative rc-panel w-full max-w-md p-5 text-rc-fg">
             <div className="flex items-center justify-between">
-              <div className="text-base font-semibold">Create Tournament</div>
-              <button
-                className="text-slate-300 hover:text-white text-sm"
+              <div className="font-rc-display text-[22px] leading-none text-rc-fg-strong">
+                Create Tournament
+              </div>
+              <RcButton
+                variant="ghost"
+                size="sm"
                 onClick={() => setTournamentOverlayOpen(false)}
               >
                 Close
-              </button>
+              </RcButton>
             </div>
             <div className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-medium mb-2">
+                <label className="rc-field-label mb-2">
                   Tournament Name *
                 </label>
                 <div className="flex gap-2">
@@ -1856,42 +1870,48 @@ export default function LobbiesCentral({
                     type="text"
                     value={tournamentName}
                     onChange={(e) => setTournamentName(e.target.value)}
-                    className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                    className="rc-input h-9 min-w-0 flex-1"
                     placeholder="Enter tournament name"
                     maxLength={50}
                     required
                   />
-                  <button
+                  <RcButton
                     type="button"
+                    variant="outline"
+                    size="icon"
                     onClick={() => setTournamentName(generateLobbyName())}
-                    className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-2 text-xs transition-colors"
+                    className="h-9 w-9"
                     title="Generate random name"
                   >
-                    🎲
-                  </button>
+                    <Icon
+                      icon="game-icons:perspective-dice-six-faces-random"
+                      width={16}
+                      height={16}
+                      aria-hidden
+                    />
+                  </RcButton>
                 </div>
               </div>
               {/* Private Tournament Toggle */}
               <div>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="rc-check flex">
                   <input
                     type="checkbox"
                     checked={tournamentIsPrivate}
                     onChange={(e) => setTournamentIsPrivate(e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600"
                   />
-                  <span className="text-xs">
+                  <span>
                     Private tournament (invite-only)
                   </span>
                 </label>
                 {tournamentIsPrivate && (
-                  <p className="text-slate-400 text-xs mt-1 ml-6">
+                  <p className={`mt-1 ml-6 ${FIELD_HELP}`}>
                     Only invited players can see and join
                   </p>
                 )}
               </div>
               <div>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="rc-check flex">
                   <input
                     type="checkbox"
                     checked={tournamentOpenSeat}
@@ -1902,21 +1922,19 @@ export default function LobbiesCentral({
                         setTournamentRegistrationLocked(false);
                       }
                     }}
-                    className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600"
                   />
-                  <span className="text-xs">
+                  <span>
                     Open seat tournament (host controls registration lock)
                   </span>
                 </label>
                 {tournamentOpenSeat && (
-                  <label className="mt-2 flex items-center gap-2 text-xs ml-6">
+                  <label className="rc-check mt-2 ml-6 flex">
                     <input
                       type="checkbox"
                       checked={tournamentRegistrationLocked}
                       onChange={(e) =>
                         setTournamentRegistrationLocked(e.target.checked)
                       }
-                      className="w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-600"
                     />
                     Start locked (no new seats until unlocked)
                   </label>
@@ -1924,18 +1942,15 @@ export default function LobbiesCentral({
               </div>
 
               <div>
-                <label className="block text-xs font-medium mb-2">
+                <label className="rc-field-label mb-2">
                   Match Type
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="rc-segment grid grid-cols-3">
                   {["constructed", "sealed", "draft"].map((type) => (
                     <button
                       key={type}
-                      className={`px-3 py-2 text-xs rounded transition-colors ${
-                        tournamentMatchType === type
-                          ? "bg-purple-600/80 text-white"
-                          : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-                      }`}
+                      aria-pressed={tournamentMatchType === type}
+                      data-tone="moonlight"
                       onClick={() =>
                         setTournamentMatchType(
                           type as "constructed" | "sealed" | "draft",
@@ -1950,23 +1965,23 @@ export default function LobbiesCentral({
               {tournamentMatchType === "sealed" && (
                 <div className="space-y-3 mt-2">
                   {/* Cube sealed toggle */}
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className="rc-check flex">
                     <input
                       type="checkbox"
                       checked={sealedUseCube}
                       onChange={(e) => setSealedUseCube(e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600"
                     />
-                    <span className="text-xs">Use Cube for sealed</span>
+                    <span>Use Cube for sealed</span>
                   </label>
 
                   {!sealedUseCube && (
                     <>
                       <div className="flex items-center gap-3">
-                        <div className="text-xs font-medium">Booster Count</div>
+                        <div className="rc-field-label">Booster Count</div>
                         <div className="flex items-center gap-2">
-                          <button
-                            type="button"
+                          <RcButton
+                            variant="quiet"
+                            size="icon-xs"
                             onClick={() => {
                               const newCount = Math.max(
                                 1,
@@ -1977,15 +1992,16 @@ export default function LobbiesCentral({
                                 prev.slice(0, newCount),
                               );
                             }}
-                            className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                            className="font-rc-mono font-bold"
                           >
                             -
-                          </button>
-                          <span className="w-8 text-center text-xs font-semibold">
+                          </RcButton>
+                          <span className="w-8 text-center font-rc-mono text-xs font-semibold tabular-nums text-rc-fg-strong">
                             {sealedBoosterCount}
                           </span>
-                          <button
-                            type="button"
+                          <RcButton
+                            variant="quiet"
+                            size="icon-xs"
                             onClick={() => {
                               const newCount = Math.min(
                                 10,
@@ -1997,19 +2013,19 @@ export default function LobbiesCentral({
                                 ...Array(newCount - prev.length).fill("Beta"),
                               ]);
                             }}
-                            className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                            className="font-rc-mono font-bold"
                           >
                             +
-                          </button>
+                          </RcButton>
                         </div>
                       </div>
-                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                      <div className="thin-scrollbar space-y-2 max-h-40 overflow-y-auto">
                         {sealedBoosters.map((setName, idx) => (
                           <div
                             key={`sealed-booster-${idx}`}
                             className="flex items-center gap-2"
                           >
-                            <div className="text-xs text-slate-400 w-16">
+                            <div className="rc-hint w-16">
                               Pack {idx + 1}
                             </div>
                             <CustomSelect
@@ -2040,15 +2056,15 @@ export default function LobbiesCentral({
                   {sealedUseCube && (
                     <>
                       <div>
-                        <label className="block text-xs opacity-80 mb-1">
+                        <label className="rc-field-label mb-1">
                           Select Cube
                         </label>
                         {loadingCubes ? (
-                          <div className="text-xs text-slate-400 py-2">
+                          <div className={`py-2 ${FIELD_HELP}`}>
                             Loading cubes...
                           </div>
                         ) : userCubes.length === 0 ? (
-                          <div className="text-xs text-slate-400 py-2">
+                          <div className={`py-2 ${FIELD_HELP}`}>
                             No cubes found. Create a cube first to use for
                             sealed.
                           </div>
@@ -2064,40 +2080,42 @@ export default function LobbiesCentral({
                             }))}
                           />
                         )}
-                        <p className="text-xs text-slate-400 mt-1">
+                        <p className={`mt-1 ${FIELD_HELP}`}>
                           Choose one of your cubes for this sealed tournament
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <div className="text-xs font-medium">Pack Count</div>
+                        <div className="rc-field-label">Pack Count</div>
                         <div className="flex items-center gap-2">
-                          <button
-                            type="button"
+                          <RcButton
+                            variant="quiet"
+                            size="icon-xs"
                             onClick={() =>
                               setSealedBoosterCount((c) => Math.max(1, c - 1))
                             }
-                            className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                            className="font-rc-mono font-bold"
                           >
                             -
-                          </button>
-                          <span className="w-8 text-center text-xs font-semibold">
+                          </RcButton>
+                          <span className="w-8 text-center font-rc-mono text-xs font-semibold tabular-nums text-rc-fg-strong">
                             {sealedBoosterCount}
                           </span>
-                          <button
-                            type="button"
+                          <RcButton
+                            variant="quiet"
+                            size="icon-xs"
                             onClick={() =>
                               setSealedBoosterCount((c) => Math.min(10, c + 1))
                             }
-                            className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                            className="font-rc-mono font-bold"
                           >
                             +
-                          </button>
+                          </RcButton>
                         </div>
                       </div>
-                      <label className="mt-2 flex items-start gap-2 text-xs cursor-pointer">
+                      <label className="rc-check mt-2 flex items-start">
                         <input
                           type="checkbox"
-                          className="mt-0.5 w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-600"
+                          className="mt-0.5"
                           checked={sealedIncludeCubeSideboard}
                           onChange={(e) =>
                             setSealedIncludeCubeSideboard(e.target.checked)
@@ -2113,7 +2131,7 @@ export default function LobbiesCentral({
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-xs opacity-80 mb-1">
+                      <label className="rc-field-label mb-1">
                         Time Limit (min)
                       </label>
                       <input
@@ -2129,11 +2147,11 @@ export default function LobbiesCentral({
                             ),
                           )
                         }
-                        className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                        className="rc-input h-8 w-full px-2"
                       />
                     </div>
                     <label
-                      className="flex items-center gap-2 text-xs mt-5 cursor-pointer"
+                      className="rc-check mt-5 flex"
                       title="When enabled, boosters replace the 'guaranteed avatar' slot with another random card (more variety, but no guaranteed avatar per pack)"
                     >
                       <input
@@ -2145,12 +2163,12 @@ export default function LobbiesCentral({
                       />
                       <span>
                         No guaranteed avatar
-                        <span className="text-slate-400 ml-1">
+                        <span className="ml-1 text-rc-fg-subtle">
                           (random cards instead)
                         </span>
                       </span>
                     </label>
-                    <label className="flex items-center gap-2 text-xs mt-2">
+                    <label className="rc-check mt-2 flex">
                       <input
                         type="checkbox"
                         checked={sealedAllowDragonlordChampion}
@@ -2166,23 +2184,23 @@ export default function LobbiesCentral({
               {tournamentMatchType === "draft" && (
                 <div className="space-y-3 mt-2">
                   {/* Cube draft toggle */}
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className="rc-check flex">
                     <input
                       type="checkbox"
                       checked={draftUseCube}
                       onChange={(e) => setDraftUseCube(e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600"
                     />
-                    <span className="text-xs">Use Cube for draft</span>
+                    <span>Use Cube for draft</span>
                   </label>
 
                   {!draftUseCube && (
                     <>
                       <div className="flex items-center gap-3">
-                        <div className="text-xs font-medium">Booster Count</div>
+                        <div className="rc-field-label">Booster Count</div>
                         <div className="flex items-center gap-2">
-                          <button
-                            type="button"
+                          <RcButton
+                            variant="quiet"
+                            size="icon-xs"
                             onClick={() => {
                               const newCount = Math.max(
                                 1,
@@ -2193,15 +2211,16 @@ export default function LobbiesCentral({
                                 prev.slice(0, newCount),
                               );
                             }}
-                            className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                            className="font-rc-mono font-bold"
                           >
                             -
-                          </button>
-                          <span className="w-8 text-center text-xs font-semibold">
+                          </RcButton>
+                          <span className="w-8 text-center font-rc-mono text-xs font-semibold tabular-nums text-rc-fg-strong">
                             {draftBoosterCount}
                           </span>
-                          <button
-                            type="button"
+                          <RcButton
+                            variant="quiet"
+                            size="icon-xs"
                             onClick={() => {
                               const newCount = Math.min(
                                 5,
@@ -2215,10 +2234,10 @@ export default function LobbiesCentral({
                                 ),
                               ]);
                             }}
-                            className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold"
+                            className="font-rc-mono font-bold"
                           >
                             +
-                          </button>
+                          </RcButton>
                         </div>
                       </div>
                       <div className="space-y-2">
@@ -2227,7 +2246,7 @@ export default function LobbiesCentral({
                             key={`draft-booster-${idx}`}
                             className="flex items-center gap-2"
                           >
-                            <div className="text-xs text-slate-400 w-16">
+                            <div className="rc-hint w-16">
                               Pack {idx + 1}
                             </div>
                             <CustomSelect
@@ -2258,15 +2277,15 @@ export default function LobbiesCentral({
                   {draftUseCube && (
                     <>
                       <div>
-                        <label className="block text-xs opacity-80 mb-1">
+                        <label className="rc-field-label mb-1">
                           Select Cube
                         </label>
                         {loadingCubes ? (
-                          <div className="text-xs text-slate-400 py-2">
+                          <div className={`py-2 ${FIELD_HELP}`}>
                             Loading cubes...
                           </div>
                         ) : userCubes.length === 0 ? (
-                          <div className="text-xs text-slate-400 py-2">
+                          <div className={`py-2 ${FIELD_HELP}`}>
                             No cubes found. Create a cube first to use for
                             drafting.
                           </div>
@@ -2282,14 +2301,14 @@ export default function LobbiesCentral({
                             }))}
                           />
                         )}
-                        <p className="text-xs text-slate-400 mt-1">
+                        <p className={`mt-1 ${FIELD_HELP}`}>
                           Choose one of your cubes for this draft tournament
                         </p>
                       </div>
-                      <label className="mt-2 flex items-start gap-2 text-xs cursor-pointer">
+                      <label className="rc-check mt-2 flex items-start">
                         <input
                           type="checkbox"
-                          className="mt-0.5 w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-600"
+                          className="mt-0.5"
                           checked={draftIncludeCubeSideboard}
                           onChange={(e) =>
                             setDraftIncludeCubeSideboard(e.target.checked)
@@ -2307,7 +2326,7 @@ export default function LobbiesCentral({
                   {/* Draft Time Limits */}
                   <div className="grid grid-cols-2 gap-2 mt-3">
                     <div>
-                      <label className="block text-xs opacity-80 mb-1">
+                      <label className="rc-field-label mb-1">
                         Pick Time Limit (sec)
                       </label>
                       <input
@@ -2324,11 +2343,11 @@ export default function LobbiesCentral({
                             ),
                           )
                         }
-                        className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                        className="rc-input h-8 w-full px-2"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs opacity-80 mb-1">
+                      <label className="rc-field-label mb-1">
                         Construction Time (min)
                       </label>
                       <input
@@ -2345,11 +2364,11 @@ export default function LobbiesCentral({
                             ),
                           )
                         }
-                        className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-2 py-1 text-sm"
+                        className="rc-input h-8 w-full px-2"
                       />
                     </div>
                   </div>
-                  <label className="flex items-center gap-2 text-xs mt-3">
+                  <label className="rc-check mt-3 flex">
                     <input
                       type="checkbox"
                       checked={draftAllowDragonlordChampion}
@@ -2363,7 +2382,7 @@ export default function LobbiesCentral({
               )}
 
               <div>
-                <label className="block text-xs font-medium mb-2">
+                <label className="rc-field-label mb-2">
                   {tournamentOpenSeat ? "Seat Cap" : "Max Players"}
                 </label>
                 {tournamentOpenSeat ? (
@@ -2380,7 +2399,7 @@ export default function LobbiesCentral({
                         ),
                       )
                     }
-                    className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
+                    className="rc-input h-9 w-full"
                   />
                 ) : (
                   <CustomSelect
@@ -2397,7 +2416,7 @@ export default function LobbiesCentral({
                   />
                 )}
                 {tournamentOpenSeat && (
-                  <p className="text-xs text-slate-400 mt-1">
+                  <p className={`mt-1 ${FIELD_HELP}`}>
                     Open seat tournaments ignore the cap until locked.
                   </p>
                 )}
@@ -2405,14 +2424,15 @@ export default function LobbiesCentral({
             </div>
 
             <div className="flex justify-end gap-2 mt-6">
-              <button
-                className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1.5 text-sm"
+              <RcButton
+                variant="outline"
+                size="sm"
                 onClick={() => setTournamentOverlayOpen(false)}
               >
                 Cancel
-              </button>
-              <button
-                className="rounded bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 px-4 py-1.5 text-sm font-semibold disabled:opacity-50"
+              </RcButton>
+              <RcButton
+                size="sm"
                 disabled={
                   !tournamentName.trim() ||
                   (tournamentMatchType === "draft" &&
@@ -2520,7 +2540,7 @@ export default function LobbiesCentral({
                 }}
               >
                 Create Tournament
-              </button>
+              </RcButton>
             </div>
           </div>
         </div>
@@ -2528,10 +2548,12 @@ export default function LobbiesCentral({
 
       {/* Tournament Settings Modal */}
       {tournamentsEnabled && settingsModalOpen && editingTournament && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-lg border border-slate-700 w-full max-w-md">
+        <div
+          className={`fixed inset-0 ${BACKDROP} z-50 flex items-center justify-center p-4`}
+        >
+          <div className="rc-panel w-full max-w-md text-rc-fg">
             <div className="p-6">
-              <h3 className="text-lg font-bold text-white mb-4">
+              <h3 className="mt-0 mb-4 font-rc-display text-[22px] leading-none text-rc-fg-strong">
                 Tournament Settings
               </h3>
 
@@ -2556,35 +2578,37 @@ export default function LobbiesCentral({
 
       {/* End Tournament Confirmation Modal */}
       {tournamentsEnabled && endTournamentConfirm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-lg border border-slate-700 w-full max-w-md">
+        <div
+          className={`fixed inset-0 ${BACKDROP} z-50 flex items-center justify-center p-4`}
+        >
+          <div className="rc-panel w-full max-w-md text-rc-fg">
             <div className="p-6">
-              <h3 className="text-lg font-bold text-white mb-4">
+              <h3 className="mt-0 mb-4 font-rc-display text-[22px] leading-none text-rc-fg-strong">
                 End Tournament
               </h3>
-              <p className="text-slate-300 mb-6">
+              <p className="mb-6 font-rc-sans text-sm text-rc-fg-muted">
                 Are you sure you want to end this tournament? This action cannot
                 be undone and will complete the tournament immediately.
               </p>
 
               <div className="flex justify-end gap-3">
-                <button
+                <RcButton
+                  variant="ghost"
                   onClick={() => setEndTournamentConfirm(null)}
-                  className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
                 >
                   Cancel
-                </button>
-                <button
+                </RcButton>
+                <RcButton
+                  variant="destructive"
                   onClick={() => {
                     if (onEndTournament && endTournamentConfirm) {
                       onEndTournament(endTournamentConfirm);
                     }
                     setEndTournamentConfirm(null);
                   }}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-md transition-colors"
                 >
                   End Tournament
-                </button>
+                </RcButton>
               </div>
             </div>
           </div>
@@ -2658,7 +2682,7 @@ function TournamentSettingsForm({
     <div className="space-y-4">
       {/* Tournament Name */}
       <div>
-        <label className="block text-xs font-medium mb-2">
+        <label className="rc-field-label mb-2">
           Tournament Name *
         </label>
         <div className="flex gap-2">
@@ -2666,33 +2690,37 @@ function TournamentSettingsForm({
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="flex-1 bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            className="rc-input h-9 min-w-0 flex-1"
             placeholder="Enter tournament name"
             maxLength={50}
           />
-          <button
+          <RcButton
             type="button"
+            variant="outline"
+            size="icon"
             onClick={() => setName(generateLobbyName())}
-            className="rounded bg-slate-700 hover:bg-slate-600 px-3 py-2 text-xs transition-colors"
+            className="h-9 w-9"
             title="Generate random name"
           >
-            🎲
-          </button>
+            <Icon
+              icon="game-icons:perspective-dice-six-faces-random"
+              width={16}
+              height={16}
+              aria-hidden
+            />
+          </RcButton>
         </div>
       </div>
 
       {/* Match Type */}
       <div>
-        <label className="block text-xs font-medium mb-2">Match Type</label>
-        <div className="grid grid-cols-3 gap-2">
+        <label className="rc-field-label mb-2">Match Type</label>
+        <div className="rc-segment grid grid-cols-3">
           {["constructed", "sealed", "draft"].map((type) => (
             <button
               key={type}
-              className={`px-3 py-2 text-xs rounded transition-colors ${
-                matchType === type
-                  ? "bg-purple-600/80 text-white"
-                  : "bg-slate-700/60 text-slate-300 hover:bg-slate-600/60"
-              }`}
+              aria-pressed={matchType === type}
+              data-tone="moonlight"
               onClick={() =>
                 setMatchType(type as "constructed" | "sealed" | "draft")
               }
@@ -2705,7 +2733,7 @@ function TournamentSettingsForm({
 
       {/* Max Players */}
       <div>
-        <label className="block text-xs font-medium mb-2">
+        <label className="rc-field-label mb-2">
           {isOpenSeat ? "Seat Cap" : "Max Players"}
         </label>
         {isOpenSeat ? (
@@ -2719,7 +2747,7 @@ function TournamentSettingsForm({
                 Math.max(2, Math.min(128, parseInt(e.target.value) || 2)),
               )
             }
-            className="w-full bg-slate-800/70 ring-1 ring-slate-700 rounded px-3 py-2 text-sm"
+            className="rc-input h-9 w-full"
           />
         ) : (
           <CustomSelect
@@ -2736,7 +2764,7 @@ function TournamentSettingsForm({
           />
         )}
         {maxPlayers < activeCount && (
-          <p className="text-red-400 text-xs mt-1">
+          <p className="mt-1 font-rc-sans text-xs text-rc-danger">
             Cannot reduce below current player count ({activeCount})
           </p>
         )}
@@ -2744,19 +2772,15 @@ function TournamentSettingsForm({
 
       {/* Action Buttons */}
       <div className="flex justify-end gap-2 mt-6">
-        <button
-          onClick={onCancel}
-          className="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-sm text-slate-300 hover:text-white transition-colors"
-        >
+        <RcButton variant="outline" onClick={onCancel}>
           Cancel
-        </button>
-        <button
+        </RcButton>
+        <RcButton
           onClick={handleSave}
           disabled={!hasChanges || maxPlayers < activeCount}
-          className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-sm text-white transition-colors"
         >
           Save Changes
-        </button>
+        </RcButton>
       </div>
     </div>
   );

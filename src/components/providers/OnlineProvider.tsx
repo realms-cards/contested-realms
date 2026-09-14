@@ -17,6 +17,7 @@ import type {
   VoiceOutgoingRequest,
   VoiceRequestPeer,
 } from "@/app/online/online-context";
+import { RcButton } from "@/components/ui/rc-button";
 import { soundManager } from "@/lib/audio/soundManager";
 import { useLoadingContext } from "@/lib/contexts/LoadingContext";
 import { FEATURE_AUDIO_ONLY, FEATURE_SEAT_VIDEO } from "@/lib/flags";
@@ -68,7 +69,7 @@ function renderColoredText(text: string): React.ReactNode {
     if (tag === "card") {
       // Card name in fantasy font (no color)
       parts.push(
-        <span key={key++} className="font-fantaisie">
+        <span key={key++} className="font-rc-display">
           {name}
         </span>,
       );
@@ -78,7 +79,8 @@ function renderColoredText(text: string): React.ReactNode {
       parts.push(
         <span
           key={key++}
-          style={{ color, fontFamily: "var(--font-fantaisie, inherit)" }}
+          className="font-rc-display"
+          style={{ color }}
         >
           {name}
         </span>,
@@ -90,7 +92,8 @@ function renderColoredText(text: string): React.ReactNode {
       parts.push(
         <span
           key={key++}
-          style={{ color, fontFamily: "var(--font-fantaisie, inherit)" }}
+          className="font-rc-display"
+          style={{ color }}
         >
           {name}
         </span>,
@@ -2159,43 +2162,49 @@ export default function OnlineProvider({
       <audio ref={persistentAudioRef} autoPlay playsInline className="hidden" />
       {connToast && !standby && (
         <div
-          className={`fixed top-3 right-3 z-[3000] text-white text-sm px-3 py-2 rounded shadow ring-1 ring-white/20 ${
-            connToast.tone === "error" ? "bg-red-600/90" : "bg-green-600/90"
-          }`}
+          className="rc-toast fixed top-3 right-3 z-[3000] text-sm px-3 py-2"
+          data-tone={connToast.tone === "error" ? "danger" : "success"}
         >
           {connToast.message}
         </div>
       )}
       {standby && (
-        <div className="fixed top-3 right-3 z-[3000] flex items-center gap-3 text-white text-sm px-3 py-2 rounded shadow ring-1 ring-white/20 bg-slate-800/95">
+        <div
+          className="rc-toast fixed top-3 right-3 z-[3000] flex items-center gap-3 text-sm px-3 py-2"
+          data-tone="info"
+        >
           <span>This session is active in another tab.</span>
-          <button
-            type="button"
+          <RcButton
+            variant="outline"
+            size="sm"
             onClick={() => {
               try {
                 transport.requestLeadership();
               } catch {}
             }}
-            className="px-2 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black font-medium transition-colors"
+            className="h-[30px] px-2 text-sm"
           >
             Play here
-          </button>
+          </RcButton>
         </div>
       )}
       {appToast && appToast.kind === "text" && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[3000] text-xl px-6 py-3 rounded-lg shadow-lg font-medium animate-fade-in bg-black/90 text-white ring-2 ring-white/30">
+        <div className="rc-toast fixed bottom-24 left-1/2 -translate-x-1/2 z-[3000] text-xl px-6 py-3 rounded-rc-lg font-medium animate-fade-in text-rc-fg-strong">
           {renderColoredText(appToast.message)}
         </div>
       )}
       {appToast && appToast.kind === "resource-warning" && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[3000] px-5 py-3 rounded-lg shadow-lg animate-fade-in bg-black/90 text-white ring-2 ring-white/30 flex items-center gap-3">
-          <span className="font-fantaisie text-lg text-amber-300">
+        <div
+          className="rc-toast fixed bottom-24 left-1/2 -translate-x-1/2 z-[3000] px-5 py-3 rounded-rc-lg animate-fade-in text-rc-fg flex items-center gap-3"
+          data-tone="warning"
+        >
+          <span className="font-rc-display text-lg text-rc-accent-link">
             {appToast.cardName}
           </span>
           <span className="flex items-center gap-2 text-sm">
-            <span className="text-red-400">missing</span>
+            <span className="text-rc-danger">missing</span>
             {appToast.manaCost !== null && appToast.availableMana !== null && (
-              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-700 border border-gray-500 font-fantaisie text-white font-bold">
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-black/45 border border-rc-line/35 font-rc-display text-rc-fg-strong font-bold">
                 {appToast.manaCost - appToast.availableMana}
               </span>
             )}

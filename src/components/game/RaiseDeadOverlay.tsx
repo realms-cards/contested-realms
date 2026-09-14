@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import { RcButton } from "@/components/ui/rc-button";
+import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 
 export default function RaiseDeadOverlay() {
@@ -28,9 +30,11 @@ export default function RaiseDeadOverlay() {
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-green-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
-          <span className="text-green-400 font-fantaisie">💀 Raise Dead</span>
-          <span className="opacity-80">
+        <div className="pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg md:text-xl flex items-center gap-3 select-none">
+          <span className="font-rc-display text-rc-accent-link">
+            Raise Dead
+          </span>
+          <span className="text-rc-fg-muted">
             {phase === "confirming" &&
               isCaster &&
               "Summon a random dead minion?"}
@@ -47,14 +51,14 @@ export default function RaiseDeadOverlay() {
 
       {/* Confirmation dialog - visible to caster */}
       {phase === "confirming" && isCaster && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-6 max-w-md w-full mx-4 ring-1 ring-green-500/30">
-            <h2 className="text-2xl font-fantaisie text-green-400 mb-4 text-center">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-md w-full mx-4 font-rc-sans text-rc-fg shadow-rc-panel">
+            <h2 className="mb-4 text-center font-rc-display text-[26px] leading-tight text-rc-fg-strong">
               Raise Dead
             </h2>
-            <p className="text-gray-300 text-center mb-4">
+            <p className="text-rc-fg-muted text-center mb-4">
               Found{" "}
-              <span className="text-green-400 font-bold">
+              <span className="font-rc-mono tabular-nums text-rc-accent-link font-bold">
                 {eligibleMinions.length}
               </span>{" "}
               dead minion(s):
@@ -63,42 +67,38 @@ export default function RaiseDeadOverlay() {
             {/* Show breakdown by graveyard */}
             <div className="flex justify-center gap-6 mb-4 text-sm">
               {p1Count > 0 && (
-                <div className="text-blue-400">
+                <div style={{ color: PLAYER_COLORS.p1 }}>
                   P1&apos;s graveyard:{" "}
-                  <span className="font-bold">{p1Count}</span>
+                  <span className="font-rc-mono tabular-nums font-bold">
+                    {p1Count}
+                  </span>
                 </div>
               )}
               {p2Count > 0 && (
-                <div className="text-red-400">
+                <div style={{ color: PLAYER_COLORS.p2 }}>
                   P2&apos;s graveyard:{" "}
-                  <span className="font-bold">{p2Count}</span>
+                  <span className="font-rc-mono tabular-nums font-bold">
+                    {p2Count}
+                  </span>
                 </div>
               )}
             </div>
 
-            <p className="text-gray-400 text-center mb-6 text-sm">
+            <p className="text-rc-fg-muted text-center mb-6 text-sm">
               Auto-resolve will pick a{" "}
-              <span className="text-yellow-400">random</span> minion from all
-              graveyards and summon it under your control.
+              <span className="text-rc-accent-link">random</span> minion from
+              all graveyards and summon it under your control.
             </p>
 
             {/* Action buttons */}
             <div className="flex gap-4 justify-center">
-              <button
-                onClick={cancel}
-                className="px-6 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white transition-colors"
-              >
+              <RcButton variant="outline" onClick={cancel}>
                 Decline (Manual)
-              </button>
-              <button
-                onClick={resolve}
-                className="px-6 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white font-semibold transition-colors ring-1 ring-green-400/50"
-              >
-                Auto-Resolve
-              </button>
+              </RcButton>
+              <RcButton onClick={resolve}>Auto-Resolve</RcButton>
             </div>
 
-            <p className="text-gray-500 text-xs text-center mt-4">
+            <p className="text-rc-fg-subtle text-xs text-center mt-4">
               Declining keeps the spell on board for manual resolution.
             </p>
           </div>
@@ -108,8 +108,8 @@ export default function RaiseDeadOverlay() {
       {/* Result display for complete phase */}
       {phase === "complete" && selectedMinion && (
         <div className="fixed inset-0 flex items-center justify-center pointer-events-none">
-          <div className="bg-black/90 rounded-xl p-6 ring-1 ring-green-500/50 animate-pulse">
-            <p className="text-xl text-green-400 font-fantaisie text-center">
+          <div className="rounded-rc-lg border border-rc-accent/45 bg-[rgba(9,13,25,0.9)] p-6 font-rc-sans text-rc-fg shadow-rc-panel animate-pulse">
+            <p className="text-center font-rc-display text-[22px] leading-tight text-rc-fg-strong">
               {selectedMinion.name} rises from the{" "}
               {selectedFromSeat === casterSeat ? "your" : "opponent&apos;s"}{" "}
               graveyard!
@@ -121,7 +121,7 @@ export default function RaiseDeadOverlay() {
       {/* Opponent waiting indicator */}
       {phase === "confirming" && !isCaster && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="px-4 py-2 rounded-lg bg-black/90 text-sm text-green-300">
+          <div className="rc-toast">
             {casterSeat.toUpperCase()} is deciding whether to auto-resolve Raise
             Dead...
           </div>

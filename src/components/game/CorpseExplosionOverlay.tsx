@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import { getCellNumber, toCellKey } from "@/lib/game/store/utils/boardHelpers";
 
@@ -105,12 +106,12 @@ export default function CorpseExplosionOverlay() {
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-red-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
-          <span className="text-red-400 font-fantaisie flex items-center gap-1">
+        <div className="pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg md:text-xl flex items-center gap-3 select-none">
+          <span className="font-rc-display text-rc-accent-link flex items-center gap-1">
             <img src="/fire.png" alt="fire" className="w-5 h-5" /> Corpse
             Explosion
           </span>
-          <span className="opacity-80">
+          <span className="text-rc-fg-muted">
             {phase === "selectingArea" &&
               (isCaster
                 ? "Click the upper-left tile of the 2×2 area"
@@ -125,29 +126,34 @@ export default function CorpseExplosionOverlay() {
             {phase === "resolved" && "Resolved — review damage report"}
           </span>
           {isCaster && phase === "selectingArea" && (
-            <button
-              className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1 select-none"
+            <RcButton
+              variant="outline"
+              size="xs"
+              className="mx-1"
               onClick={() => cancelCorpseExplosion()}
             >
               Cancel
-            </button>
+            </RcButton>
           )}
           {phase === "resolved" && (
             <>
               {!reportVisible && (
-                <button
-                  className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1 select-none text-sm"
+                <RcButton
+                  variant="quiet"
+                  size="xs"
+                  className="mx-1"
                   onClick={() => setReportVisible(true)}
                 >
                   Show Report
-                </button>
+                </RcButton>
               )}
-              <button
-                className="mx-1 rounded bg-red-600/80 hover:bg-red-500 px-3 py-1 select-none text-sm"
+              <RcButton
+                size="xs"
+                className="mx-1"
                 onClick={() => dismissCorpseExplosionReport()}
               >
                 Dismiss
-              </button>
+              </RcButton>
             </>
           )}
         </div>
@@ -156,13 +162,13 @@ export default function CorpseExplosionOverlay() {
       {/* Corpse picker panel (right side) - during assigningCorpses phase */}
       {phase === "assigningCorpses" && isCaster && (
         <div className="fixed right-4 top-20 bottom-32 z-[201] pointer-events-auto w-56 flex flex-col">
-          <div className="bg-black/95 rounded-xl ring-1 ring-red-500/30 shadow-lg overflow-hidden flex flex-col max-h-full">
-            <div className="px-4 py-2 border-b border-white/10 text-sm text-white/60">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] font-rc-sans text-rc-fg shadow-rc-panel overflow-hidden flex flex-col max-h-full">
+            <div className="px-4 py-2 border-b border-rc-line/14 text-sm text-rc-fg-subtle">
               Cemetery — Pick a corpse
             </div>
-            <div className="overflow-y-auto flex-1 p-2 space-y-1">
+            <div className="thin-scrollbar overflow-y-auto flex-1 p-2 space-y-1">
               {pending.eligibleCorpses.length === 0 && (
-                <div className="text-white/40 text-xs text-center py-4">
+                <div className="rc-hint text-center py-4">
                   No more corpses available
                 </div>
               )}
@@ -182,18 +188,18 @@ export default function CorpseExplosionOverlay() {
                 return (
                   <button
                     key={`${entry.fromSeat}-${entry.card.instanceId || idx}`}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                    className={`w-full text-left px-3 py-2 rounded-rc-md border text-sm transition-colors ${
                       isSelected
-                        ? "bg-red-600/40 ring-1 ring-red-400 text-white"
-                        : "bg-white/5 hover:bg-white/10 text-white/80"
+                        ? "border-rc-accent bg-rc-accent/12 text-rc-fg-strong shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                        : "border-rc-line/18 bg-black/30 text-rc-fg hover:border-rc-accent/60 hover:bg-rc-accent/8"
                     }`}
                     onClick={() => selectCorpse(entry.card, entry.fromSeat)}
                   >
-                    <div className="font-medium truncate">
+                    <div className="font-rc-display text-rc-fg-strong truncate">
                       {entry.card.name}
                     </div>
-                    <div className="text-xs text-white/50 flex justify-between">
-                      <span>ATK {power}</span>
+                    <div className="text-xs text-rc-fg-subtle flex justify-between">
+                      <span className="font-rc-mono tabular-nums">ATK {power}</span>
                       <span className="uppercase">
                         {entry.fromSeat} cemetery
                       </span>
@@ -210,16 +216,16 @@ export default function CorpseExplosionOverlay() {
       {(phase === "assigningCorpses" || phase === "resolving") &&
         pending.areaCorner && (
           <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-            <div className="pointer-events-auto px-6 py-4 rounded-xl bg-black/95 text-white ring-1 ring-red-500/30 shadow-lg max-w-lg">
-              <div className="text-sm text-white/60 mb-2">Target Area:</div>
-              <div className="text-red-300 text-sm mb-3">
+            <div className="pointer-events-auto px-6 py-4 rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] font-rc-sans text-rc-fg shadow-rc-panel max-w-lg">
+              <div className="text-sm text-rc-fg-subtle mb-2">Target Area:</div>
+              <div className="text-rc-fg-strong text-sm mb-3">
                 {getAffectedCellsDisplay()}
               </div>
 
               {/* Assignment list */}
               {pending.assignments.length > 0 && (
                 <div className="mb-3 space-y-1">
-                  <div className="text-sm text-white/60">
+                  <div className="text-sm text-rc-fg-subtle">
                     Corpses dealt to sites:
                   </div>
                   {pending.assignments.map((a) => {
@@ -228,14 +234,14 @@ export default function CorpseExplosionOverlay() {
                     return (
                       <div
                         key={a.cellKey}
-                        className="flex items-center justify-between text-sm bg-white/5 rounded px-3 py-1"
+                        className="flex items-center justify-between text-sm rounded-rc-md border border-rc-line/12 bg-black/30 px-3 py-1"
                       >
                         <span>
                           {a.corpse.name} (ATK {a.power}) → #{cellNo}
                         </span>
                         {isCaster && phase === "assigningCorpses" && (
                           <button
-                            className="text-red-400 hover:text-red-300 text-xs ml-2"
+                            className="text-rc-danger hover:text-rc-danger-hover transition-colors text-xs ml-2"
                             onClick={() => unassignCorpse(a.cellKey)}
                           >
                             ✕
@@ -249,7 +255,7 @@ export default function CorpseExplosionOverlay() {
 
               {/* Unassigned tiles */}
               {phase === "assigningCorpses" && (
-                <div className="text-xs text-white/40 mb-3">
+                <div className="text-xs text-rc-fg-subtle mb-3">
                   {pending.affectedCells.filter(
                     (c) => !getAssignmentForCell(c),
                   ).length > 0
@@ -260,35 +266,33 @@ export default function CorpseExplosionOverlay() {
 
               {phase === "assigningCorpses" && isCaster && (
                 <div className="flex gap-2 mt-2">
-                  <button
-                    className={`flex-1 py-2 rounded-lg font-medium transition-colors ${
-                      pending.assignments.length > 0
-                        ? "bg-red-600 hover:bg-red-500 text-white"
-                        : "bg-white/10 text-white/30 cursor-not-allowed"
-                    }`}
+                  <RcButton
+                    className="flex-1 h-auto py-2 whitespace-normal"
                     disabled={pending.assignments.length === 0}
                     onClick={() => resolveCorpseExplosion()}
                   >
                     Resolve ({pending.assignments.length} corpse
                     {pending.assignments.length !== 1 ? "s" : ""})
-                  </button>
-                  <button
-                    className="px-4 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
+                  </RcButton>
+                  <RcButton
+                    variant="outline"
+                    className="h-auto py-2 whitespace-normal"
                     onClick={() => repickCorpseExplosionArea()}
                   >
                     Re-pick area
-                  </button>
-                  <button
-                    className="px-4 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
+                  </RcButton>
+                  <RcButton
+                    variant="outline"
+                    className="h-auto py-2 whitespace-normal"
                     onClick={() => cancelCorpseExplosion()}
                   >
                     Cancel
-                  </button>
+                  </RcButton>
                 </div>
               )}
 
               {phase === "resolving" && (
-                <div className="text-center text-red-400 animate-pulse">
+                <div className="text-center text-rc-accent-link animate-pulse">
                   Dealing damage and banishing corpses...
                 </div>
               )}
@@ -299,19 +303,21 @@ export default function CorpseExplosionOverlay() {
       {/* Resolution damage report — hidable, non-obscuring */}
       {phase === "resolved" && pending.resolvedReport && reportVisible && (
         <div className="fixed left-4 top-20 z-[201] pointer-events-auto max-w-sm">
-          <div className="bg-black/90 rounded-xl ring-1 ring-red-500/40 shadow-lg overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2 border-b border-white/10">
-              <span className="text-sm text-red-300 font-medium">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] font-rc-sans text-rc-fg shadow-rc-panel overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-rc-line/14">
+              <span className="rc-eyebrow">
                 Damage Report
               </span>
-              <button
-                className="text-white/40 hover:text-white/70 text-xs px-2"
+              <RcButton
+                variant="ghost"
+                size="xs"
+                className="h-6 px-2"
                 onClick={() => setReportVisible(false)}
               >
                 Hide
-              </button>
+              </RcButton>
             </div>
-            <div className="p-3 space-y-2 max-h-64 overflow-y-auto">
+            <div className="thin-scrollbar p-3 space-y-2 max-h-64 overflow-y-auto">
               {pending.resolvedReport.map((entry) => {
                 const [cx, cy] = entry.cellKey.split(",").map(Number);
                 const cellNo = getCellNumber(cx, cy, board.size.w, board.size.h);
@@ -319,14 +325,14 @@ export default function CorpseExplosionOverlay() {
                 return (
                   <div
                     key={entry.cellKey}
-                    className="bg-white/5 rounded-lg px-3 py-2"
+                    className="rounded-rc-md border border-rc-line/12 bg-black/30 px-3 py-2"
                   >
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-red-300">
+                      <span className="text-rc-fg-strong">
                         #{cellNo}
                         {site?.card?.name ? ` (${site.card.name})` : ""}
                       </span>
-                      <span className="text-white/50 text-xs">
+                      <span className="text-rc-fg-subtle text-xs">
                         {entry.corpseName} — ATK {entry.power}
                       </span>
                     </div>
@@ -337,22 +343,22 @@ export default function CorpseExplosionOverlay() {
                             key={i}
                             className="text-xs flex items-center gap-1"
                           >
-                            <span className="text-orange-400">
+                            <span className="font-rc-mono tabular-nums text-rc-danger">
                               {u.damageTaken} dmg
                             </span>
-                            <span className="text-white/60">→ {u.name}</span>
+                            <span className="text-rc-fg-subtle">→ {u.name}</span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="text-xs text-white/30 mt-1">
+                      <div className="text-xs text-rc-fg-dim mt-1">
                         No units at this tile
                       </div>
                     )}
                   </div>
                 );
               })}
-              <div className="text-xs text-white/40 text-center pt-1">
+              <div className="text-xs text-rc-fg-subtle text-center pt-1">
                 All assigned corpses have been banished.
               </div>
             </div>

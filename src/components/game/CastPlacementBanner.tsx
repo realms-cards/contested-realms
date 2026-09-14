@@ -1,5 +1,6 @@
 "use client";
 
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 
 export default function CastPlacementBanner() {
@@ -20,12 +21,14 @@ export default function CastPlacementBanner() {
 
   return (
     <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40 pointer-events-auto">
-      <div className="flex items-center gap-3 bg-zinc-900/90 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-lg px-5 py-3 text-white">
-        <span className="text-sm">
-          {isSite ? "Playing" : "Casting"} <strong>{cardName}</strong>{modeLabel} — click a tile to place
+      <div className="rc-toast flex items-center gap-3 rounded-rc-lg px-5 py-3" data-tone="info">
+        <span className="font-rc-sans text-sm text-rc-fg">
+          {isSite ? "Playing" : "Casting"} <strong className="font-rc-display font-normal text-rc-fg-strong">{cardName}</strong>{modeLabel} — click a tile to place
         </span>
-        <button
-          className="rounded bg-red-900/50 hover:bg-red-900/70 px-3 py-1 text-sm font-medium transition-colors"
+        <RcButton
+          variant="quiet"
+          size="sm"
+          className="h-[30px] px-3 text-sm"
           onClick={() => {
             clearSelection();
             setCastSubsurface(false);
@@ -33,7 +36,7 @@ export default function CastPlacementBanner() {
           }}
         >
           Cancel
-        </button>
+        </RcButton>
       </div>
     </div>
   );

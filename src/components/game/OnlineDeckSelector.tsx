@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useOnline } from "@/app/online/online-context";
 import GoldfishCoverage from "@/components/game/GoldfishCoverage";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { RcButton } from "@/components/ui/rc-button";
 import { readGoldfishDeck, saveGoldfishDeck, type GoldfishDeckSnapshot } from "@/lib/game/cpu/goldfishTesting";
 import { betaPrecons } from "@/lib/game/cpu/precons";
 import type { DeckLoadPayload } from "@/lib/game/deckLoader";
@@ -283,33 +284,33 @@ export default function OnlineDeckSelector({
   if (goldfishTesting && review) return <GoldfishCoverage snapshot={review} busy={isLoading} error={deckError} onConfirm={confirmReview} onBack={() => {setReview(null);setDeckError(null);}} />;
 
   return (
-    <div className="w-full max-w-2xl bg-zinc-900/80 text-white rounded-2xl ring-1 ring-white/10 p-6">
+    <div className="w-full max-w-2xl rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-rc-fg shadow-rc-panel">
       <div className="mb-6 text-center">
-        <h2 className="text-xl font-semibold mb-2">
+        <h2 className="m-0 font-rc-display text-[28px] leading-none text-rc-fg-strong">
           {isPrecon ? "Select a Precon Deck" : "Select Your Deck"}
         </h2>
-        <p className="text-sm opacity-80">
+        <p className="mt-2 font-rc-sans text-sm text-rc-fg-muted">
           Playing as:{" "}
-          <span className="font-medium text-blue-400">
+          <span className="font-rc-mono font-medium text-rc-info">
             {playerNames[myPlayerKey]}
           </span>
         </p>
       </div>
 
       <div className="space-y-4">
-        {goldfishTesting && lastTest && <div className="rounded border border-amber-700/40 p-3 space-y-2">
-          <p className="text-sm">Previous test: {lastTest.name}. Reuse the saved list with a fresh shuffle, even if the original deck has changed.</p>
-          <button disabled={isLoading} onClick={() => {setDeckError(null);setReview(lastTest);}} className="rounded bg-indigo-600 px-4 py-2">Reuse previous test deck</button>
+        {goldfishTesting && lastTest && <div className="space-y-2 rounded-rc-md border border-rc-accent/35 bg-black/30 p-3">
+          <p className="font-rc-sans text-sm text-rc-fg-muted">Previous test: <span className="text-rc-fg-strong">{lastTest.name}</span>. Reuse the saved list with a fresh shuffle, even if the original deck has changed.</p>
+          <RcButton variant="outline" size="sm" disabled={isLoading} onClick={() => {setDeckError(null);setReview(lastTest);}}>Reuse previous test deck</RcButton>
         </div>}
         {/* Guests: load a list on the fly (nothing is saved) */}
         {isGuest && !isPrecon && (
-          <div className="bg-zinc-900/60 ring-1 ring-zinc-700 rounded p-3 space-y-2">
-            <div className="text-sm font-medium">
+          <div className="space-y-2 rounded-rc-md border border-rc-line/12 bg-black/30 p-3">
+            <div className="font-rc-sans text-sm font-medium text-rc-fg-strong">
               Load a deck from sorcerytcg.com or Four Cores
             </div>
             <div className="flex gap-2">
               <input
-                className="flex-1 min-w-0 bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
+                className="rc-input h-9 min-w-0 flex-1"
                 placeholder="https://sorcerytcg.com/decks/..."
                 value={guestUrl}
                 onChange={(e) => setGuestUrl(e.target.value)}
@@ -318,16 +319,16 @@ export default function OnlineDeckSelector({
                 }}
                 disabled={isLoading}
               />
-              <button
-                type="button"
-                className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 shrink-0"
+              <RcButton
+                variant="outline"
+                className="h-9 shrink-0"
                 onClick={prepareGuestDeck}
                 disabled={!guestUrl.trim() || isLoading}
               >
                 {isLoading ? "Loading..." : "Load & Play"}
-              </button>
+              </RcButton>
             </div>
-            <p className="text-xs opacity-60">
+            <p className="rc-hint leading-relaxed">
               Playing as a guest: the list is used for this match only. Sign
               in to keep decks in your collection.
             </p>
@@ -336,20 +337,20 @@ export default function OnlineDeckSelector({
 
         {/* Deck URL import inline panel - hidden for precon matches and guests */}
         {curiosaEnabled && !isPrecon && !isGuest && (
-          <div className="bg-zinc-900/60 ring-1 ring-zinc-700 rounded p-3 space-y-2">
-            <div className="text-sm font-medium">
+          <div className="space-y-2 rounded-rc-md border border-rc-line/12 bg-black/30 p-3">
+            <div className="font-rc-sans text-sm font-medium text-rc-fg-strong">
               Import from Sorcerytcg or Four Cores
             </div>
             <div className="grid gap-2 sm:grid-cols-5">
               <input
-                className="sm:col-span-3 w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
+                className="rc-input h-9 w-full sm:col-span-3"
                 placeholder="Sorcerytcg or Four Cores deck URL"
                 value={impUrl}
                 onChange={(e) => setImpUrl(e.target.value)}
                 disabled={impLoading || isLoading}
               />
               <input
-                className="sm:col-span-2 w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-white"
+                className="rc-input h-9 w-full sm:col-span-2"
                 placeholder="Optional name"
                 value={impName}
                 onChange={(e) => setImpName(e.target.value)}
@@ -357,38 +358,37 @@ export default function OnlineDeckSelector({
               />
             </div>
             {impError && (
-              <div className="text-red-400 text-xs bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">
+              <div className="rc-alert" data-tone="danger">
                 {impError}
               </div>
             )}
             <div className="flex gap-2">
-              <button
-                type="button"
-                className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+              <RcButton
+                variant="outline"
+                className="h-9"
                 onClick={importFromCuriosa}
                 disabled={!impUrl.trim() || impLoading || isLoading}
               >
                 {impLoading ? "Importing..." : "Import"}
-              </button>
+              </RcButton>
             </div>
           </div>
         )}
 
         <div>
-          <label className="block text-sm font-medium mb-2">
+          <label className="rc-field-label mb-2">
             {isGuest && !isPrecon ? "Or choose a precon deck" : "Choose Deck"}
           </label>
           {/* Hide deck options for precon mode - only precon decks available.
               Guests only ever see precons, so the toggle is pointless for them. */}
           {!isPrecon && !isGuest && (
-            <div className="flex items-center justify-between mb-2 text-xs">
-              <span className="opacity-60">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <span className="rc-hint">
                 Your own decks are always shown.
               </span>
-              <label className="flex items-center gap-2">
+              <label className="rc-check">
                 <input
                   type="checkbox"
-                  className="rounded"
                   checked={includePublic}
                   onChange={(e) => {
                     const next = e.target.checked;
@@ -406,7 +406,7 @@ export default function OnlineDeckSelector({
             </div>
           )}
           {!decksLoaded ? (
-            <div className="w-full bg-zinc-800/80 ring-1 ring-zinc-700 rounded px-3 py-2 text-gray-400">
+            <div className="rc-hint w-full rounded-rc-md border border-rc-line/12 bg-black/45 px-3 py-2">
               Loading decks...
             </div>
           ) : isPrecon ? (
@@ -447,14 +447,14 @@ export default function OnlineDeckSelector({
         </div>
 
         {deckError && (
-          <div className="text-red-400 text-sm bg-red-900/20 rounded px-3 py-2 ring-1 ring-red-800">
+          <div className="rc-alert" data-tone="danger">
             {deckError}
           </div>
         )}
 
         {/* Warning for precon decks in constructed mode (not for precon matches) */}
         {isConstructed && !isPrecon && isPreconSelected && (
-          <div className="mt-2 text-amber-300 text-xs bg-amber-900/20 rounded px-3 py-2 ring-1 ring-amber-800">
+          <div className="rc-alert" data-tone="warning">
             You selected a Precon deck. These lists are for learning the game
             and are not competitive constructed-legal.
           </div>
@@ -462,22 +462,23 @@ export default function OnlineDeckSelector({
 
         {/* Helpful info for precon matches */}
         {isPrecon && (
-          <div className="mt-2 text-blue-300 text-xs bg-blue-900/20 rounded px-3 py-2 ring-1 ring-blue-800">
+          <div className="rc-alert">
             Precon Match: Both players use prebuilt element decks. Great for
             learning the game!
           </div>
         )}
 
-        <button
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded px-4 py-2 font-medium transition-colors"
+        <RcButton
+          size="lg"
+          className="w-full"
           onClick={prepareMyDeck}
           disabled={!selectedDeck || isLoading}
         >
           {isLoading ? "Loading Deck..." : "Ready to Play"}
-        </button>
+        </RcButton>
       </div>
 
-      <div className="mt-6 text-xs opacity-60 text-center">
+      <div className="rc-hint mt-6 text-center">
         Waiting for other players to select their decks...
       </div>
     </div>

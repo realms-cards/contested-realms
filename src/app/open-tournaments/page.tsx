@@ -170,7 +170,7 @@ export default function OpenTournamentsPage() {
         <RcEmpty
           title="No open events found."
           action={
-            <RcButton onClick={() => setShowCreate(true)}>
+            <RcButton variant="outline" onClick={() => setShowCreate(true)}>
               Create Open Event
             </RcButton>
           }

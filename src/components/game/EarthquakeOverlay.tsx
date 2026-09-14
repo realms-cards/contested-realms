@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import { getCellNumber, toCellKey } from "@/lib/game/store/utils/boardHelpers";
 import type { GameTransport } from "@/lib/net/transport";
@@ -137,11 +138,11 @@ export default function EarthquakeOverlay({
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-amber-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
-          <span className="text-amber-400 font-fantaisie flex items-center gap-1">
+        <div className="pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg md:text-xl flex items-center gap-3 select-none">
+          <span className="font-rc-display text-rc-accent-link flex items-center gap-1">
             <img src="/earth.png" alt="earth" className="w-5 h-5" /> Earthquake
           </span>
-          <span className="opacity-80">
+          <span className="text-rc-fg-muted">
             {phase === "selectingArea" &&
               (isCaster
                 ? "Click the upper-left tile of the 2×2 area"
@@ -153,12 +154,14 @@ export default function EarthquakeOverlay({
             {phase === "resolving" && "Resolving..."}
           </span>
           {isCaster && phase === "selectingArea" && (
-            <button
-              className="mx-1 rounded bg-white/15 hover:bg-white/25 px-3 py-1 select-none"
+            <RcButton
+              variant="outline"
+              size="xs"
+              className="mx-1"
               onClick={() => cancelEarthquake()}
             >
               Cancel
-            </button>
+            </RcButton>
           )}
         </div>
       </div>
@@ -167,22 +170,22 @@ export default function EarthquakeOverlay({
       {(phase === "rearranging" || phase === "resolving") &&
         pending.areaCorner && (
           <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-            <div className="pointer-events-auto px-6 py-4 rounded-xl bg-black/95 text-white ring-1 ring-amber-500/30 shadow-lg max-w-md">
-              <div className="text-sm text-white/60 mb-2">Affected Area:</div>
-              <div className="text-amber-300 text-sm mb-3">
+            <div className="pointer-events-auto px-6 py-4 rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] font-rc-sans text-rc-fg shadow-rc-panel max-w-md">
+              <div className="text-sm text-rc-fg-subtle mb-2">Affected Area:</div>
+              <div className="text-rc-accent-link text-sm mb-3">
                 {getAffectedCellsDisplay()}
               </div>
 
               {phase === "rearranging" && (
                 <>
-                  <div className="text-sm text-white/60 mb-2">
+                  <div className="text-sm text-rc-fg-subtle mb-2">
                     Swaps performed: {pending.swaps.length}
                   </div>
 
                   {switchSiteSource && (
-                    <div className="text-cyan-400 text-sm mb-3">
+                    <div className="text-rc-accent-link text-sm mb-3">
                       Selected:{" "}
-                      <span className="font-medium">
+                      <span className="font-medium font-rc-mono tabular-nums">
                         #
                         {getCellNumber(
                           switchSiteSource.x,
@@ -197,31 +200,33 @@ export default function EarthquakeOverlay({
 
                   {isCaster && (
                     <div className="flex gap-2 mt-4">
-                      <button
-                        className="flex-1 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-medium transition-colors"
+                      <RcButton
+                        className="flex-1 h-auto py-2 whitespace-normal"
                         onClick={() => resolveEarthquake()}
                       >
                         Resolve & Burrow
-                      </button>
-                      <button
-                        className="px-4 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
+                      </RcButton>
+                      <RcButton
+                        variant="outline"
+                        className="h-auto py-2 whitespace-normal"
                         onClick={() => repickEarthquakeArea()}
                       >
                         Re-pick area
-                      </button>
-                      <button
-                        className="px-4 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors"
+                      </RcButton>
+                      <RcButton
+                        variant="outline"
+                        className="h-auto py-2 whitespace-normal"
                         onClick={() => cancelEarthquake()}
                       >
                         Cancel
-                      </button>
+                      </RcButton>
                     </div>
                   )}
                 </>
               )}
 
               {phase === "resolving" && (
-                <div className="text-center text-amber-400 animate-pulse">
+                <div className="text-center text-rc-accent-link animate-pulse">
                   Burrowing all minions and artifacts...
                 </div>
               )}

@@ -1,11 +1,14 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   CardScannerView,
   type ScannerSet,
 } from "@/components/scanner/CardScannerView";
+import { Badge } from "@/components/ui/badge";
+import { RcButton } from "@/components/ui/rc-button";
 import type { ScanResult } from "@/lib/scanner/card-scanner";
 
 interface ScannedCard {
@@ -178,25 +181,25 @@ export default function ListScanPage() {
   // Summary view after scanning
   if (showSummary) {
     return (
-      <div className="min-h-screen bg-gray-900 p-6">
+      <div className="rc-app min-h-screen p-6">
         <div className="max-w-2xl mx-auto">
-          <h1 className="text-2xl font-bold mb-2">Scan Complete</h1>
-          <p className="text-gray-400 mb-6">
+          <h1 className="mb-2 font-rc-display text-[28px] leading-none text-rc-fg-strong">Scan Complete</h1>
+          <p className="font-rc-sans text-sm text-rc-fg-muted mb-6">
             Added {successCount} cards to &quot;{listName}&quot;
           </p>
 
           {/* Scanned cards list */}
-          <div className="bg-gray-800 rounded-lg divide-y divide-gray-700 mb-6">
+          <div className="rc-panel divide-y divide-rc-line/12 mb-6">
             {scannedCards.map((card, i) => (
               <div key={i} className="flex items-center justify-between p-3">
-                <span className={card.error ? "text-red-400" : "text-white"}>
+                <span className={card.error ? "font-rc-display text-rc-danger-ink" : "font-rc-display text-rc-fg"}>
                   {card.name}
                 </span>
                 {card.addedToList && (
-                  <span className="text-green-400 text-sm">✓ In list</span>
+                  <span className="font-rc-mono text-sm text-rc-success">✓ In list</span>
                 )}
                 {card.error && (
-                  <span className="text-red-400 text-sm">{card.error}</span>
+                  <span className="font-rc-mono text-sm text-rc-danger-ink">{card.error}</span>
                 )}
               </div>
             ))}
@@ -205,28 +208,33 @@ export default function ListScanPage() {
           {/* Actions */}
           <div className="flex flex-col gap-3">
             {successCount > 0 && (
-              <button
+              <RcButton
+                size="lg"
                 onClick={handleAddAllToCollection}
                 disabled={addingToCollection}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg font-medium transition-colors"
+                className="w-full"
               >
                 {addingToCollection
                   ? "Adding..."
                   : `Add All ${successCount} Cards to Collection`}
-              </button>
+              </RcButton>
             )}
-            <button
+            <RcButton
+              size="lg"
+              variant="outline"
               onClick={() => router.push(`/collection/lists/${listId}`)}
-              className="w-full py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
+              className="w-full"
             >
               Back to List
-            </button>
-            <button
+            </RcButton>
+            <RcButton
+              size="lg"
+              variant="ghost"
               onClick={() => setShowSummary(false)}
-              className="w-full py-3 bg-gray-800 hover:bg-gray-700 rounded-lg font-medium transition-colors"
+              className="w-full"
             >
               Continue Scanning
-            </button>
+            </RcButton>
           </div>
         </div>
       </div>
@@ -242,27 +250,28 @@ export default function ListScanPage() {
       />
 
       {/* List name badge */}
-      <div className="fixed top-4 left-16 bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-medium z-50">
-        📋 {listName}
+      <div className="fixed top-4 left-16 rounded-full border border-rc-accent/35 bg-[rgba(7,10,20,0.92)] text-rc-accent-link px-3 py-1 font-rc-sans text-sm font-medium z-50">
+        {listName}
       </div>
 
       {/* Scanned cards counter */}
       {scannedCards.length > 0 && (
         <div className="fixed top-4 right-16 flex items-center gap-2 z-50">
           {successCount > 0 && (
-            <div className="bg-green-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+            <Badge tone="ok" className="bg-[rgba(7,10,20,0.92)] tabular-nums">
               ✓ {successCount} in list
-            </div>
+            </Badge>
           )}
           {pendingCount > 0 && (
-            <div className="bg-cyan-600 text-white px-3 py-1 rounded-full text-sm font-medium animate-pulse">
-              ⏳ {pendingCount}
-            </div>
+            <Badge tone="info" className="bg-[rgba(7,10,20,0.92)] tabular-nums animate-pulse">
+              <Icon icon="game-icons:sands-of-time" width={12} height={12} />
+              {pendingCount}
+            </Badge>
           )}
           {errorCount > 0 && (
-            <div className="bg-red-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+            <Badge tone="danger" className="bg-[rgba(7,10,20,0.92)] tabular-nums">
               ✗ {errorCount}
-            </div>
+            </Badge>
           )}
         </div>
       )}

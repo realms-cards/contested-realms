@@ -74,8 +74,7 @@ export default function PracticeMatchControls({
           </RcButton>
         )}
         <RcButton
-          variant="outline"
-          className="text-rc-danger hover:text-rc-danger-hover"
+          variant="danger-soft"
           onClick={end}
           disabled={ending}
           aria-busy={ending}

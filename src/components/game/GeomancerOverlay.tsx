@@ -3,6 +3,7 @@
 import Image from "next/image";
 import React, { useMemo, useState } from "react";
 import CardPreview from "@/components/game/CardPreview";
+import { RcButton } from "@/components/ui/rc-button";
 import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import { useGameStore } from "@/lib/game/store";
 import { getImageSlug } from "@/lib/utils/cardSlug";
@@ -47,25 +48,27 @@ export default function GeomancerOverlay() {
     return (
       <div className="fixed left-4 bottom-28 z-[201] pointer-events-auto">
         <div
-          className="rounded-xl bg-black/85 backdrop-blur-sm ring-1 ring-amber-500/60 shadow-2xl overflow-hidden"
+          className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] backdrop-blur-sm font-rc-sans text-rc-fg shadow-rc-panel overflow-hidden"
           style={{ width: 207 }}
         >
           <div className="px-3 py-2 flex flex-col gap-1">
-            <div className="text-amber-400 font-medium text-sm">
+            <div className="font-rc-display text-rc-accent-link text-sm">
               Geomancer — Fill Void
             </div>
-            <div className="text-gray-400 text-[11px] leading-tight">
+            <div className="text-rc-fg-muted text-[11px] leading-tight">
               {isOwner
                 ? "Click a highlighted tile to place Rubble"
                 : `${ownerSeat.toUpperCase()} is filling a void with Rubble\u2026`}
             </div>
             {isOwner && (
-              <button
+              <RcButton
+                variant="outline"
+                size="xs"
                 onClick={cancelFill}
-                className="mt-1 w-full px-2 py-1 rounded-lg bg-gray-700/60 hover:bg-gray-600/60 text-gray-300 text-xs font-medium transition-colors"
+                className="mt-1 w-full h-6 px-2"
               >
                 Cancel
-              </button>
+              </RcButton>
             )}
           </div>
         </div>
@@ -89,7 +92,7 @@ export default function GeomancerOverlay() {
 
       <div className="fixed left-4 bottom-28 z-[201] pointer-events-auto">
         <div
-          className="rounded-xl bg-black/85 backdrop-blur-sm ring-1 ring-amber-500/60 shadow-2xl overflow-hidden"
+          className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] backdrop-blur-sm font-rc-sans text-rc-fg shadow-rc-panel overflow-hidden"
           style={{ width: 207 }}
         >
           {/* Card image — landscape preview (sites are stored portrait, rotated 90°) */}
@@ -108,8 +111,8 @@ export default function GeomancerOverlay() {
                 unoptimized
               />
             ) : (
-              <div className="w-full h-full bg-amber-900/30 flex items-center justify-center">
-                <span className="text-amber-400 font-medium text-sm text-center px-3">
+              <div className="w-full h-full bg-black/30 flex items-center justify-center">
+                <span className="font-rc-display text-rc-fg text-sm text-center px-3">
                   {topSite?.name || "Unknown"}
                 </span>
               </div>
@@ -118,21 +121,23 @@ export default function GeomancerOverlay() {
 
           {/* Info strip */}
           <div className="px-3 py-2 flex flex-col gap-1">
-            <div className="text-amber-400 font-medium text-sm truncate">
+            <div className="font-rc-display text-rc-accent-link text-sm truncate">
               {topSite?.name || "Unknown"}
             </div>
-            <div className="text-gray-400 text-[11px] leading-tight">
+            <div className="text-rc-fg-muted text-[11px] leading-tight">
               {isOwner
                 ? "Click a highlighted Rubble tile"
                 : `${ownerSeat.toUpperCase()} is replacing Rubble\u2026`}
             </div>
             {isOwner && (
-              <button
+              <RcButton
+                variant="outline"
+                size="xs"
                 onClick={cancel}
-                className="mt-1 w-full px-2 py-1 rounded-lg bg-gray-700/60 hover:bg-gray-600/60 text-gray-300 text-xs font-medium transition-colors"
+                className="mt-1 w-full h-6 px-2"
               >
                 Cancel
-              </button>
+              </RcButton>
             )}
           </div>
         </div>

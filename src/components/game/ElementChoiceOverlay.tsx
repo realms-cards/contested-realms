@@ -54,9 +54,9 @@ export function ElementChoiceOverlay() {
   // If we're not the chooser, show a waiting message
   if (!isChooser) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
-        <div className="flex flex-col items-center gap-4">
-          <p className="text-gray-400 text-sm">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.9)]">
+        <div className="flex flex-col items-center gap-4 font-rc-sans">
+          <p className="text-rc-fg-muted text-sm">
             Opponent is choosing an element...
           </p>
           <div className="flex gap-3">
@@ -72,9 +72,9 @@ export function ElementChoiceOverlay() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
-      <div className="flex flex-col items-center gap-6">
-        <p className="text-gray-400 text-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.9)]">
+      <div className="flex flex-col items-center gap-6 font-rc-sans">
+        <p className="text-rc-fg-muted text-sm">
           Choose threshold for {pending.siteName}
         </p>
 
@@ -83,7 +83,7 @@ export function ElementChoiceOverlay() {
             <button
               key={el.key}
               onClick={() => handleChoice(el.key)}
-              className="w-16 h-16 hover:scale-125 transition-transform focus:outline-none focus:ring-2 focus:ring-white/50 rounded"
+              className="w-16 h-16 hover:scale-125 transition-transform focus:outline-none focus:ring-2 focus:ring-rc-accent-ring rounded-rc-sm"
               title={el.key.charAt(0).toUpperCase() + el.key.slice(1)}
             >
               <img src={el.icon} alt={el.key} className="w-full h-full" />
@@ -91,7 +91,7 @@ export function ElementChoiceOverlay() {
           ))}
         </div>
 
-        <p className="text-gray-600 text-xs">Press Esc to cancel</p>
+        <p className="text-rc-fg-subtle text-xs">Press Esc to cancel</p>
       </div>
     </div>
   );

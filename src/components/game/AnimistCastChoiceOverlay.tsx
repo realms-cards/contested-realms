@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useCallback } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import type { AnimistCastMode } from "@/lib/game/store/types";
 
@@ -46,17 +47,17 @@ export function AnimistCastChoiceOverlay() {
   // If we're not the caster, show a waiting message
   if (!isCaster) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
-        <div className="flex flex-col items-center gap-4">
-          <p className="text-gray-400 text-sm">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.9)]">
+        <div className="flex flex-col items-center gap-4 font-rc-sans">
+          <p className="text-rc-fg-muted text-sm">
             Opponent is choosing how to cast {pending.card.name}...
           </p>
           <div className="flex gap-4">
-            <div className="px-6 py-3 bg-gray-700/50 rounded-lg opacity-50 animate-pulse">
-              <span className="text-gray-400">Magic</span>
+            <div className="px-6 py-3 rounded-rc-md border border-rc-line/12 bg-black/30 opacity-50 animate-pulse">
+              <span className="text-rc-fg-muted">Magic</span>
             </div>
-            <div className="px-6 py-3 bg-gray-700/50 rounded-lg opacity-50 animate-pulse">
-              <span className="text-gray-400">Spirit</span>
+            <div className="px-6 py-3 rounded-rc-md border border-rc-line/12 bg-black/30 opacity-50 animate-pulse">
+              <span className="text-rc-fg-muted">Spirit</span>
             </div>
           </div>
         </div>
@@ -65,15 +66,15 @@ export function AnimistCastChoiceOverlay() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
-      <div className="flex flex-col items-center gap-6 max-w-md text-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(6,10,20,0.9)]">
+      <div className="flex flex-col items-center gap-6 max-w-md text-center font-rc-sans text-rc-fg">
         <div className="flex flex-col gap-2">
-          <h2 className="text-xl font-bold text-emerald-400">
+          <h2 className="font-rc-display text-[22px] leading-tight text-rc-fg-strong">
             Animist&apos;s Gift
           </h2>
-          <p className="text-gray-300">
+          <p className="text-rc-fg-muted">
             How would you like to cast{" "}
-            <span className="text-amber-400 font-semibold">
+            <span className="font-rc-display text-rc-accent-link">
               {pending.card.name}
             </span>
             ?
@@ -84,10 +85,10 @@ export function AnimistCastChoiceOverlay() {
           {/* Cast as Magic */}
           <button
             onClick={() => handleChoice("magic")}
-            className="flex flex-col items-center gap-3 px-8 py-6 bg-purple-900/60 hover:bg-purple-800/80 border border-purple-500/50 hover:border-purple-400 rounded-xl transition-all hover:scale-105 focus:outline-none focus:ring-2 focus:ring-purple-400"
+            className="flex flex-col items-center gap-3 px-8 py-6 rounded-rc-md border border-rc-line/18 bg-black/30 hover:border-rc-accent/60 hover:bg-rc-accent/8 transition-all hover:scale-105 focus:outline-none focus:ring-2 focus:ring-rc-accent-ring"
           >
-            <span className="text-lg font-semibold text-purple-200">Magic</span>
-            <span className="text-xs text-purple-400">
+            <span className="text-lg font-medium text-rc-fg-strong">Magic</span>
+            <span className="text-xs text-rc-fg-muted">
               Cast normally as a spell
             </span>
           </button>
@@ -95,28 +96,25 @@ export function AnimistCastChoiceOverlay() {
           {/* Cast as Spirit */}
           <button
             onClick={() => handleChoice("spirit")}
-            className="flex flex-col items-center gap-3 px-8 py-6 bg-emerald-900/60 hover:bg-emerald-800/80 border border-emerald-500/50 hover:border-emerald-400 rounded-xl transition-all hover:scale-105 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            className="flex flex-col items-center gap-3 px-8 py-6 rounded-rc-md border border-rc-line/18 bg-black/30 hover:border-rc-accent/60 hover:bg-rc-accent/8 transition-all hover:scale-105 focus:outline-none focus:ring-2 focus:ring-rc-accent-ring"
           >
-            <span className="text-lg font-semibold text-emerald-200">
+            <span className="text-lg font-medium text-rc-fg-strong">
               Spirit
             </span>
-            <span className="text-xs text-emerald-400">
+            <span className="font-rc-mono tabular-nums text-xs text-rc-fg-muted">
               Power: {pending.manaCost}
             </span>
           </button>
         </div>
 
-        <p className="text-gray-500 text-xs">
+        <p className="text-rc-fg-subtle text-xs">
           Spirits have power equal to the spell&apos;s mana cost (
           {pending.manaCost})
         </p>
 
-        <button
-          onClick={cancelAnimistCast}
-          className="text-gray-500 hover:text-gray-300 text-sm underline"
-        >
+        <RcButton variant="ghost" size="sm" onClick={cancelAnimistCast}>
           Cancel (Esc)
-        </button>
+        </RcButton>
       </div>
     </div>
   );

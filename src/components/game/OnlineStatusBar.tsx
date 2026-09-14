@@ -18,6 +18,7 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import AudioControls from "@/components/game/AudioControls";
 import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
 import { TournamentMatchTimer } from "@/components/game/TournamentMatchTimer";
+import { RcButton } from "@/components/ui/rc-button";
 import { FEATURE_UNDO } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useGameStore } from "@/lib/game/store";
@@ -115,11 +116,8 @@ export default function OnlineStatusBar({
       : "w-4 h-4 fill-rc-success text-rc-success"
     : "w-4 h-4 fill-rc-warning text-rc-warning";
 
-  const endTurnButtonClass =
-    "rounded-full px-2.5 py-1 font-rc-mono text-[11px] uppercase tracking-[0.1em] " +
-    "ring-1 ring-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent " +
-    "text-rc-accent-fg transition-[background-color,transform] hover:-translate-y-px " +
-    "hover:from-rc-accent-ring hover:to-rc-accent-hover";
+  // Round HUD icon toggles: quiet chip, gold tint when pressed.
+  const iconToggleClass = "rounded-full";
 
   return (
     <div
@@ -181,28 +179,26 @@ export default function OnlineStatusBar({
 
         {/* Turn Controls - Only for current player and not read-only */}
         {canControlTurn && (
-          <button
-            className={
-              endTurnButtonClass +
-              (isMobileScreen
-                ? " text-[10px] px-2 py-0.5 whitespace-nowrap"
-                : " whitespace-nowrap")
-            }
+          <RcButton
+            size="xs"
+            className={`rounded-full font-rc-mono uppercase tracking-[0.1em] ${
+              isMobileScreen ? "h-5 px-2 text-[10px]" : "h-6 px-2.5 text-[11px]"
+            }`}
             onClick={() => requestEndTurn()}
             onContextMenu={(e) => e.preventDefault()}
           >
             End Turn
-          </button>
+          </RcButton>
         )}
 
         {/* UI visibility toggle - surfaced on mobile for quick access */}
         {isMobileScreen && (
-          <button
-            className={`rounded-full p-1.5 transition-colors ${
-              uiHidden
-                ? "bg-rc-accent text-rc-accent-fg hover:bg-rc-accent-hover"
-                : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
-            }`}
+          <RcButton
+            variant="quiet"
+            size="icon-xs"
+            tone="warning"
+            className={`${iconToggleClass} h-6 w-6`}
+            aria-pressed={uiHidden}
             onClick={toggleUiHidden}
             title={`UI ${uiHidden ? "Hidden" : "Visible"} (U)`}
           >
@@ -211,7 +207,7 @@ export default function OnlineStatusBar({
             ) : (
               <Eye className="w-3 h-3" />
             )}
-          </button>
+          </RcButton>
         )}
 
         {/* Hand visibility indicator - shows red when hand is hidden (Space key) */}
@@ -226,8 +222,10 @@ export default function OnlineStatusBar({
         )}
 
         {/* Match Info Button - icon-only on mobile */}
-        <button
-          className={`rounded-full transition-colors bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent ${isMobileScreen ? "p-1" : "p-1.5 md:px-3 md:py-1"} flex items-center gap-1.5`}
+        <RcButton
+          variant="quiet"
+          size="icon-xs"
+          className={`rounded-full gap-1.5 ${isMobileScreen ? "h-5 w-5" : "md:h-6 md:w-auto md:px-3"}`}
           onClick={onOpenMatchInfo}
           title="Match Info & Settings"
           onContextMenu={(e) => e.preventDefault()}
@@ -236,7 +234,7 @@ export default function OnlineStatusBar({
           <span className="hidden font-rc-mono text-[11px] uppercase tracking-[0.1em] md:inline">
             Info
           </span>
-        </button>
+        </RcButton>
 
         {/* === DESKTOP-ONLY CONTROLS (hidden on mobile, shown in overflow) === */}
         {!isMobileScreen && (
@@ -244,12 +242,12 @@ export default function OnlineStatusBar({
             <div className="w-px h-4 bg-rc-line/22" />
 
             {/* UI visibility toggle (keyboard: U) */}
-            <button
-              className={`rounded-full p-1.5 transition-colors ${
-                uiHidden
-                  ? "bg-rc-accent text-rc-accent-fg hover:bg-rc-accent-hover"
-                  : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
-              }`}
+            <RcButton
+              variant="quiet"
+              size="icon-xs"
+              tone="warning"
+              className={iconToggleClass}
+              aria-pressed={uiHidden}
               onClick={toggleUiHidden}
               title={`UI ${uiHidden ? "Hidden" : "Visible"} (U)`}
             >
@@ -258,28 +256,28 @@ export default function OnlineStatusBar({
               ) : (
                 <Eye className="w-4 h-4" />
               )}
-            </button>
+            </RcButton>
 
             {/* Card Previews toggle (keyboard: P) */}
-            <button
-              className={`rounded-full p-1.5 transition-colors ${
-                cardPreviewsEnabled
-                  ? "bg-rc-accent text-rc-accent-fg hover:bg-rc-accent-hover"
-                  : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
-              }`}
+            <RcButton
+              variant="quiet"
+              size="icon-xs"
+              tone="info"
+              className={iconToggleClass}
+              aria-pressed={cardPreviewsEnabled}
               onClick={toggleCardPreviews}
               title={`Card Previews ${cardPreviewsEnabled ? "On" : "Off"} (P)`}
             >
               <Search className="w-4 h-4" />
-            </button>
+            </RcButton>
 
             {/* Playmat/Grid toggle */}
-            <button
-              className={`rounded-full p-1.5 transition-colors ${
-                showPlaymatOverlay
-                  ? "bg-rc-accent text-rc-accent-fg hover:bg-rc-accent-hover"
-                  : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
-              }`}
+            <RcButton
+              variant="quiet"
+              size="icon-xs"
+              tone="info"
+              className={iconToggleClass}
+              aria-pressed={showPlaymatOverlay}
               onClick={() => {
                 togglePlaymatOverlay();
                 togglePlaymat();
@@ -287,7 +285,7 @@ export default function OnlineStatusBar({
               title={showPlaymatOverlay ? "Show playmat" : "Show grid"}
             >
               <Grid3X3 className="w-4 h-4" />
-            </button>
+            </RcButton>
 
             {/* Playing as indicator */}
             {myPlayerKey && !readOnly && (
@@ -313,8 +311,10 @@ export default function OnlineStatusBar({
             {FEATURE_UNDO && (
               <>
                 <div className="w-px h-4 bg-rc-line/22" />
-                <button
-                  className="rounded-full font-rc-mono text-[11px] uppercase tracking-[0.1em] px-2.5 py-1 disabled:opacity-40 transition-colors bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
+                <RcButton
+                  variant="quiet"
+                  size="xs"
+                  className="h-6 rounded-full px-2.5 font-rc-mono text-[11px] uppercase tracking-[0.1em] disabled:opacity-40"
                   onClick={() => undo()}
                   disabled={!history.length || !canControlTurn}
                   title={
@@ -325,7 +325,7 @@ export default function OnlineStatusBar({
                   onContextMenu={(e) => e.preventDefault()}
                 >
                   Undo
-                </button>
+                </RcButton>
               </>
             )}
 
@@ -348,12 +348,12 @@ export default function OnlineStatusBar({
             {isNativeTouch && (
               <>
                 <div className="w-px h-4 bg-rc-line/22" />
-                <button
-                  className={`rounded-full p-1.5 transition-colors ${
-                    effectiveMode === "touch"
-                      ? "bg-rc-accent text-rc-accent-fg hover:bg-rc-accent-hover"
-                      : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
-                  }`}
+                <RcButton
+                  variant="quiet"
+                  size="icon-xs"
+                  tone="info"
+                  className={iconToggleClass}
+                  aria-pressed={effectiveMode === "touch"}
                   onClick={toggleOverride}
                   title={
                     effectiveMode === "touch"
@@ -366,7 +366,7 @@ export default function OnlineStatusBar({
                   ) : (
                     <Mouse className="w-4 h-4" />
                   )}
-                </button>
+                </RcButton>
               </>
             )}
 
@@ -379,12 +379,12 @@ export default function OnlineStatusBar({
         {/* === MOBILE OVERFLOW MENU TRIGGER === */}
         {isMobileScreen && (
           <div className="relative" ref={moreRef}>
-            <button
-              className={`rounded-full p-1.5 transition-colors ${
-                moreOpen
-                  ? "bg-rc-accent text-rc-accent-fg"
-                  : "bg-black/35 text-rc-fg-muted ring-1 ring-rc-line/22 hover:text-rc-accent-ring hover:ring-rc-accent"
-              }`}
+            <RcButton
+              variant="quiet"
+              size="icon-xs"
+              className={iconToggleClass}
+              aria-pressed={moreOpen}
+              aria-expanded={moreOpen}
               onClick={() => setMoreOpen((v) => !v)}
               title="More options"
             >
@@ -393,7 +393,7 @@ export default function OnlineStatusBar({
               ) : (
                 <MoreHorizontal className="w-4 h-4" />
               )}
-            </button>
+            </RcButton>
 
             {/* Dropdown */}
             {moreOpen && (

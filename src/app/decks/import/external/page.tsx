@@ -250,6 +250,7 @@ function ExternalImportInner() {
           </div>
         )}
         <RcButton
+          variant="outline"
           className="mt-3"
           onClick={() => {
             setError(null);

@@ -140,7 +140,7 @@ function LessonCard({
             </h3>
             {isComplete && <Badge tone="ok">Complete</Badge>}
             {isCurrent && !isComplete && (
-              <Badge tone="gold">In Progress</Badge>
+              <Badge tone="info">In Progress</Badge>
             )}
           </div>
           <p className="mt-1.5 line-clamp-2 font-rc-sans text-sm leading-relaxed text-rc-fg-muted">

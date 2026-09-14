@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import React, { useMemo, useState } from "react";
+import { RcButton } from "@/components/ui/rc-button";
+import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import { getImageSlug } from "@/lib/utils/cardSlug";
 
@@ -57,26 +59,22 @@ export default function BabelTowerOverlay() {
   // Online: only show caster UI if we're the caster
   const isCaster = actorKey === null || casterSeat === actorKey;
 
-  // Get player color class
-  const playerColorClass =
-    casterSeat === "p2"
-      ? "ring-red-500/50 text-red-400"
-      : "ring-blue-500/50 text-blue-400";
-  const playerBgClass =
-    casterSeat === "p2" ? "bg-red-900/20" : "bg-blue-900/20";
-  const accentClass = casterSeat === "p2" ? "text-red-400" : "text-blue-400";
+  // Seat identity colour (P1 blue / P2 red): ring = 50% alpha border, text = solid
+  const seatRingStyle = { borderColor: `${PLAYER_COLORS[casterSeat]}80` };
+  const seatTextStyle = { color: PLAYER_COLORS[casterSeat] };
 
   return (
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top status bar */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
         <div
-          className={`pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ${playerColorClass} shadow-lg text-lg flex items-center gap-3`}
+          className="pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg flex items-center gap-3"
+          style={seatRingStyle}
         >
-          <span className="text-amber-400 font-fantaisie">
-            🏛️ Tower of Babel
+          <span className="font-rc-display text-rc-accent-link">
+            Tower of Babel
           </span>
-          <span className="opacity-80">
+          <span className="text-rc-fg-muted">
             {phase === "selectingTarget"
               ? isCaster
                 ? "Choose where to play Apex of Babel"
@@ -88,9 +86,10 @@ export default function BabelTowerOverlay() {
 
       {/* Caster choice UI */}
       {phase === "selectingTarget" && isCaster && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
           <div
-            className={`bg-black/95 rounded-xl p-6 max-w-2xl w-full mx-4 ring-1 ${playerColorClass} shadow-xl`}
+            className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-2xl w-full mx-4 font-rc-sans text-rc-fg shadow-rc-panel"
+            style={seatRingStyle}
           >
             {/* Apex card display */}
             <div className="flex items-center gap-4 mb-6">
@@ -101,25 +100,23 @@ export default function BabelTowerOverlay() {
                     alt={apex?.name || "Apex of Babel"}
                     width={105}
                     height={75}
-                    className="rounded-lg shadow-lg ring-1 ring-amber-500/30"
+                    className="rounded-rc-md shadow-rc-md ring-1 ring-rc-line/25"
                     onError={() => setImageError(true)}
                     unoptimized
                   />
                 ) : (
-                  <div
-                    className={`w-[105px] h-[75px] ${playerBgClass} rounded-lg flex items-center justify-center`}
-                  >
-                    <span className="text-amber-400 font-medium text-sm text-center px-2">
+                  <div className="w-[105px] h-[75px] rounded-rc-md border border-rc-line/12 bg-black/30 flex items-center justify-center">
+                    <span className="font-rc-display text-rc-fg text-sm text-center px-2">
                       {apex?.name || "Apex of Babel"}
                     </span>
                   </div>
                 )}
               </div>
               <div>
-                <div className="text-amber-400 font-medium text-xl mb-1">
+                <div className="mb-1 font-rc-display text-[22px] leading-tight text-rc-fg-strong">
                   {apex?.name || "The Apex of Babel"}
                 </div>
-                <div className="text-gray-400 text-sm">
+                <div className="text-rc-fg-muted text-sm">
                   You may play this onto Base of Babel to create the Tower!
                 </div>
               </div>
@@ -131,18 +128,17 @@ export default function BabelTowerOverlay() {
               {baseCellInfo && (
                 <button
                   onClick={() => selectTarget(baseCellInfo.cellKey, true)}
-                  className="p-4 rounded-lg bg-amber-900/30 hover:bg-amber-800/40 ring-1 ring-amber-500/50 transition-colors text-left"
+                  className="p-4 rounded-rc-md border border-rc-accent/45 bg-rc-accent/8 hover:border-rc-accent hover:bg-rc-accent/12 transition-colors text-left"
                 >
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-2xl">🏛️</span>
-                    <span className="text-amber-400 font-medium text-lg">
+                    <span className="text-rc-accent-link font-medium text-lg">
                       Build Tower of Babel
                     </span>
                   </div>
-                  <div className="text-gray-300 text-sm mb-2">
+                  <div className="text-rc-fg-muted text-sm mb-2">
                     Merge with Base of Babel at #{baseCellInfo.cellNo}
                   </div>
-                  <div className="text-amber-300/80 text-xs">
+                  <div className="text-rc-accent-link/80 text-xs">
                     Creates a single site that provides <strong>2 mana</strong>.
                     <br />
                     Both Unique and Exceptional rarity.
@@ -161,22 +157,22 @@ export default function BabelTowerOverlay() {
                   }
                 }}
                 disabled={validVoidCells.length === 0}
-                className={`p-4 rounded-lg ${
+                className={`p-4 rounded-rc-md border ${
                   validVoidCells.length > 0
-                    ? `${playerBgClass} hover:bg-opacity-40 ring-1 ${playerColorClass}`
-                    : "bg-gray-800/50 ring-1 ring-gray-700/50 cursor-not-allowed opacity-50"
+                    ? "border-rc-line/18 bg-black/30 hover:bg-rc-accent/8"
+                    : "border-rc-line/10 bg-black/20 cursor-not-allowed opacity-50"
                 } transition-colors text-left`}
+                style={validVoidCells.length > 0 ? seatRingStyle : undefined}
               >
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-2xl">📍</span>
-                  <span className={`font-medium text-lg ${accentClass}`}>
+                  <span className="font-medium text-lg" style={seatTextStyle}>
                     Play Normally
                   </span>
                 </div>
-                <div className="text-gray-300 text-sm mb-2">
+                <div className="text-rc-fg-muted text-sm mb-2">
                   Play to an empty tile (void)
                 </div>
-                <div className="text-gray-400 text-xs">
+                <div className="text-rc-fg-muted text-xs">
                   Standard site placement.
                   <br />
                   Provides 1 mana as normal.
@@ -189,12 +185,9 @@ export default function BabelTowerOverlay() {
 
             {/* Cancel button */}
             <div className="flex justify-center mt-4">
-              <button
-                onClick={cancel}
-                className="px-6 py-2 rounded-full bg-gray-800/50 hover:bg-gray-700/50 text-gray-300 text-sm transition-colors"
-              >
+              <RcButton variant="outline" size="sm" onClick={cancel}>
                 Cancel
-              </button>
+              </RcButton>
             </div>
           </div>
         </div>
@@ -204,7 +197,8 @@ export default function BabelTowerOverlay() {
       {phase === "selectingTarget" && !isCaster && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
           <div
-            className={`pointer-events-auto px-6 py-4 rounded-xl bg-black/90 ring-1 ${playerColorClass} shadow-lg flex items-center gap-4`}
+            className="pointer-events-auto px-6 py-4 rounded-rc-lg border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans shadow-rc-panel flex items-center gap-4"
+            style={seatRingStyle}
           >
             <div className="relative flex-shrink-0">
               {apexImageUrl && !imageError ? (
@@ -213,25 +207,23 @@ export default function BabelTowerOverlay() {
                   alt={apex?.name || "Apex of Babel"}
                   width={84}
                   height={60}
-                  className="rounded-lg shadow-lg ring-1 ring-white/20"
+                  className="rounded-rc-md shadow-rc-md ring-1 ring-rc-line/25"
                   onError={() => setImageError(true)}
                   unoptimized
                 />
               ) : (
-                <div
-                  className={`w-[84px] h-[60px] ${playerBgClass} rounded-lg flex items-center justify-center`}
-                >
-                  <span className="text-amber-400 font-medium text-xs text-center px-1">
+                <div className="w-[84px] h-[60px] rounded-rc-md border border-rc-line/12 bg-black/30 flex items-center justify-center">
+                  <span className="font-rc-display text-rc-fg text-xs text-center px-1">
                     {apex?.name || "Unknown"}
                   </span>
                 </div>
               )}
             </div>
             <div className="flex flex-col">
-              <div className="text-amber-400 font-medium">
+              <div className="font-rc-display text-rc-fg-strong">
                 {apex?.name || "The Apex of Babel"}
               </div>
-              <span className="text-gray-400 text-sm">
+              <span className="text-rc-fg-muted text-sm">
                 Opponent is choosing where to play...
               </span>
             </div>

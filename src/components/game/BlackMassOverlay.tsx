@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import React, { useState, useCallback, useRef } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store/types";
 
@@ -37,9 +38,9 @@ export default function BlackMassOverlay() {
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-purple-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
-          <span className="text-purple-400 font-fantaisie">🖤 Black Mass</span>
-          <span className="opacity-80">
+        <div className="pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg md:text-xl flex items-center gap-3 select-none">
+          <span className="font-rc-display text-rc-accent-link">Black Mass</span>
+          <span className="text-rc-fg-muted">
             {phase === "loading" && "Searching spellbook..."}
             {phase === "selecting" &&
               isCaster &&
@@ -55,25 +56,25 @@ export default function BlackMassOverlay() {
 
       {/* Card selection area - visible to caster */}
       {phase === "selecting" && isCaster && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-6 max-w-4xl w-full mx-4 ring-1 ring-purple-500/30 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-fantaisie text-purple-400 mb-4 text-center">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="thin-scrollbar rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-4xl w-full mx-4 font-rc-sans text-rc-fg shadow-rc-panel max-h-[90vh] overflow-y-auto">
+            <h2 className="mb-4 text-center font-rc-display text-[26px] leading-tight text-rc-fg-strong">
               Search Your Top {topSevenCards.length} Spells
             </h2>
-            <p className="text-gray-400 text-center mb-2">
+            <p className="text-rc-fg-muted text-center mb-2">
               Select up to 3 different Evil minions to draw. Click a card to
               select/deselect.
             </p>
 
             {/* Allow non-evil toggle */}
-            <label className="flex items-center justify-center gap-2 mb-4 cursor-pointer text-sm">
+            <label className="rc-check flex justify-center mb-4">
               <input
                 type="checkbox"
                 checked={allowNonEvil}
                 onChange={(e) => setAllowNonEvil(e.target.checked)}
-                className="w-4 h-4 accent-purple-500"
+                className="w-4 h-4"
               />
-              <span className="text-gray-400">
+              <span>
                 Allow selecting non-Evil minions (for cards that grant Evil)
               </span>
             </label>
@@ -105,22 +106,16 @@ export default function BlackMassOverlay() {
 
             {/* Action buttons */}
             <div className="flex justify-center gap-4">
-              <button
-                onClick={resolve}
-                className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium transition-colors"
-              >
+              <RcButton onClick={resolve}>
                 {selectedIndices.length > 0
                   ? `Draw ${selectedIndices.length} card${
                       selectedIndices.length > 1 ? "s" : ""
                     }`
                   : "Draw nothing"}
-              </button>
-              <button
-                onClick={cancel}
-                className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-medium transition-colors"
-              >
+              </RcButton>
+              <RcButton variant="outline" onClick={cancel}>
                 Cancel
-              </button>
+              </RcButton>
             </div>
           </div>
         </div>
@@ -129,7 +124,7 @@ export default function BlackMassOverlay() {
       {/* Opponent view - just show they're searching */}
       {phase === "selecting" && !isCaster && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="pointer-events-auto px-4 py-2 rounded-lg bg-black/90 text-sm text-purple-300 ring-1 ring-purple-500/30">
+          <div className="rc-toast pointer-events-auto">
             {casterSeat.toUpperCase()} is searching their spellbook with Black
             Mass...
           </div>
@@ -139,7 +134,7 @@ export default function BlackMassOverlay() {
       {/* Brief result flash on complete */}
       {phase === "complete" && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="pointer-events-auto px-4 py-2 rounded-lg bg-black/90 text-sm text-purple-300 ring-1 ring-purple-500/30">
+          <div className="rc-toast pointer-events-auto">
             Black Mass resolved
           </div>
         </div>
@@ -186,11 +181,11 @@ function BlackMassCardDisplay({
       disabled={disabled}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all ${
+      className={`relative aspect-[2.5/3.5] rounded-rc-md overflow-hidden transition-all ${
         isSelected
-          ? "ring-4 ring-purple-500 scale-105 shadow-lg shadow-purple-500/50"
+          ? "ring-4 ring-rc-moonlight scale-105 shadow-[0_0_14px_rgba(201,214,234,0.3)]"
           : isEligible
-          ? "ring-2 ring-green-500/50 hover:ring-green-500 cursor-pointer"
+          ? "ring-2 ring-rc-success/35 hover:ring-rc-success cursor-pointer"
           : "opacity-50 cursor-not-allowed grayscale"
       }`}
     >
@@ -202,14 +197,14 @@ function BlackMassCardDisplay({
         unoptimized
       />
       {isSelected && (
-        <div className="absolute inset-0 bg-purple-500/30 flex items-center justify-center">
-          <span className="text-white text-2xl font-bold bg-purple-600 rounded-full w-8 h-8 flex items-center justify-center">
+        <div className="absolute inset-0 bg-rc-moonlight/20 flex items-center justify-center">
+          <span className="text-rc-moonlight text-2xl font-bold border border-rc-moonlight/45 bg-[rgba(7,10,20,0.85)] shadow-rc-sm rounded-full w-8 h-8 flex items-center justify-center">
             ✓
           </span>
         </div>
       )}
       {!isEligible && !isSelected && (
-        <div className="absolute bottom-0 inset-x-0 bg-black/70 text-xs text-gray-400 py-1 text-center">
+        <div className="absolute bottom-0 inset-x-0 bg-[rgba(7,10,20,0.7)] font-rc-sans text-xs text-rc-fg-muted py-1 text-center">
           Not a minion
         </div>
       )}

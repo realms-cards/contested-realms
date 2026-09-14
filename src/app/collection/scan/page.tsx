@@ -1,11 +1,13 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import {
   CardScannerView,
   type ScannerSet,
 } from "@/components/scanner/CardScannerView";
+import { Badge } from "@/components/ui/badge";
 import type { ScanResult } from "@/lib/scanner/card-scanner";
 
 interface ScannedCard {
@@ -121,19 +123,20 @@ export default function ScanPage() {
       {scannedCards.length > 0 && (
         <div className="fixed top-4 right-16 flex items-center gap-2 z-50">
           {successCount > 0 && (
-            <div className="bg-green-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+            <Badge tone="ok" className="bg-[rgba(7,10,20,0.92)] tabular-nums">
               ✓ {successCount} added
-            </div>
+            </Badge>
           )}
           {pendingCount > 0 && (
-            <div className="bg-cyan-600 text-white px-3 py-1 rounded-full text-sm font-medium animate-pulse">
-              ⏳ {pendingCount}
-            </div>
+            <Badge tone="info" className="bg-[rgba(7,10,20,0.92)] tabular-nums animate-pulse">
+              <Icon icon="game-icons:sands-of-time" width={12} height={12} />
+              {pendingCount}
+            </Badge>
           )}
           {errorCount > 0 && (
-            <div className="bg-red-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+            <Badge tone="danger" className="bg-[rgba(7,10,20,0.92)] tabular-nums">
               ✗ {errorCount}
-            </div>
+            </Badge>
           )}
         </div>
       )}

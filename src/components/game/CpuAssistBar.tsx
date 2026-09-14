@@ -3,19 +3,19 @@
 import { X } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { abilityChoices } from "@/lib/game/cpu/abilities";
+import { RcButton } from "@/components/ui/rc-button";
+import { abilitySourceId, type AbilityChoice, useCpuAbilityPicker, useReadyAbilities } from "@/lib/game/cpu/abilityPicker";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
-import type { SpellChoice, SpellState } from "@/lib/game/cpu/spellTypes";
+import { CPU_TRIGGERS_IN_ORDER, type SpellChoice, type SpellState } from "@/lib/game/cpu/spellTypes";
 import { cardText, getSpellChoices, projectileKey, supportsSpell } from "@/lib/game/cpu/spells";
 import { useGameStore } from "@/lib/game/store";
 import type { GameState, PendingMagic } from "@/lib/game/store/types";
-import { getCellNumber, seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
+import { seatFromOwner } from "@/lib/game/store/utils/boardHelpers";
 import { useSmallScreen } from "@/lib/hooks/useTouchDevice";
 
 type TilePick = NonNullable<SpellChoice["picks"]>[number];
 type Decision = NonNullable<SpellChoice["projectile"]>["decisions"][number];
 type Targetable = Pick<SpellChoice, "key" | "label" | "picks" | "projectile">;
-type AbilityChoice = ReturnType<typeof abilityChoices>[number];
 /** A board click, or an effect taken from the list (which ends the path). */
 type Step = {tile: string} | {base: string};
 type Panel = "effects" | "rules";
@@ -24,19 +24,16 @@ type Ui = {session: string; steps: Step[]; decision: number | null; panel: Panel
  * treasure, timed aura, blaze/movement and label helpers. pendingMagic supplies the
  * event, the Raise Dead outcomes and the spell; its cpuChoice is the selection key. */
 type MagicRulesState = SpellState & {pendingMagic: PendingMagic};
-/** Every GameState field abilityChoices reads, directly or through the shared spells.js helpers. */
-type AbilityRulesState = SpellState & Pick<GameState, "phase" | "cpuPendingTriggerCount" | "cpuEffectContinuations">;
 type Aim<T extends Targetable> = ReturnType<typeof useTargeting<T>>;
 
 const NO_CHOICES: SpellChoice[] = [];
 const NO_ABILITIES: AbilityChoice[] = [];
 const NO_TRIGGERS: NonNullable<GameState["cpuTriggerOptions"]> = [];
-const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300";
-const BTN = `shrink-0 rounded-full px-2.5 py-1 text-xs lg:px-3 lg:text-sm transition-colors disabled:opacity-40 ${FOCUS}`;
-const PRIMARY = `${BTN} bg-emerald-600/90 hover:bg-emerald-500`;
-const QUIET = `${BTN} bg-white/15 hover:bg-white/25`;
-const CHIP = "min-w-0 max-w-[18rem] truncate rounded-full bg-white/10 px-2.5 py-0.5 text-xs lg:text-sm";
-const NAME = "font-fantaisie text-amber-100";
+const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rc-accent-ring";
+/** Bar pill sizing on top of RcButton size="xs": compact on phones, a step up on large screens. */
+const PILL = "h-auto shrink-0 rounded-full py-1 lg:px-3 lg:text-sm";
+const CHIP = "min-w-0 max-w-[18rem] truncate rounded-full border border-rc-accent/35 bg-rc-accent/8 px-2.5 py-0.5 text-xs text-rc-fg-strong lg:text-sm";
+const NAME = "font-rc-display text-rc-spark";
 
 const uniq = (tiles: (string | null | undefined)[]) => [...new Set(tiles.filter((tile): tile is string => !!tile))];
 const baseOf = (choice: Targetable) => choice.projectile?.baseKey ?? choice.key;
@@ -44,8 +41,6 @@ const tilesOf = (pick: TilePick | undefined) => pick === undefined ? [] : Array.
 /** Tiles that name exactly one option of a decision; options sharing a tile are only picked from the list. */
 const soleTiles = (decision: Decision) => { const ats = decision.options.map(option => option.at); return uniq(ats).filter(at => ats.indexOf(at) === ats.lastIndexOf(at)); };
 const typing = (target: EventTarget | null) => target instanceof HTMLElement && (["INPUT","TEXTAREA","SELECT"].includes(target.tagName) || target.isContentEditable);
-/** The site, avatar or permanent offering an ability. */
-const sourceId = (choice: AbilityChoice) => `${choice.source.card.instanceId || choice.source.card.name}@${choice.source.at}`;
 
 function eventLabel(event: NonNullable<PendingMagic["cpuEvent"]>): string {
   const labels: Record<typeof event.kind, string> = {
@@ -143,21 +138,22 @@ function useEscape(handler: (() => void) | null) {
   },[handler]);
 }
 
+// Below the status bar pill (top 0.75rem, about 2.5rem tall on desktop), in the slot the combat HUD's bars share.
 function Shell({children,below,bare = false}: {children: ReactNode; below?: ReactNode; bare?: boolean}) {
   const small = useSmallScreen();
-  return <div className={`fixed inset-x-0 ${small ? "top-[calc(env(safe-area-inset-top,0px)+2.5rem)] px-3" : "top-6 px-4"} z-[100] pointer-events-none flex justify-center`}>
+  return <div className={`fixed inset-x-0 ${small ? "top-[calc(env(safe-area-inset-top,0px)+2.5rem)] px-3" : "top-16 px-4"} z-[100] pointer-events-none flex justify-center`}>
     <div className="flex w-full max-w-[44rem] flex-col items-center gap-2">
-      {bare ? children : <div className={`pointer-events-auto flex max-w-full flex-wrap items-center bg-black/90 text-white shadow-lg ring-1 ring-white/20 select-none ${small ? "w-full gap-1.5 rounded-2xl px-3 py-2 text-xs" : "justify-center gap-2 rounded-full px-5 py-2 text-base"}`}>{children}</div>}
+      {bare ? children : <div className={`pointer-events-auto flex max-w-full flex-wrap items-center border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel select-none ${small ? "w-full gap-1.5 rounded-rc-lg px-3 py-2 text-xs" : "justify-center gap-2 rounded-full px-5 py-2 text-base"}`}>{children}</div>}
       {below}
     </div>
   </div>;
 }
 
 function Popover({title,onClose,children}: {title: string; onClose?: () => void; children: ReactNode}) {
-  return <section aria-label={title} className="pointer-events-auto max-h-[40vh] w-full overflow-y-auto rounded-2xl bg-black/90 p-2 text-white shadow-xl ring-1 ring-white/20">
-    <div className="mb-1 flex items-center justify-between gap-2 px-1 text-xs text-white/60">
+  return <section aria-label={title} className="thin-scrollbar pointer-events-auto max-h-[40vh] w-full overflow-y-auto rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-2 font-rc-sans text-rc-fg shadow-rc-panel">
+    <div className="mb-1 flex items-center justify-between gap-2 px-1 font-rc-mono text-xs tracking-[0.08em] text-rc-fg-subtle">
       <span className="truncate">{title}</span>
-      {onClose && <button type="button" aria-label={`Close ${title}`} className={`rounded-full p-1 hover:bg-white/10 hover:text-white ${FOCUS}`} onClick={onClose}><X className="h-3.5 w-3.5" /></button>}
+      {onClose && <button type="button" aria-label={`Close ${title}`} className={`cursor-pointer rounded-rc-md p-1 text-rc-fg-muted hover:bg-rc-line/6 hover:text-rc-fg-strong ${FOCUS}`} onClick={onClose}><X className="h-3.5 w-3.5" /></button>}
     </div>
     {children}
   </section>;
@@ -166,7 +162,7 @@ function Popover({title,onClose,children}: {title: string; onClose?: () => void;
 function OptionList({items,onPick}: {items: {id: string; label: string; current?: boolean}[]; onPick: (id: string) => void}) {
   return <ul className="grid gap-1">{items.map(item => <li key={item.id}>
     <button type="button" aria-pressed={item.current} onClick={() => onPick(item.id)}
-      className={`w-full rounded-xl px-3 py-2 text-left text-sm transition-colors ${FOCUS} ${item.current ? "bg-emerald-700/60" : "bg-white/10 hover:bg-white/20"}`}>{item.label}</button>
+      className={`w-full cursor-pointer rounded-rc-md border px-3 py-2 text-left text-sm transition-colors ${FOCUS} ${item.current ? "border-rc-success/60 bg-rc-success/16 text-rc-success-ink" : "border-rc-line/12 bg-black/30 hover:border-rc-accent/40 hover:text-rc-fg-strong"}`}>{item.label}</button>
   </li>)}</ul>;
 }
 
@@ -176,9 +172,9 @@ function effectList<T extends Targetable>(aim: Aim<T>, all: T[]) {
   const list = aim.panel === "effects" || forced ? <Popover title="Effects" onClose={forced ? undefined : () => aim.toggle("effects")}>
     <OptionList items={(view.remaining.length > 1 ? view.remaining : all).map(choice => ({id:baseOf(choice),label:choice.label,current:baseOf(choice) === current}))} onPick={aim.choose} />
   </Popover> : null;
-  const toggle = all.length > 1 && !forced ? <button type="button" className={QUIET} aria-label="Show all effects" aria-expanded={aim.panel === "effects"} onClick={() => aim.toggle("effects")}>
+  const toggle = all.length > 1 && !forced ? <RcButton variant="quiet" size="xs" className={PILL} aria-label="Show all effects" aria-expanded={aim.panel === "effects"} onClick={() => aim.toggle("effects")}>
     All effects{view.unreachable ? ` +${view.unreachable}` : ""}
-  </button> : null;
+  </RcButton> : null;
   return {list,toggle};
 }
 
@@ -216,7 +212,9 @@ function SpellAssist() {
     const updated = getSpellChoices(rules,seat,name,projectileKey(plan.baseKey,selections)).find(choice => choice.projectile?.baseKey === plan.baseKey);
     if (updated) setCpuMagicChoice(updated.key);
   },[plan,rules,seat,name,setCpuMagicChoice]);
-  const aim = useTargeting({session:`${pending?.id}|${turn}|${choices.map(baseOf).join(" ")}`,choices,casterTile,active:canChoose,selected,decisions:plan?.decisions,onOption:setOption});
+  // A Genesis has no caster to pick: light the card whose Genesis it is, not the avatar (whose tile may hold an ability source).
+  const origin = pending?.cpuEvent?.kind === "genesis" ? [pending.spell.at] : undefined;
+  const aim = useTargeting({session:`${pending?.id}|${turn}|${choices.map(baseOf).join(" ")}`,choices,casterTile,active:canChoose,selected,decisions:plan?.decisions,onOption:setOption,sources:origin});
   const {view} = aim, targetKey = view.target?.key, targetBase = view.target ? baseOf(view.target) : null, selectedBase = selected ? baseOf(selected) : null;
   // The store's cpuChoice mirrors the board path, so the bot and the confirm step see the same effect.
   useEffect(() => {
@@ -227,13 +225,13 @@ function SpellAssist() {
   const cancellable = !!pending && !pending.cpuEvent && !pending.cpuRandomMinion && actorKey === seat;
   useEscape(canChoose ? aim.back ?? (cancellable ? cancelMagic : null) : manual && cancellable ? cancelMagic : null);
   if (!pending) return null;
-  const header = <span className="flex min-w-0 items-baseline gap-1.5"><span className={NAME}>{name}</span>{pending.cpuEvent && <span className="truncate text-white/70">· {eventLabel(pending.cpuEvent)}</span>}</span>;
+  const header = <span className="flex min-w-0 items-baseline gap-1.5"><span className={NAME}>{name}</span>{pending.cpuEvent && <span className="truncate text-rc-fg-muted">· {eventLabel(pending.cpuEvent)}</span>}</span>;
   if (manual) return <Shell below={aim.panel === "rules" && <Popover title="Rules" onClose={() => aim.toggle("rules")}><p className="whitespace-pre-line px-2 pb-1 text-sm">{pending.summaryText || cardText(pending.spell.card)}</p></Popover>}>
-    {header}<span className="text-amber-200">Manual effect — resolve it on the board</span>
-    <button type="button" className={QUIET} aria-expanded={aim.panel === "rules"} onClick={() => aim.toggle("rules")}>Rules</button>
-    {actorKey === seat && <><button type="button" className={PRIMARY} onClick={completeCpuMagicManual}>Done</button><button type="button" className={QUIET} onClick={cancelMagic}>Cancel</button></>}
+    {header}<span className="text-rc-accent-link">Manual effect — resolve it on the board</span>
+    <RcButton variant="quiet" size="xs" className={PILL} aria-expanded={aim.panel === "rules"} onClick={() => aim.toggle("rules")}>Rules</RcButton>
+    {actorKey === seat && <><RcButton size="xs" className={PILL} onClick={completeCpuMagicManual}>Done</RcButton><RcButton variant="quiet" size="xs" className={PILL} onClick={cancelMagic}>Cancel</RcButton></>}
   </Shell>;
-  if (!canChoose) return <Shell>{header}<span aria-hidden className="text-white/50">—</span>
+  if (!canChoose) return <Shell>{header}<span aria-hidden className="text-rc-fg-dim">—</span>
     <span aria-live="polite" className="min-w-0 truncate" title={selected?.label}>{selected?.label || "Choosing…"}{pending.status === "confirm" ? " — Resolving…" : ""}</span>
   </Shell>;
   const {decision,decisionIndex} = aim, text = instruction(view,decision,aim.tiles.length > 0), effects = effectList(aim,choices);
@@ -242,70 +240,53 @@ function SpellAssist() {
   </Popover> : effects.list;
   return <Shell below={below}>
     {header}
-    {text && <span aria-live="polite" className="text-white/80">· {text}</span>}
+    {text && <span aria-live="polite" className="text-rc-fg-muted">· {text}</span>}
     {view.target && <span className={CHIP} title={view.target.label}>{view.target.label}</span>}
-    {plan && targetBase === selectedBase && plan.decisions.map((entry,index) => entry.options.length > 1 && <button key={index} type="button" className={`${QUIET} max-w-[14rem] truncate`}
+    {plan && targetBase === selectedBase && plan.decisions.map((entry,index) => entry.options.length > 1 && <RcButton key={index} variant="quiet" size="xs" className={`${PILL} block max-w-[14rem] truncate`}
       aria-pressed={decisionIndex === index} title={entry.label} onClick={() => aim.openDecision(index)}>
-      <span className="text-white/60">{entry.label}:</span> {entry.options.find(option => option.key === plan.selections[index])?.label ?? "—"}
-    </button>)}
+      <span className="text-rc-fg-subtle">{entry.label}:</span> {entry.options.find(option => option.key === plan.selections[index])?.label ?? "—"}
+    </RcButton>)}
     {effects.toggle}
-    {aim.back && <button type="button" className={QUIET} onClick={aim.back}>Back</button>}
-    <button type="button" className={PRIMARY} disabled={!selected || targetBase !== selectedBase} onClick={confirmMagic}>Confirm</button>
-    {!pending.cpuEvent && <button type="button" className={QUIET} disabled={!!pending.cpuRandomMinion} onClick={cancelMagic}>Cancel</button>}
+    {aim.back && <RcButton variant="quiet" size="xs" className={PILL} onClick={aim.back}>Back</RcButton>}
+    <RcButton size="xs" className={PILL} disabled={!selected || targetBase !== selectedBase} onClick={confirmMagic}>Confirm</RcButton>
+    {!pending.cpuEvent && <RcButton variant="quiet" size="xs" className={PILL} disabled={!!pending.cpuRandomMinion} onClick={cancelMagic}>Cancel</RcButton>}
   </Shell>;
 }
 
-// The combat HUD's attack-choice bars own the same top slot and precede any pendingCombat, so the chips give way to them.
-const selectAbilityView = (state: GameState) => ({actorKey:state.actorKey,matchEnded:state.matchEnded,matchId:state.matchId,turn:state.turn,currentPlayer:state.currentPlayer,
-  activateCpuAbility:state.activateCpuAbility,combatBar:!!(state.attackChoice || state.attackTargetChoice || state.attackConfirm)});
-
-/** Rules inputs only while an ability can be activated: this mirrors abilityChoices' gate, which yields no choices in every other state. */
-function selectAbilityRules(state: GameState): AbilityRulesState | null {
-  const seat = state.actorKey;
-  if (!seat || state.matchEnded || state.cpuTriggerOptions?.length || state.phase !== "Main" || state.currentPlayer !== (seat === "p1" ? 1 : 2) ||
-    state.pendingMagic || state.pendingCombat || state.cpuPendingTriggerCount || state.cpuEffectContinuations?.length) return null;
-  return {phase:state.phase,currentPlayer:state.currentPlayer,turn:state.turn,pendingMagic:state.pendingMagic,pendingCombat:state.pendingCombat,
-    cpuPendingTriggerCount:state.cpuPendingTriggerCount,cpuEffectContinuations:state.cpuEffectContinuations,board:state.board,permanents:state.permanents,
-    permanentPositions:state.permanentPositions,avatars:state.avatars,players:state.players,zones:state.zones};
-}
+// The combat HUD's attack-choice bars own the same top slot and precede any pendingCombat, so targeting gives way to them.
+const selectAbilityView = (state: GameState) => ({matchEnded:state.matchEnded,activateCpuAbility:state.activateCpuAbility,
+  combatBar:!!(state.attackChoice || state.attackTargetChoice || state.attackConfirm)});
 
 const sourceTile = (choice: AbilityChoice) => choice.source.at;
 
+/** Targeting for the source picked from CpuAbilityButtons (next to Attack here): nothing shows until a source is picked,
+ * and a hovered button only lights its source's tile. */
 function AbilityAssist() {
-  const {actorKey,matchEnded,matchId,turn,currentPlayer,activateCpuAbility,combatBar} = useGameStore(useShallow(selectAbilityView));
-  const rules = useGameStore(useShallow(selectAbilityRules));
-  const choices = useMemo(() => rules && actorKey ? abilityChoices(rules,actorKey) : NO_ABILITIES,[rules,actorKey]);
-  const sources = useMemo(() => [...new Map(choices.map(choice => [sourceId(choice),choice.source])).entries()],[choices]);
-  const request = `${matchId}:ability:${turn}:${currentPlayer}`, ids = sources.map(([id]) => id);
-  const [picked,setPicked] = useState<{request: string; id: string} | null>(null);
-  // Hidden chips stay hidden for the rest of the turn, until a source they did not offer gains an ability.
-  const [closed,setClosed] = useState<{request: string; sources: string[]} | null>(null);
-  const hidden = closed?.request === request && ids.every(id => closed.sources.includes(id));
-  const active = picked?.request === request && ids.includes(picked.id) ? picked.id : null;
-  const own = useMemo(() => active && !combatBar ? choices.filter(choice => sourceId(choice) === active) : NO_ABILITIES,[choices,active,combatBar]);
+  const {matchEnded,activateCpuAbility,combatBar} = useGameStore(useShallow(selectAbilityView));
+  const {actorKey,request,choices,sources} = useReadyAbilities();
+  const picked = useCpuAbilityPicker(state => state.request === request ? state.picked : null);
+  const hovered = useCpuAbilityPicker(state => state.request === request ? state.hovered : null);
+  const active = picked && sources.some(([id]) => id === picked) ? picked : null;
+  // A pick from another turn, or of a source that no longer offers an ability, is dropped rather than coming back later.
+  useEffect(() => {
+    const picker = useCpuAbilityPicker.getState();
+    if (picker.request !== request ? picker.picked || picker.hovered : picker.picked && !active) picker.clear();
+  },[request,picked,active]);
+  const own = useMemo(() => active && !combatBar ? choices.filter(choice => abilitySourceId(choice) === active) : NO_ABILITIES,[choices,active,combatBar]);
+  const lit = !active && !combatBar && hovered ? sources.find(([id]) => id === hovered)?.[1].at : undefined;
   const aim = useTargeting({session:`${request}|${active}|${own.map(baseOf).join(" ")}`,choices:own,casterTile:sourceTile,active:!!active,
-    sources:active ? undefined : hidden || combatBar ? [] : uniq(sources.map(([,source]) => source.at))});
-  const leave = useCallback(() => setPicked(null),[]);
+    sources:active ? undefined : lit ? [lit] : []});
+  const leave = useCallback(() => useCpuAbilityPicker.getState().pick(request,null),[request]);
   useEscape(combatBar ? null : aim.back ?? (active ? leave : null));
-  if (!actorKey || matchEnded || !choices.length || combatBar) return null;
-  if (hidden) return <Shell bare><button type="button" onClick={() => setClosed(null)} className={`pointer-events-auto rounded-full bg-black/90 px-3 py-1.5 text-sm text-amber-100 shadow-lg ring-1 ring-white/20 hover:bg-black ${FOCUS}`}>Show abilities</button></Shell>;
-  const size = rules?.board.size, tileNo = (at: string) => { const [x,y] = at.split(",").map(Number); return size ? getCellNumber(x,y,size.w,size.h) : at; };
-  if (!active) return <Shell>
-    <span className="hidden text-sm text-white/60 lg:inline">Abilities</span>
-    {sources.map(([id,source]) => <button key={id} type="button" className={`${QUIET} ${NAME}`} aria-label={`${source.card.name} abilities, Tile #${tileNo(source.at)}`} onClick={() => setPicked({request,id})}>
-      {source.card.name}{sources.filter(([,other]) => other.card.name === source.card.name).length > 1 && <span className="ml-1 font-sans text-white/60">#{tileNo(source.at)}</span>}
-    </button>)}
-    <button type="button" aria-label="Hide abilities for this turn" title="Hide for this turn" onClick={() => setClosed({request,sources:ids})}
-      className={`shrink-0 rounded-full p-1 text-white/70 hover:bg-white/10 hover:text-white ${FOCUS}`}><X className="h-4 w-4" /></button>
-  </Shell>;
+  if (!actorKey || matchEnded || !active || combatBar) return null;
   const {view} = aim, text = instruction(view), effects = effectList(aim,own), source = sources.find(([id]) => id === active)?.[1];
   return <Shell below={effects.list}>
     <span className={NAME}>{source?.card.name}</span>
-    {text && <span aria-live="polite" className="text-white/80">· {text}</span>}
+    {text && <span aria-live="polite" className="text-rc-fg-muted">· {text}</span>}
     {view.target && <span className={CHIP} title={view.target.label}>{view.target.label}</span>}
     {effects.toggle}
-    <button type="button" className={QUIET} onClick={aim.back ?? leave}>Back</button>
-    <button type="button" className={PRIMARY} disabled={!view.target} onClick={() => { if (view.target) activateCpuAbility(view.target.key); leave(); }}>Resolve</button>
+    <RcButton variant="quiet" size="xs" className={PILL} onClick={aim.back ?? leave}>Back</RcButton>
+    <RcButton size="xs" className={PILL} disabled={!view.target} onClick={() => { if (view.target) activateCpuAbility(view.target.key); leave(); }}>Resolve</RcButton>
   </Shell>;
 }
 
@@ -313,8 +294,12 @@ const selectTriggers = (state: GameState) => ({triggers:state.cpuTriggerOptions?
 
 function TriggerAssist() {
   const {triggers,chooseCpuTrigger} = useGameStore(useShallow(selectTriggers));
-  return <Shell below={<Popover title="Triggers"><OptionList items={triggers} onPick={chooseCpuTrigger} /></Popover>}>
+  // Dismissing (close or Escape) keeps the listed order; mandatory triggers are never skipped.
+  const inOrder = useCallback(() => chooseCpuTrigger(CPU_TRIGGERS_IN_ORDER),[chooseCpuTrigger]);
+  useEscape(inOrder);
+  return <Shell below={<Popover title="Triggers" onClose={inOrder}><OptionList items={triggers} onPick={chooseCpuTrigger} /></Popover>}>
     <span className={NAME}>Choose the next trigger to resolve</span>
+    <span className="hidden text-sm text-rc-fg-muted lg:inline">· or close to keep this order</span>
   </Shell>;
 }
 

@@ -99,6 +99,7 @@ import {
 import KeyboardShortcutsHelp, {
   useHelpShortcut,
 } from "@/components/ui/KeyboardShortcutsHelp";
+import { RcButton } from "@/components/ui/rc-button";
 import { GameSoundEffects } from "@/lib/audio/gameSfx";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import {
@@ -506,7 +507,7 @@ export default function PlayPage() {
         <span
           key={key++}
           style={{ color: PLAYER_COLORS[playerKey], fontWeight: 500 }}
-          className={isCard ? "font-fantaisie" : undefined}
+          className={isCard ? "font-rc-display" : undefined}
         >
           {displayText}
         </span>,
@@ -938,14 +939,15 @@ export default function PlayPage() {
           }
         >
           <div
-            className={`bg-black/50 rounded-lg ${isMobile ? "p-0.5" : "p-1"} ring-1 ring-white/10 flex items-center`}
+            className={`bg-[rgba(7,10,20,0.85)] rounded-rc-md ${isMobile ? "p-0.5" : "p-1"} ring-1 ring-rc-line/22 flex items-center`}
           >
             <button
               className={`${isMobile ? "px-1 py-0.5 text-[10px]" : "px-2 py-1 text-xs"} rounded-rc-sm font-rc-mono uppercase tracking-[0.14em] transition-colors ${
                 cameraMode === "topdown"
-                  ? "bg-rc-accent text-rc-accent-fg"
+                  ? "bg-rc-info/18 text-rc-info-ink ring-1 ring-inset ring-rc-info/60"
                   : "bg-transparent text-rc-fg-muted hover:text-rc-accent-ring"
               }`}
+              aria-pressed={cameraMode === "topdown"}
               onClick={() => {
                 setCameraMode("topdown");
                 gotoBaseline("topdown");
@@ -957,9 +959,10 @@ export default function PlayPage() {
             <button
               className={`${isMobile ? "ml-0.5 px-1 py-0.5 text-[10px]" : "ml-1 px-2 py-1 text-xs"} rounded-rc-sm font-rc-mono uppercase tracking-[0.14em] transition-colors ${
                 cameraMode === "orbit"
-                  ? "bg-rc-accent text-rc-accent-fg"
+                  ? "bg-rc-info/18 text-rc-info-ink ring-1 ring-inset ring-rc-info/60"
                   : "bg-transparent text-rc-fg-muted hover:text-rc-accent-ring"
               }`}
+              aria-pressed={cameraMode === "orbit"}
               onClick={() => {
                 setCameraMode("orbit");
                 gotoBaseline("orbit");
@@ -976,28 +979,20 @@ export default function PlayPage() {
       )}
       {/* Restore Game Prompt */}
       {showRestorePrompt && (
-        <div className="absolute inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-gray-900 rounded-xl p-6 max-w-md text-center ring-1 ring-white/20 shadow-xl">
-            <h2 className="text-xl font-semibold text-white mb-4">
+        <div className="absolute inset-0 z-30 bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px] flex items-center justify-center p-6">
+          <div className="max-w-md rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 text-center text-rc-fg shadow-rc-panel">
+            <h2 className="mb-4 font-rc-display text-[28px] leading-none text-rc-fg-strong">
               Resume Previous Game?
             </h2>
-            <p className="text-gray-300 mb-6">
+            <p className="mb-6 font-rc-sans text-sm text-rc-fg-muted">
               A saved hotseat game was found. Would you like to continue where
               you left off?
             </p>
             <div className="flex gap-3 justify-center">
-              <button
-                onClick={handleNewGame}
-                className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white transition-colors"
-              >
+              <RcButton variant="outline" onClick={handleNewGame}>
                 Start New Game
-              </button>
-              <button
-                onClick={handleRestoreGame}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
-              >
-                Resume Game
-              </button>
+              </RcButton>
+              <RcButton onClick={handleRestoreGame}>Resume Game</RcButton>
             </div>
           </div>
         </div>
@@ -1005,7 +1000,7 @@ export default function PlayPage() {
 
       {/* Setup Overlay - only show after we've checked for saved game */}
       {setupOpen && !showRestorePrompt && checkedForSavedGame && (
-        <div className="absolute inset-0 z-20 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
+        <div className="absolute inset-0 z-20 bg-[rgba(6,10,20,0.7)] backdrop-blur-[4px] flex items-center justify-center p-6">
           {!prepared ? (
             <DeckSelector
               onPrepareComplete={({ enableSeer }) => {
@@ -1053,8 +1048,8 @@ export default function PlayPage() {
             />
           ) : (
             /* Waiting for game to start */
-            <div className="text-center text-white">
-              <div className="animate-pulse">Starting game...</div>
+            <div className="text-center text-rc-fg">
+              <div className="animate-pulse font-rc-sans text-sm text-rc-fg-muted">Starting game...</div>
             </div>
           )}
         </div>
@@ -1290,15 +1285,17 @@ export default function PlayPage() {
         <div
           className={`absolute ${isMobile ? "left-[max(0.25rem,env(safe-area-inset-left))] bottom-[max(0.25rem,env(safe-area-inset-bottom))]" : "left-3 bottom-2"} z-10 ${
             dragFromHand ? "pointer-events-none" : "pointer-events-auto"
-          } text-white ${isMobile ? "w-48" : "w-80"}`}
+          } text-rc-fg ${isMobile ? "w-48" : "w-80"}`}
         >
-          <div className="bg-black/60 backdrop-blur rounded-xl ring-1 ring-white/10 shadow">
+          <div className="bg-[rgba(9,13,25,0.82)] backdrop-blur rounded-rc-lg ring-1 ring-rc-line/18 shadow-rc-panel">
             <div
               className={`flex items-center justify-between ${isMobile ? "px-2 py-1 text-[10px]" : "px-3 py-2 text-sm"}`}
             >
-              <span className="font-semibold opacity-90">Console</span>
+              <span className="font-rc-mono font-medium uppercase tracking-[0.14em] text-rc-fg-muted">
+                Console
+              </span>
               <button
-                className={`rounded bg-white/10 hover:bg-white/20 ${isMobile ? "px-1.5 py-px text-[9px]" : "px-2 py-0.5 text-xs"}`}
+                className={`rounded-rc-sm bg-black/35 font-rc-mono tracking-[0.08em] text-rc-fg-muted ring-1 ring-rc-line/22 transition-colors hover:text-rc-accent-ring hover:ring-rc-accent ${isMobile ? "px-1.5 py-px text-[9px]" : "px-2 py-0.5 text-xs"}`}
                 onClick={() => setConsoleOpen((o) => !o)}
               >
                 {consoleOpen ? "Collapse" : "Expand"}
@@ -1307,10 +1304,10 @@ export default function PlayPage() {
             {consoleOpen && (
               <div
                 ref={eventsRef}
-                className="max-h-64 overflow-y-auto px-3 pb-3 text-xs space-y-1"
+                className="thin-scrollbar max-h-64 overflow-y-auto px-3 pb-3 font-rc-mono text-xs leading-[1.5] space-y-1"
               >
                 {events.length === 0 && (
-                  <div className="opacity-60">No events yet</div>
+                  <div className="text-rc-fg-dim">No events yet</div>
                 )}
                 {events.slice(-100).map((ev, idx) => {
                   const t = ev.text || "";
@@ -1333,9 +1330,9 @@ export default function PlayPage() {
                       key={`${ev.id}-${ev.ts}-${idx}`}
                       className={`opacity-85 ${
                         isWarn
-                          ? "text-yellow-400"
+                          ? "text-rc-warning"
                           : isSearch
-                            ? "text-blue-400"
+                            ? "text-rc-info"
                             : ""
                       }`}
                     >

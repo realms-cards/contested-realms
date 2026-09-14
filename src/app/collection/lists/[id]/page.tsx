@@ -414,7 +414,7 @@ export default function ListDetailPage() {
           title="This list is empty."
           action={
             list.isOwner ? (
-              <RcButton onClick={() => setShowAddCard(true)}>
+              <RcButton variant="outline" onClick={() => setShowAddCard(true)}>
                 Add Cards
               </RcButton>
             ) : undefined
@@ -762,7 +762,7 @@ function AddCardModal({
     >
       <form id="add-cards-form" onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="rc-eyebrow mb-1 block">Card List</label>
+          <label className="rc-field-label mb-1">Card List</label>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}

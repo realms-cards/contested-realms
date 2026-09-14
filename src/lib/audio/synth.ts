@@ -190,6 +190,145 @@ function fm(v: SynthVoice, t0: number, o: FmOptions): number {
   return end;
 }
 
+// ─── Chant ───────────────────────────────────────────────────────────────
+
+type Vowel = "a" | "o" | "u";
+
+/** Bass-singer formants per vowel: [centre Hz, level dB, bandwidth Hz]. */
+const FORMANTS: Record<Vowel, readonly (readonly [number, number, number])[]> = {
+  a: [[600, 0, 60], [1040, -7, 70], [2250, -9, 110]],
+  o: [[400, 0, 40], [750, -11, 80], [2400, -21, 100]],
+  u: [[350, 0, 40], [600, -20, 80], [2400, -32, 100]],
+};
+
+type ChantNote = { freq: number; at: number; glide?: number };
+type ChantPart = { interval: number; gain: number };
+
+type ChantOptions = {
+  /** Melody: the first note starts at 0, later notes glide in at `at` seconds. */
+  notes: readonly [ChantNote, ...ChantNote[]];
+  /** Voice parts relative to the melody in semitones (organum): 0, -7, -12… */
+  parts?: readonly ChantPart[];
+  /** Singers per part, spread in pitch so the part sounds like a choir. */
+  voices?: number;
+  spread?: number;
+  vowel?: Vowel;
+  a?: number;
+  hold?: number;
+  r?: number;
+  gain?: number;
+  /** Lowpass after the formants; lower is darker. */
+  lp?: number;
+  /** Cathedral reverb send level. */
+  reverb?: number;
+  tail?: number;
+  vibrato?: number;
+};
+
+const hallImpulses = new WeakMap<BaseAudioContext, AudioBuffer>();
+
+/** A short stone-hall impulse response: decaying noise with a soft onset. */
+function hallImpulse(ctx: BaseAudioContext): AudioBuffer {
+  const cached = hallImpulses.get(ctx);
+  if (cached) return cached;
+  const length = Math.floor(ctx.sampleRate * 1.6);
+  const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
+  for (let channel = 0; channel < 2; channel++) {
+    const data = buffer.getChannelData(channel);
+    for (let i = 0; i < length; i++) {
+      const t = i / ctx.sampleRate;
+      const onset = t < 0.012 ? t / 0.012 : 1;
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-t * 3.2) * onset;
+    }
+  }
+  hallImpulses.set(ctx, buffer);
+  return buffer;
+}
+
+/** A small male choir singing one vowel through a formant bank, with hall reverb. */
+function chant(v: SynthVoice, t0: number, o: ChantOptions): number {
+  const { ctx } = v;
+  const attack = o.a ?? 0.05;
+  const hold = o.hold ?? 0.45;
+  const release = o.r ?? 0.18;
+  const singEnd = t0 + attack + hold + release;
+  const perPart = Math.max(1, o.voices ?? 3);
+  const spread = o.spread ?? 9;
+
+  const choir = ctx.createGain();
+  const vibrato = ctx.createOscillator();
+  vibrato.frequency.value = 5;
+  const vibratoDepth = ctx.createGain();
+  vibratoDepth.gain.value = o.vibrato ?? 6;
+  vibrato.connect(vibratoDepth);
+  const oscillators: OscillatorNode[] = [vibrato];
+
+  for (const part of o.parts ?? [{ interval: 0, gain: 1 }]) {
+    const ratio = Math.pow(2, part.interval / 12);
+    for (let i = 0; i < perPart; i++) {
+      const osc = ctx.createOscillator();
+      osc.type = "sawtooth";
+      let previous = o.notes[0].freq * ratio;
+      osc.frequency.setValueAtTime(previous, t0);
+      for (const note of o.notes.slice(1)) {
+        const target = note.freq * ratio;
+        osc.frequency.setValueAtTime(previous, t0 + note.at - (note.glide ?? 0.05));
+        osc.frequency.exponentialRampToValueAtTime(target, t0 + note.at);
+        previous = target;
+      }
+      const offset = perPart > 1 ? ((i / (perPart - 1)) * 2 - 1) * spread : 0;
+      osc.detune.value = v.cents + offset + (Math.random() * 4 - 2);
+      vibratoDepth.connect(osc.detune);
+      const level = ctx.createGain();
+      level.gain.value = part.gain / perPart;
+      osc.connect(level);
+      level.connect(choir);
+      oscillators.push(osc);
+    }
+  }
+
+  const amp = ctx.createGain();
+  amp.gain.value = 0;
+  envelope(amp.gain, t0, o.gain ?? 1, { a: attack, d: 0.01, s: 1, hold: Math.max(0, hold - 0.01), r: release });
+  // Cut the buzz of the sawtooth sources above the formants.
+  const darken = ctx.createBiquadFilter();
+  darken.type = "lowpass";
+  darken.frequency.value = o.lp ?? 1700;
+  darken.Q.value = 0.5;
+  darken.connect(amp);
+  for (const [freq, db, bandwidth] of FORMANTS[o.vowel ?? "o"]) {
+    const formant = ctx.createBiquadFilter();
+    formant.type = "bandpass";
+    formant.frequency.value = freq;
+    // A choir smears each formant; double the solo-singer bandwidth.
+    formant.Q.value = freq / (bandwidth * 2);
+    const formantLevel = ctx.createGain();
+    formantLevel.gain.value = Math.pow(10, db / 20);
+    choir.connect(formant);
+    formant.connect(formantLevel);
+    formantLevel.connect(darken);
+  }
+  amp.connect(v.out);
+
+  let end = singEnd;
+  const wet = o.reverb ?? 0.35;
+  if (wet > 0) {
+    const hall = ctx.createConvolver();
+    hall.buffer = hallImpulse(ctx);
+    const wetLevel = ctx.createGain();
+    wetLevel.gain.value = wet;
+    amp.connect(hall);
+    hall.connect(wetLevel);
+    wetLevel.connect(v.out);
+    end = singEnd + (o.tail ?? 0.9);
+  }
+  for (const osc of oscillators) {
+    osc.start(t0);
+    osc.stop(singEnd + 0.05);
+  }
+  return end;
+}
+
 /** Schedule `steps` calls of `fn`, spaced by a fixed or per-step gap. */
 function seq(
   t0: number,
@@ -229,16 +368,29 @@ export const SYNTH_PATCHES = {
       return tone(v, t, { freq: 200, to: 120, glide: 0.12, d: 0.12, gain: 0.25 });
     },
   },
+  /**
+   * Miserere: a short burst of dark plainchant. The choir falls a half step
+   * (F3 to E3, Phrygian) in parallel fifths with an octave below, vowel "o",
+   * in a stone hall.
+   */
   toCemetery: {
     group: "board",
-    build: (v, t) => {
-      noise(v, t, { freq: 2500, q: 0.8, d: 0.05, gain: 0.3 });
-      tone(v, t, { freq: 60, to: 40, glide: 0.2, d: 0.25, gain: 0.5 });
-      return tone(v, t, {
-        type: "sawtooth", freq: 220, to: 110, glide: 0.35, d: 0.4, r: 0.15,
-        gain: 0.25, lp: 1200, lpTo: 200,
-      });
-    },
+    build: (v, t) =>
+      chant(v, t, {
+        notes: [{ freq: 174.61, at: 0 }, { freq: 164.81, at: 0.17 }],
+        parts: [
+          { interval: 0, gain: 1 },
+          { interval: -7, gain: 0.7 },
+          { interval: -12, gain: 0.55 },
+        ],
+        vowel: "o",
+        a: 0.05,
+        hold: 0.42,
+        r: 0.2,
+        gain: 1,
+        lp: 1700,
+        reverb: 0.35,
+      }),
   },
   /** Into the void: reverse swell with a hard cut, then a low drop. */
   banish: {

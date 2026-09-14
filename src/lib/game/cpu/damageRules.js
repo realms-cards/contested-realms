@@ -11,6 +11,7 @@ function evaluateDamage(unit, hits, turn) {
     if (unit.name === 'Rimland Nomads' && /Desert/.test(hit.sourceName || '')) continue;
     if (unit.name === 'Lava Salamander' && hit.element === 'fire' && hit.sourcePower === undefined) continue;
     if (unit.name === 'Sling Pixies' && (hit.sourcePower ?? 0) >= 4) continue;
+    if (unit.name === 'Yourke Crossbowmen' && hit.ranged) continue;
     if (unit.name === 'Askelon Phoenix' && hit.element === 'fire') { power++; continue; }
     damage += hit.amount;
     lethal ||= hit.lethal === true;

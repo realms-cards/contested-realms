@@ -151,7 +151,7 @@ export default function SoatcSettingsPage() {
         <div className="space-y-5 px-[18px] py-4">
           {/* UUID Input */}
           <div>
-            <label htmlFor="soatc-uuid" className="rc-eyebrow block">
+            <label htmlFor="soatc-uuid" className="rc-field-label">
               Your SATC UUID
             </label>
             <p className="mt-1.5 font-rc-sans text-xs leading-relaxed text-rc-fg-muted">

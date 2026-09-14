@@ -357,7 +357,12 @@ export default function CubeEditorPage() {
                     <div className="rc-hint">{card.type || "Unknown"}</div>
                   </div>
                   <div className="absolute inset-0 flex items-center justify-center gap-2 bg-[rgba(6,10,20,0.82)] opacity-0 transition-opacity group-hover:opacity-100">
-                    <RcButton size="sm" onClick={() => addCard(card, "main")}>
+                    <RcButton
+                      variant="outline"
+                      size="sm"
+                      className="bg-black/35"
+                      onClick={() => addCard(card, "main")}
+                    >
                       + Main
                     </RcButton>
                     <RcButton
@@ -425,8 +430,9 @@ export default function CubeEditorPage() {
                     </RcButton>
                     <span className="rc-stat px-1 text-sm">{card.count}</span>
                     <RcButton
+                      variant="outline"
                       size="icon"
-                      className="h-6 w-6"
+                      className="h-6 w-6 bg-black/35"
                       aria-label="Add one copy"
                       onClick={() =>
                         updateCardCount(card.cardId, "main", card.count + 1)
@@ -472,7 +478,7 @@ export default function CubeEditorPage() {
                       sizes="120px"
                       unoptimized
                     />
-                    <div className="absolute top-1 right-1 rounded-rc-sm bg-rc-accent/85 px-1.5 py-0.5 font-rc-mono text-xs text-rc-accent-fg">
+                    <div className="absolute top-1 right-1 rounded-rc-sm border border-rc-accent/60 bg-black/80 px-1.5 py-0.5 font-rc-mono text-xs text-rc-spark">
                       {card.count}x
                     </div>
                   </div>
@@ -499,8 +505,9 @@ export default function CubeEditorPage() {
                     </RcButton>
                     <span className="rc-stat px-1 text-sm">{card.count}</span>
                     <RcButton
+                      variant="outline"
                       size="icon"
-                      className="h-6 w-6"
+                      className="h-6 w-6 bg-black/35"
                       aria-label="Add one copy"
                       onClick={() =>
                         updateCardCount(

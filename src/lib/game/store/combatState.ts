@@ -1,7 +1,9 @@
 import type { StateCreator } from "zustand";
 import { isInterrogator } from "@/lib/game/avatarAbilities";
 import { resolveCpuCombat } from "@/lib/game/cpu/combat";
-import { unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
+import { applyDamageEvent, locateUnit } from "@/lib/game/cpu/damage";
+import { cardText, hasStealth, unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
+import { rangedAttack } from "@/lib/game/cpu/stationaryAttack";
 import type { CustomMessage } from "@/lib/net/transport";
 import {
   getBoudiccaBonus,
@@ -54,6 +56,7 @@ type CombatSlice = Pick<
   | "lastCombatSummary"
   | "setLastCombatSummary"
   | "declareAttack"
+  | "rangedStrike"
   | "offerIntercept"
   | "setDefenderSelection"
   | "resolveCombat"
@@ -452,6 +455,83 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
 
       return { pendingCombat: combatState } as Partial<GameState> as GameState;
     }),
+
+  // Ranged X is a tap ability, not an attack: nobody defends and the target does not strike back.
+  rangedStrike: (attacker, target) => {
+    const seat = seatFromOwner(attacker.owner);
+    set({ attackTargetChoice: null, attackConfirm: null } as Partial<GameState> as GameState);
+    const state = get();
+    // Re-check on the live board: the shooter may have tapped or moved, or the line changed, since the choice opened.
+    const from = attacker.isAvatar
+      ? { kind: "avatar" as const, seat }
+      : { kind: "permanent" as const, at: attacker.at, index: attacker.index };
+    const legal = rangedAttack(state, from)?.candidates.some(
+      (c) => c.kind === target.kind && c.at === target.at && c.index === target.index,
+    );
+    const units = unitsInRealm(state);
+    const source = units.find((u) =>
+      attacker.isAvatar
+        ? u.target.kind === "avatar" && u.target.seat === seat
+        : u.target.kind === "permanent" && u.at === attacker.at && u.target.index === attacker.index,
+    );
+    const victim = units.find((u) =>
+      target.kind === "avatar"
+        ? u.target.kind === "avatar" && u.owner !== seat
+        : u.target.kind === "permanent" && u.at === target.at && u.target.index === target.index,
+    );
+    if (!legal || !source || !victim) {
+      state.log("That ranged strike is no longer possible.");
+      return;
+    }
+    const power = unitStats(state, source).atk;
+    if (victim.target.kind === "avatar" && isInterrogator(state.avatars[seat]?.card?.name ?? null)) {
+      get().triggerInterrogatorChoice(seat, victim.owner, source.card.name, null);
+    }
+    if (source.target.kind === "avatar") get().toggleTapAvatar(seat);
+    else get().setTapPermanent(source.at as CellKey, source.target.index, true);
+
+    if (state.opponentPlayerId?.startsWith("cpu_")) {
+      // The bot has no client of its own, so this client applies the strike and any kill.
+      applyDamageEvent(set, get, [{
+        target: victim.target,
+        amount: power,
+        ranged: true,
+        lethal: /\bLethal\b/.test(cardText(source.card)),
+        sourcePower: power,
+        sourceName: source.card.name,
+      }]);
+      const shooter = locateUnit(get(), source.target);
+      if (shooter?.target.kind === "permanent" && hasStealth(get(), shooter)) {
+        // Striking interacts with the realm, which ends Stealth.
+        const items = [...get().permanents[shooter.at]];
+        const index = shooter.target.index;
+        items[index] = { ...items[index], cpuStealthLost: true, version: (items[index].version || 0) + 1 };
+        set({ permanents: { ...get().permanents, [shooter.at]: items } } as Partial<GameState> as GameState);
+        get().trySendPatch({ permanents: { [shooter.at]: items } });
+      }
+    } else {
+      // Owner-applies: the struck unit's client damages it (magicDamage handler).
+      get().transport?.sendMessage?.({
+        type: "magicDamage",
+        damage: [
+          victim.target.kind === "avatar"
+            ? { kind: "avatar", seat: victim.target.seat, amount: power }
+            : { kind: "permanent", at: victim.at, index: victim.target.index, amount: power },
+        ],
+      } as unknown as CustomMessage);
+    }
+
+    const summary = {
+      id: `rng_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+      text: `[${seat}:${source.card.name}] shoots [${victim.owner}:${victim.card.name}] for ${power}`,
+      actor: seat,
+      targetSeat: victim.owner,
+      ts: Date.now(),
+    };
+    get().setLastCombatSummary(summary);
+    get().log(summary.text);
+    get().transport?.sendMessage?.({ type: "combatSummary", ...summary } as unknown as CustomMessage);
+  },
 
   offerIntercept: (tile, attacker) => {
     try {

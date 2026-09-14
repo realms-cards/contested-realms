@@ -72,7 +72,7 @@ export function NumberBadge({
             fill="#000"
             fontWeight={800}
             fontSize={fontScale * 100}
-            className="font-fantaisie select-none"
+            className="font-rc-display select-none"
             style={{ pointerEvents: "none", userSelect: "none" }}
           >
             {value}
@@ -81,7 +81,7 @@ export function NumberBadge({
       </svg>
       {!textAsSvg && (
         <span
-          className="font-fantaisie select-none"
+          className="font-rc-display select-none"
           style={{
             position: "absolute",
             top: "50%",
@@ -151,15 +151,15 @@ export function ManaCounter({
         }}
         className={`h-6 w-6 rounded-full border flex items-center justify-center text-base font-bold leading-none ${
           disableInc
-            ? "bg-black/30 border-white/10 text-white/40 cursor-default"
-            : "bg-black/60 border-white/30 text-white hover:bg-black/70"
+            ? "bg-black/30 border-rc-line/10 text-rc-fg-dim cursor-default"
+            : "bg-black/60 border-rc-line/30 text-rc-fg hover:bg-black/70 hover:border-rc-accent hover:text-rc-accent-ring"
         }`}
       >
         +
       </button>
 
       {/* Value as badges; show single 0 badge when value is 0 */}
-      <div className="flex items-center gap-1 select-none font-fantaisie">
+      <div className="flex items-center gap-1 select-none font-rc-display">
         {digits.length === 0 ? (
           <NumberBadge value={0} size={size} strokeWidth={6} />
         ) : (
@@ -180,8 +180,8 @@ export function ManaCounter({
         }}
         className={`h-6 w-6 rounded-full border flex items-center justify-center text-base font-bold leading-none ${
           disableDec
-            ? "bg-black/30 border-white/10 text-white/40 cursor-default"
-            : "bg-black/60 border-white/30 text-white hover:bg-black/70"
+            ? "bg-black/30 border-rc-line/10 text-rc-fg-dim cursor-default"
+            : "bg-black/60 border-rc-line/30 text-rc-fg hover:bg-black/70 hover:border-rc-accent hover:text-rc-accent-ring"
         }`}
       >
         −
@@ -227,10 +227,10 @@ export function ManaCounterHUD({
         style={{ width: btnSize, height: btnSize, fontSize: btnSize * 0.7 }}
         className={`flex items-center justify-center rounded-full font-bold leading-none transition-all ${
           disableDec
-            ? "opacity-20 cursor-not-allowed bg-black/20 text-white/30"
+            ? "opacity-20 cursor-not-allowed bg-black/20 text-rc-fg-dim"
             : isTouchDevice
-            ? "opacity-100 bg-rose-600/80 hover:bg-rose-500 text-white cursor-pointer"
-            : "opacity-0 group-hover:opacity-100 bg-rose-600/80 hover:bg-rose-500 text-white cursor-pointer"
+            ? "opacity-100 bg-[rgba(7,10,20,0.85)] ring-1 ring-rc-line/22 text-rc-fg-muted hover:ring-rc-accent hover:text-rc-accent-ring cursor-pointer"
+            : "opacity-0 group-hover:opacity-100 bg-[rgba(7,10,20,0.85)] ring-1 ring-rc-line/22 text-rc-fg-muted hover:ring-rc-accent hover:text-rc-accent-ring cursor-pointer"
         }`}
       >
         −
@@ -238,7 +238,7 @@ export function ManaCounterHUD({
 
       {/* Compact mana display: remaining/total */}
       <div
-        className="flex items-center select-none font-mono tabular-nums text-white"
+        className="flex items-center select-none font-rc-mono tabular-nums text-rc-fg-strong"
         style={{ fontSize, lineHeight: 1 }}
         title={
           showTotal
@@ -249,9 +249,9 @@ export function ManaCounterHUD({
         <span
           className={
             value === 0
-              ? "text-red-500"
+              ? "text-rc-danger"
               : value < (total ?? value)
-              ? "text-amber-400"
+              ? "text-rc-warning"
               : ""
           }
           style={{
@@ -265,13 +265,13 @@ export function ManaCounterHUD({
         {showTotal && (
           <>
             <span
-              className="text-white/50 mx-px"
+              className="text-rc-fg-subtle mx-px"
               style={{ fontSize: slashSize }}
             >
               /
             </span>
             <span
-              className="text-white/70"
+              className="text-rc-fg-muted"
               style={{
                 minWidth: "1ch",
                 textAlign: "left",
@@ -297,10 +297,10 @@ export function ManaCounterHUD({
         style={{ width: btnSize, height: btnSize, fontSize: btnSize * 0.7 }}
         className={`flex items-center justify-center rounded-full font-bold leading-none transition-all ${
           disableInc
-            ? "opacity-20 cursor-not-allowed bg-black/20 text-white/30"
+            ? "opacity-20 cursor-not-allowed bg-black/20 text-rc-fg-dim"
             : isTouchDevice
-            ? "opacity-100 bg-emerald-600/80 hover:bg-emerald-500 text-white cursor-pointer"
-            : "opacity-0 group-hover:opacity-100 bg-emerald-600/80 hover:bg-emerald-500 text-white cursor-pointer"
+            ? "opacity-100 bg-[rgba(7,10,20,0.85)] ring-1 ring-rc-line/22 text-rc-fg-muted hover:ring-rc-accent hover:text-rc-accent-ring cursor-pointer"
+            : "opacity-0 group-hover:opacity-100 bg-[rgba(7,10,20,0.85)] ring-1 ring-rc-line/22 text-rc-fg-muted hover:ring-rc-accent hover:text-rc-accent-ring cursor-pointer"
         }`}
       >
         +

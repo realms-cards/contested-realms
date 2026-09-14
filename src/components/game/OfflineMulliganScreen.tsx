@@ -1,7 +1,9 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import { useGameStore, type PlayerKey } from "@/lib/game/store";
@@ -112,8 +114,9 @@ export default function OfflineMulliganScreen({
                 </div>
                 {myChampion &&
                   myAvatar.name?.toLowerCase() === "dragonlord" && (
-                    <div className="rc-alert mt-1 px-2 py-0.5 text-[10px]" data-tone="warning">
-                      ⚔ {myChampion.name}
+                    <div className="rc-alert mt-1 flex items-center gap-1 px-2 py-0.5 text-[10px]" data-tone="warning">
+                      <Icon icon="game-icons:crossed-swords" width={10} height={10} aria-hidden="true" />
+                      {myChampion.name}
                     </div>
                   )}
               </div>
@@ -139,8 +142,9 @@ export default function OfflineMulliganScreen({
                 </div>
                 {opponentChampion &&
                   opponentAvatar.name?.toLowerCase() === "dragonlord" && (
-                    <div className="rc-alert mt-1 px-2 py-0.5 text-[10px]" data-tone="warning">
-                      ⚔ {opponentChampion.name}
+                    <div className="rc-alert mt-1 flex items-center gap-1 px-2 py-0.5 text-[10px]" data-tone="warning">
+                      <Icon icon="game-icons:crossed-swords" width={10} height={10} aria-hidden="true" />
+                      {opponentChampion.name}
                     </div>
                   )}
               </div>
@@ -233,22 +237,20 @@ export default function OfflineMulliganScreen({
 
           <div className="flex gap-2">
             {!done && myMulligans > 0 && (
-              <button
-                className="cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent px-4 py-2 font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px disabled:pointer-events-none disabled:opacity-50"
-                onClick={handleMulligan}
-              >
+              <RcButton onClick={handleMulligan}>
                 {selected.length === 0
                   ? "Keep Hand"
                   : `Mulligan ${selected.length} Cards`}
-              </button>
+              </RcButton>
             )}
 
             {(done || myMulligans === 0) && (
-              <button
+              <RcButton
+                variant={submitted ? "quiet" : "default"}
                 className={
                   submitted
-                    ? "cursor-not-allowed rounded-rc-md border border-rc-line/22 bg-black/35 px-4 py-2 font-rc-mono text-xs tracking-[0.08em] text-rc-fg-muted"
-                    : "cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent px-4 py-2 font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px disabled:pointer-events-none disabled:opacity-50"
+                    ? "cursor-not-allowed font-rc-mono text-xs tracking-[0.08em] disabled:opacity-100"
+                    : undefined
                 }
                 onClick={handleFinalize}
                 disabled={submitted}
@@ -259,7 +261,7 @@ export default function OfflineMulliganScreen({
                 }
               >
                 {submitted ? "Ready — Waiting for others…" : finalizeLabel}
-              </button>
+              </RcButton>
             )}
           </div>
         </div>

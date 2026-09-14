@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useOnline } from "@/app/online/online-context";
+import { RcButton } from "@/components/ui/rc-button";
 import type { MatchInfo } from "@/lib/net/protocol";
 import type { CustomMessage } from "@/lib/net/transport";
 
@@ -239,54 +240,56 @@ export default function OnlineSealedDeckLoader({
   }, [autoStart, initiated, completed, loading, match?.playerDecks, match, me, loadSealedDecks]);
 
   return (
-    <div className="w-full max-w-2xl mx-auto bg-slate-900/95 rounded-xl p-6">
+    <div className="mx-auto w-full max-w-2xl rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 text-rc-fg shadow-rc-panel">
       <div className="text-center">
-        <h2 className="text-2xl font-bold text-white mb-4">Loading Sealed Decks</h2>
-        
+        <h2 className="m-0 mb-4 font-rc-display text-[28px] leading-none text-rc-fg-strong">Loading Sealed Decks</h2>
+
         <div className="space-y-4">
-          <div className="text-slate-300">
-            <div className="mb-2">Players:</div>
-            <div className="text-white font-medium">
+          <div className="font-rc-sans text-sm text-rc-fg-muted">
+            <div className="rc-eyebrow mb-2">Players:</div>
+            <div className="font-rc-mono font-medium text-rc-fg-strong">
               {Object.values(playerNames).join(", ")}
             </div>
           </div>
-          
+
           {loading && (
-            <div className="flex items-center justify-center gap-2 text-blue-400">
-              <div className="w-6 h-6 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
+            <div className="flex items-center justify-center gap-2 font-rc-sans text-sm text-rc-accent-link">
+              <div className="w-6 h-6 border-2 border-rc-accent/30 border-t-rc-accent rounded-full animate-spin" />
               Loading sealed decks...
             </div>
           )}
 
           {!loading && !deckError && waitingForMe && (
-            <div className="flex items-center justify-center gap-2 text-slate-300">
-              <div className="w-4 h-4 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin" />
+            <div className="flex items-center justify-center gap-2 font-rc-sans text-sm text-rc-fg-muted">
+              <div className="w-4 h-4 border-2 border-rc-line/20 border-t-rc-fg-muted rounded-full animate-spin" />
               Waiting for your sealed deck submission to register...
             </div>
           )}
 
           {!loading && !deckError && waitingForOpponent && (
-            <div className="flex items-center justify-center gap-2 text-slate-300">
-              <div className="w-4 h-4 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin" />
+            <div className="flex items-center justify-center gap-2 font-rc-sans text-sm text-rc-fg-muted">
+              <div className="w-4 h-4 border-2 border-rc-line/20 border-t-rc-fg-muted rounded-full animate-spin" />
               Waiting for other players to submit their sealed decks...
             </div>
           )}
 
           {deckError && (
-            <div className="bg-red-900/50 border border-red-600/50 rounded-lg p-3 text-red-200">
+            <div className="rc-alert" data-tone="danger">
               Error: {deckError}
-              <button
+              <RcButton
+                variant="outline"
+                size="sm"
                 onClick={loadSealedDecks}
-                className="ml-3 px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors"
+                className="ml-3"
                 disabled={loading}
               >
                 Retry
-              </button>
+              </RcButton>
             </div>
           )}
 
           {!loading && !deckError && completed && (
-            <div className="text-green-400 font-medium">
+            <div className="font-rc-sans font-medium text-rc-success">
               ✓ Sealed decks loaded successfully!
             </div>
           )}

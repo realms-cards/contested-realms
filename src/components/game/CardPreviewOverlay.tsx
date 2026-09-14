@@ -41,7 +41,7 @@ export default function CardPreviewOverlay({
 
   return (
     <div className={`${anchorClass} z-50 pointer-events-none select-none ${className}`}>
-      <div className={`relative ${base} rounded-xl overflow-hidden shadow-2xl ${isSite ? "rotate-90" : ""}`}>
+      <div className={`relative ${base} rounded-rc-lg overflow-hidden shadow-rc-panel ring-1 ring-rc-line/18 ${isSite ? "rotate-90" : ""}`}>
         <Image
           src={`/api/images/${card.slug}`}
           alt={card.name}

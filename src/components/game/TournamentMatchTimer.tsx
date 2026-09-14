@@ -147,10 +147,10 @@ export function TournamentMatchTimer({
 
   // Bare LCD digits: urgency is conveyed through text color only
   const urgencyClasses = {
-    normal: "text-white",
-    warning: "text-yellow-400",
-    critical: "text-red-400 animate-pulse",
-    expired: "text-red-500",
+    normal: "text-rc-fg-strong",
+    warning: "text-rc-warning",
+    critical: "text-rc-danger-hover animate-pulse",
+    expired: "text-rc-danger",
   };
 
   const sizeClasses = compact ? "gap-1 text-xs" : "gap-2 text-sm";
@@ -158,7 +158,7 @@ export function TournamentMatchTimer({
 
   return (
     <div
-      className={`flex items-center font-mono ${sizeClasses} ${
+      className={`flex items-center font-rc-mono tabular-nums ${sizeClasses} ${
         extraTurnsMode ? urgencyClasses.expired : urgencyClasses[urgency]
       }`}
       title={

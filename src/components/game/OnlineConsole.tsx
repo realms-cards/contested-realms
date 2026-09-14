@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import {
   ChevronDown,
   ChevronUp,
@@ -9,6 +10,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { type MatchEvent, formatMatchEvent } from "@/hooks/useMatchEvents";
 import { PLAYER_COLORS } from "@/lib/game/constants";
@@ -448,6 +450,7 @@ export default function OnlineConsole({
                         ? "text-rc-info"
                         : "text-rc-fg-dim hover:text-rc-fg-muted"
                     }`}
+                    aria-pressed={showEvents}
                     onClick={() => setShowEvents((v) => !v)}
                     onContextMenu={(e) => e.preventDefault()}
                     title={showEvents ? "Hide events" : "Show events"}
@@ -467,6 +470,7 @@ export default function OnlineConsole({
                           ? "text-rc-success"
                           : "text-rc-fg-dim hover:text-rc-fg-muted"
                       }`}
+                      aria-pressed={showChat}
                       onClick={() => setShowChat((v) => !v)}
                       onContextMenu={(e) => e.preventDefault()}
                       title={showChat ? "Hide chat" : "Show chat"}
@@ -531,9 +535,20 @@ export default function OnlineConsole({
                     return (
                       <div
                         key={item.id}
-                        className={`opacity-90 ${formatted.color || ""}`}
+                        className={formatted.color || ""}
                       >
-                        {formatted.icon} {formatted.text}
+                        {formatted.icon ? (
+                          <Icon
+                            icon={formatted.icon}
+                            width="1em"
+                            height="1em"
+                            className="mr-1 inline-block align-[-0.125em]"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          "• "
+                        )}
+                        {formatted.text}
                       </div>
                     );
                   } else if (item.kind === "chat") {
@@ -622,15 +637,16 @@ export default function OnlineConsole({
                     disabled={!connected}
                     onContextMenu={(e) => e.preventDefault()}
                   />
-                  <button
-                    className="rounded-rc-md ring-1 ring-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent text-rc-accent-fg font-rc-mono uppercase tracking-[0.14em] disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1 transition-[background-color,transform] hover:-translate-y-px hover:from-rc-accent-ring hover:to-rc-accent-hover"
+                  <RcButton
+                    size="xs"
+                    className="h-auto px-3 py-1 font-rc-mono uppercase tracking-[0.14em]"
                     style={fontStyle}
                     onClick={handleSendChat}
                     disabled={!connected || !chatInput.trim()}
                     onContextMenu={(e) => e.preventDefault()}
                   >
                     Send
-                  </button>
+                  </RcButton>
                 </div>
               )}
             </div>
@@ -641,7 +657,8 @@ export default function OnlineConsole({
       {/* Toast notification for chat messages - always shown (even in toastOnly mode) */}
       {showToast && (toastOnly || !consoleOpen) && (
         <div
-          className={`absolute ${toastOnly ? "top-0" : "top-[-70px]"} left-0 right-0 bg-[rgba(9,13,25,0.9)] ring-1 ring-rc-line/18 rounded-rc-lg px-4 py-3 text-sm text-rc-fg shadow-rc-panel cursor-pointer transform transition-all duration-300 ease-out z-20`}
+          className={`rc-toast absolute ${toastOnly ? "top-0" : "top-[-70px]"} left-0 right-0 rounded-rc-lg px-4 py-3 text-sm cursor-pointer transform transition-all duration-300 ease-out z-20`}
+          data-tone="info"
           style={{
             animation: "slideInUp 0.4s ease-out",
           }}
@@ -656,7 +673,10 @@ export default function OnlineConsole({
           }}
         >
           <div className="flex items-center gap-2">
-            <span className="text-lg">💬</span>
+            <MessageCircle
+              className="w-4 h-4 flex-none text-rc-success"
+              aria-hidden="true"
+            />
             <span className="font-medium truncate text-rc-fg-strong">
               {toastMessage}
             </span>

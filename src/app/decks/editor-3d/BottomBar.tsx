@@ -1,7 +1,9 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import Image from "next/image";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { RcButton } from "@/components/ui/rc-button";
 import type { SearchResult, SearchType } from "@/lib/deckEditor/search";
 import { getBoosterAssetName } from "@/lib/utils/booster-assets";
 
@@ -193,7 +195,7 @@ export default function BottomBar(props: BottomBarProps) {
             searchExpanded
               ? "p-2"
               : "p-0"
-          } rounded-lg`}
+          } rounded-rc-lg`}
         >
           <div
             className={`flex flex-wrap items-center ${
@@ -205,12 +207,12 @@ export default function BottomBar(props: BottomBarProps) {
                 {isSealed ? (
                   <div className="flex items-center gap-2 w-full">
                     <div
-                      className={`h-10 px-4 rounded-lg flex items-center gap-2 font-medium ${
+                      className={`h-10 px-4 rounded-rc-md border flex items-center gap-2 font-rc-mono font-medium tabular-nums shadow-rc-sm ${
                         timeRemaining <= 60000
-                          ? "bg-red-600 text-white"
+                          ? "border-rc-danger-hover bg-rc-danger text-rc-fg-strong"
                           : timeRemaining <= 300000
-                          ? "bg-yellow-600 text-white"
-                          : "bg-blue-600 text-white"
+                          ? "border-rc-accent-press bg-rc-warning text-rc-accent-fg"
+                          : "border-rc-line/22 bg-[rgba(7,10,20,0.85)] text-rc-fg-strong"
                       }`}
                     >
                       <svg
@@ -243,7 +245,7 @@ export default function BottomBar(props: BottomBarProps) {
                           key={setName}
                           className="flex flex-col items-center gap-2"
                         >
-                          <div className="text-white text-sm font-medium">
+                          <div className="font-rc-sans text-sm font-medium text-rc-fg-strong">
                             {/* Display cube name instead of 'cube' when available */}
                             {setName.toLowerCase() === "cube" && cubeName
                               ? cubeName
@@ -257,10 +259,10 @@ export default function BottomBar(props: BottomBarProps) {
                                 <button
                                   key={pack.id}
                                   onClick={() => ready && openPack(pack.id)}
-                                  className={`w-16 h-24 rounded-lg overflow-hidden ring-1 transition-all duration-200 shadow-lg relative group ${
+                                  className={`w-16 h-24 rounded-rc-md overflow-hidden ring-1 transition-all duration-200 shadow-rc-md relative group ${
                                     ready
-                                      ? "ring-white/20 hover:ring-white/40"
-                                      : "ring-white/10 opacity-60 cursor-wait"
+                                      ? "ring-rc-line/22 hover:ring-rc-accent"
+                                      : "ring-rc-line/12 opacity-60 cursor-wait"
                                   }`}
                                   title={
                                     ready
@@ -279,20 +281,20 @@ export default function BottomBar(props: BottomBarProps) {
                                       unoptimized
                                     />
                                   ) : (
-                                    <div className="w-full h-full bg-gradient-to-r from-green-600 to-emerald-600 flex items-center justify-center text-white font-bold">
+                                    <div className="w-full h-full bg-gradient-to-b from-rc-accent/22 to-rc-accent/8 flex items-center justify-center font-rc-mono font-bold text-rc-spark">
                                       {setPacks.indexOf(pack) + 1}
                                     </div>
                                   )}
                                   {pack.opened && (
                                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                      <span className="text-white text-xs font-bold">
+                                      <span className="font-rc-mono text-xs font-bold text-rc-fg-strong">
                                         OPENED
                                       </span>
                                     </div>
                                   )}
                                   {!ready && !pack.opened && (
                                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                      <span className="text-white text-[10px] font-semibold tracking-wide">
+                                      <span className="font-rc-mono text-[10px] font-semibold tracking-wide text-rc-fg-strong">
                                         Loading…
                                       </span>
                                     </div>
@@ -306,19 +308,18 @@ export default function BottomBar(props: BottomBarProps) {
                       {(showLoadingBar || showOpenAll) && (
                         <div className="flex items-center gap-3 flex-wrap">
                           {showLoadingBar && (
-                            <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-white text-sm">
+                            <div className="flex items-center gap-3 px-3 py-2 rounded-rc-md border border-rc-line/22 bg-[rgba(7,10,20,0.85)] font-rc-sans text-sm text-rc-fg">
                               <div className="flex flex-col leading-tight">
-                                <span className="font-semibold">
+                                <span className="font-semibold text-rc-fg-strong">
                                   Loading packs…
                                 </span>
-                                <span className="text-xs text-white/80">
+                                <span className="font-rc-mono text-xs tabular-nums text-rc-fg-muted">
                                   {packLoadProgress.processed} /{" "}
                                   {packLoadProgress.total} ready
                                 </span>
                               </div>
-                              <div className="w-32 h-2 rounded bg-white/10 overflow-hidden">
-                                <div
-                                  className="h-full bg-emerald-400 transition-all duration-300"
+                              <div className="rc-progress w-32">
+                                <span
                                   style={{
                                     width: `${Math.min(
                                       100,
@@ -333,7 +334,7 @@ export default function BottomBar(props: BottomBarProps) {
                               </div>
                               {packLoadProgress.inProgress && (
                                 <svg
-                                  className="w-5 h-5 animate-spin text-white/80"
+                                  className="w-5 h-5 animate-spin text-rc-fg-muted"
                                   viewBox="0 0 24 24"
                                   fill="none"
                                   stroke="currentColor"
@@ -349,55 +350,51 @@ export default function BottomBar(props: BottomBarProps) {
                             </div>
                           )}
                           {showOpenAll && (
-                            <button
+                            <RcButton
+                              variant="quiet"
                               onClick={openAllPacks}
                               disabled={openAllDisabled}
-                              className={`h-10 px-4 rounded-lg font-semibold transition-colors ${
-                                openAllDisabled
-                                  ? "bg-white/10 text-white/50 cursor-not-allowed"
-                                  : "bg-emerald-600 text-white hover:bg-emerald-500"
-                              }`}
+                              className="h-10 px-4 text-rc-fg"
                               title="Open all remaining packs"
                             >
                               Open All Packs
-                            </button>
+                            </RcButton>
                           )}
                         </div>
                       )}
                     </div>
                     <div className="flex justify-center gap-2">
-                      <button
+                      <RcButton
+                        variant="quiet"
+                        tone="success"
                         onClick={onShowStandardCards}
-                        className={`h-10 px-4 rounded font-medium transition-colors ${
-                          standardActive
-                            ? "bg-yellow-600 text-white hover:bg-yellow-500"
-                            : "bg-white/10 text-white hover:bg-white/20"
-                        }`}
+                        aria-pressed={standardActive}
+                        className="h-10 px-4 text-sm text-rc-fg"
                         title="Show tournament legal cards"
                       >
                         Add Standard Cards
-                      </button>
+                      </RcButton>
                       {cubeExtrasAvailable && (
-                        <button
+                        <RcButton
+                          variant="quiet"
+                          tone="moonlight"
                           onClick={onShowCubeExtras}
-                          className={`h-10 px-4 rounded font-medium transition-colors ${
-                            cubeActive
-                              ? "bg-purple-600 text-white hover:bg-purple-500"
-                              : "bg-purple-700 text-white hover:bg-purple-600"
-                          }`}
+                          aria-pressed={cubeActive}
+                          className="h-10 px-4 text-sm text-rc-fg"
                           title="Show cube extras from this cube"
                         >
                           Cube Extras
-                        </button>
+                        </RcButton>
                       )}
                     </div>
                   </div>
                 ) : (
                   <div className="flex-1 flex justify-center items-center gap-2">
                     {!isDraftMode && (
-                      <button
+                      <RcButton
+                        variant="quiet"
                         onClick={() => setSearchExpanded(true)}
-                        className="flex items-center gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-500 hover:to-purple-500 transition-all duration-200 shadow-lg"
+                        className="h-10 px-4 text-rc-fg"
                       >
                         <svg
                           className="w-5 h-5"
@@ -413,17 +410,17 @@ export default function BottomBar(props: BottomBarProps) {
                           />
                         </svg>
                         Add Cards
-                      </button>
+                      </RcButton>
                     )}
                     {/* Free mode booster toggle */}
                     {isFreeMode && onToggleBoosterControls && (
-                      <button
+                      <RcButton
+                        variant="quiet"
+                        size="sm"
+                        tone="ember"
                         onClick={onToggleBoosterControls}
-                        className={`flex items-center gap-1.5 h-8 px-3 rounded text-sm font-medium transition-colors ${
-                          showBoosterControls
-                            ? "bg-amber-600 hover:bg-amber-500 text-white"
-                            : "bg-black/40 hover:bg-black/60 text-white/70 hover:text-white border border-white/10"
-                        }`}
+                        aria-pressed={Boolean(showBoosterControls)}
+                        className="gap-1.5 bg-black/40 text-sm"
                         title={
                           showBoosterControls
                             ? "Hide booster controls"
@@ -444,11 +441,11 @@ export default function BottomBar(props: BottomBarProps) {
                           />
                         </svg>
                         Boosters
-                      </button>
+                      </RcButton>
                     )}
                     {/* Free mode booster opening */}
                     {isFreeMode && showBoosterControls && onOpenFreeBooster && (
-                      <div className="flex items-center gap-2 bg-black/40 rounded-lg px-3 py-1.5 border border-white/10">
+                      <div className="flex items-center gap-2 rounded-rc-md border border-rc-line/22 bg-[rgba(7,10,20,0.85)] px-3 py-1.5">
                         <CustomSelect
                           value={
                             freeBoosterCubeId
@@ -478,10 +475,12 @@ export default function BottomBar(props: BottomBarProps) {
                             })),
                           ]}
                         />
-                        <button
+                        <RcButton
+                          variant="outline"
+                          size="sm"
                           onClick={onOpenFreeBooster}
                           disabled={freeBoosterLoading}
-                          className="flex items-center gap-1.5 h-8 px-3 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-wait"
+                          className="gap-1.5"
                           title="Open a booster pack and add cards to your deck"
                         >
                           {freeBoosterLoading ? (
@@ -514,43 +513,40 @@ export default function BottomBar(props: BottomBarProps) {
                             </svg>
                           )}
                           Open Booster
-                        </button>
+                        </RcButton>
                       </div>
                     )}
                     {pick3DLength > 0 && (
                       <div className="flex justify-center gap-2">
-                        <button
+                        <RcButton
+                          variant="quiet"
+                          tone="success"
                           onClick={onShowStandardCards}
-                          className={`h-10 px-4 rounded font-medium transition-colors ${
-                            standardActive
-                              ? "bg-yellow-600 text-white hover:bg-yellow-500"
-                              : "bg-white/10 text-white hover:bg-white/20"
-                          }`}
+                          aria-pressed={standardActive}
+                          className="h-10 px-4 text-sm text-rc-fg"
                           title="Show tournament legal cards"
                         >
                           Add Standard Cards
-                        </button>
+                        </RcButton>
                         {cubeExtrasAvailable && (
-                          <button
+                          <RcButton
+                            variant="quiet"
+                            tone="moonlight"
                             onClick={onShowCubeExtras}
-                            className={`h-10 px-4 rounded font-medium transition-colors ${
-                              cubeActive
-                                ? "bg-purple-600 text-white hover:bg-purple-500"
-                                : "bg-purple-700 text-white hover:bg-purple-600"
-                            }`}
+                            aria-pressed={cubeActive}
+                            className="h-10 px-4 text-sm text-rc-fg"
                             title="Show cube extras from this cube"
                           >
                             Cube Extras
-                          </button>
+                          </RcButton>
                         )}
                         {/* Dragonlord Champion button */}
                         {hasDragonlordAvatar && onOpenChampionModal && (
-                          <button
+                          <RcButton
+                            variant="quiet"
                             onClick={onOpenChampionModal}
-                            className={`h-10 px-4 rounded font-medium transition-colors flex items-center gap-2 ${
-                              champion
-                                ? "bg-amber-600 text-white hover:bg-amber-500"
-                                : "bg-amber-700 text-white hover:bg-amber-600 animate-pulse"
+                            className={`h-10 px-4 text-sm border-rc-accent/60 bg-rc-accent/14 text-rc-spark ${
+                              champion ? "" : "animate-pulse"
                             }`}
                             title={
                               champion
@@ -560,16 +556,16 @@ export default function BottomBar(props: BottomBarProps) {
                           >
                             {champion ? (
                               <>
-                                <span className="text-amber-200">⚔️</span>
+                                <Icon icon="game-icons:crossed-swords" width={16} height={16} />
                                 {champion.name}
                               </>
                             ) : (
                               <>
-                                <span>🐉</span>
+                                <Icon icon="game-icons:spiked-dragon-head" width={16} height={16} />
                                 Select Champion
                               </>
                             )}
-                          </button>
+                          </RcButton>
                         )}
                       </div>
                     )}
@@ -578,16 +574,18 @@ export default function BottomBar(props: BottomBarProps) {
               </div>
             ) : !isDraftMode ? (
               <div className="w-full flex justify-start">
-                <div className="relative flex flex-col gap-3 p-3 rounded-lg backdrop-blur-sm border border-white/10 max-w-4xl w-full">
+                <div className="relative flex flex-col gap-3 p-3 rounded-rc-lg backdrop-blur-sm border border-rc-line/18 max-w-4xl w-full">
                   {/* Close button in upper right */}
-                  <button
+                  <RcButton
+                    variant="quiet"
+                    size="icon-xs"
                     onClick={() => setSearchExpanded(false)}
-                    className="absolute top-2 right-2 h-8 w-8 grid place-items-center rounded-full bg-red-500/20 hover:bg-red-500/40 text-red-400 hover:text-red-300 border border-red-500/30 font-bold text-sm transition-colors z-10"
+                    className="absolute top-2 right-2 h-8 w-8 font-bold text-sm z-10"
                     title="Close search (Esc)"
                     aria-label="Close search"
                   >
                     ✕
-                  </button>
+                  </RcButton>
                   <div className="flex items-center gap-3 pr-10">
                     {isFreeMode && onLiveSearchChange ? (
                       /* Free mode: live search with instant results */
@@ -617,14 +615,14 @@ export default function BottomBar(props: BottomBarProps) {
                               setSearchExpanded(false);
                             }
                           }}
-                          className="w-full border rounded-lg px-4 py-2 bg-black/60 text-white border-white/20 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20 transition-all"
+                          className="rc-input h-9 w-full"
                           placeholder="Search cards... (Enter to add first result)"
                           autoFocus
                         />
                         {liveSearchLoading && (
                           <div className="absolute right-3 top-1/2 -translate-y-1/2">
                             <svg
-                              className="w-4 h-4 animate-spin text-blue-400"
+                              className="w-4 h-4 animate-spin text-rc-accent"
                               viewBox="0 0 24 24"
                               fill="none"
                               stroke="currentColor"
@@ -655,19 +653,19 @@ export default function BottomBar(props: BottomBarProps) {
                         value={q}
                         onChange={(e) => setQ(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && doSearch()}
-                        className="flex-1 border rounded-lg px-4 py-2 bg-black/60 text-white border-white/20 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20 transition-all min-w-64"
+                        className="rc-input h-9 flex-1 min-w-64"
                         placeholder="Search all cards..."
                         autoFocus
                       />
                     )}
                     {/* Owned cards filter */}
                     {ownedFilterAvailable && (
-                      <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap text-sm text-white/80 hover:text-white transition-colors">
+                      <label className="rc-check gap-1.5 whitespace-nowrap transition-colors hover:text-rc-fg">
                         <input
                           type="checkbox"
                           checked={ownedOnly}
                           onChange={(e) => onOwnedOnlyChange?.(e.target.checked)}
-                          className="w-4 h-4 rounded border-white/30 bg-black/40 text-blue-500 focus:ring-blue-400/30 focus:ring-offset-0 cursor-pointer accent-blue-500"
+                          className="w-4 h-4 cursor-pointer"
                         />
                         Owned
                       </label>
@@ -697,7 +695,7 @@ export default function BottomBar(props: BottomBarProps) {
                     {/* Zoom slider */}
                     {onSearchZoomChange && (
                       <div className="flex items-center gap-1.5 whitespace-nowrap">
-                        <span className="text-xs text-white/50">Size</span>
+                        <span className="rc-hint">Size</span>
                         <input
                           type="range"
                           min="60"
@@ -705,14 +703,14 @@ export default function BottomBar(props: BottomBarProps) {
                           step="10"
                           value={searchZoom}
                           onChange={(e) => onSearchZoomChange(Number(e.target.value))}
-                          className="w-16 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                          className="rc-range w-16"
                         />
                       </div>
                     )}
                   </div>
                   {/* Live search results - show inline for free mode */}
                   {isFreeMode && liveSearchResults.length > 0 && (
-                    <div className={`overflow-y-auto ${searchZoom <= 100 ? "max-h-56" : searchZoom <= 130 ? "max-h-72" : "max-h-96"}`}>
+                    <div className={`thin-scrollbar overflow-y-auto ${searchZoom <= 100 ? "max-h-56" : searchZoom <= 130 ? "max-h-72" : "max-h-96"}`}>
                       <div className={`grid ${liveGridCols} gap-2`}>
                         {liveSearchResults.map((r, idx) => {
                           const isSite = (r.type || "")
@@ -726,12 +724,12 @@ export default function BottomBar(props: BottomBarProps) {
                                 onHoverPreview?.(r.slug, r.cardName, r.type)
                               }
                               onMouseLeave={() => onHoverClear?.()}
-                              className={`group relative rounded overflow-hidden bg-black/40 border transition-all ${
+                              className={`group relative rounded-rc-sm overflow-hidden bg-black/40 border transition-all ${
                                 isSite ? "aspect-[4/3]" : "aspect-[3/4]"
                               } ${
                                 idx === 0
-                                  ? "border-green-400 ring-2 ring-green-400/50 shadow-lg shadow-green-400/20"
-                                  : "border-white/20 hover:border-blue-400"
+                                  ? "border-rc-accent ring-2 ring-rc-accent/45 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                                  : "border-rc-line/22 hover:border-rc-accent"
                               }`}
                               title={`${idx === 0 ? "[Enter] " : ""}Add ${
                                 r.cardName
@@ -750,7 +748,7 @@ export default function BottomBar(props: BottomBarProps) {
                                 unoptimized
                               />
                               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-1">
-                                <span className="text-[10px] text-white font-medium truncate max-w-full px-1">
+                                <span className="font-rc-display text-[11px] leading-tight text-rc-fg-strong truncate max-w-full px-1">
                                   {r.cardName}
                                 </span>
                               </div>
@@ -767,14 +765,14 @@ export default function BottomBar(props: BottomBarProps) {
 
           {/* Search results grid */}
           {searchExpanded && !isDraftMode && (
-            <div className="mt-4 pointer-events-auto max-h-[60vh] overflow-y-auto pr-2">
+            <div className="thin-scrollbar mt-4 pointer-events-auto max-h-[60vh] overflow-y-auto pr-2">
               <div className={`grid ${serverGridCols} gap-3`}>
                 {results.map((r) => {
                   const isSite = (r.type || "").toLowerCase().includes("site");
                   return (
                     <div
                       key={r.variantId}
-                      className={`border border-white/30 rounded p-2 bg-black/70 text-white text-xs${
+                      className={`rounded-rc-md border border-rc-line/22 p-2 bg-[rgba(9,13,25,0.85)] text-rc-fg text-xs${
                         isSite ? " col-span-2" : ""
                       }`}
                     >
@@ -783,7 +781,7 @@ export default function BottomBar(props: BottomBarProps) {
                           isSite
                             ? "relative aspect-[3/2] mb-1"
                             : "relative aspect-[3/4] mb-2"
-                        } rounded overflow-hidden bg-black/40 group`}
+                        } rounded-rc-sm overflow-hidden bg-black/40 group`}
                       >
                         <Image
                           src={`/api/images/${r.slug}`}
@@ -800,43 +798,47 @@ export default function BottomBar(props: BottomBarProps) {
                         <div className="hidden sm:flex absolute inset-0">
                           <button
                             onClick={() => addToSideboardFromSearch(r)}
-                            className="w-1/2 h-full opacity-0 group-hover:opacity-100 transition bg-gradient-to-r from-black/0 to-black/40 text-white text-xs flex items-end justify-start p-2"
+                            className="w-1/2 h-full opacity-0 group-hover:opacity-100 transition bg-gradient-to-r from-black/0 to-black/40 text-rc-fg text-xs flex items-end justify-start p-2"
                             title="Add to sideboard"
                           >
-                            <span className="bg-black/60 px-2 py-1 rounded border border-white/20">
+                            <span className="rounded-rc-sm border border-rc-line/22 bg-[rgba(7,10,20,0.85)] px-2 py-1 font-rc-mono">
                               + Side
                             </span>
                           </button>
                           <button
                             onClick={() => addCardAuto(r)}
-                            className="w-1/2 h-full opacity-0 group-hover:opacity-100 transition bg-gradient-to-l from-black/0 to-black/40 text-white text-xs flex items-end justify-end p-2"
+                            className="w-1/2 h-full opacity-0 group-hover:opacity-100 transition bg-gradient-to-l from-black/0 to-black/40 text-rc-fg text-xs flex items-end justify-end p-2"
                             title="Add to deck"
                           >
-                            <span className="bg-black/60 px-2 py-1 rounded border border-white/20">
+                            <span className="rounded-rc-sm border border-rc-line/22 bg-[rgba(7,10,20,0.85)] px-2 py-1 font-rc-mono">
                               + Deck
                             </span>
                           </button>
                         </div>
                       </div>
-                      <div className="font-semibold line-clamp-1 mb-1">
+                      <div className="font-rc-display text-[15px] leading-tight text-rc-fg-strong line-clamp-1 mb-1">
                         {r.cardName}
                       </div>
-                      <div className="opacity-80 line-clamp-1 mb-2">
+                      <div className="font-rc-sans text-rc-fg-muted line-clamp-1 mb-2">
                         {r.type || ""}
                       </div>
                       <div className="flex gap-1 sm:hidden">
-                        <button
-                          className="px-2 py-1 border border-white/30 rounded hover:bg-white/10"
+                        <RcButton
+                          variant="quiet"
+                          size="xs"
+                          className="px-2"
                           onClick={() => addCardAuto(r)}
                         >
                           + Deck
-                        </button>
-                        <button
-                          className="px-2 py-1 border border-white/30 rounded hover:bg-white/10"
+                        </RcButton>
+                        <RcButton
+                          variant="quiet"
+                          size="xs"
+                          className="px-2"
                           onClick={() => addToSideboardFromSearch(r)}
                         >
                           + Side
-                        </button>
+                        </RcButton>
                       </div>
                     </div>
                   );

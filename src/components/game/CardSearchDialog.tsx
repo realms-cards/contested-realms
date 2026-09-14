@@ -4,6 +4,7 @@ import { Eye, Search, X } from "lucide-react";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import CardPreview from "@/components/game/CardPreview";
+import { RcButton } from "@/components/ui/rc-button";
 import { useSound } from "@/lib/contexts/SoundContext";
 import {
   useCardHover,
@@ -132,22 +133,22 @@ export default function CardSearchDialog({
 
   const content = (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-[rgba(6,10,20,0.5)] backdrop-blur-sm"
       onContextMenu={(e) => e.preventDefault()}
     >
       <div
         ref={dialogRef}
-        className="bg-zinc-900/95 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-2xl p-4 sm:p-6 w-[min(95vw,420px)] max-h-[85vh] text-white flex flex-col"
+        className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] backdrop-blur shadow-rc-panel p-4 sm:p-6 w-[min(95vw,420px)] max-h-[85vh] font-rc-sans text-rc-fg flex flex-col"
         onContextMenu={(e) => e.preventDefault()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Search className="w-5 h-5" />
+          <h3 className="m-0 flex items-center gap-2 font-rc-display text-[22px] leading-none text-rc-fg-strong">
+            <Search className="w-5 h-5 text-rc-accent-link" />
             Search All Cards
           </h3>
           <button
             onClick={onClose}
-            className="text-zinc-400 hover:text-white transition-colors"
+            className="-m-0.5 rounded-rc-md p-0.5 text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
           >
             <X className="w-5 h-5" />
           </button>
@@ -190,64 +191,51 @@ export default function CardSearchDialog({
               onMouseDown={(e) => e.currentTarget.removeAttribute("readonly")}
               onTouchStart={(e) => e.currentTarget.removeAttribute("readonly")}
               readOnly={!isMobile}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="rc-input h-9 w-full placeholder:text-rc-fg-subtle"
               autoFocus
             />
           </div>
 
-          <div className="flex gap-2">
+          <div className="rc-segment">
             <button
               onClick={() => setTypeFilter("")}
-              className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                typeFilter === ""
-                  ? "bg-blue-600 text-white"
-                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-              }`}
+              aria-pressed={typeFilter === ""}
+              data-tone="info"
             >
               All
             </button>
             <button
               onClick={() => setTypeFilter("spell")}
-              className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                typeFilter === "spell"
-                  ? "bg-purple-600 text-white"
-                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-              }`}
+              aria-pressed={typeFilter === "spell"}
+              data-tone="moonlight"
             >
               Spells
             </button>
             <button
               onClick={() => setTypeFilter("site")}
-              className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                typeFilter === "site"
-                  ? "bg-green-600 text-white"
-                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-              }`}
+              aria-pressed={typeFilter === "site"}
+              data-tone="success"
             >
               Sites
             </button>
             <button
               onClick={() => setTypeFilter("avatar")}
-              className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                typeFilter === "avatar"
-                  ? "bg-amber-600 text-white"
-                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-              }`}
+              aria-pressed={typeFilter === "avatar"}
             >
               Avatars
             </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto min-h-[200px]">
+        <div className="thin-scrollbar flex-1 overflow-y-auto min-h-[200px]">
           {loading ? (
-            <div className="text-center text-zinc-400 py-8">Searching...</div>
+            <div className="rc-hint text-center py-8 text-rc-fg-subtle">Searching...</div>
           ) : !searchTerm.trim() ? (
-            <div className="text-center text-zinc-400 py-8">
+            <div className="rc-hint text-center py-8 text-rc-fg-subtle">
               Type to search for cards
             </div>
           ) : results.length === 0 ? (
-            <div className="text-center text-zinc-400 py-8">
+            <div className="rc-hint text-center py-8 text-rc-fg-subtle">
               No cards found for &quot;{searchTerm}&quot;
             </div>
           ) : (
@@ -255,7 +243,7 @@ export default function CardSearchDialog({
               {results.map((card) => (
                 <div
                   key={card.cardId}
-                  className="bg-zinc-800/50 hover:bg-zinc-700/50 rounded-lg p-3 transition-colors cursor-pointer"
+                  className="rounded-rc-md border border-rc-line/12 bg-black/30 p-3 transition-colors cursor-pointer hover:border-rc-accent/35 hover:bg-rc-accent/8"
                   onMouseEnter={() => {
                     if (card.slug) {
                       showCardPreview({
@@ -277,24 +265,25 @@ export default function CardSearchDialog({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-white truncate">
+                      <div className="truncate font-rc-display text-[16px] leading-tight text-rc-fg-strong">
                         {card.name}
                       </div>
                       {card.type && (
-                        <div className="text-xs text-zinc-400 truncate">
+                        <div className="truncate text-xs text-rc-fg-muted">
                           {card.type}
                           {card.subTypes && ` — ${card.subTypes}`}
                         </div>
                       )}
                       {formatStats(card) && (
-                        <div className="text-xs text-zinc-500 mt-0.5">
+                        <div className="mt-0.5 font-rc-mono text-xs tabular-nums text-rc-fg-subtle">
                           {formatStats(card)}
                         </div>
                       )}
                     </div>
                     {isMobile && (
-                      <button
-                        type="button"
+                      <RcButton
+                        variant="quiet"
+                        size="xs"
                         onClick={(e) => {
                           // Touch has no hover, and tapping the row draws the
                           // card, so give phones an explicit preview button.
@@ -307,14 +296,14 @@ export default function CardSearchDialog({
                             });
                           }
                         }}
-                        className="flex-shrink-0 text-xs bg-white/10 hover:bg-white/20 rounded px-2 py-1.5 transition-colors"
+                        className="h-auto flex-shrink-0 px-2 py-1.5"
                         aria-label={`Preview ${card.name}`}
                         title="Preview"
                       >
                         <Eye className="w-4 h-4" />
-                      </button>
+                      </RcButton>
                     )}
-                    <button
+                    <RcButton
                       onClick={(e) => {
                         e.stopPropagation();
                         try {
@@ -322,10 +311,12 @@ export default function CardSearchDialog({
                         } catch {}
                         onSelectCard(card);
                       }}
-                      className="flex-shrink-0 text-xs bg-emerald-600/80 hover:bg-emerald-500 rounded px-3 py-1.5 transition-colors"
+                      variant="outline"
+                      size="sm"
+                      className="h-auto flex-shrink-0 px-3 py-1.5 text-xs"
                     >
                       Draw
-                    </button>
+                    </RcButton>
                   </div>
                 </div>
               ))}
@@ -333,12 +324,12 @@ export default function CardSearchDialog({
           )}
         </div>
 
-        <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center justify-between">
-          <span className="text-xs text-zinc-500">
+        <div className="mt-4 pt-4 border-t border-rc-line/12 flex items-center justify-between">
+          <span className="rc-hint tabular-nums">
             {results.length > 0 && `${results.length} cards found`}
           </span>
           <button
-            className="text-sm text-zinc-400 hover:text-zinc-300 transition-colors"
+            className="text-sm text-rc-fg-muted transition-colors hover:text-rc-fg-strong"
             onClick={onClose}
           >
             Cancel

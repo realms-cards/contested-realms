@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import CardWithPreview, { CardGrid } from "./CardWithPreview";
 
@@ -20,11 +21,11 @@ export default function HighlandPrincessOverlay() {
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-cyan-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
-          <span className="text-cyan-400 font-fantaisie">
-            👸 Highland Princess
+        <div className="pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg md:text-xl flex items-center gap-3 select-none">
+          <span className="font-rc-display text-rc-accent-link">
+            Highland Princess
           </span>
-          <span className="opacity-80">
+          <span className="text-rc-fg-muted">
             {phase === "loading" && "Searching spellbook..."}
             {phase === "selecting" && isOwner && "Select an artifact (cost ≤1)"}
             {phase === "selecting" &&
@@ -38,12 +39,12 @@ export default function HighlandPrincessOverlay() {
 
       {/* Card selection area - visible to owner */}
       {phase === "selecting" && isOwner && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-6 max-w-3xl w-full mx-4 ring-1 ring-cyan-500/30 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-fantaisie text-cyan-400 mb-4 text-center">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="thin-scrollbar rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto font-rc-sans text-rc-fg shadow-rc-panel">
+            <h2 className="mb-4 text-center font-rc-display text-[26px] leading-tight text-rc-fg-strong">
               Search for Artifact (Cost ≤1)
             </h2>
-            <p className="text-gray-400 text-center mb-4">
+            <p className="text-rc-fg-muted text-center mb-4">
               Select an artifact to put into your hand. Spellbook will be
               shuffled.
             </p>
@@ -64,23 +65,16 @@ export default function HighlandPrincessOverlay() {
 
             {/* Action buttons */}
             <div className="flex justify-center gap-4">
-              <button
+              <RcButton
                 onClick={resolve}
                 disabled={!selectedCard}
-                className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                  selectedCard
-                    ? "bg-cyan-600 hover:bg-cyan-500 text-white"
-                    : "bg-gray-700 text-gray-400 cursor-not-allowed"
-                }`}
+                className="h-auto whitespace-normal py-2"
               >
                 {selectedCard ? `Take ${selectedCard.name}` : "Select a card"}
-              </button>
-              <button
-                onClick={cancel}
-                className="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-medium transition-colors"
-              >
+              </RcButton>
+              <RcButton variant="outline" onClick={cancel}>
                 Skip
-              </button>
+              </RcButton>
             </div>
           </div>
         </div>
@@ -89,7 +83,7 @@ export default function HighlandPrincessOverlay() {
       {/* Opponent view */}
       {phase === "selecting" && !isOwner && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="pointer-events-auto px-4 py-2 rounded-lg bg-black/90 text-sm text-cyan-300 ring-1 ring-cyan-500/30">
+          <div className="rc-toast pointer-events-auto">
             {ownerSeat.toUpperCase()} is searching for an artifact...
           </div>
         </div>
@@ -98,7 +92,7 @@ export default function HighlandPrincessOverlay() {
       {/* Brief result flash on complete */}
       {phase === "complete" && selectedCard && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="pointer-events-auto px-4 py-2 rounded-lg bg-black/90 text-sm text-cyan-300 ring-1 ring-cyan-500/30">
+          <div className="rc-toast pointer-events-auto">
             Highland Princess found {selectedCard.name}!
           </div>
         </div>

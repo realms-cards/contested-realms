@@ -1,5 +1,8 @@
 import type { CardRef, GameState, MagicTarget, PendingMagic, PlayerKey } from "@/lib/game/store/types";
 
+/** A trigger-order choice meaning "keep the listed order" for the rest of that batch (the list was dismissed). */
+export const CPU_TRIGGERS_IN_ORDER = "__in_order__";
+
 export type UnitTarget =
   | { kind: "avatar"; seat: PlayerKey }
   | { kind: "permanent"; at: string; index: number; instanceId?: string | null };
@@ -59,6 +62,8 @@ export interface DamageHit {
   lethal?: boolean;
   sourcePower?: number;
   sourceName?: string;
+  /** A Ranged strike (Yourke Crossbowmen takes no damage from these). */
+  ranged?: boolean;
 }
 
 export interface SpellChoice {

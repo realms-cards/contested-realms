@@ -1,7 +1,10 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import Image from "next/image";
 import React, { useState, useCallback, useRef } from "react";
+import { Badge } from "@/components/ui/badge";
+import { RcButton } from "@/components/ui/rc-button";
 import { useOverlaySlot, overlaySlotClass } from "@/lib/game/overlayRegistry";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store/types";
@@ -83,20 +86,22 @@ export default function AccusationOverlay() {
   if (layout.minimized) {
     return (
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-4 py-2 rounded-full bg-black/90 text-white ring-1 ring-red-600/50 shadow-lg text-sm flex items-center gap-2 select-none">
-          <span className="text-red-500 font-fantaisie">⚖️ Accusation</span>
-          <span className="opacity-80 truncate max-w-[200px]">
+        <div className="pointer-events-auto px-4 py-2 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-sm flex items-center gap-2 select-none">
+          <span className="font-rc-display text-rc-accent-link">Accusation</span>
+          <span className="text-rc-fg-muted truncate max-w-[200px]">
             {summonInterrupting
               ? "Paused — resolving interrupt..."
               : getInstructionText()}
           </span>
-          <button
-            className="ml-1 rounded bg-white/15 hover:bg-white/25 px-2 py-0.5 text-xs"
+          <RcButton
+            variant="quiet"
+            size="xs"
+            className="ml-1 h-6 px-2"
             onClick={layout.toggleMinimize}
             title="Expand overlay"
           >
             ▼
-          </button>
+          </RcButton>
         </div>
       </div>
     );
@@ -110,28 +115,32 @@ export default function AccusationOverlay() {
       <div
         className={`${layout.tiled ? "" : "fixed inset-x-0 top-6 z-[201]"} pointer-events-none flex justify-center ${layout.tiled ? "pt-4 px-2" : ""}`}
       >
-        <div className="pointer-events-auto px-4 py-2 rounded-full bg-black/90 text-white ring-1 ring-red-600/50 shadow-lg text-sm md:text-base flex items-center gap-2 select-none">
-          <span className="text-red-500 font-fantaisie">⚖️ Accusation</span>
-          <span className="opacity-80 truncate">
+        <div className="pointer-events-auto px-4 py-2 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-sm md:text-base flex items-center gap-2 select-none">
+          <span className="font-rc-display text-rc-accent-link">Accusation</span>
+          <span className="text-rc-fg-muted truncate">
             {summonInterrupting
               ? "Paused — resolving interrupt..."
               : getInstructionText()}
           </span>
           {isCaster && phase === "selecting" && !summonInterrupting && (
-            <button
-              className="mx-1 rounded bg-white/15 hover:bg-white/25 px-2 py-0.5 select-none text-xs"
+            <RcButton
+              variant="outline"
+              size="xs"
+              className="mx-1 h-6 px-2"
               onClick={handleCancel}
             >
               Cancel
-            </button>
+            </RcButton>
           )}
-          <button
-            className="ml-1 rounded bg-white/15 hover:bg-white/25 px-2 py-0.5 text-xs"
+          <RcButton
+            variant="quiet"
+            size="xs"
+            className="ml-1 h-6 px-2"
             onClick={layout.toggleMinimize}
             title="Minimize overlay"
           >
             ▲
-          </button>
+          </RcButton>
         </div>
       </div>
 
@@ -142,25 +151,25 @@ export default function AccusationOverlay() {
             className={`flex-1 flex items-center justify-center pointer-events-auto ${layout.tiled ? "overflow-y-auto p-2" : ""}`}
           >
             <div
-              className={`bg-black/95 rounded-xl p-4 md:p-6 w-full mx-2 md:mx-4 ring-1 ring-red-600/30 ${layout.tiled ? "max-h-full" : "max-w-4xl max-h-[90vh]"} overflow-y-auto`}
+              className={`thin-scrollbar rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-4 md:p-6 w-full mx-2 md:mx-4 font-rc-sans text-rc-fg shadow-rc-panel ${layout.tiled ? "max-h-full" : "max-w-4xl max-h-[90vh]"} overflow-y-auto`}
             >
               <h2
-                className={`font-fantaisie text-red-500 mb-2 text-center ${layout.tiled ? "text-lg" : "text-2xl"}`}
+                className={`font-rc-display leading-tight text-rc-fg-strong mb-2 text-center ${layout.tiled ? "text-[18px]" : "text-[26px]"}`}
               >
                 {pending.victimSeat.toUpperCase()}&apos;s Hand Revealed
               </h2>
-              <p className="text-white/70 text-sm mb-2 text-center">
+              <p className="text-rc-fg-muted text-sm mb-2 text-center">
                 {revealedHand.length} card{revealedHand.length !== 1 ? "s" : ""}{" "}
                 in hand
               </p>
               {casterHasChoice && (
-                <p className="text-red-400 text-xs sm:text-sm mb-4 text-center font-medium flex items-center justify-center gap-1">
+                <p className="text-rc-danger text-xs sm:text-sm mb-4 text-center font-medium flex items-center justify-center gap-1">
                   <img src="/fire.png" alt="fire" className="w-4 h-4" /> Evil
                   detected - Caster chooses the card to banish
                 </p>
               )}
               {!casterHasChoice && (
-                <p className="text-amber-400 text-xs sm:text-sm mb-4 text-center">
+                <p className="text-rc-accent-link text-xs sm:text-sm mb-4 text-center">
                   No Evil found - Victim chooses the card to banish
                 </p>
               )}
@@ -185,29 +194,30 @@ export default function AccusationOverlay() {
               {hasControl && phase === "selecting" && (
                 <div className="flex gap-3 justify-center">
                   {isCaster && (
-                    <button
-                      className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 font-medium transition-colors text-sm"
+                    <RcButton
+                      variant="outline"
+                      size="sm"
                       onClick={handleCancel}
                     >
                       Cancel
-                    </button>
+                    </RcButton>
                   )}
-                  <button
-                    className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  <RcButton
+                    size="sm"
                     onClick={handleResolve}
                     disabled={selectedIndex === null}
                   >
                     Banish Card
-                  </button>
+                  </RcButton>
                 </div>
               )}
 
               {/* Waiting / paused message */}
               {!hasControl && phase === "selecting" && (
-                <div className="text-center text-white/60 text-sm">
+                <div className="text-center text-rc-fg-subtle text-sm">
                   {summonInterrupting ? (
-                    <span className="text-purple-400">
-                      ⏸ Paused while The Inquisition summon resolves...
+                    <span className="text-rc-accent-link">
+                      Paused while The Inquisition summon resolves...
                     </span>
                   ) : (
                     <>
@@ -264,15 +274,15 @@ function CardDisplay({
       onClick={interactive ? onClick : undefined}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all ${
+      className={`relative aspect-[2.5/3.5] rounded-rc-md overflow-hidden transition-all ${
         interactive
-          ? "cursor-pointer hover:ring-2 hover:ring-red-400/50 hover:scale-105"
+          ? "cursor-pointer hover:ring-2 hover:ring-rc-accent/60 hover:scale-105"
           : ""
       } ${
         selected
-          ? "ring-4 ring-red-500 scale-105 shadow-lg shadow-red-500/30"
+          ? "ring-4 ring-rc-accent scale-105 shadow-[0_0_14px_rgba(243,207,106,0.25)]"
           : ""
-      } ${isEvil && !selected ? "ring-2 ring-purple-500/50" : ""}`}
+      } ${isEvil && !selected ? "ring-2 ring-rc-danger/60" : ""}`}
     >
       <Image
         src={`/api/images/${card.slug || card.cardId}`}
@@ -283,13 +293,21 @@ function CardDisplay({
         unoptimized
       />
       {isEvil && (
-        <div className="absolute top-1 right-1 bg-purple-600 text-white text-xs px-1 rounded">
+        <Badge
+          tone="danger"
+          className="absolute top-1 right-1 bg-[rgba(7,10,20,0.85)]"
+        >
           Evil
-        </div>
+        </Badge>
       )}
       {selected && (
-        <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center">
-          <span className="text-3xl">⚖️</span>
+        <div className="absolute inset-0 bg-rc-accent/12 flex items-center justify-center">
+          <Icon
+            icon="game-icons:scales"
+            width={32}
+            height={32}
+            className="text-rc-accent-link"
+          />
         </div>
       )}
     </div>

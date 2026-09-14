@@ -38,11 +38,11 @@ export default function PiracyCastOverlay() {
 
   return (
     <div className="fixed right-4 bottom-56 z-[151] pointer-events-auto">
-      <div className="bg-black/90 rounded-lg p-3 ring-1 ring-cyan-500/50 max-w-56">
-        <div className="text-xs text-cyan-400 font-medium mb-1">
+      <div className="rounded-rc-md border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-3 max-w-56 font-rc-sans text-rc-fg shadow-rc-panel">
+        <div className="text-xs text-rc-accent-link font-medium mb-1">
           {sourceName} — Plunder
         </div>
-        <div className="text-xs text-gray-400 mb-2">
+        <div className="text-xs text-rc-fg-muted mb-2">
           Cast these from your opponent&apos;s cemetery this turn, ignoring
           threshold.
         </div>
@@ -60,10 +60,10 @@ export default function PiracyCastOverlay() {
                     card: grant.card,
                   })
                 }
-                className="w-full flex items-center gap-2 px-2 py-1 text-xs bg-cyan-900/40 hover:bg-cyan-800/50 text-cyan-200 rounded transition-colors text-left"
+                className="w-full flex items-center gap-2 px-2 py-1 text-xs rounded-rc-sm border border-rc-line/18 bg-black/30 hover:border-rc-accent/60 hover:bg-rc-accent/8 text-rc-fg transition-colors text-left"
                 title={`Cast ${grant.card.name} (cost ${grant.card.cost ?? 0})`}
               >
-                <span className="relative w-6 h-8 shrink-0 rounded overflow-hidden border border-cyan-400/30">
+                <span className="relative w-6 h-8 shrink-0 rounded-rc-sm overflow-hidden ring-1 ring-rc-line/25">
                   {imageId ? (
                     <Image
                       src={`/api/images/${imageId}`}
@@ -74,8 +74,8 @@ export default function PiracyCastOverlay() {
                     />
                   ) : null}
                 </span>
-                <span className="truncate">{grant.card.name}</span>
-                <span className="ml-auto opacity-70">
+                <span className="truncate font-rc-display text-rc-fg-strong">{grant.card.name}</span>
+                <span className="ml-auto font-rc-mono tabular-nums text-rc-fg-muted">
                   {grant.card.cost ?? 0}
                 </span>
               </button>

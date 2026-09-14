@@ -1351,7 +1351,7 @@ export default function CardbackSettingsPage() {
                   </div>
 
                   <div className="mt-4">
-                    <label htmlFor="sleeve-name" className="rc-eyebrow block">
+                    <label htmlFor="sleeve-name" className="rc-field-label">
                       Name
                     </label>
                     <input

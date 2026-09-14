@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { RcButton } from "@/components/ui/rc-button";
 
 type MyDeckInfo = {
   id: string;
@@ -214,13 +215,12 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
           </label>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            className="cursor-pointer rounded-rc-md border border-rc-accent-press bg-gradient-to-b from-rc-accent-hover to-rc-accent px-4 py-2 font-rc-sans text-sm font-medium text-rc-accent-fg shadow-rc-sm transition-transform hover:-translate-y-px disabled:pointer-events-none disabled:opacity-50"
+          <RcButton
             disabled={!deckIdP1 || !deckIdP2}
             onClick={prepareHands}
           >
             Prepare Hands
-          </button>
+          </RcButton>
         </div>
       </div>
     </div>

@@ -4408,6 +4408,37 @@ io.on("connection", async (socket: SocketClient) => {
           io.to(`spectate:${matchId}`).emit("message", out);
         } catch {}
       } catch {}
+    } else if (type === "botActionToast") {
+      // CPU bots announce each action: `message` is toast text, `log` a marked-up
+      // event log line that the human client (who adjudicates CPU matches) records.
+      try {
+        if (!isCpuPlayerId(player.id)) return;
+        const match = await getOrLoadMatch(matchId);
+        const room = `match:${matchId}`;
+        const playerKey = getSeatForPlayer(match, player.id) || "p2";
+        const { message: rawMessage, log: rawLog } = (payload ?? {}) as {
+          message?: unknown;
+          log?: unknown;
+        };
+        const message =
+          typeof rawMessage === "string" && rawMessage.trim()
+            ? rawMessage.slice(0, 200)
+            : null;
+        const log =
+          typeof rawLog === "string" && rawLog.trim() ? rawLog.slice(0, 300) : null;
+        if (!message && !log) return;
+        const out = {
+          type: "botActionToast",
+          message,
+          log,
+          playerKey,
+          ts: Date.now(),
+        } as const;
+        io.to(room).emit("message", out);
+        try {
+          io.to(`spectate:${matchId}`).emit("message", out);
+        } catch {}
+      } catch {}
     } else if (type === "handPeekAction") {
       // Broadcast hand peek actions (top/bottom of spellbook, graveyard, banish, steal)
       // to other players in the match for online synchronization

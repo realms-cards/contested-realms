@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { useGameStore } from "@/lib/game/store";
 
@@ -68,9 +69,9 @@ export function MarqueeActionBar() {
   return (
     <div
       data-marquee-bar
-      className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[9998] flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900/90 ring-1 ring-cyan-500/40 backdrop-blur-sm shadow-lg"
+      className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[9998] flex items-center gap-2 px-3 py-2 rounded-rc-md bg-[rgba(7,10,20,0.85)] ring-1 ring-cyan-500/40 backdrop-blur-sm shadow-rc-panel"
     >
-      <span className="text-xs text-cyan-300 font-medium mr-1">
+      <span className="mr-1 font-rc-mono text-xs font-medium tabular-nums text-cyan-300">
         {marqueeSelection.length} selected
       </span>
 
@@ -78,7 +79,7 @@ export function MarqueeActionBar() {
         <button
           type="button"
           onClick={tapAll}
-          className="px-2.5 py-1 text-xs font-medium rounded bg-amber-600/80 hover:bg-amber-600 text-white transition-colors"
+          className="px-2.5 py-1 text-xs font-medium rounded-rc-md border border-rc-accent/45 bg-black/35 font-rc-sans text-rc-accent-link transition-colors hover:border-rc-accent hover:bg-rc-accent/12"
         >
           Tap All
         </button>
@@ -88,19 +89,20 @@ export function MarqueeActionBar() {
         <button
           type="button"
           onClick={untapAll}
-          className="px-2.5 py-1 text-xs font-medium rounded bg-emerald-600/80 hover:bg-emerald-600 text-white transition-colors"
+          className="px-2.5 py-1 text-xs font-medium rounded-rc-md border border-rc-accent/45 bg-black/35 font-rc-sans text-rc-accent-link transition-colors hover:border-rc-accent hover:bg-rc-accent/12"
         >
           Untap All
         </button>
       )}
 
-      <button
-        type="button"
+      <RcButton
+        variant="quiet"
+        size="xs"
         onClick={clearMarqueeSelection}
-        className="px-2.5 py-1 text-xs font-medium rounded bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+        className="h-[26px]"
       >
         Clear
-      </button>
+      </RcButton>
     </div>
   );
 }

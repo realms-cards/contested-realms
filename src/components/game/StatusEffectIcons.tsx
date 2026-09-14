@@ -49,12 +49,12 @@ function StatusEffectIcon({ effect, expanded }: StatusEffectIconProps) {
   return (
     <div
       className={`relative flex items-center gap-2 transition-all duration-200 ${
-        expanded ? "bg-slate-800/90 rounded-lg px-2 py-1" : ""
+        expanded ? "rounded-rc-md border border-rc-line/12 bg-black/30 px-2 py-1" : ""
       }`}
     >
       {/* Circular icon with card art */}
       <div
-        className={`relative w-6 h-6 rounded-full overflow-hidden ring-2 ${ringColor} bg-slate-900 shadow-md flex-shrink-0 ${
+        className={`relative w-6 h-6 rounded-full overflow-hidden ring-2 ${ringColor} bg-rc-floor shadow-rc-md flex-shrink-0 ${
           effect.isSilenced ? "opacity-60" : ""
         }`}
       >
@@ -66,19 +66,19 @@ function StatusEffectIcon({ effect, expanded }: StatusEffectIconProps) {
         {/* Strikethrough for silenced effects */}
         {effect.isSilenced && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-full h-0.5 bg-red-500 rotate-45 shadow-sm" />
+            <div className="w-full h-0.5 bg-red-500 rotate-45 shadow-rc-sm" />
           </div>
         )}
       </div>
       {/* Expanded description */}
       {expanded && (
-        <div className="text-white text-xs whitespace-nowrap">
+        <div className="font-rc-sans text-rc-fg text-xs whitespace-nowrap">
           <div
-            className={`font-medium ${effect.isSilenced ? "line-through opacity-70" : ""}`}
+            className={`font-medium text-rc-fg-strong ${effect.isSilenced ? "line-through opacity-70" : ""}`}
           >
             {effect.title}
           </div>
-          <div className="text-white/70 text-[10px]">
+          <div className="text-rc-fg-muted text-[10px]">
             {effect.isSilenced ? "Silenced" : effect.description}
           </div>
         </div>
@@ -109,7 +109,7 @@ function ClusteredIcon({ effects, isExpanded }: ClusteredIconProps) {
             return (
               <div
                 key={effect.id}
-                className={`w-6 h-6 rounded-full overflow-hidden ring-2 ${ringColor} bg-slate-900 shadow-md`}
+                className={`w-6 h-6 rounded-full overflow-hidden ring-2 ${ringColor} bg-rc-floor shadow-rc-md`}
                 style={{ zIndex: 10 - idx }}
               >
                 <img
@@ -122,7 +122,7 @@ function ClusteredIcon({ effects, isExpanded }: ClusteredIconProps) {
           })}
         </div>
         {hiddenCount > 0 && (
-          <div className="ml-1 w-5 h-5 rounded-full bg-slate-700 text-white text-[10px] flex items-center justify-center font-medium">
+          <div className="ml-1 w-5 h-5 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.85)] text-rc-fg-muted font-rc-mono tabular-nums text-[10px] flex items-center justify-center font-medium">
             +{hiddenCount}
           </div>
         )}
@@ -327,13 +327,13 @@ export default function PlayerStatusEffects() {
       <div
         className={`transition-all duration-200 ${
           isHovered
-            ? "bg-slate-900/95 rounded-xl p-2 shadow-xl border border-slate-700/50"
+            ? "rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-2 text-rc-fg shadow-rc-panel"
             : ""
         }`}
       >
         {/* Header when expanded */}
         {isHovered && activeEffects.length > 1 && (
-          <div className="text-white/50 text-[10px] uppercase tracking-wider mb-2 px-1">
+          <div className="rc-eyebrow text-[10px] mb-2 px-1">
             Active Effects ({activeEffects.length})
           </div>
         )}

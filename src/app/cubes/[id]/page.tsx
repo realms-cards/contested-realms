@@ -271,7 +271,7 @@ export default function CubeViewPage() {
                       sizes="100px"
                       unoptimized
                     />
-                    <div className="absolute top-1 right-1 rounded-rc-sm bg-rc-accent/85 px-1.5 py-0.5 font-rc-mono text-xs text-rc-accent-fg">
+                    <div className="absolute top-1 right-1 rounded-rc-sm border border-rc-accent/60 bg-black/80 px-1.5 py-0.5 font-rc-mono text-xs text-rc-spark">
                       {card.count}x
                     </div>
                   </div>

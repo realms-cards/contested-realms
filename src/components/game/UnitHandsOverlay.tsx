@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import React, { useCallback, useRef, useState } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import type {
   CardRef,
@@ -161,31 +162,21 @@ function UnitHandButton({
       ? unitHand.entry.minion.card.name || "Morgana"
       : unitHand.entry.artifact.card.name || "Omphalos";
 
-  // Color scheme based on type
-  const colors =
-    unitHand.kind === "morgana"
-      ? {
-          ring: "ring-purple-500",
-          bg: "bg-purple-600",
-          text: "text-purple-300",
-        }
-      : getOmphalosColors(sourceName);
-
   return (
     <div className="flex flex-col items-end">
       {/* Compact button with card image */}
       <button
         data-omphalos-hand={unitHand.kind === "omphalos" ? unitHand.entry.id : undefined}
         onClick={onToggleExpand}
-        className={`flex items-center gap-1.5 p-1 pr-2 rounded-lg transition-all ${
+        className={`flex items-center gap-1.5 p-1 pr-2 rounded-rc-md border bg-[rgba(7,10,20,0.9)] transition-all ${
           expanded
-            ? `${colors.bg} text-white ring-2 ${colors.ring}`
-            : `bg-black/80 text-white/90 hover:bg-black/90 ring-1 ${colors.ring}/50`
+            ? "border-rc-accent text-rc-fg-strong shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+            : "border-rc-line/22 text-rc-fg hover:border-rc-accent/60"
         }`}
         title={sourceName}
       >
         {/* Card image thumbnail */}
-        <div className="relative w-8 h-10 rounded overflow-hidden flex-shrink-0">
+        <div className="relative w-8 h-10 rounded-rc-sm overflow-hidden flex-shrink-0">
           <Image
             src={`/api/images/${sourceSlug}`}
             alt={sourceName}
@@ -197,8 +188,10 @@ function UnitHandButton({
         </div>
         {/* Card count badge */}
         <span
-          className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
-            expanded ? "bg-white/20" : "bg-black/50"
+          className={`px-1.5 py-0.5 rounded-full border font-rc-mono text-xs font-medium tabular-nums ${
+            expanded
+              ? "border-rc-accent/45 bg-rc-accent/16 text-rc-accent-link"
+              : "border-rc-line/22 bg-black/40 text-rc-fg"
           }`}
         >
           {handCount}
@@ -208,9 +201,9 @@ function UnitHandButton({
       {/* Expanded view */}
       {expanded && (
         <div
-          className={`mt-1 p-3 bg-black/95 rounded-lg ring-1 ${colors.ring}/50 max-w-xs`}
+          className="mt-1 p-3 rounded-rc-md border border-rc-line/18 bg-[rgba(9,13,25,0.95)] font-rc-sans text-rc-fg shadow-rc-panel max-w-xs"
         >
-          <p className={`${colors.text} text-xs mb-2 text-center`}>
+          <p className="text-rc-fg-muted text-xs mb-2 text-center">
             {isOwner
               ? handCount > 0
                 ? "Select a card, then cast it"
@@ -230,24 +223,20 @@ function UnitHandButton({
                     onClick={() => onSelectCard(index)}
                     selected={selectedCardIndex === index}
                     interactive={true}
-                    ringColor={colors.ring}
                   />
                 ))}
               </div>
 
               {selectedCardIndex !== null && (
                 <div className="mt-3 flex justify-center">
-                  <button
-                    onClick={() => onCast(selectedCardIndex)}
-                    className={`px-3 py-1.5 ${colors.bg} hover:brightness-110 text-white text-sm font-medium rounded-lg transition-colors`}
-                  >
+                  <RcButton size="sm" onClick={() => onCast(selectedCardIndex)}>
                     Cast {hand[selectedCardIndex]?.name || "Card"}
-                  </button>
+                  </RcButton>
                 </div>
               )}
             </>
           ) : isOwner ? (
-            <p className="text-white/50 text-sm text-center py-2">
+            <p className="text-rc-fg-subtle text-sm text-center py-2">
               {unitHand.kind === "omphalos" ? "Draws at end of turn" : "Empty"}
             </p>
           ) : (
@@ -255,7 +244,7 @@ function UnitHandButton({
               {Array.from({ length: handCount }).map((_, i) => (
                 <div
                   key={i}
-                  className={`w-8 h-10 bg-black/50 rounded border ${colors.ring}/30`}
+                  className="w-8 h-10 rounded-rc-sm border border-rc-line/22 bg-black/50"
                 />
               ))}
             </div>
@@ -266,35 +255,16 @@ function UnitHandButton({
   );
 }
 
-function getOmphalosColors(name: string) {
-  const nameLower = name.toLowerCase();
-  if (nameLower.includes("algor"))
-    return { ring: "ring-cyan-400", bg: "bg-cyan-600", text: "text-cyan-300" };
-  if (nameLower.includes("char"))
-    return {
-      ring: "ring-orange-400",
-      bg: "bg-orange-600",
-      text: "text-orange-300",
-    };
-  if (nameLower.includes("dank"))
-    return { ring: "ring-teal-400", bg: "bg-teal-600", text: "text-teal-300" };
-  if (nameLower.includes("torrid"))
-    return { ring: "ring-red-400", bg: "bg-red-600", text: "text-red-300" };
-  return { ring: "ring-amber-400", bg: "bg-amber-600", text: "text-amber-300" };
-}
-
 function CardDisplay({
   card,
   onClick,
   selected,
   interactive,
-  ringColor,
 }: {
   card: CardRef;
   onClick?: () => void;
   selected: boolean;
   interactive: boolean;
-  ringColor: string;
 }) {
   const setPreviewCard = useGameStore((s) => s.setPreviewCard);
   const hoverTimerRef = useRef<number | null>(null);
@@ -319,11 +289,11 @@ function CardDisplay({
       onClick={interactive ? onClick : undefined}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`relative aspect-[2.5/3.5] rounded overflow-hidden transition-all ${
+      className={`relative aspect-[2.5/3.5] rounded-rc-sm overflow-hidden transition-all ${
         interactive
-          ? `cursor-pointer hover:scale-105 hover:ring-2 hover:${ringColor}`
+          ? "cursor-pointer hover:scale-105 hover:ring-2 hover:ring-rc-accent/60"
           : ""
-      } ${selected ? `ring-2 ${ringColor} scale-105` : ""}`}
+      } ${selected ? "ring-2 ring-rc-accent scale-105" : ""}`}
     >
       <Image
         src={`/api/images/${card.slug || card.cardId}`}
@@ -333,13 +303,13 @@ function CardDisplay({
         unoptimized
       />
       <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent p-0.5">
-        <p className="text-white text-[9px] text-center truncate">
+        <p className="font-rc-display text-rc-fg-strong text-[9px] text-center truncate">
           {card.name}
         </p>
       </div>
       {selected && (
-        <div className="absolute inset-0 bg-white/10 flex items-center justify-center">
-          <div className="bg-white text-black font-bold px-1 py-0.5 rounded text-[9px]">
+        <div className="absolute inset-0 bg-rc-accent/12 flex items-center justify-center">
+          <div className="bg-rc-accent text-rc-accent-fg font-rc-mono font-bold px-1 py-0.5 rounded-rc-sm text-[9px]">
             ✓
           </div>
         </div>

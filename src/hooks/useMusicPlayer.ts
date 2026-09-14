@@ -128,6 +128,10 @@ interface SingletonState {
 
 let singletonAudio: HTMLAudioElement | null = null;
 let shouldBePlaying = false;
+// Each play() request gets a number. A request that a newer play, pause or
+// track change superseded is ignored when it settles: its AbortError must not
+// clear shouldBePlaying, or the playlist stops after the current track.
+let playRequest = 0;
 // Consecutive media load failures; stops the "skip on error" hop from looping
 // through the whole playlist forever when /music is unreachable.
 let consecutiveLoadErrors = 0;
@@ -277,6 +281,7 @@ function ensureAudio(): HTMLAudioElement {
     singletonAudio.addEventListener("error", () => {
       consecutiveLoadErrors++;
       if (consecutiveLoadErrors >= MUSIC_TRACKS.length) {
+        playRequest++;
         shouldBePlaying = false;
         updateSnapshot({ isPlaying: false });
         return;
@@ -293,47 +298,47 @@ function ensureAudio(): HTMLAudioElement {
   return singletonAudio;
 }
 
+/** Ask the element to play; only the latest request may update state. */
+function requestPlay(audio: HTMLAudioElement) {
+  const request = ++playRequest;
+  shouldBePlaying = true;
+  const playPromise = audio.play();
+  if (!playPromise) return;
+  playPromise
+    .then(() => {
+      if (request !== playRequest) return;
+      disarmGestureRetry();
+      updateSnapshot({ isPlaying: true, autoplayBlocked: false });
+    })
+    .catch(() => {
+      if (request !== playRequest) return;
+      shouldBePlaying = false;
+      updateSnapshot({ isPlaying: false, autoplayBlocked: true });
+      armGestureRetry();
+    });
+}
+
+/** Stop playback and invalidate any play() still pending. */
+function stopPlayback() {
+  playRequest++;
+  shouldBePlaying = false;
+  if (singletonAudio) singletonAudio.pause();
+}
+
 function changeTrack(index: number) {
   const audio = ensureAudio();
   const track = getTrackByIndex(index);
   audio.src = track.path;
   saveSetting(MUSIC_STORAGE_KEYS.currentTrackIndex, index);
+  updateSnapshot({ currentTrackIndex: index });
 
   if (shouldBePlaying && snapshot.isEnabled) {
-    const playPromise = audio.play();
-    if (playPromise) {
-      playPromise
-        .then(() => {
-          disarmGestureRetry();
-          updateSnapshot({ currentTrackIndex: index, isPlaying: true, autoplayBlocked: false });
-        })
-        .catch(() => {
-          shouldBePlaying = false;
-          updateSnapshot({ currentTrackIndex: index, isPlaying: false, autoplayBlocked: true });
-          armGestureRetry();
-        });
-    }
-  } else {
-    updateSnapshot({ currentTrackIndex: index });
+    requestPlay(audio);
   }
 }
 
 function tryPlay() {
-  const audio = ensureAudio();
-  shouldBePlaying = true;
-  const playPromise = audio.play();
-  if (playPromise) {
-    playPromise
-      .then(() => {
-        disarmGestureRetry();
-        updateSnapshot({ isPlaying: true, autoplayBlocked: false });
-      })
-      .catch(() => {
-        shouldBePlaying = false;
-        updateSnapshot({ isPlaying: false, autoplayBlocked: true });
-        armGestureRetry();
-      });
-  }
+  requestPlay(ensureAudio());
 }
 
 // ─── Autoplay recovery ───────────────────────────────────────────────────
@@ -402,11 +407,8 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
           teardownTimer = null;
           if (mountCount > 0) return;
           disarmGestureRetry();
-          if (singletonAudio) {
-            singletonAudio.pause();
-            singletonAudio = null;
-          }
-          shouldBePlaying = false;
+          stopPlayback();
+          singletonAudio = null;
           updateSnapshot({ isPlaying: false });
         }, TEARDOWN_DELAY_MS);
       }
@@ -416,28 +418,19 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
   const currentTrack = getTrackByIndex(state.currentTrackIndex);
 
   // Controls
+  // Decide by intent, not audio.paused: play() flips paused to false before
+  // playback starts, so a second click during loading must still pause.
   const togglePlay = useCallback(() => {
     const audio = ensureAudio();
 
-    if (audio.paused) {
-      shouldBePlaying = true;
-      saveSetting(MUSIC_STORAGE_KEYS.enabled, true);
-      const playPromise = audio.play();
-      if (playPromise) {
-        playPromise
-          .then(() => {
-            updateSnapshot({ isEnabled: true, isPlaying: true, autoplayBlocked: false });
-          })
-          .catch(() => {
-            shouldBePlaying = false;
-            updateSnapshot({ autoplayBlocked: true });
-          });
-      }
-    } else {
-      shouldBePlaying = false;
+    if (shouldBePlaying || !audio.paused) {
+      stopPlayback();
       saveSetting(MUSIC_STORAGE_KEYS.enabled, false);
-      audio.pause();
-      updateSnapshot({ isEnabled: false, isPlaying: false });
+      updateSnapshot({ isEnabled: false, isPlaying: false, autoplayBlocked: false });
+    } else {
+      saveSetting(MUSIC_STORAGE_KEYS.enabled, true);
+      updateSnapshot({ isEnabled: true });
+      requestPlay(audio);
     }
   }, []);
 
@@ -474,8 +467,7 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
       updateSnapshot({ isEnabled: true });
       tryPlay();
     } else {
-      shouldBePlaying = false;
-      if (singletonAudio) singletonAudio.pause();
+      stopPlayback();
       updateSnapshot({ isEnabled: false, isPlaying: false });
     }
   }, []);

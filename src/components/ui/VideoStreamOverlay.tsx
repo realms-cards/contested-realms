@@ -68,7 +68,8 @@ export const VideoStreamOverlay: React.FC<VideoStreamOverlayProps> = ({
 
   return (
     <div className={`
-      relative bg-gray-900 rounded-lg overflow-hidden
+      relative bg-rc-floor rounded-rc-lg overflow-hidden
+      border border-rc-line/18
       min-w-0 min-h-0
       ${className}
     `}>
@@ -83,19 +84,19 @@ export const VideoStreamOverlay: React.FC<VideoStreamOverlayProps> = ({
         />
       ) : (
         // Audio-only mode - show avatar/placeholder
-        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-700">
+        <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-rc-bg-top to-rc-floor">
           <div className="text-center">
-            <div className="w-16 h-16 mx-auto mb-2 bg-white/20 rounded-full flex items-center justify-center">
-              <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <div className="w-16 h-16 mx-auto mb-2 rounded-full border border-rc-accent/35 bg-rc-accent/8 flex items-center justify-center">
+              <svg className="w-8 h-8 text-rc-accent-ring" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 2a3 3 0 013 3v6a3 3 0 01-6 0V5a3 3 0 013-3z"/>
                 <path d="M19 10v2a7 7 0 11-14 0v-2"/>
                 <path d="M12 19v4M8 23h8"/>
               </svg>
             </div>
-            <p className="text-white text-sm font-medium">
+            <p className="font-rc-sans text-rc-fg-strong text-sm font-medium">
               {displayName}
             </p>
-            <p className="text-white/70 text-xs">
+            <p className="rc-hint">
               Audio Only
             </p>
           </div>
@@ -104,12 +105,12 @@ export const VideoStreamOverlay: React.FC<VideoStreamOverlayProps> = ({
 
       {/* Loading Overlay */}
       {hasVideo && !isVideoLoaded && (
-        <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
-          <div className="text-center text-white">
+        <div className="absolute inset-0 bg-rc-bg flex items-center justify-center">
+          <div className="text-center text-rc-fg-muted">
             <svg className="w-6 h-6 mx-auto mb-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            <p className="text-xs">Loading video...</p>
+            <p className="font-rc-mono text-xs tracking-[0.08em]">Loading video...</p>
           </div>
         </div>
       )}
@@ -118,7 +119,7 @@ export const VideoStreamOverlay: React.FC<VideoStreamOverlayProps> = ({
       <div className="absolute bottom-0 left-0 right-0">
         <div className="bg-gradient-to-t from-black/80 via-black/40 to-transparent px-3 py-2">
           <div className="flex items-center justify-between">
-            <span className="text-white text-sm font-medium truncate">
+            <span className="font-rc-sans text-rc-fg-strong text-sm font-medium truncate">
               {displayName}
             </span>
             
@@ -127,8 +128,8 @@ export const VideoStreamOverlay: React.FC<VideoStreamOverlayProps> = ({
               <div className={`
                 p-1 rounded-full text-xs
                 ${hasAudio && !muted 
-                  ? 'bg-green-500/80 text-white' 
-                  : 'bg-red-500/80 text-white'
+                  ? 'bg-rc-success/80 text-rc-fg-strong'
+                  : 'bg-rc-danger/80 text-rc-fg-strong'
                 }
               `}>
                 {hasAudio && !muted ? (
@@ -145,7 +146,7 @@ export const VideoStreamOverlay: React.FC<VideoStreamOverlayProps> = ({
               
               {/* Video Indicator */}
               {hasVideo && (
-                <div className="p-1 bg-green-500/80 text-white rounded-full text-xs">
+                <div className="p-1 bg-rc-success/80 text-rc-fg-strong rounded-full text-xs">
                   <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M17 10.5V7a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1v-3.5l4 4v-11l-4 4z"/>
                   </svg>
@@ -159,10 +160,10 @@ export const VideoStreamOverlay: React.FC<VideoStreamOverlayProps> = ({
       {/* Connection Quality Indicator */}
       <div className="absolute top-2 right-2">
         <div className="flex items-center gap-1">
-          <div className="w-1 h-2 bg-green-400 rounded-sm" />
-          <div className="w-1 h-3 bg-green-400 rounded-sm" />
-          <div className="w-1 h-4 bg-green-400 rounded-sm" />
-          <div className="w-1 h-2 bg-gray-400 rounded-sm opacity-30" />
+          <div className="w-1 h-2 bg-rc-success rounded-sm" />
+          <div className="w-1 h-3 bg-rc-success rounded-sm" />
+          <div className="w-1 h-4 bg-rc-success rounded-sm" />
+          <div className="w-1 h-2 bg-rc-fg-subtle rounded-sm opacity-30" />
         </div>
       </div>
     </div>
@@ -195,8 +196,8 @@ export const CompactVideoStream: React.FC<VideoStreamOverlayProps & {
   return (
     <div className={`
       ${sizeClasses[size]} ${className}
-      relative rounded-md overflow-hidden
-      border-2 border-white/20 shadow-lg
+      relative rounded-rc-md overflow-hidden
+      border-2 border-rc-line/22 shadow-rc-md
     `}>
       <VideoStreamOverlay
         stream={stream}
@@ -209,7 +210,7 @@ export const CompactVideoStream: React.FC<VideoStreamOverlayProps & {
       {/* Compact Controls Overlay */}
       {showControls && (
         <div className="absolute top-1 left-1 flex gap-1">
-          <button className="p-0.5 bg-black/50 rounded-full text-white text-xs hover:bg-black/70">
+          <button className="p-0.5 bg-black/50 rounded-full text-rc-fg-strong text-xs hover:bg-black/70">
             <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
               <path d="M6 18L18 6M6 6l12 12"/>
             </svg>

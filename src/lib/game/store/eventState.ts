@@ -15,8 +15,11 @@ export const createEventSlice: StateCreator<GameState, [], [], EventSlice> = (
       // In online play, only the acting player should log events.
       // The opponent will receive events via server patches.
       // This prevents duplicate logs from both clients logging the same action.
+      // A CPU match has no second client: the human client adjudicates it and
+      // also logs the CPU's turn (the bot's own lines arrive as botActionToast).
       const isOnline = Boolean(state.transport && state.actorKey);
-      if (isOnline) {
+      const cpuMatch = state.opponentPlayerId?.startsWith("cpu_") === true;
+      if (isOnline && !cpuMatch) {
         const currentSeat = state.currentPlayer === 1 ? "p1" : "p2";
         if (state.actorKey !== currentSeat) {
           // Not the current player's turn - don't log locally, events come from server

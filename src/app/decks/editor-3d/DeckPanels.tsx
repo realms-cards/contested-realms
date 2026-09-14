@@ -10,10 +10,11 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import DeckTopBarActions from "@/app/decks/editor-3d/DeckTopBarActions";
 import UserBadge from "@/components/auth/UserBadge";
 import { DeckValidation } from "@/components/deck-editor";
+import { RcButton, rcButtonVariants } from "@/components/ui/rc-button";
 
 type DeckPanelsProps = {
   // Modes
@@ -125,36 +126,37 @@ function DeckTitle({
               setEditing(false);
             }
           }}
-          className="text-lg font-fantaisie border-b-2 border-white/40 bg-transparent text-white outline-none max-w-[20ch] px-1"
+          className="text-lg font-rc-display border-b-2 border-rc-line/40 bg-transparent text-rc-fg-strong outline-none focus:border-rc-accent max-w-[20ch] px-1"
           placeholder="Deck name"
           autoFocus
         />
       ) : (
         <div
-          className="text-lg font-fantaisie text-white max-w-[20ch] truncate"
+          className="text-lg font-rc-display text-rc-fg-strong max-w-[20ch] truncate"
           title={displayName}
         >
           {displayName}
         </div>
       )}
       {deckIsOwner && !editing && (
-        <button
+        <RcButton
+          variant="quiet"
+          size="icon-xs"
           onClick={() => setEditing(true)}
-          className="h-7 w-7 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition-colors"
           title="Rename deck"
           aria-label="Rename deck"
         >
           <Pencil className="h-3.5 w-3.5" />
-        </button>
+        </RcButton>
       )}
       {modeLabel && (
         <span
-          className={`text-sm ml-1 ${
+          className={`font-rc-mono text-sm ml-1 ${
             isDraftMode
-              ? "text-orange-400"
+              ? "text-rc-ember"
               : isSealed
-              ? "text-amber-400"
-              : "text-blue-400"
+              ? "text-rc-accent-link"
+              : "text-rc-info"
           }`}
         >
           {modeLabel}
@@ -167,15 +169,6 @@ function DeckTitle({
 export default function DeckPanels(props: DeckPanelsProps) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
-  const iconButtonStyles = useMemo(
-    () => ({
-      base: "h-8 w-8 grid place-items-center rounded-full border border-white/15 bg-white/5 text-white/70 transition-colors duration-150 hover:bg-white/15 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
-      active:
-        "bg-emerald-500/80 text-black border-emerald-400 hover:bg-emerald-400 focus-visible:ring-emerald-300",
-      toggled: "bg-white/15 text-white border-white/30 hover:bg-white/20",
-    }),
-    []
-  );
   const {
     isDraftMode,
     isSealed,
@@ -233,7 +226,11 @@ export default function DeckPanels(props: DeckPanelsProps) {
         {isFreeMode && !tournamentId && (
           <Link
             href="/decks"
-            className="flex items-center px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors flex-none"
+            className={rcButtonVariants({
+              variant: "quiet",
+              size: "icon-xs",
+              className: "flex-none",
+            })}
           >
             <ArrowLeft className="h-4 w-4" />
           </Link>
@@ -241,23 +238,29 @@ export default function DeckPanels(props: DeckPanelsProps) {
         {tournamentId && (
           <Link
             href={`/tournaments/${encodeURIComponent(tournamentId)}`}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600/80 hover:bg-emerald-500 text-white text-xs font-medium transition-colors shadow-md flex-none"
+            className={rcButtonVariants({
+              variant: "quiet",
+              size: "xs",
+              className: "gap-1 px-2 text-rc-fg flex-none",
+            })}
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Tournament
           </Link>
         )}
         {onToggleViewMode && (
-          <button
+          <RcButton
+            variant="quiet"
+            size="icon-xs"
+            tone="info"
             onClick={onToggleViewMode}
-            className={`${iconButtonStyles.base} ${
-              viewMode === "2d" ? "bg-blue-600/80 text-white border-blue-500" : ""
-            } flex-none`}
+            aria-pressed={viewMode === "2d"}
+            className="h-8 w-8 flex-none"
             title={viewMode === "3d" ? "Switch to 2D view" : "Switch to 3D view"}
             aria-label={viewMode === "3d" ? "Switch to 2D view" : "Switch to 3D view"}
           >
             <Layers className="h-4 w-4" strokeWidth={2.5} />
-          </button>
+          </RcButton>
         )}
         <DeckTitle
           deckName={deckName}
@@ -268,58 +271,64 @@ export default function DeckPanels(props: DeckPanelsProps) {
           onSetDeckName={onSetDeckName}
         />
         {isFreeMode && onFreeValidationModeChange && (
-          <div className="flex items-center gap-0.5 bg-black/40 rounded p-0.5 border border-white/10 flex-none">
+          <div className="rc-segment bg-black/40 text-[10px] tracking-[0.08em] flex-none">
             <button
               onClick={() => onFreeValidationModeChange("constructed")}
-              className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
-                freeValidationMode === "constructed"
-                  ? "bg-blue-500 text-white"
-                  : "text-white/60 hover:text-white hover:bg-white/10"
-              }`}
+              aria-pressed={freeValidationMode === "constructed"}
+              data-tone="info"
+              className="px-2 py-0.5"
               title={`Constructed: ${validationMinimums.atlas}+ sites, ${validationMinimums.spellbook}+ spells (40 cards min)`}
             >
               Constructed
             </button>
             <button
               onClick={() => onFreeValidationModeChange("sealed")}
-              className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
-                freeValidationMode === "sealed"
-                  ? "bg-amber-500 text-white"
-                  : "text-white/60 hover:text-white hover:bg-white/10"
-              }`}
+              aria-pressed={freeValidationMode === "sealed"}
+              data-tone="info"
+              className="px-2 py-0.5"
               title="Sealed: 8+ sites, 18+ spells (30 cards min)"
             >
               Sealed
             </button>
           </div>
         )}
-        <button
+        <RcButton
+          variant="quiet"
+          size="icon-xs"
           onClick={() => setHelpOpen(true)}
-          className={`${iconButtonStyles.base} text-blue-200 hover:text-blue-100 hover:bg-blue-500/20 border-blue-300/30 focus-visible:ring-blue-200/50 flex-none`}
+          className="h-8 w-8 flex-none"
           title="How to use the editor"
           aria-label="How to use the editor"
         >
           <HelpCircle className="h-4 w-4" strokeWidth={2.5} />
-        </button>
+        </RcButton>
         {pick3DLength > 0 && (
-          <button
+          <RcButton
+            variant="quiet"
+            size="icon-xs"
+            tone="success"
             onClick={onToggleSort}
             title={isSortingEnabled ? "Disable auto-stacking" : "Enable auto-stacking"}
             aria-label={isSortingEnabled ? "Disable auto-stacking" : "Enable auto-stacking"}
-            className={`${iconButtonStyles.base} ${isSortingEnabled ? iconButtonStyles.active : ""} flex-none`}
+            aria-pressed={isSortingEnabled}
+            className="h-8 w-8 flex-none"
           >
             <Shuffle className="h-4 w-4" strokeWidth={2.5} />
-          </button>
+          </RcButton>
         )}
         {(isDraftMode || isSealed) &&
           hiddenCardCount > 0 &&
           onToggleShowHidden && (
-            <button
+            <RcButton
+              variant="quiet"
+              size="icon-xs"
+              tone="success"
               onClick={onToggleShowHidden}
               title={showHiddenCards ? `Hide ${hiddenCardCount} hidden cards` : `Show ${hiddenCardCount} hidden cards`}
               aria-label={showHiddenCards ? "Hide hidden cards" : "Show hidden cards"}
-              className={`${iconButtonStyles.base} ${
-                showHiddenCards ? iconButtonStyles.active : "ring-2 ring-yellow-500/50 border-yellow-500/50"
+              aria-pressed={showHiddenCards}
+              className={`h-8 w-8 ${
+                showHiddenCards ? "" : "border-rc-warning/50 ring-2 ring-rc-warning/50"
               } flex-none relative`}
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
@@ -329,23 +338,21 @@ export default function DeckPanels(props: DeckPanelsProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
                 )}
               </svg>
-              <span className="absolute -top-1 -right-1 bg-yellow-500 text-black text-[10px] font-bold rounded-full h-3.5 w-3.5 flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 bg-rc-warning text-rc-accent-fg font-rc-mono text-[10px] font-bold tabular-nums rounded-full h-3.5 w-3.5 flex items-center justify-center">
                 {hiddenCardCount}
               </span>
-            </button>
+            </RcButton>
           )}
 
         {/* Save button + auto-save (free mode) */}
         {isFreeMode && status === "authenticated" && (
           <div className="flex items-center gap-1.5 flex-none">
-            <button
+            <RcButton
+              variant={saving ? "quiet" : "default"}
+              size="xs"
               onClick={onSaveDeck}
               disabled={saving}
-              className={`h-7 px-3 rounded-full font-semibold text-xs shadow transition-all flex items-center gap-1.5 ${
-                saving
-                  ? "bg-gray-600 text-white cursor-wait"
-                  : "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white"
-              }`}
+              className="px-3 disabled:opacity-100"
               title={saving ? "Saving…" : deckId ? "Update deck" : "Save new deck"}
             >
               {saving ? (
@@ -358,19 +365,20 @@ export default function DeckPanels(props: DeckPanelsProps) {
                 </svg>
               )}
               {saving ? "..." : "Save"}
-            </button>
+            </RcButton>
             {deckId && onToggleAutoSave && (
               <button
                 onClick={() => onToggleAutoSave(!autoSaveEnabled)}
-                className={`flex items-center gap-1 h-7 px-1.5 rounded-full text-[10px] font-medium transition-all ${
+                aria-pressed={autoSaveEnabled}
+                className={`flex items-center gap-1 h-7 px-1.5 rounded-full font-rc-mono text-[10px] font-medium transition-all ${
                   autoSaveEnabled
-                    ? "bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30"
-                    : "bg-white/10 text-white/60 border border-white/10 hover:bg-white/20 hover:text-white/80"
+                    ? "bg-rc-success/16 text-rc-success-ink border border-rc-success/60 hover:bg-rc-success/24"
+                    : "bg-[rgba(7,10,20,0.85)] text-rc-fg-muted border border-rc-line/22 hover:border-rc-line/35 hover:text-rc-fg"
                 }`}
                 title={autoSaveEnabled ? "Auto-save ON" : "Auto-save OFF"}
               >
-                <div className={`w-5 h-3 rounded-full relative transition-colors ${autoSaveEnabled ? "bg-blue-500" : "bg-white/30"}`}>
-                  <div className={`absolute top-0.5 w-2 h-2 rounded-full bg-white shadow-sm transition-all ${autoSaveEnabled ? "left-2.5" : "left-0.5"}`} />
+                <div className={`w-5 h-3 rounded-full relative transition-colors ${autoSaveEnabled ? "bg-rc-success" : "bg-rc-line/30"}`}>
+                  <div className={`absolute top-0.5 w-2 h-2 rounded-full bg-rc-fg-strong shadow-rc-sm transition-all ${autoSaveEnabled ? "left-2.5" : "left-0.5"}`} />
                 </div>
                 <span>Auto</span>
               </button>
@@ -379,17 +387,20 @@ export default function DeckPanels(props: DeckPanelsProps) {
         )}
 
         <div className="relative flex-none">
-          <button
+          <RcButton
+            variant="quiet"
+            size="icon-xs"
             onClick={() => setControlsOpen((v) => !v)}
-            className={`${iconButtonStyles.base} ${controlsOpen ? iconButtonStyles.toggled : ""}`}
+            aria-pressed={controlsOpen}
+            className="h-8 w-8"
             title={controlsOpen ? "Hide deck controls" : "Show deck controls"}
             aria-label={controlsOpen ? "Hide deck controls" : "Show deck controls"}
           >
             <SlidersHorizontal className="h-4 w-4" strokeWidth={2.5} />
-          </button>
+          </RcButton>
           {controlsOpen && (
             <div className="absolute top-full left-0 mt-2 z-[60] pointer-events-auto">
-              <div className="rounded-lg bg-black/85 ring-1 ring-white/20 p-3 shadow-xl">
+              <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-3 text-rc-fg shadow-rc-panel">
                 <DeckTopBarActions
                   isSealed={isSealed}
                   isDraftMode={isDraftMode}
@@ -421,7 +432,7 @@ export default function DeckPanels(props: DeckPanelsProps) {
         <div className="ml-auto flex items-center gap-2 flex-none">
           {pick3DLength > 0 && (
             <div className="flex items-center gap-1.5">
-              <div className="flex items-end gap-px h-7 bg-black/30 rounded px-1 py-0.5">
+              <div className="flex items-end gap-px h-7 bg-black/30 rounded-rc-sm px-1 py-0.5">
                 {Array.from({ length: 8 }, (_, cost) => {
                   const count = manaCurve[cost] || 0;
                   const maxCount = Math.max(...Object.values(manaCurve), 1);
@@ -430,11 +441,11 @@ export default function DeckPanels(props: DeckPanelsProps) {
                   return (
                     <div key={cost} className="flex flex-col items-center justify-end gap-0 w-3.5 h-full">
                       <div
-                        className="bg-blue-400/80 rounded-t min-h-[1px] w-2"
+                        className="bg-rc-accent/80 rounded-t min-h-[1px] w-2"
                         style={{ height: `${Math.max(height, count > 0 ? 10 : 0)}%` }}
                         title={`${label} mana: ${count} cards`}
                       />
-                      <span className="text-[7px] text-white/40 leading-none">{label}</span>
+                      <span className="font-rc-mono text-[7px] text-rc-fg-subtle leading-none">{label}</span>
                     </div>
                   );
                 })}
@@ -444,7 +455,7 @@ export default function DeckPanels(props: DeckPanelsProps) {
                   {thresholdSummary.elements.map((element) => {
                     const count = thresholdSummary.summary[element as keyof typeof thresholdSummary.summary] || 0;
                     return (
-                      <div key={element} className="flex items-center gap-px bg-black/30 px-0.5 py-0.5 rounded" title={`Max ${element} threshold: ${count}`}>
+                      <div key={element} className="flex items-center gap-px bg-black/30 px-0.5 py-0.5 rounded-rc-sm" title={`Max ${element} threshold: ${count}`}>
                         {Array.from({ length: count }, (_, i) => (
                           <Image key={i} src={`/api/assets/${element}.png`} alt={element} width={9} height={9} unoptimized />
                         ))}
@@ -465,25 +476,27 @@ export default function DeckPanels(props: DeckPanelsProps) {
             sitesInSpellbook={validationMinimums.sitesInSpellbook}
           />
           {isSealed && (
-            <button
+            <RcButton
+              size="sm"
               onClick={onSubmitSealed}
               disabled={saving || status !== "authenticated" || (isDraftMode && (!validation.avatar || !validation.atlas || !validation.spellbook))}
-              className="h-7 px-3 rounded text-white text-xs disabled:opacity-50 bg-blue-600 hover:bg-blue-700 flex-none"
+              className="h-7 px-3 text-xs flex-none"
             >
               {saving ? "..." : "Submit Sealed"}
-            </button>
+            </RcButton>
           )}
           {isDraftMode && (
-            <button
+            <RcButton
+              size="sm"
               onClick={onSubmitDraft}
               disabled={saving || status !== "authenticated" || !validation.avatar || !validation.atlas || !validation.spellbook}
-              className="h-7 px-3 rounded text-white text-xs disabled:opacity-50 bg-purple-600 hover:bg-purple-700 flex-none"
+              className="h-7 px-3 text-xs flex-none"
             >
               {saving ? "..." : "Submit Draft"}
-            </button>
+            </RcButton>
           )}
           <UserBadge
-            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/80 hover:text-white hover:bg-white/10 flex-none ml-2"
+            className="inline-flex items-center gap-2 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.85)] px-2 py-1 text-xs text-rc-fg-muted hover:border-rc-accent/45 hover:text-rc-fg-strong flex-none ml-2"
             showPresence={false}
           />
         </div>
@@ -492,24 +505,24 @@ export default function DeckPanels(props: DeckPanelsProps) {
       {helpOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-auto">
           <div
-            className="absolute inset-0 bg-black/70"
+            className="absolute inset-0 bg-[rgba(6,10,20,0.7)] backdrop-blur-[4px]"
             onClick={() => setHelpOpen(false)}
           />
-          <div className="relative bg-slate-900 text-white rounded-lg p-6 w-[min(90vw,720px)] ring-1 ring-white/20 shadow-2xl">
+          <div className="relative rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] text-rc-fg p-6 w-[min(90vw,720px)] shadow-rc-panel">
             <div className="flex items-center justify-between mb-4">
-              <div className="text-lg font-semibold">Editor Help</div>
+              <div className="font-rc-display text-[22px] leading-none text-rc-fg-strong">Editor Help</div>
               <button
                 onClick={() => setHelpOpen(false)}
-                className="h-8 w-8 grid place-items-center rounded bg-white/10 hover:bg-white/20"
+                className="h-8 w-8 grid place-items-center rounded-rc-md text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
                 aria-label="Close help"
                 title="Close"
               >
                 ×
               </button>
             </div>
-            <div className="space-y-3 text-sm opacity-90">
+            <div className="space-y-3 font-rc-sans text-sm text-rc-fg-muted">
               <div>
-                <div className="font-medium mb-1">Board (3D) interactions</div>
+                <div className="rc-eyebrow mb-1">Board (3D) interactions</div>
                 <ul className="list-disc pl-5 space-y-1">
                   <li>
                     Drag cards to position them; drop on deck (top) or sideboard
@@ -525,7 +538,7 @@ export default function DeckPanels(props: DeckPanelsProps) {
                 </ul>
               </div>
               <div>
-                <div className="font-medium mb-1">Your Deck panel</div>
+                <div className="rc-eyebrow mb-1">Your Deck panel</div>
                 <ul className="list-disc pl-5 space-y-1">
                   <li>
                     Right‑click a card row to move a copy between Deck/Sideboard
@@ -535,7 +548,7 @@ export default function DeckPanels(props: DeckPanelsProps) {
                 </ul>
               </div>
               <div>
-                <div className="font-medium mb-1">Adding cards</div>
+                <div className="rc-eyebrow mb-1">Adding cards</div>
                 <ul className="list-disc pl-5 space-y-1">
                   <li>
                     Use the bottom “Add Cards” search; click “+ Deck” or “+
@@ -548,7 +561,7 @@ export default function DeckPanels(props: DeckPanelsProps) {
                 </ul>
               </div>
               <div>
-                <div className="font-medium mb-1">Sorting</div>
+                <div className="rc-eyebrow mb-1">Sorting</div>
                 <ul className="list-disc pl-5 space-y-1">
                   <li>
                     Auto‑stack groups similar cards; toggle with the green stack

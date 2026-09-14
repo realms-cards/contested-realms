@@ -3,7 +3,12 @@
 import { Camera, CameraOff, Mic, MicOff, RefreshCw, Settings, Video, PhoneOff, Volume2, VolumeX, Phone } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { RcButton } from "@/components/ui/rc-button";
 import { FEATURE_AUDIO_ONLY } from '@/lib/flags';
+
+/** Muted / off toggles read as a warning, not a gold tint. */
+const MUTED_PRESSED =
+  "aria-pressed:border-rc-warning/60 aria-pressed:bg-rc-warning/30 aria-pressed:text-rc-fg-strong";
 
 // Minimal shape expected from useMatchWebRTC
 export type SeatRtcLike = {
@@ -172,68 +177,81 @@ export default function SeatMediaControls({
   if (!rtc.featureEnabled) return null;
 
   return (
-    <div className={`inline-flex items-center gap-2 bg-black/55 rounded-lg px-2 py-1 ring-1 ring-white/10 ${className ?? ""}`}>
+    <div className={`inline-flex items-center gap-2 rounded-rc-md border border-rc-line/18 bg-[rgba(7,10,20,0.85)] px-2 py-1 ${className ?? ""}`}>
       {isIdle ? (
-        <button
+        <RcButton
+          variant="quiet"
+          size="icon-xs"
+          className="border-rc-success/50 text-rc-success-ink hover:border-rc-success hover:text-rc-success-ink"
           onClick={handleJoinClick}
-          className="h-7 w-7 grid place-items-center rounded bg-green-600 hover:bg-green-700 text-white"
           title={FEATURE_AUDIO_ONLY ? "Request audio connection" : "Request video connection"}
         >
           {FEATURE_AUDIO_ONLY ? <Phone className="h-4 w-4" /> : <Video className="h-4 w-4" />}
-        </button>
+        </RcButton>
       ) : (
         <button
           onClick={() => rtc.leave()}
-          className="h-7 w-7 grid place-items-center rounded bg-red-600 hover:bg-red-700 text-white"
+          className="h-7 w-7 grid place-items-center rounded-rc-md bg-rc-danger hover:bg-rc-danger-hover text-rc-fg-strong"
           title={FEATURE_AUDIO_ONLY ? "Leave audio" : "Leave call"}
         >
           <PhoneOff className="h-4 w-4" />
         </button>
       )}
 
-      <button
+      <RcButton
+        variant="quiet"
+        size="icon-xs"
         onClick={() => rtc.toggleMic()}
-        className={`h-7 w-7 grid place-items-center rounded ${rtc.micMuted ? "bg-yellow-700" : "bg-slate-700 hover:bg-slate-600"} text-white`}
+        className={MUTED_PRESSED}
+        aria-pressed={rtc.micMuted}
         title={rtc.micMuted ? "Unmute mic" : "Mute mic"}
       >
         {rtc.micMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-      </button>
+      </RcButton>
 
       {!FEATURE_AUDIO_ONLY && (
-        <button
+        <RcButton
+          variant="quiet"
+          size="icon-xs"
           onClick={() => rtc.toggleCam()}
-          className={`h-7 w-7 grid place-items-center rounded ${rtc.camOff ? "bg-yellow-700" : "bg-slate-700 hover:bg-slate-600"} text-white`}
+          className={MUTED_PRESSED}
+          aria-pressed={rtc.camOff}
           title={rtc.camOff ? "Enable camera" : "Disable camera"}
         >
           {rtc.camOff ? <CameraOff className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
-        </button>
+        </RcButton>
       )}
 
       {effectiveShowSpeakerToggle && (
-        <button
+        <RcButton
+          variant="quiet"
+          size="icon-xs"
           onClick={togglePlayback}
-          className={`h-7 w-7 grid place-items-center rounded ${playbackEnabled ? "bg-slate-700 hover:bg-slate-600" : "bg-yellow-700"} text-white`}
+          className={MUTED_PRESSED}
+          aria-pressed={!playbackEnabled}
           title={playbackEnabled ? "Mute speakers" : "Unmute speakers"}
         >
           {playbackEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-        </button>
+        </RcButton>
       )}
 
       {/* Device popover */}
       <div className="relative">
-        <button
+        <RcButton
+          variant="quiet"
+          size="icon-xs"
           onClick={() => setShowDevices((s) => !s)}
-          className="h-7 w-7 grid place-items-center rounded bg-slate-700 hover:bg-slate-600 text-white"
+          aria-pressed={showDevices}
           title={FEATURE_AUDIO_ONLY ? "Audio devices" : "Audio/Video devices"}
         >
           <Settings className="h-4 w-4" />
-        </button>
+        </RcButton>
         {showDevices && (
           <div
-            className={`absolute ${menuAlignment === 'right' ? 'right-0' : 'left-0'} top-full mt-1 z-50 bg-black/85 ring-1 ring-white/15 rounded-md p-2 backdrop-blur-sm min-w-[200px]`}
+            className={`absolute ${menuAlignment === 'right' ? 'right-0' : 'left-0'} top-full mt-1 z-50 rounded-rc-md border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-2 text-rc-fg shadow-rc-panel backdrop-blur-sm min-w-[200px]`}
           >
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-[10px] uppercase tracking-wide text-white/60">Mic</span>
+              <span className="rc-field-label">Mic</span>
               <CustomSelect
                 className="flex-1"
                 value={rtc.audioDeviceId ?? ""}
@@ -246,7 +264,7 @@ export default function SeatMediaControls({
               />
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-white/60">Output</span>
+              <span className="rc-field-label">Output</span>
               <CustomSelect
                 className="flex-1"
                 value={rtc.audioOutputDeviceId ?? ""}
@@ -260,7 +278,7 @@ export default function SeatMediaControls({
             </div>
             {!FEATURE_AUDIO_ONLY && (
               <div className="flex items-center gap-2 mt-2">
-                <span className="text-[10px] uppercase tracking-wide text-white/60">Cam</span>
+                <span className="rc-field-label">Cam</span>
                 <CustomSelect
                   className="flex-1"
                   value={rtc.videoDeviceId ?? ""}
@@ -274,20 +292,21 @@ export default function SeatMediaControls({
               </div>
             )}
             <div className="flex items-center justify-end mt-2">
-              <button
+              <RcButton
+                variant="quiet"
+                size="icon-xs"
                 onClick={() => rtc.refreshDevices()}
-                className="h-7 w-7 grid place-items-center rounded bg-slate-700 hover:bg-slate-600 text-white"
                 title="Refresh devices"
               >
                 <RefreshCw className="h-4 w-4" />
-              </button>
+              </RcButton>
             </div>
           </div>
         )}
       </div>
 
       {/* State badge */}
-      <span className="text-[10px] text-slate-300 ml-1">{rtc.state}</span>
+      <span className="font-rc-mono text-[10px] tracking-[0.08em] text-rc-fg-muted ml-1">{rtc.state}</span>
 
       {renderAudioElement && (
         <>
@@ -296,7 +315,9 @@ export default function SeatMediaControls({
 
           {/* Playback unlock helper (shown only if autoplay was blocked) */}
           {needsAudioUnlock && (
-            <button
+            <RcButton
+              variant="quiet"
+              size="xs"
               onClick={() => {
                 const el = audioRef.current;
                 if (!el) return;
@@ -308,11 +329,11 @@ export default function SeatMediaControls({
                   })
                   .catch(() => setNeedsAudioUnlock(true));
               }}
-              className="ml-1 h-7 px-2 inline-flex items-center gap-1 rounded bg-amber-600 hover:bg-amber-700 text-white text-[10px]"
+              className="ml-1 gap-1 px-2 text-[10px]"
               title="Enable audio playback"
             >
               <Volume2 className="h-3.5 w-3.5" /> Enable audio
-            </button>
+            </RcButton>
           )}
         </>
       )}

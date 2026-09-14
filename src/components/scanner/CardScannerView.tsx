@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Button } from "@/components/ui/button";
+import { RcButton } from "@/components/ui/rc-button";
 import {
   getCardScanner,
   type ScanResult,
@@ -635,18 +635,18 @@ export function CardScannerView({
   return (
     <div className="relative flex flex-col h-full bg-black">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-0 left-0 right-0 z-10">
+      <div className="flex items-center justify-between p-4 bg-gradient-to-b from-[rgba(7,10,20,0.85)] to-transparent absolute top-0 left-0 right-0 z-10">
         <div className="flex items-center gap-3">
           <Link
             href="/collection"
-            className="flex items-center justify-center w-8 h-8 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+            className="flex items-center justify-center w-8 h-8 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.85)] text-rc-fg-muted hover:border-rc-accent hover:text-rc-accent-ring transition-colors"
             title="Back to Collection"
           >
-            <ArrowLeft className="w-5 h-5 text-white" />
+            <ArrowLeft className="w-5 h-5" />
           </Link>
-          <h2 className="text-lg font-bold text-white">Card Scanner</h2>
+          <h2 className="m-0 font-rc-display text-[18px] leading-none text-rc-fg-strong">Card Scanner</h2>
           {ocrLoading && (
-            <span className="text-xs text-cyan-400 flex items-center">
+            <span className="font-rc-mono text-xs text-rc-accent-link flex items-center">
               <Loader2 className="w-3 h-3 mr-1 animate-spin" />
               Loading OCR...
             </span>
@@ -660,12 +660,12 @@ export function CardScannerView({
               const idx = modes.indexOf(scanMode);
               setScanMode(modes[(idx + 1) % modes.length]);
             }}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm transition-colors ${
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-rc-md font-rc-sans text-sm transition-colors ${
               scanMode === "ocr"
-                ? "bg-cyan-500/30 text-cyan-300 border border-cyan-500/50"
+                ? "bg-rc-info/18 text-rc-info-ink border border-rc-info/60"
                 : scanMode === "hybrid"
-                ? "bg-green-500/30 text-green-300 border border-green-500/50"
-                : "bg-purple-500/30 text-purple-300 border border-purple-500/50"
+                ? "bg-rc-success/16 text-rc-success-ink border border-rc-success/60"
+                : "bg-rc-moonlight/12 text-rc-moonlight border border-rc-moonlight/45"
             }`}
             title={
               scanMode === "ocr"
@@ -697,15 +697,15 @@ export function CardScannerView({
             <div className="relative">
               <button
                 onClick={() => setShowCameraPicker(!showCameraPicker)}
-                className="flex items-center gap-1 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-md text-white text-sm transition-colors"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-rc-md border border-rc-line/22 bg-[rgba(7,10,20,0.85)] font-rc-sans text-sm text-rc-fg-muted hover:border-rc-accent hover:text-rc-accent-ring transition-colors"
                 title="Select camera"
               >
                 <Video className="w-4 h-4" />
                 {cameras.length > 1 && <ChevronDown className="w-3 h-3" />}
               </button>
               {showCameraPicker && (
-                <div className="absolute top-full right-0 mt-1 bg-gray-900 border border-white/20 rounded-md shadow-lg overflow-hidden min-w-[200px] max-w-[300px] z-50">
-                  <div className="px-3 py-2 text-xs text-white/50 border-b border-white/10">
+                <div className="absolute top-full right-0 mt-1 rounded-rc-md border border-rc-line/18 bg-[rgba(9,13,25,0.95)] shadow-rc-panel overflow-hidden min-w-[200px] max-w-[300px] z-50">
+                  <div className="rc-hint px-3 py-2 border-b border-rc-line/12">
                     {cameras.length} camera{cameras.length !== 1 ? "s" : ""}{" "}
                     available
                   </div>
@@ -731,16 +731,16 @@ export function CardScannerView({
                           setSelectedCameraId(camera.deviceId);
                           setShowCameraPicker(false);
                         }}
-                        className={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 transition-colors ${
+                        className={`w-full px-3 py-2 text-left font-rc-sans text-sm hover:bg-rc-line/6 transition-colors ${
                           selectedCameraId === camera.deviceId
-                            ? "text-cyan-400 bg-white/5"
-                            : "text-white"
+                            ? "text-rc-accent-link bg-rc-accent/8"
+                            : "text-rc-fg"
                         }`}
                       >
                         <div className="truncate">{label}</div>
                         {(isFront || isBack) && (
-                          <div className="text-xs text-white/40">
-                            {isFront ? "📱 Front" : "📷 Back"}
+                          <div className="font-rc-mono text-xs text-rc-fg-subtle">
+                            {isFront ? "Front" : "Back"}
                           </div>
                         )}
                       </button>
@@ -754,13 +754,13 @@ export function CardScannerView({
           <div className="relative">
             <button
               onClick={() => setShowSetPicker(!showSetPicker)}
-              className="flex items-center gap-1 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-md text-white text-sm transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-rc-md border border-rc-line/22 bg-[rgba(7,10,20,0.85)] font-rc-sans text-sm text-rc-fg-muted hover:border-rc-accent hover:text-rc-accent-ring transition-colors"
             >
               {SET_OPTIONS.find((o) => o.value === selectedSet)?.label}
               <ChevronDown className="w-4 h-4" />
             </button>
             {showSetPicker && (
-              <div className="absolute top-full right-0 mt-1 bg-gray-900 border border-white/20 rounded-md shadow-lg overflow-hidden min-w-[140px]">
+              <div className="absolute top-full right-0 mt-1 rounded-rc-md border border-rc-line/18 bg-[rgba(9,13,25,0.95)] shadow-rc-panel overflow-hidden min-w-[140px]">
                 {SET_OPTIONS.map((option) => (
                   <button
                     key={option.value}
@@ -768,10 +768,10 @@ export function CardScannerView({
                       setSelectedSet(option.value);
                       setShowSetPicker(false);
                     }}
-                    className={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 transition-colors ${
+                    className={`w-full px-3 py-2 text-left font-rc-sans text-sm hover:bg-rc-line/6 transition-colors ${
                       selectedSet === option.value
-                        ? "text-cyan-400 bg-white/5"
-                        : "text-white"
+                        ? "text-rc-accent-link bg-rc-accent/8"
+                        : "text-rc-fg"
                     }`}
                   >
                     {option.label}
@@ -781,14 +781,14 @@ export function CardScannerView({
             )}
           </div>
           {onClose && (
-            <Button
+            <RcButton
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="text-white"
+              className="text-rc-fg-muted hover:text-rc-fg-strong"
             >
               <X className="w-5 h-5" />
-            </Button>
+            </RcButton>
           )}
         </div>
       </div>
@@ -806,17 +806,17 @@ export function CardScannerView({
         {status === "scanning" && (
           <div className="absolute inset-0 pointer-events-none">
             {/* Scanning frame */}
-            <div className="absolute inset-8 border-2 border-white/50 rounded-lg">
-              <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-cyan-400 rounded-tl-lg" />
-              <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-cyan-400 rounded-tr-lg" />
-              <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-cyan-400 rounded-bl-lg" />
-              <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-cyan-400 rounded-br-lg" />
+            <div className="absolute inset-8 border-2 border-rc-line/40 rounded-rc-lg">
+              <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-rc-accent-ring rounded-tl-rc-lg" />
+              <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-rc-accent-ring rounded-tr-rc-lg" />
+              <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-rc-accent-ring rounded-bl-rc-lg" />
+              <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-rc-accent-ring rounded-br-rc-lg" />
             </div>
 
             {/* OCR mode: highlight the card name reading region */}
             {(scanMode === "ocr" || (scanMode as ScanMode) === "hybrid") && (
               <div
-                className="absolute border-2 border-cyan-400 bg-cyan-400/10 rounded animate-pulse"
+                className="absolute border-2 border-rc-accent-ring bg-rc-accent-ring/10 rounded-rc-sm animate-pulse"
                 style={
                   isLandscape
                     ? {
@@ -835,23 +835,23 @@ export function CardScannerView({
                       }
                 }
               >
-                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-cyan-400 bg-black/80 px-2 py-1 rounded whitespace-nowrap">
-                  📖 Position card name in this area
+                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 font-rc-mono text-xs text-rc-accent-link bg-[rgba(7,10,20,0.85)] px-2 py-1 rounded-rc-sm whitespace-nowrap">
+                  Position card name in this area
                 </div>
               </div>
             )}
 
             {/* ML mode: Scanning line animation */}
             {scanMode === "ml" && (
-              <div className="absolute inset-8 overflow-hidden rounded-lg">
-                <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-scan" />
+              <div className="absolute inset-8 overflow-hidden rounded-rc-lg">
+                <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-rc-accent-ring to-transparent animate-scan" />
               </div>
             )}
 
             {/* Show current detection while waiting for stability */}
             {currentResult && !stableResult && (
               <div className="absolute bottom-28 left-4 right-4 text-center pointer-events-auto">
-                <span className="text-white/60 text-sm bg-black/50 px-3 py-1 rounded-full">
+                <span className="rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.85)] px-3 py-1 font-rc-sans text-sm text-rc-fg-muted">
                   Detecting: {currentResult.cardName}...
                 </span>
               </div>
@@ -861,44 +861,44 @@ export function CardScannerView({
 
         {/* Loading state */}
         {status === "loading" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
-            <Loader2 className="w-12 h-12 text-cyan-400 animate-spin mb-4" />
-            <p className="text-white">Loading scanner...</p>
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[rgba(6,10,20,0.82)]">
+            <Loader2 className="w-12 h-12 text-rc-accent animate-spin mb-4" />
+            <p className="font-rc-sans text-rc-fg">Loading scanner...</p>
           </div>
         )}
 
         {/* Error state */}
         {status === "error" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 p-8">
-            <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
-            <p className="text-white text-center whitespace-pre-line">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[rgba(6,10,20,0.82)] p-8">
+            <AlertCircle className="w-12 h-12 text-rc-danger mb-4" />
+            <p className="font-rc-sans text-rc-fg text-center whitespace-pre-line">
               {error}
             </p>
-            <Button
+            <RcButton
               variant="outline"
               className="mt-4"
               onClick={() => window.location.reload()}
             >
               Retry
-            </Button>
+            </RcButton>
           </div>
         )}
 
         {/* Result overlay - show stable result to reduce hopping */}
         {stableResult && status === "scanning" && !showCorrection && (
-          <div className="absolute bottom-24 left-4 right-4 bg-black/80 rounded-lg p-4 backdrop-blur-sm">
+          <div className="absolute bottom-24 left-4 right-4 rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] text-rc-fg shadow-rc-panel p-4 backdrop-blur-sm">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-cyan-400 font-bold text-lg">
+              <span className="font-rc-display text-[22px] leading-none text-rc-spark">
                 {stableResult.cardName}
               </span>
-              <span className="text-white/70">
+              <span className="font-rc-mono tabular-nums text-rc-fg-muted">
                 {(stableResult.confidence * 100).toFixed(1)}%
               </span>
             </div>
 
             {/* Top alternatives - clickable for correction */}
             {stableResult.topK.length > 1 && (
-              <div className="text-xs text-white/50 space-y-0.5 mb-2">
+              <div className="font-rc-sans text-xs text-rc-fg-subtle space-y-0.5 mb-2">
                 {stableResult.topK
                   .slice(1, 4)
                   .map(
@@ -908,7 +908,7 @@ export function CardScannerView({
                     ) => (
                       <button
                         key={i}
-                        className="flex justify-between w-full hover:text-cyan-300 hover:bg-white/5 px-1 rounded transition-colors"
+                        className="flex justify-between w-full hover:text-rc-accent-ring hover:bg-rc-line/6 px-1 rounded-rc-sm transition-colors"
                         onClick={() => submitFeedback(alt.cardName)}
                         disabled={submittingFeedback}
                       >
@@ -921,36 +921,36 @@ export function CardScannerView({
             )}
 
             <div className="flex gap-2 mt-3">
-              <Button
-                className="flex-1 bg-cyan-600 hover:bg-cyan-500"
+              <RcButton
+                className="flex-1"
                 onClick={confirmCard}
               >
-                <Check className="w-4 h-4 mr-2" />
+                <Check className="w-4 h-4" />
                 Correct
-              </Button>
-              <Button
+              </RcButton>
+              <RcButton
                 variant="outline"
-                className="border-orange-500 text-orange-400 hover:bg-orange-500/20"
+                className="border-rc-ember/60 text-rc-ember hover:border-rc-ember hover:bg-rc-ember/15 hover:text-rc-ember"
                 onClick={() => setShowCorrection(true)}
               >
-                <ThumbsDown className="w-4 h-4 mr-1" />
+                <ThumbsDown className="w-4 h-4" />
                 Wrong
-              </Button>
+              </RcButton>
             </div>
           </div>
         )}
 
         {/* Correction modal */}
         {(stableResult || currentResult) && showCorrection && (
-          <div className="absolute bottom-24 left-4 right-4 bg-black/90 rounded-lg p-4 backdrop-blur-sm max-h-[60vh] overflow-y-auto">
+          <div className="thin-scrollbar absolute bottom-24 left-4 right-4 rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] text-rc-fg shadow-rc-panel p-4 backdrop-blur-sm max-h-[60vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-white font-bold">Select correct card:</span>
+              <span className="font-rc-display text-[18px] leading-none text-rc-fg-strong">Select correct card:</span>
               <button
                 onClick={() => {
                   setShowCorrection(false);
                   setCorrectionSearch("");
                 }}
-                className="text-white/50 hover:text-white"
+                className="rounded-rc-md text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -958,23 +958,23 @@ export function CardScannerView({
 
             {/* Search input */}
             <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-rc-fg-subtle" />
               <input
                 type="text"
                 value={correctionSearch}
                 onChange={(e) => setCorrectionSearch(e.target.value)}
                 placeholder="Search cards..."
-                className="w-full pl-10 pr-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-cyan-400"
+                className="rc-input h-9 w-full pl-10 pr-4 text-base placeholder:text-rc-fg-dim sm:text-[13px]"
                 autoFocus
               />
             </div>
 
             {/* Show topK suggestions when no search, or all matching cards when searching */}
-            <div className="space-y-1 max-h-[40vh] overflow-y-auto">
+            <div className="thin-scrollbar space-y-1 max-h-[40vh] overflow-y-auto">
               {correctionSearch.length >= 2 ? (
                 // Search all cards
                 <>
-                  <div className="text-xs text-white/40 mb-2">
+                  <div className="rc-hint mb-2">
                     {
                       allCardNames.filter((name) =>
                         name
@@ -994,7 +994,7 @@ export function CardScannerView({
                     .map((cardName, i) => (
                       <button
                         key={i}
-                        className="flex justify-between w-full p-2 hover:bg-cyan-500/20 rounded transition-colors text-white text-left"
+                        className="flex justify-between w-full p-2 hover:bg-rc-accent/12 hover:text-rc-fg-strong rounded-rc-md transition-colors font-rc-display text-rc-fg text-left"
                         onClick={() => submitFeedback(cardName)}
                         disabled={submittingFeedback}
                       >
@@ -1005,7 +1005,7 @@ export function CardScannerView({
               ) : (
                 // Show top predictions with confidence
                 <>
-                  <div className="text-xs text-white/40 mb-2">
+                  <div className="font-rc-sans text-xs text-rc-fg-subtle mb-2">
                     Top predictions (type to search all {allCardNames.length}{" "}
                     cards)
                   </div>
@@ -1016,12 +1016,12 @@ export function CardScannerView({
                     ) => (
                       <button
                         key={i}
-                        className="flex justify-between w-full p-2 hover:bg-cyan-500/20 rounded transition-colors text-white text-left"
+                        className="flex justify-between w-full p-2 hover:bg-rc-accent/12 hover:text-rc-fg-strong rounded-rc-md transition-colors font-rc-display text-rc-fg text-left"
                         onClick={() => submitFeedback(alt.cardName)}
                         disabled={submittingFeedback}
                       >
                         <span>{alt.cardName}</span>
-                        <span className="text-white/50 text-sm">
+                        <span className="font-rc-mono tabular-nums text-rc-fg-subtle text-sm">
                           {(alt.confidence * 100).toFixed(1)}%
                         </span>
                       </button>
@@ -1032,7 +1032,7 @@ export function CardScannerView({
             </div>
 
             {submittingFeedback && (
-              <div className="flex items-center justify-center mt-3 text-cyan-400">
+              <div className="flex items-center justify-center mt-3 font-rc-sans text-sm text-rc-accent-link">
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Saving...
               </div>
@@ -1043,10 +1043,13 @@ export function CardScannerView({
         {/* Confirmed card toast - shows briefly then auto-dismisses */}
         {confirmedCard && (
           <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 animate-pulse">
-            <div className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg">
-              <Check className="w-5 h-5" />
-              <span className="font-medium">{confirmedCard}</span>
-              <span className="text-green-200 text-sm">added!</span>
+            <div
+              className="rc-toast flex items-center gap-2 px-4 py-2"
+              data-tone="success"
+            >
+              <Check className="w-5 h-5 text-rc-success" />
+              <span className="font-rc-display text-rc-fg-strong">{confirmedCard}</span>
+              <span className="font-rc-mono text-sm text-rc-success">added!</span>
             </div>
           </div>
         )}
@@ -1062,34 +1065,33 @@ export function CardScannerView({
       </div>
 
       {/* Controls */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
+      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[rgba(7,10,20,0.85)] to-transparent">
         <div className="flex items-center justify-center gap-4">
           {status === "ready" && (
-            <Button
+            <RcButton
               size="lg"
-              className="bg-cyan-600 hover:bg-cyan-500"
               onClick={startScanning}
             >
-              <Camera className="w-5 h-5 mr-2" />
+              <Camera className="w-5 h-5" />
               Start Scanning
-            </Button>
+            </RcButton>
           )}
 
           {status === "scanning" && (
-            <Button size="lg" variant="outline" onClick={stopScanning}>
-              <X className="w-5 h-5 mr-2" />
+            <RcButton size="lg" variant="outline" onClick={stopScanning}>
+              <X className="w-5 h-5" />
               Stop
-            </Button>
+            </RcButton>
           )}
 
-          <Button
+          <RcButton
             size="icon"
             variant="ghost"
-            className="text-white"
+            className="text-rc-fg hover:text-rc-fg-strong"
             onClick={switchCamera}
           >
             <RotateCcw className="w-5 h-5" />
-          </Button>
+          </RcButton>
         </div>
       </div>
 

@@ -118,7 +118,7 @@ export default function LobbyActionStrip({
       <button
         type="button"
         onClick={onCreateMatch}
-        className={`${TILE_BASE} border-rc-accent-ring bg-gradient-to-b from-[#e8bf5c] to-[#d4a94a] text-rc-accent-fg shadow-[0_6px_14px_rgba(0,0,0,0.4),0_0_22px_rgba(243,207,106,0.22)] hover:-translate-y-px hover:shadow-[0_6px_14px_rgba(0,0,0,0.4),0_0_30px_rgba(243,207,106,0.35)]`}
+        className={`${TILE_BASE} border-rc-accent-ring bg-gradient-to-b from-rc-accent-hover to-rc-accent text-rc-accent-fg shadow-[0_6px_14px_rgba(0,0,0,0.4),0_0_22px_rgba(243,207,106,0.22)] hover:-translate-y-px hover:shadow-[0_6px_14px_rgba(0,0,0,0.4),0_0_30px_rgba(243,207,106,0.35)]`}
       >
         <div className={`${EYEBROW} text-rc-gold-ink`}>primary</div>
         <div className="mt-1.5 font-rc-display text-[34px] leading-none text-rc-accent-fg">

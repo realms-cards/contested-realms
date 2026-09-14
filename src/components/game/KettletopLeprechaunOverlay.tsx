@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import CardWithPreview from "./CardWithPreview";
 
@@ -19,11 +20,11 @@ export default function KettletopLeprechaunOverlay() {
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top bar with status */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-emerald-500/50 shadow-lg text-lg md:text-xl flex items-center gap-3 select-none">
-          <span className="text-emerald-400 font-fantaisie">
+        <div className="pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg md:text-xl flex items-center gap-3 select-none">
+          <span className="font-rc-display text-rc-accent-link">
             Kettletop Leprechaun
           </span>
-          <span className="opacity-80">
+          <span className="text-rc-fg-muted">
             {phase === "confirming" && "Deathrite — Draw a site?"}
             {phase === "complete" && "Site drawn!"}
           </span>
@@ -32,31 +33,25 @@ export default function KettletopLeprechaunOverlay() {
 
       {/* Confirmation dialog — only owner can act */}
       {isOwner && phase === "confirming" && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-6 max-w-md w-full mx-4 ring-1 ring-emerald-500/30">
-            <h2 className="text-2xl font-fantaisie text-emerald-400 mb-2 text-center">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-md w-full mx-4 font-rc-sans text-rc-fg shadow-rc-panel">
+            <h2 className="mb-2 text-center font-rc-display text-[26px] leading-tight text-rc-fg-strong">
               Kettletop Leprechaun
             </h2>
-            <p className="text-gray-400 text-center mb-2">
+            <p className="text-rc-fg-muted text-center mb-2">
               Deathrite &mdash; Draw a site from your atlas.
             </p>
-            <p className="text-yellow-400 text-sm text-center mb-6">
+            <p className="text-rc-warning text-sm text-center mb-6">
               Decline if silenced or you want to skip the effect.
             </p>
 
             <div className="flex gap-3 justify-center">
-              <button
-                onClick={cancel}
-                className="px-5 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
-              >
+              <RcButton variant="outline" onClick={cancel}>
                 Decline
-              </button>
-              <button
-                onClick={resolve}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-colors"
-              >
+              </RcButton>
+              <RcButton onClick={resolve}>
                 Draw Site
-              </button>
+              </RcButton>
             </div>
           </div>
         </div>
@@ -64,9 +59,9 @@ export default function KettletopLeprechaunOverlay() {
 
       {/* Complete phase — show drawn card briefly */}
       {isOwner && phase === "complete" && drawnCard && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/70">
-          <div className="bg-black/95 rounded-xl p-6 max-w-md w-full mx-4 ring-1 ring-emerald-500/30">
-            <h2 className="text-xl font-fantaisie text-emerald-400 mb-4 text-center">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.7)]">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-md w-full mx-4 font-rc-sans text-rc-fg shadow-rc-panel">
+            <h2 className="mb-4 text-center font-rc-display text-[22px] leading-tight text-rc-fg-strong">
               Site Drawn
             </h2>
             <div className="flex justify-center mb-4">
@@ -77,7 +72,7 @@ export default function KettletopLeprechaunOverlay() {
                 size="md"
               />
             </div>
-            <p className="text-gray-400 text-sm text-center">
+            <p className="text-rc-fg-muted text-sm text-center">
               Added to your hand.
             </p>
           </div>
@@ -87,8 +82,8 @@ export default function KettletopLeprechaunOverlay() {
       {/* Opponent waiting indicator */}
       {!isOwner && phase === "confirming" && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="pointer-events-auto px-4 py-2 rounded-lg bg-black/90 text-white/80 text-sm ring-1 ring-emerald-500/30">
-            <span className="text-emerald-400">
+          <div className="rc-toast pointer-events-auto">
+            <span className="text-rc-fg-strong">
               {ownerSeat.toUpperCase()}
             </span>{" "}
             is resolving Kettletop Leprechaun Deathrite...

@@ -1,8 +1,10 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CardPreview from "@/components/game/CardPreview";
+import { RcButton } from "@/components/ui/rc-button";
 import { useSound } from "@/lib/contexts/SoundContext";
 import {
   useCardHover,
@@ -86,19 +88,19 @@ export default function PileSearchDialog({
 
   const content = (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-[rgba(6,10,20,0.5)] backdrop-blur-sm"
       onContextMenu={(e) => e.preventDefault()}
     >
       <div
         ref={dialogRef}
-        className="bg-zinc-900/95 backdrop-blur rounded-xl ring-1 ring-white/10 shadow-2xl p-3 sm:p-6 w-[95vw] sm:w-96 max-h-[85vh] text-white flex flex-col"
+        className="rounded-rc-md sm:rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] backdrop-blur shadow-rc-panel p-3 sm:p-6 w-[95vw] sm:w-96 max-h-[85vh] font-rc-sans text-rc-fg flex flex-col"
         onContextMenu={(e) => e.preventDefault()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Search {pileName}</h3>
+          <h3 className="m-0 font-rc-display text-[22px] leading-none text-rc-fg-strong">Search {pileName}</h3>
           <button
             onClick={onClose}
-            className="text-zinc-400 hover:text-white transition-colors"
+            className="rounded-rc-md px-1.5 text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-fg-strong"
           >
             ✕
           </button>
@@ -141,14 +143,14 @@ export default function PileSearchDialog({
             onMouseDown={(e) => e.currentTarget.removeAttribute("readonly")}
             onTouchStart={(e) => e.currentTarget.removeAttribute("readonly")}
             readOnly={!isMobile}
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="rc-input h-9 w-full placeholder:text-rc-fg-subtle"
             autoFocus
           />
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="thin-scrollbar flex-1 overflow-y-auto">
           {filteredCards.length === 0 ? (
-            <div className="text-center text-zinc-400 py-8">
+            <div className="rc-hint text-center py-8 text-rc-fg-subtle">
               {cards.length === 0
                 ? "No cards in pile"
                 : "No cards match your search"}
@@ -158,7 +160,7 @@ export default function PileSearchDialog({
               {filteredCards.map((card, index) => (
                 <div
                   key={`${card.slug}-${index}`}
-                  className="bg-zinc-800/50 hover:bg-zinc-700/50 rounded-lg p-3 transition-colors flex gap-3"
+                  className="rounded-rc-md border border-rc-line/12 bg-black/30 p-3 transition-colors hover:border-rc-accent/35 hover:bg-rc-accent/8 flex gap-3"
                   onMouseEnter={() => {
                     if (card.slug) {
                       showCardPreview({
@@ -183,7 +185,7 @@ export default function PileSearchDialog({
                   }}
                 >
                   {/* Card thumbnail */}
-                  <div className="flex-shrink-0 w-12 h-[67px] rounded overflow-hidden bg-zinc-700/50">
+                  <div className="flex-shrink-0 w-12 h-[67px] rounded-rc-sm overflow-hidden bg-black/45 ring-1 ring-rc-line/18">
                     {card.slug ? (
                       <img
                         src={`/api/images/${card.slug}`}
@@ -193,42 +195,46 @@ export default function PileSearchDialog({
                         draggable={false}
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">
+                      <div className="w-full h-full flex items-center justify-center font-rc-mono text-rc-fg-dim text-xs">
                         ?
                       </div>
                     )}
                   </div>
                   {/* Card info and actions */}
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-white mb-1 truncate">
+                    <div className="mb-1 truncate font-rc-display text-[16px] leading-tight text-rc-fg-strong">
                       {card.name || "Unknown Card"}
                     </div>
                     {card.type && (
-                      <div className="text-xs text-zinc-400 mb-2">
+                      <div className="text-xs text-rc-fg-muted mb-2">
                         {card.type}
                       </div>
                     )}
                     <div className="flex gap-2">
-                      <button
+                      <RcButton
                         onClick={() => {
                           try {
                             playCardSelect();
                           } catch {}
                           onSelectCard(card);
                         }}
-                        className="flex-1 text-xs bg-blue-600/80 hover:bg-blue-500 rounded px-2 py-1 transition-colors"
+                        variant="outline"
+                        size="sm"
+                        className="h-auto flex-1 px-2 py-1 text-xs"
                       >
                         To Hand
-                      </button>
+                      </RcButton>
                       {onMaskCard && canMask?.(card) && (
-                        <button
+                        <RcButton
                           onClick={() => {
                             try {
                               playCardSelect();
                             } catch {}
                             onMaskCard(card);
                           }}
-                          className="flex-1 text-xs bg-purple-600/80 hover:bg-purple-500 rounded px-2 py-1 transition-colors"
+                          variant="quiet"
+                          size="xs"
+                          className="h-auto flex-1 gap-0 px-2 py-1"
                           title="Imposter: Mask yourself as this avatar (3 mana)"
                         >
                           Mask (
@@ -236,25 +242,35 @@ export default function PileSearchDialog({
                             3
                           </span>
                           )
-                        </button>
+                        </RcButton>
                       )}
                       {onBanishCard && (
-                        <button
+                        <RcButton
                           onClick={() => {
                             try {
                               playCardSelect();
                             } catch {}
                             onBanishCard(card);
                           }}
-                          className="flex-1 text-xs bg-red-600/80 hover:bg-red-500 rounded px-2 py-1 transition-colors"
+                          variant="danger-soft"
+                          size="xs"
+                          className="h-auto flex-1 gap-0 px-2 py-1"
                           title={
                             banishRequiresConsent
                               ? "Requires opponent consent"
                               : undefined
                           }
                         >
-                          Banish{banishRequiresConsent ? " ⚠" : ""}
-                        </button>
+                          Banish
+                          {banishRequiresConsent && (
+                            <Icon
+                              icon="game-icons:hazard-sign"
+                              width={12}
+                              height={12}
+                              className="ml-1 inline-block align-[-1px]"
+                            />
+                          )}
+                        </RcButton>
                       )}
                     </div>
                   </div>
@@ -264,9 +280,9 @@ export default function PileSearchDialog({
           )}
         </div>
 
-        <div className="mt-4 pt-4 border-t border-zinc-800">
+        <div className="mt-4 pt-4 border-t border-rc-line/12">
           <button
-            className="w-full text-sm text-zinc-400 hover:text-zinc-300 transition-colors"
+            className="w-full text-sm text-rc-fg-muted transition-colors hover:text-rc-fg-strong"
             onClick={onClose}
           >
             Cancel

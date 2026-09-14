@@ -14,6 +14,7 @@ import {
   DynamicPiles3D as Piles3D,
 } from "@/components/game/dynamic-3d";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { RcButton } from "@/components/ui/rc-button";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { Physics } from "@/lib/game/physics";
 import { useGameStore } from "@/lib/game/store";
@@ -64,7 +65,7 @@ function ShareButton({ matchId, currentActionIndex }: { matchId: string; current
     <div ref={ref} className="relative flex-shrink-0">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="h-7 w-7 grid place-items-center rounded text-slate-400 hover:text-white transition-colors"
+        className="h-7 w-7 grid place-items-center rounded-rc-md text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-accent-ring"
         title="Share replay"
       >
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
@@ -73,28 +74,30 @@ function ShareButton({ matchId, currentActionIndex }: { matchId: string; current
       </button>
 
       {open && (
-        <div className="absolute bottom-full right-0 mb-2 w-52 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl p-3 z-50">
-          <label className="flex items-center gap-2 cursor-pointer mb-3 select-none">
+        <div className="absolute bottom-full right-0 mb-2 w-52 rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-3 text-rc-fg shadow-rc-panel z-50">
+          <label className="rc-check flex mb-3 select-none">
             <input
               type="checkbox"
               checked={withTimestamp}
               onChange={(e) => setWithTimestamp(e.target.checked)}
-              className="w-3.5 h-3.5 rounded accent-blue-500"
+              className="w-3.5 h-3.5"
             />
-            <span className="text-xs text-slate-300">
+            <span className="text-xs text-rc-fg-muted">
               Start at action {currentActionIndex + 1}
             </span>
           </label>
-          <button
+          <RcButton
+            variant="quiet"
+            size="xs"
             onClick={copy}
-            className={`w-full py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`w-full font-rc-mono ${
               copied
-                ? "bg-emerald-600 text-white"
-                : "bg-white/10 hover:bg-white/20 text-slate-200"
+                ? "border-rc-success/35 bg-rc-success/18 text-rc-success-ink hover:border-rc-success/35 hover:text-rc-success-ink"
+                : ""
             }`}
           >
             {copied ? "Copied!" : "Copy link"}
-          </button>
+          </RcButton>
         </div>
       )}
     </div>
@@ -295,26 +298,26 @@ export default function ReplayViewerPage() {
 
   if (loading && !recording) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-white">Loading replay...</div>
+      <div className="rc-app min-h-screen flex items-center justify-center">
+        <div className="font-rc-mono text-sm text-rc-fg-muted">Loading replay...</div>
       </div>
     );
   }
 
   if (error || !recording) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-center text-white">
-          <div className="text-xl mb-4">Error loading replay</div>
-          <div className="text-slate-400 mb-4">
+      <div className="rc-app min-h-screen flex items-center justify-center">
+        <div className="text-center text-rc-fg">
+          <div className="mb-4 font-rc-display text-[24px] leading-none text-rc-fg-strong">Error loading replay</div>
+          <div className="rc-alert mb-4" data-tone="danger">
             {error || "Recording not found"}
           </div>
-          <button
+          <RcButton
+            variant="outline"
             onClick={() => router.push("/replay")}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
           >
             Back to Replays
-          </button>
+          </RcButton>
         </div>
       </div>
     );
@@ -326,7 +329,7 @@ export default function ReplayViewerPage() {
       : 0;
 
   return (
-    <div className="fixed inset-0 w-screen h-[100dvh] bg-slate-900" onMouseMove={showControls}>
+    <div className="fixed inset-0 w-screen h-[100dvh] bg-rc-floor" onMouseMove={showControls}>
       {/* 3D Game View */}
       <div className="absolute inset-0 w-full h-full">
         <ClientCanvas
@@ -441,9 +444,9 @@ export default function ReplayViewerPage() {
       >
         {/* Scrubber — sits at the very bottom edge */}
         <div className="group relative h-5 flex items-end px-0 cursor-pointer">
-          <div className="absolute inset-x-0 bottom-0 h-1 group-hover:h-[5px] transition-all duration-150 bg-white/10 rounded-none">
+          <div className="absolute inset-x-0 bottom-0 h-1 group-hover:h-[5px] transition-all duration-150 bg-rc-line/10 rounded-none">
             <div
-              className="h-full bg-blue-500 rounded-none transition-none"
+              className="h-full bg-gradient-to-r from-rc-accent to-rc-accent-hover rounded-none transition-none"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -461,11 +464,11 @@ export default function ReplayViewerPage() {
         </div>
 
         {/* Control bar */}
-        <div className="flex items-center gap-1 px-3 py-2 bg-gradient-to-t from-black/70 to-black/0 backdrop-blur-[2px]">
+        <div className="flex items-center gap-1 px-3 py-2 bg-gradient-to-t from-rc-floor/70 to-rc-floor/0 backdrop-blur-[2px]">
           {/* Left: back + title */}
           <button
             onClick={() => router.push("/replay")}
-            className="h-7 w-7 grid place-items-center rounded text-slate-400 hover:text-white transition-colors flex-shrink-0"
+            className="h-7 w-7 grid place-items-center rounded-rc-md text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-accent-ring flex-shrink-0"
             title="Back to Replays"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
@@ -473,11 +476,11 @@ export default function ReplayViewerPage() {
             </svg>
           </button>
 
-          <span className="text-xs text-slate-300 truncate max-w-[180px] flex-shrink-0 mr-1">
+          <span className="font-rc-sans text-xs text-rc-fg truncate max-w-[180px] flex-shrink-0 mr-1">
             {recording.playerNames.join(" vs ")}
           </span>
 
-          <span className="text-[10px] text-slate-500 flex-shrink-0 mr-2">
+          <span className="font-rc-mono text-[10px] tracking-[0.1em] text-rc-fg-subtle flex-shrink-0 mr-2">
             {recording.initialState.matchType}
           </span>
 
@@ -485,7 +488,7 @@ export default function ReplayViewerPage() {
           <div className="flex items-center gap-1 flex-1 justify-center">
             <button
               onClick={() => { setIsPlaying(false); jumpToAction(0); }}
-              className="h-7 w-7 grid place-items-center rounded text-slate-400 hover:text-white transition-colors"
+              className="h-7 w-7 grid place-items-center rounded-rc-md text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-accent-ring"
               title="Jump to Start"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
@@ -494,16 +497,17 @@ export default function ReplayViewerPage() {
             </button>
             <button
               onClick={stepBackward}
-              className="h-7 w-7 grid place-items-center rounded text-slate-400 hover:text-white transition-colors"
+              className="h-7 w-7 grid place-items-center rounded-rc-md text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-accent-ring"
               title="Step Backward"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                 <path d="M6 5h2v14H6V5zm12 7-9 6V6l9 6z" />
               </svg>
             </button>
-            <button
+            <RcButton
+              size="icon-xs"
               onClick={() => setIsPlaying(!isPlaying)}
-              className="h-8 w-8 grid place-items-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+              className="h-8 w-8 rounded-full"
               title={isPlaying ? "Pause" : "Play"}
             >
               {isPlaying ? (
@@ -515,10 +519,10 @@ export default function ReplayViewerPage() {
                   <path d="M8 5v14l11-7-11-7z" />
                 </svg>
               )}
-            </button>
+            </RcButton>
             <button
               onClick={stepForward}
-              className="h-7 w-7 grid place-items-center rounded text-slate-400 hover:text-white transition-colors"
+              className="h-7 w-7 grid place-items-center rounded-rc-md text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-accent-ring"
               title="Step Forward"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
@@ -527,7 +531,7 @@ export default function ReplayViewerPage() {
             </button>
             <button
               onClick={() => { setIsPlaying(false); jumpToAction(recording.actions.length - 1); }}
-              className="h-7 w-7 grid place-items-center rounded text-slate-400 hover:text-white transition-colors"
+              className="h-7 w-7 grid place-items-center rounded-rc-md text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-accent-ring"
               title="Jump to End"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
@@ -537,7 +541,7 @@ export default function ReplayViewerPage() {
           </div>
 
           {/* Right: time + speed + share + download */}
-          <span className="text-[10px] text-slate-400 tabular-nums flex-shrink-0">
+          <span className="font-rc-mono text-[10px] text-rc-fg-muted tabular-nums flex-shrink-0">
             {currentActionIndex + 1}/{recording.actions.length} · {currentTimeLabel}
           </span>
 
@@ -570,7 +574,7 @@ export default function ReplayViewerPage() {
               document.body.removeChild(a);
               URL.revokeObjectURL(url);
             }}
-            className="h-7 w-7 grid place-items-center rounded text-slate-400 hover:text-white transition-colors flex-shrink-0"
+            className="h-7 w-7 grid place-items-center rounded-rc-md text-rc-fg-muted transition-colors hover:bg-rc-line/6 hover:text-rc-accent-ring flex-shrink-0"
             title="Download Replay"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">

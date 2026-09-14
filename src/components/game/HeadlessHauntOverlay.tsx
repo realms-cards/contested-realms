@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
+import { RcButton } from "@/components/ui/rc-button";
 import { useGameStore } from "@/lib/game/store";
 import { toCellKey, getCellNumber } from "@/lib/game/store/utils/boardHelpers";
 
@@ -60,17 +61,17 @@ export default function HeadlessHauntOverlay() {
     <div className="fixed inset-0 z-[200] pointer-events-none">
       {/* Top status bar */}
       <div className="fixed inset-x-0 top-6 z-[201] pointer-events-none flex justify-center">
-        <div className="pointer-events-auto px-5 py-3 rounded-full bg-black/90 text-white ring-1 ring-violet-500/50 shadow-lg text-lg flex items-center gap-3">
-          <span className="text-violet-400 font-fantaisie">
-            👻 {currentHaunt.cardName}
+        <div className="pointer-events-auto px-5 py-3 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] font-rc-sans text-rc-fg shadow-rc-panel text-lg flex items-center gap-3">
+          <span className="font-rc-display text-rc-accent-link">
+            {currentHaunt.cardName}
           </span>
-          <span className="opacity-80">
+          <span className="text-rc-fg-muted">
             {isOwner
               ? `Choose destination tile (currently #${currentCellNo})`
               : `${ownerSeat.toUpperCase()} is choosing movement...`}
           </span>
           {haunts.length > 1 && (
-            <span className="text-xs opacity-60">
+            <span className="font-rc-mono text-xs tabular-nums text-rc-fg-subtle">
               ({currentIndex + 1}/{haunts.length})
             </span>
           )}
@@ -79,13 +80,13 @@ export default function HeadlessHauntOverlay() {
 
       {/* Owner tile selection UI */}
       {isOwner && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-black/60">
-          <div className="bg-black/95 rounded-xl p-6 max-w-2xl w-full mx-4 ring-1 ring-violet-500/30">
-            <h3 className="text-lg font-semibold text-violet-300 mb-4 text-center">
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-auto bg-[rgba(6,10,20,0.6)]">
+          <div className="rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-6 max-w-2xl w-full mx-4 font-rc-sans text-rc-fg shadow-rc-panel">
+            <h3 className="mb-4 text-center font-rc-display text-[18px] leading-tight text-rc-fg-strong">
               Kythera Mechanism - Choose Destination
             </h3>
-            <p className="text-sm text-gray-400 mb-4 text-center">
-              Select a tile to move <strong>{currentHaunt.cardName}</strong> to,
+            <p className="text-sm text-rc-fg-muted mb-4 text-center">
+              Select a tile to move <strong className="font-rc-display text-rc-accent-link">{currentHaunt.cardName}</strong> to,
               or skip to keep it at #{currentCellNo}
             </p>
 
@@ -105,13 +106,13 @@ export default function HeadlessHauntOverlay() {
                     onClick={() => selectTile(tile.key)}
                     disabled={isCurrent}
                     className={`
-                      aspect-square rounded text-xs font-bold transition-all
+                      aspect-square rounded-rc-sm border font-rc-mono text-xs font-bold tabular-nums transition-all
                       ${
                         isCurrent
-                          ? "bg-violet-900/50 text-violet-300 cursor-not-allowed ring-2 ring-violet-500"
+                          ? "border-dashed border-rc-accent/50 bg-rc-accent/8 text-rc-accent-link cursor-not-allowed"
                           : isSelected
-                          ? "bg-emerald-600 text-white ring-2 ring-emerald-400"
-                          : "bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white"
+                          ? "border-rc-accent bg-rc-accent/12 text-rc-fg-strong shadow-[0_0_14px_rgba(243,207,106,0.25)]"
+                          : "border-rc-line/18 bg-black/30 text-rc-fg-muted hover:border-rc-accent/60 hover:bg-rc-accent/8 hover:text-rc-fg-strong"
                       }
                     `}
                   >
@@ -123,29 +124,15 @@ export default function HeadlessHauntOverlay() {
 
             {/* Action buttons */}
             <div className="flex gap-3 justify-center">
-              <button
-                onClick={skipMove}
-                className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 transition-colors"
-              >
+              <RcButton variant="outline" onClick={skipMove}>
                 Skip (Stay at #{currentCellNo})
-              </button>
-              <button
-                onClick={resolveMove}
-                disabled={!selectedTile}
-                className={`
-                  px-4 py-2 rounded-lg transition-colors
-                  ${
-                    selectedTile
-                      ? "bg-emerald-600 hover:bg-emerald-500 text-white"
-                      : "bg-gray-800 text-gray-500 cursor-not-allowed"
-                  }
-                `}
-              >
+              </RcButton>
+              <RcButton onClick={resolveMove} disabled={!selectedTile}>
                 Move to #
                 {selectedTile
                   ? boardTiles.find((t) => t.key === selectedTile)?.cellNo
                   : "?"}
-              </button>
+              </RcButton>
             </div>
           </div>
         </div>
@@ -154,7 +141,7 @@ export default function HeadlessHauntOverlay() {
       {/* Opponent waiting indicator */}
       {!isOwner && (
         <div className="fixed bottom-24 inset-x-0 z-[201] pointer-events-none flex justify-center">
-          <div className="px-4 py-2 rounded-lg bg-black/90 text-sm text-violet-300 animate-pulse">
+          <div className="rc-toast animate-pulse">
             {ownerSeat.toUpperCase()} is choosing where to move{" "}
             {currentHaunt.cardName}...
           </div>
