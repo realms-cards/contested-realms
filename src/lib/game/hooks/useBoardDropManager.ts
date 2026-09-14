@@ -1,4 +1,5 @@
 import { useEffect, type MutableRefObject } from "react";
+import { soundManager } from "@/lib/audio/soundManager";
 import {
   clampOffset,
   STACK_MARGIN_Z,
@@ -212,6 +213,7 @@ export function useBoardDropManager({
           }
 
           // Invalid drop (wrong card type for pile, or token/avatar) - just cancel
+          soundManager.play("denied");
           setDragging(null);
           setDragFromHand(false);
           setGhost(null);

@@ -26,15 +26,12 @@ describe("CPU Sunken Treasure", () => {
     store.setState({matchId:"lost-treasure",transport:new LocalTransport(),permanents:{"2,3":[unit("Diluvian Kraken"),{...unit("Sunken Treasure"),attachedTo:{at:"2,3",index:0},isCarried:true}]},
       permanentPositions:{"Diluvian Kraken":{permanentId:"Diluvian Kraken",state:"submerged",position:{x:2,y:-0.15,z:3}}}});
     store.getState().setPermanentPosition("Diluvian Kraken",{permanentId:"Diluvian Kraken",state:"surface",position:{x:2,y:0,z:3}});
-    await settle();
+    // The recovery is queued; the Treasure leaves before it resolves.
     store.getState().movePermanentToZone("2,3",1,"banished");
-    const choices = getSpellChoices(store.getState(),"p1","Sunken Treasure");
-    expect(choices.map(choice => choice.key)).toEqual(["treasure/gone"]);
-    store.getState().setCpuMagicChoice(choices[0].key);
-    store.getState().resolveMagic();
     await settle();
     expect(store.getState().zones.p1.hand).toHaveLength(0);
     expect(store.getState().pendingMagic).toBeNull();
+    expect(store.getState().cpuPendingTriggerCount).toBe(0);
   });
   it("leaves human-versus-human artifact handling unchanged", async () => {
     const store = setup(), treasure = card("Sunken Treasure");
@@ -78,12 +75,9 @@ describe("CPU Sunken Treasure", () => {
     const unsubscribe = store.subscribe(state => { if (sizes[sizes.length-1] !== state.zones.p1.hand.length) sizes.push(state.zones.p1.hand.length); });
     store.getState().setPermanentPosition("Diluvian Kraken",{permanentId:"Diluvian Kraken",state:"surface",position:{x:2,y:0,z:3}});
     await settle();
-    expect(store.getState().pendingMagic?.cpuEvent?.kind).toBe("treasureRecover");
-    expect(store.getState().pendingMagic?.spell.owner).toBe(1);
-    store.getState().setCpuMagicChoice("treasure/recover");
-    store.getState().resolveMagic();
-    await settle();
+    // The recovery itself has a single choice and resolves unprompted for its carrier's owner.
     expect(treasures(store.getState())).toHaveLength(0);
+    expect(store.getState().pendingMagic?.spell.owner).toBe(1);
     expect(store.getState().zones.p2.graveyard.map(card => card.name)).toContain("Sunken Treasure");
     expect(store.getState().pendingMagic?.cpuEvent?.kind).toBe("drawChoice");
     store.getState().setCpuMagicChoice("draw/1");

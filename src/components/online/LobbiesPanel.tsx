@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useOnline } from "@/app/online/online-context";
 import LobbyList from "@/components/online/LobbyList";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { visibleLobbies } from "@/lib/lobby/practice";
 
 export default function LobbiesPanel() {
   const {
@@ -27,7 +28,7 @@ export default function LobbiesPanel() {
 
   const filteredLobbies = useMemo(() => {
     const q = lobbyQuery.trim().toLowerCase();
-    const list = lobbies.filter((l) => {
+    const list = visibleLobbies(lobbies, me?.id, lobby).filter((l) => {
       if (hideFull && l.players.length >= l.maxPlayers) return false;
       if (hideStarted && l.status !== "open") return false;
       if (!q) return true;
@@ -53,7 +54,7 @@ export default function LobbiesPanel() {
       }
     });
     return list;
-  }, [lobbies, lobbyQuery, hideFull, hideStarted, sortKey]);
+  }, [lobbies, me?.id, lobby, lobbyQuery, hideFull, hideStarted, sortKey]);
 
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

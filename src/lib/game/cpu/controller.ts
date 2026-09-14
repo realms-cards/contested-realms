@@ -1,6 +1,7 @@
 import type { StoreApi } from "zustand";
 import { applySpellChoice } from "@/lib/game/cpu/applySpellChoice";
 import { hasCpuGenesis } from "@/lib/game/cpu/genesis";
+import { movementAllowance, movementRoutes } from "@/lib/game/cpu/movement";
 import type { UnitTarget } from "@/lib/game/cpu/spellTypes";
 import { cardText, getSpellChoices, inRange, isDisabled, sameTarget, unitsInRealm } from "@/lib/game/cpu/spells";
 import { treasures } from "@/lib/game/cpu/treasure";
@@ -78,12 +79,13 @@ export function installCpuController(store: StoreApi<GameState>) {
     store.setState({pendingMagic:pending,cpuPendingTriggerCount:queue.length,cpuTriggerOptions:[],cpuChosenTrigger:null});
     state.transport?.sendMessage?.({type:"magicBegin",id:pending.id,tile:pending.tile,spell:pending.spell} as unknown as CustomMessage);
     const seat = pending.spell.owner === 1 ? "p1" : "p2";
-    if (state.actorKey !== seat) {
-      const choice = getSpellChoices(store.getState(),seat,pending.spell.card.name).sort((a,b) => b.score-a.score)[0];
-      if (choice) {
-        store.setState({pendingMagic:{...pending,cpuChoice:choice.key,status:"confirm"}});
-        store.getState().resolveMagic();
-      }
+    const choices = getSpellChoices(store.getState(),seat,pending.spell.card.name);
+    // The CPU's events take the best choice; the human's resolve unprompted when nothing is left to decide.
+    const choice = state.actorKey !== seat ? choices.sort((a,b) => b.score-a.score)[0]
+      : choices.length === 1 && (!choices[0].projectile?.decisions.length || choices[0].autoResolve) ? choices[0] : undefined;
+    if (choice) {
+      store.setState({pendingMagic:{...pending,cpuChoice:choice.key,status:"confirm"}});
+      store.getState().resolveMagic();
     }
   };
   return store.subscribe((state,previous) => {
@@ -139,11 +141,22 @@ export function installCpuController(store: StoreApi<GameState>) {
         if (!prior && current.target.kind === "permanent") enqueueGenesis(current.card,current.at,current.owner === "p1" ? 1 : 2,batch,current.region,current.target);
         if (!prior || (prior.at === current.at && prior.region === current.region)) continue;
         const entity = prior.target.kind === "avatar" ? previous.avatars[prior.target.seat] : previous.permanents[prior.at][prior.target.index];
-        if (!entity.cpuTurnEffect?.blaze || entity.cpuTurnEffect.turn !== `${previous.turn}:${previous.currentPlayer}`) continue;
+        const effect = entity.cpuTurnEffect;
+        if (!effect?.blaze || effect.turn !== `${previous.turn}:${previous.currentPlayer}`) continue;
+        // Only an effect's relocation is forced; every other change of place, void and layer shifts included, walks the steps left.
+        const forced = !!state.cpuForcedMovement;
+        // Drags are not range-checked in CPU matches: a trail only follows the steps left this turn.
+        const mover = {...entity,card:prior.card,owner:prior.owner === "p1" ? 1 as const : 2 as const};
+        const budget = forced ? undefined : movementAllowance(previous,mover)-(effect.steps || 0);
+        if (budget !== undefined && (budget<=0 || !movementRoutes(previous,prior.at,mover,budget).get(current.at))) {
+          store.getState().log(budget<=0 ? `Blaze: ${current.card.name} has no movement left this turn; no fire trail`
+            : `Blaze: ${current.card.name} has no legal route within its ${budget} remaining step${budget === 1 ? "" : "s"}; no fire trail`);
+          continue;
+        }
         const id = `cpu_trail_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         const [x,y] = current.at.split(",").map(Number);
         enqueue({id,tile:{x,y},spell:{at:current.at,index:-1,owner:current.owner === "p1" ? 1 : 2,instanceId:id,card:current.card},
-          cpuEvent:{kind:"blazeTrail",from:prior.at,to:current.at,region:prior.region,source:current.target,forced:state.cpuForcedMovement || prior.region !== current.region},status:"choosingTarget",createdAt:Date.now()},batch);
+          cpuEvent:{kind:"blazeTrail",from:prior.at,to:current.at,region:prior.region,source:current.target,forced,...(budget === undefined ? {} : {budget})},status:"choosingTarget",createdAt:Date.now()},batch);
       }
     }
     if (!restored && state.board !== previous.board) {

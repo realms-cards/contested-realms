@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { withSfxSource } from "@/lib/audio/gameSfx";
 import { soundManager } from "@/lib/audio/soundManager";
 import type {
   AvatarState,
@@ -41,8 +42,9 @@ export const createNetworkSlice: StateCreator<
   lastServerTs: 0,
   lastLocalActionTs: 0,
 
+  // Tagged "remote" so the sound director voices these changes as the opponent.
   applyServerPatch: (patch, t) =>
-    set((state) => {
+    withSfxSource("remote", () => set((state) => {
       if (!patch || typeof patch !== "object") return state as GameState;
       if (typeof t === "number" && t < (state.lastServerTs ?? 0)) {
         return state as GameState;
@@ -1553,7 +1555,7 @@ export const createNetworkSlice: StateCreator<
         console.error("[net] Error in state loss detection:", err);
       }
       return result;
-    }),
+    })),
 
   applyPatch: (patch) =>
     set((state) => {

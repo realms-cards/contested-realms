@@ -19,9 +19,10 @@ function setup() {
   return store;
 }
 function insertTestInterruption(store: ReturnType<typeof setup>) {
+  // Two outcomes keep the interruption a prompt; a lone outcome resolves unprompted.
   store.setState({cpuEffectRequests:[{id:"area-interruption",tile:{x:2,y:3},
     spell:{at:"2,3",index:-1,owner:1,card:card("Lucky Charm"),instanceId:"area-interruption"},
-    cpuEvent:{kind:"randomChoice",outcomes:[{kind:"gainMana",seat:"p1",amount:0}]},status:"choosingTarget",createdAt:0}]});
+    cpuEvent:{kind:"randomChoice",outcomes:[{kind:"gainMana",seat:"p1",amount:0},{kind:"gainMana",seat:"p1",amount:0}]},status:"choosingTarget",createdAt:0}]});
 }
 async function finishTestInterruption(store: ReturnType<typeof setup>) {
   await Promise.resolve();
@@ -122,7 +123,7 @@ describe("paid chains and movement", () => {
     expect(store.getState().players.p1.mana).toBe(-5);
     expect(store.getState().permanents["2,0"][0].damage).toBe(2);
   });
-  it("applies Blaze along the chosen route, not just the destination, without replaying echoes", async () => {
+  it("applies Blaze along the unique route without a prompt, not just the destination, without replaying echoes", async () => {
     const store = setup();
     const transport = Object.assign(new LocalTransport(),{sendMessage:vi.fn(),sendAction:vi.fn()});
     store.setState({matchId:"blaze-test",transport,permanents:{"2,3":[unit("Raal Dromedary","runner",1)],"2,2":[unit("Ogre Goons","victim")]}});
@@ -132,15 +133,16 @@ describe("paid chains and movement", () => {
     expect(reachableCells(store.getState(),"2,3",runner)).toContain("2,0");
     store.setState({permanents:{...store.getState().permanents,"2,3":[],"2,1":[runner]}});
     await Promise.resolve();
-    expect(store.getState().pendingMagic?.cpuEvent?.kind).toBe("blazeTrail");
-    store.getState().setCpuMagicChoice("blaze-trail");
-    store.getState().resolveMagic();
+    expect(transport.sendMessage).toHaveBeenCalledWith(expect.objectContaining({type:"magicBegin",spell:expect.objectContaining({card:expect.objectContaining({name:"Raal Dromedary"})})}));
+    expect(store.getState().pendingMagic).toBeNull();
     expect(store.getState().permanents["2,2"][0].damage).toBe(2);
     expect(store.getState().players.p1.life).toBe(18);
     expect(store.getState().permanents["2,1"][0].damage || 0).toBe(0);
+    expect(store.getState().permanents["2,1"][0].cpuTurnEffect).toMatchObject({blaze:true,steps:2});
     store.setState({permanents:{...store.getState().permanents}});
     await Promise.resolve();
     expect(store.getState().pendingMagic).toBeNull();
+    expect(store.getState().permanents["2,2"][0].damage).toBe(2);
   });
   it("enforces forward/sideways movement and Polar Bears' edge connection", () => {
     const store = setup();

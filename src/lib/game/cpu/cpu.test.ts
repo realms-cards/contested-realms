@@ -415,8 +415,9 @@ describe("live sequential projectile resolution", () => {
   function interruptFirstDamage(store: ReturnType<typeof position>) {
     return store.subscribe((state,previous) => {
       if (state.permanents["1,3"]?.[0]?.damage && !previous.permanents["1,3"]?.[0]?.damage) {
+        // Two outcomes keep the interruption a prompt; a lone outcome resolves unprompted.
         store.setState({cpuEffectRequests:[{id:"intervening-event",tile:{x:0,y:3},spell:{at:"0,3",index:-1,owner:1,card:card("Lucky Charm")},
-          cpuEvent:{kind:"randomChoice",outcomes:[{kind:"gainMana",seat:"p1",amount:0}]},status:"choosingTarget",createdAt:0}]});
+          cpuEvent:{kind:"randomChoice",outcomes:[{kind:"gainMana",seat:"p1",amount:0},{kind:"gainMana",seat:"p1",amount:0}]},status:"choosingTarget",createdAt:0}]});
       }
     });
   }

@@ -15,6 +15,7 @@ import { SoatcLeagueCheckbox } from "@/components/online/SoatcLeagueBadge";
 import LobbyActionStrip from "@/components/online/lobby/LobbyActionStrip";
 import LobbyHero from "@/components/online/lobby/LobbyHero";
 import LobbyPageFooter from "@/components/online/lobby/LobbyPageFooter";
+import PracticeMatchControls from "@/components/online/lobby/PracticeMatchControls";
 import AppShell from "@/components/ui/AppShell";
 import CustomSelect from "@/components/ui/CustomSelect";
 import Modal from "@/components/ui/Modal";
@@ -36,6 +37,7 @@ import {
   useSharedTournament,
   useSoatcStatus,
 } from "@/lib/hooks/useSoatcStatus";
+import { isPracticeMatch, visibleLobbies } from "@/lib/lobby/practice";
 import {
   LEGACY_LOBBY_JOIN_QUERY_PARAM,
   LOBBY_INVITE_QUERY_PARAM,
@@ -314,6 +316,24 @@ function LobbyPageContent({
     // Allow the same link to be opened again later in this session
     inviteJoinAttemptRef.current = null;
   }, [inviteLobbyId, router, searchParams]);
+
+  // vs-CPU and goldfish practice games are dismissed in one click, without a
+  // confirmation: leaving the match forfeits to the bot (never recorded for
+  // the ladder) and leaving the lobby closes it and stops the bot.
+  const isPracticeGame = useMemo(
+    () => !!match && isPracticeMatch(match),
+    [match],
+  );
+  const endPractice = useCallback(() => {
+    try {
+      leaveMatch();
+    } finally {
+      try {
+        leaveLobby();
+        clearInviteParam();
+      } catch {}
+    }
+  }, [leaveMatch, leaveLobby, clearInviteParam]);
 
   // Shareable link for the current lobby (origin is only known in the browser)
   const [origin, setOrigin] = useState("");
@@ -972,8 +992,9 @@ function LobbyPageContent({
     if (prevStatus === "in_progress" && currentStatus === "ended") {
       // Small delay to avoid conflicts with other UI updates
       setTimeout(() => {
-        if (!leaveConfirmOpen) {
-          // Only show if not already open
+        // Only show if not already open. Practice games are dismissed from
+        // their own panel without a confirmation.
+        if (!leaveConfirmOpen && !isPracticeGame) {
           setLeaveConfirmOpen(true);
         }
       }, 500);
@@ -985,7 +1006,7 @@ function LobbyPageContent({
     }
 
     prevMatchStatusRef.current = currentStatus;
-  }, [match?.status, leaveConfirmOpen]);
+  }, [match?.status, leaveConfirmOpen, isPracticeGame]);
 
   // Track if the user explicitly left this match and declined rejoin (persisted)
 
@@ -1338,6 +1359,8 @@ function LobbyPageContent({
     if (
       !id ||
       !isPlayerInMatch ||
+      // Practice games wait for an explicit Resume
+      isPracticeGame ||
       autoJoinCancelled ||
       leaveConfirmOpen ||
       (status !== "waiting" && status !== "in_progress")
@@ -1372,6 +1395,7 @@ function LobbyPageContent({
     match?.id,
     match?.status,
     isPlayerInMatch,
+    isPracticeGame,
     autoJoinCancelled,
     leaveConfirmOpen,
     router,
@@ -1497,10 +1521,17 @@ function LobbyPageContent({
     )} • Time: ${sealedConfig.timeLimit}m`;
   }, [isHost, matchType, sealedConfig, draftConfig]);
 
+  // The list shown on this page: other players' practice games (vs CPU /
+  // goldfish) left out, the player's own practice lobby kept for pinning.
+  const visibleLobbyList = useMemo(
+    () => visibleLobbies(lobbies, me?.id ?? null, lobby),
+    [lobbies, me?.id, lobby],
+  );
+
   // Lobbies with a match in progress, for the hero's LIVE counter
   const liveCount = useMemo(
-    () => lobbies.filter((l) => l.status === "started").length,
-    [lobbies],
+    () => visibleLobbyList.filter((l) => l.status === "started").length,
+    [visibleLobbyList],
   );
 
   // removed startSealedMatch helper; start is confirmed via modal action
@@ -1583,8 +1614,19 @@ function LobbyPageContent({
           </div>
         )}
 
+        {/* Practice games (vs CPU / goldfish): resume or end, no countdown */}
+        {match && isPlayerInMatch && isPracticeGame && (
+          <PracticeMatchControls
+            key={match.id}
+            match={match}
+            onResume={() =>
+              router.push(`/online/play/${encodeURIComponent(match.id)}`)
+            }
+            onEnd={endPractice}
+          />
+        )}
         {/* Match Controls - show only when user is actually a player in the match (not spectator) */}
-        {match && isPlayerInMatch && (
+        {match && isPlayerInMatch && !isPracticeGame && (
           <div className="rc-panel flex flex-col gap-3 px-[18px] py-3.5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="font-rc-display text-[22px] leading-none text-rc-fg-strong">
@@ -1785,7 +1827,7 @@ function LobbyPageContent({
         )}
         {/* Lobbies (central, full width) */}
         <LobbiesCentral
-          lobbies={lobbies}
+          lobbies={visibleLobbyList}
           tournaments={(tournamentsEnabled ? tournamentsFromApi : []).map(
             mapToProtocolTournament,
           )}
@@ -1813,6 +1855,7 @@ function LobbyPageContent({
             leaveLobby();
             clearInviteParam();
           }}
+          onEndPractice={endPractice}
           onSetLobbyVisibility={(v) => setLobbyVisibility(v)}
           onResync={() => resync()}
           onAddCpuBot={addCpuBot}

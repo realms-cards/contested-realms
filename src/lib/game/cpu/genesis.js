@@ -26,7 +26,7 @@ function choicesFor(state) {
   const sites = Object.keys(state.board.sites).filter(at => state.board.sites[at]?.card);
   /** @type {import('./spellTypes').SpellChoice[]} */
   const choices = [];
-  const add = (key,label,operations) => choices.push({key:`genesis/${key}`,label,operations,target:null, caster:{kind:'avatar',seat},score:scoreOperations(state,seat,operations)});
+  const add = (key,label,operations,picks) => choices.push({key:`genesis/${key}`,label,operations,target:null, caster:{kind:'avatar',seat},score:scoreOperations(state,seat,operations),...(picks ? {picks} : {})});
   const name = card.name;
   if ((card.type === 'Minion' && event.source && !source) || (event.sourceSite && !siteSource)) {
     add('gone','The source left the realm; skip its Genesis',[]);
@@ -40,12 +40,12 @@ function choicesFor(state) {
   else if (name === 'Clamor of Harpies' && source) {
     for (const target of visible.filter(u => u.target.kind === 'permanent' && !sameTarget(u.target,source.target) && unitStats(state,u).atk<unitStats(state,source).atk)) {
       const id = target.target.instanceId || `${target.at}:${target.target.index}`;
-      add(`${id}/move`,`Teleport ${target.card.name} here, then choose whether to strike`,[{kind:'move',target:target.target,to:at,preserveRegion:true},{kind:'offerFight',source:source.target,target:target.target,strikeOnly:true}]);
+      add(`${id}/move`,`Teleport ${target.card.name} here, then choose whether to strike`,[{kind:'move',target:target.target,to:at,preserveRegion:true},{kind:'offerFight',source:source.target,target:target.target,strikeOnly:true}],[target.at]);
     }
   } else if (name === 'Brobdingnag Bullfrog' && source) {
-    for (const target of visible.filter(u => u.at === at && u.target.kind === 'permanent' && !sameTarget(u.target,source.target))) add(target.target.instanceId || String(target.target.index),`Swallow ${target.card.name}`,[{kind:'swallow',target:target.target,carrier:source.target}]);
+    for (const target of visible.filter(u => u.at === at && u.target.kind === 'permanent' && !sameTarget(u.target,source.target))) add(target.target.instanceId || String(target.target.index),`Swallow ${target.card.name}`,[{kind:'swallow',target:target.target,carrier:source.target}],[target.at]);
   } else if (['Arid Desert','Red Desert','Remote Desert'].includes(name)) {
-    for (const to of sites.filter(to => inRange(at,to,'nearby'))) add(to,`Deal 1 to every minion atop ${to}`,[{kind:'damageEvent',hits:units.filter(u => u.at === to && u.region === 'surface' && u.target.kind === 'permanent').map(u => ({target:u.target,amount:1,sourceName:name}))}]);
+    for (const to of sites.filter(to => inRange(at,to,'nearby'))) add(to,`Deal 1 to every minion atop ${to}`,[{kind:'damageEvent',hits:units.filter(u => u.at === to && u.region === 'surface' && u.target.kind === 'permanent').map(u => ({target:u.target,amount:1,sourceName:name}))}],[to]);
   } else if (name === 'Shifting Sands') add('deserts','Reactivate nearby Desert Genesis abilities',[{kind:'retriggerGenesis',ats:sites.filter(to => inRange(at,to,'nearby') && ['Arid Desert','Red Desert','Remote Desert'].includes(state.board.sites[to].card.name))}]);
   else if (name === 'Holy Ground') add('heal','Each nearby Avatar heals 3 life',units.filter(u => u.target.kind === 'avatar' && inRange(at,u.at,'nearby')).map(u => ({kind:'mend',target:u.target,amount:3})));
   else if (['Humble Village','Rustic Village','Simple Village'].includes(name)) {
@@ -64,7 +64,7 @@ function choicesFor(state) {
   } else if (name === 'Undertow') {
     const body = bodyOfWater(state,at);
     for (const target of units.filter(u => body.includes(u.at) && (u.owner === seat || !hasStealth(state,u)))) for (const to of body.filter(to => to !== target.at && inRange(target.at,to,'adjacent') && isWater(state,to))) {
-      add(`${target.target.kind === 'avatar' ? target.owner : target.target.instanceId}/${to}`,`Move ${target.card.name} to ${to}`,[{kind:'move',target:target.target,to,preserveRegion:true}]);
+      add(`${target.target.kind === 'avatar' ? target.owner : target.target.instanceId}/${to}`,`Move ${target.card.name} to ${to}`,[{kind:'move',target:target.target,to,preserveRegion:true}],[target.at,to]);
     }
   }
   if (!choices.length) add('none','No legal targets; finish Genesis',[]);

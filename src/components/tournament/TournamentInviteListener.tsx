@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useOnline } from "@/app/online/online-context";
+import { soundManager } from "@/lib/audio/soundManager";
 
 interface TournamentInviteData {
   tournamentId: string;
@@ -97,6 +98,7 @@ export default function TournamentInviteListener() {
 
     const handleTournamentInvite = (data: TournamentInviteData) => {
       console.log("[TournamentInviteListener] Received invite:", data);
+      soundManager.play("invite");
 
       const id = `${data.tournamentId}-${Date.now()}`;
       const toast: InviteToast = {

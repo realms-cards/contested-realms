@@ -61,6 +61,7 @@ export const LADDER = {
 
 export type RatedMode = "full" | "leaver_only";
 export type UnratedReason =
+  | "cpu"
   | "guest"
   | "missing_user"
   | "precon"
@@ -82,6 +83,8 @@ export interface ClassifyInput {
   /** Game turn at match end; null when unknown (treated as a full-length game). */
   turn: number | null;
   durationSec: number | null;
+  /** A CPU bot took part (vs CPU precons, goldfish): practice, never rated. */
+  hasCpu?: boolean;
   hasGuest: boolean;
   sameNetwork: boolean;
   /** False when a client-reported result could not be corroborated by game state. */
@@ -100,6 +103,7 @@ export function classifyResult(input: ClassifyInput): ResultClassification {
     ratedMode: "full",
     unratedReason: reason,
   });
+  if (input.hasCpu) return unrated("cpu");
   if (input.hasGuest) return unrated("guest");
   if (input.missingUser) return unrated("missing_user");
   if (input.isPrecon) return unrated("precon");

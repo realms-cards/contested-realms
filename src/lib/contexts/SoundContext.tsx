@@ -2,17 +2,26 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  DEFAULT_SFX_MIX,
   DEFAULT_SOUND_VOLUME,
+  SFX_MIX_STORAGE_KEY,
   SOUND_EFFECTS,
   SOUND_VOLUME_STORAGE_KEY,
   soundManager,
+  type ClipSoundId,
+  type PlayOptions,
+  type SfxGroup,
+  type SfxMix,
   type SoundEffectId,
 } from "@/lib/audio/soundManager";
 
 export type SoundContextValue = {
   volume: number;
   setVolume: (value: number) => void;
-  play: (effect: SoundEffectId) => void;
+  /** Which sound groups are enabled (board, alerts, interface). */
+  mix: SfxMix;
+  setMixGroup: (group: SfxGroup, enabled: boolean) => void;
+  play: (effect: SoundEffectId, options?: PlayOptions) => void;
   playCardFlip: () => void;
   playCardPlay: () => void;
   playCardSelect: () => void;
@@ -25,8 +34,25 @@ export type SoundContextValue = {
 
 const SoundContext = React.createContext<SoundContextValue | undefined>(undefined);
 
+function parseMix(raw: string | null): SfxMix | null {
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const record = parsed as Record<string, unknown>;
+    const mix: SfxMix = { ...DEFAULT_SFX_MIX };
+    for (const group of Object.keys(DEFAULT_SFX_MIX) as SfxGroup[]) {
+      if (typeof record[group] === "boolean") mix[group] = record[group];
+    }
+    return mix;
+  } catch {
+    return null;
+  }
+}
+
 export function SoundProvider({ children }: { children: React.ReactNode }) {
   const [volume, setVolumeState] = useState<number>(DEFAULT_SOUND_VOLUME);
+  const [mix, setMixState] = useState<SfxMix>(DEFAULT_SFX_MIX);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -41,6 +67,11 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
           soundManager.setVolume(clamped);
         }
       }
+      const storedMix = parseMix(window.localStorage.getItem(SFX_MIX_STORAGE_KEY));
+      if (storedMix) {
+        setMixState(storedMix);
+        soundManager.setMix(storedMix);
+      }
     } catch {
       // Ignore storage errors (private mode, etc.)
     }
@@ -51,7 +82,11 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
   }, [volume]);
 
   useEffect(() => {
-    (Object.keys(SOUND_EFFECTS) as SoundEffectId[]).forEach((effect) => {
+    soundManager.setMix(mix);
+  }, [mix]);
+
+  useEffect(() => {
+    (Object.keys(SOUND_EFFECTS) as ClipSoundId[]).forEach((effect) => {
       soundManager.preload(effect);
     });
   }, []);
@@ -68,13 +103,28 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const play = useCallback((effect: SoundEffectId) => {
-    soundManager.play(effect);
+  const setMixGroup = useCallback((group: SfxGroup, enabled: boolean) => {
+    setMixState((prev) => {
+      const next: SfxMix = { ...prev, [group]: enabled };
+      soundManager.setMix(next);
+      try {
+        window.localStorage.setItem(SFX_MIX_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // Ignore storage errors
+      }
+      return next;
+    });
+  }, []);
+
+  const play = useCallback((effect: SoundEffectId, options?: PlayOptions) => {
+    soundManager.play(effect, options);
   }, []);
 
   const value = useMemo<SoundContextValue>(() => ({
     volume,
     setVolume,
+    mix,
+    setMixGroup,
     play,
     playCardFlip: () => play("cardFlip"),
     playCardPlay: () => play("cardPlay"),
@@ -84,7 +134,7 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
     playTurnGong: () => play("turnGong"),
     playHealthPlus: () => play("healthPlus"),
     playHealthMinus: () => play("healthMinus"),
-  }), [play, setVolume, volume]);
+  }), [mix, play, setMixGroup, setVolume, volume]);
 
   return <SoundContext.Provider value={value}>{children}</SoundContext.Provider>;
 }

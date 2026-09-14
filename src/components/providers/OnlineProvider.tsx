@@ -17,6 +17,7 @@ import type {
   VoiceOutgoingRequest,
   VoiceRequestPeer,
 } from "@/app/online/online-context";
+import { soundManager } from "@/lib/audio/soundManager";
 import { useLoadingContext } from "@/lib/contexts/LoadingContext";
 import { FEATURE_AUDIO_ONLY, FEATURE_SEAT_VIDEO } from "@/lib/flags";
 import { PLAYER_COLORS } from "@/lib/game/constants";
@@ -1096,6 +1097,17 @@ export default function OnlineProvider({
         const you = meRef.current;
         const isHost = you && p.lobby.hostId === you.id;
 
+        // Chime when someone else joins or leaves the lobby you are in.
+        if (you && prevLobby && prevLobby.id === p.lobby.id) {
+          const idsBefore = new Set(prevLobby.players.map((pl) => pl.id));
+          const idsAfter = new Set(p.lobby.players.map((pl) => pl.id));
+          if (p.lobby.players.some((pl) => pl.id !== you.id && !idsBefore.has(pl.id))) {
+            soundManager.play("playerJoined");
+          } else if (prevLobby.players.some((pl) => pl.id !== you.id && !idsAfter.has(pl.id))) {
+            soundManager.play("playerLeft");
+          }
+        }
+
         // Detect new players joining (only notify host when tab is unfocused)
         if (isHost && prevLobby) {
           const prevPlayerIds = new Set(prevLobby.players.map((pl) => pl.id));
@@ -1142,6 +1154,7 @@ export default function OnlineProvider({
         setPlayers(p.players);
       }),
       transport.on("lobbyInvite", (p) => {
+        soundManager.play("invite");
         setInvites((prev) => {
           // de-dup by lobbyId + from.id
           const key = `${p.lobbyId}:${p.from.id}`;
@@ -1166,6 +1179,21 @@ export default function OnlineProvider({
         } catch {}
 
         setMatch(p.match);
+
+        // Match start fanfare, once per match per tab: matchStarted is re-sent
+        // on reconnect and after a reload.
+        try {
+          const startedId = String((p.match as { id?: unknown }).id || "");
+          const soundKey = `sfx:matchStart:${startedId}`;
+          if (
+            startedId &&
+            p.match.status !== "ended" &&
+            !window.sessionStorage.getItem(soundKey)
+          ) {
+            window.sessionStorage.setItem(soundKey, "1");
+            soundManager.play("matchStart");
+          }
+        } catch {}
 
         // Dev handle for inspecting the latest match info from the console
         if (process.env.NODE_ENV !== "production") {
@@ -1275,6 +1303,30 @@ export default function OnlineProvider({
               }
               return next as MatchInfo;
             });
+          }
+        } catch {}
+        // Background tab: patches wait for the next animation frame, which
+        // browsers pause while a tab is hidden, so the turn overlay cannot
+        // announce the turn. Chime "your turn" straight from the socket.
+        try {
+          if (document.hidden) {
+            const nextPlayer = (patch as { currentPlayer?: unknown }).currentPlayer;
+            const game = useGameStore.getState();
+            const seat = game.actorKey;
+            if (
+              seat &&
+              nextPlayer === (seat === "p1" ? 1 : 2) &&
+              game.currentPlayer !== nextPlayer
+            ) {
+              const turn = (patch as { turn?: unknown }).turn;
+              const alertKey = `${game.matchId ?? ""}:${
+                typeof turn === "number" ? turn : Math.floor(Date.now() / 60000)
+              }`;
+              if (window.sessionStorage.getItem("sfx:yourTurn") !== alertKey) {
+                window.sessionStorage.setItem("sfx:yourTurn", alertKey);
+                soundManager.play("yourTurn");
+              }
+            }
           }
         } catch {}
         queueServerPatch(p.patch, p.t);
@@ -1655,6 +1707,7 @@ export default function OnlineProvider({
         notificationKey !== lastMatchmakingNotificationRef.current
       ) {
         lastMatchmakingNotificationRef.current = notificationKey;
+        soundManager.play("invite");
         notifyMatchFound(opponentName, {
           lobbyId: data.lobbyId,
           awaitingConfirmation: data.status === "confirming",

@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { withSfxSource } from "@/lib/audio/gameSfx";
 import type {
   GameState,
   PlayerKey,
@@ -236,8 +237,10 @@ export const createHistorySlice: StateCreator<
       } as Partial<GameState> as GameState;
     }),
 
+  // Tagged "undo" so the sound director plays one undo sound instead of
+  // voicing every card the restore moves back.
   undo: () =>
-    set((state) => {
+    withSfxSource("undo", () => set((state) => {
       // PRODUCTION HARDENING: Block undo during critical game phases
       // to prevent state corruption or desync issues
 
@@ -639,5 +642,5 @@ export const createHistorySlice: StateCreator<
         pendingBrowse: null,
         pendingAccusation: null,
       } as Partial<GameState> as GameState;
-    }),
+    })),
 });

@@ -3,6 +3,7 @@ import type { ThreeEvent } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import { useRef, useState, type MutableRefObject } from "react";
 import { flushSync } from "react-dom";
+import { soundManager } from "@/lib/audio/soundManager";
 import {
   BASE_CARD_ELEVATION,
   BodyApi,
@@ -273,11 +274,17 @@ export function AvatarCard({
   void _touchContextTimerRef;
   const {
     selectedAvatar,
-    selectAvatar,
+    selectAvatar: selectAvatarQuietly,
     contextMenu,
     setLastTouchedId,
     lastTouchedId,
   } = selectionContext;
+  // Pointer selection ticks when it changes the selection. Drops call the
+  // store action directly and stay quiet.
+  const selectAvatar: GameState["selectAvatar"] = (who) => {
+    if (selectedAvatar !== who) soundManager.play("cardSelect");
+    selectAvatarQuietly(who);
+  };
   const { attackTargetChoice, attackConfirm, setAttackConfirm, pendingCombat } =
     combatContext;
   const {

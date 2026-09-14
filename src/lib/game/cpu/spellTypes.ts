@@ -48,6 +48,7 @@ export type SpellOperation =
   | { kind: "retriggerGenesis"; ats: string[] }
   | { kind: "move"; target: UnitTarget; to: string; preserveRegion?: boolean }
   | { kind: "buff"; target: UnitTarget; power: number; movement: number; blaze?: boolean }
+  | { kind: "moveSpent"; target: UnitTarget; steps: number }
   | { kind: "mend"; target: UnitTarget; amount: number }
   | { kind: "subsurface"; targets: UnitTarget[]; state: "burrowed" | "submerged" };
 
@@ -61,8 +62,8 @@ export interface DamageHit {
 }
 
 export interface SpellChoice {
-  /** Board fields that can be clicked to narrow this choice. Internal keys only. */
-  boardTiles?: string[];
+  /** Board-first selection: one entry per click needed to reach this choice, in order. An entry is a tile key "x,y" or an array of tile keys any of which counts (e.g. every tile along a projectile direction). Choices that need no click (e.g. "Gain 7 life") omit it or use []. Caster tiles are NOT included; the UI prepends the caster when choices differ by caster. */
+  picks?: (string | string[])[];
   key: string;
   label: string;
   caster: NonNullable<PendingMagic["caster"]>;
@@ -71,10 +72,16 @@ export interface SpellChoice {
   /** Live resolution when operations describe only a tactical preview. */
   resolutionOperations?: SpellOperation[];
   score: number;
+  /**
+   * The default plan of a choice with projectile decisions is the only sensible one
+   * (e.g. a unique shortest Blaze route), so the controller may resolve it without a prompt.
+   */
+  autoResolve?: boolean;
   projectile?: {
     baseKey: string;
     selections: string[];
-    decisions: { label: string; options: { key: string; label: string }[] }[];
+    /** `at` marks an option that a click on that board tile selects (internal cell key); it is unique within a decision, so options sharing a tile omit it and are picked from the list. */
+    decisions: { label: string; options: { key: string; label: string; at?: string }[] }[];
   };
 }
 

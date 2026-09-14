@@ -1,8 +1,7 @@
 "use client";
 
 import React from "react";
-import CpuAbilityChoices from "@/components/game/CpuAbilityChoices";
-import CpuMagicChoices from "@/components/game/CpuMagicChoices";
+import CpuAssistBar from "@/components/game/CpuAssistBar";
 import { useGameStore } from "@/lib/game/store";
 import {
   getCellNumber,
@@ -17,9 +16,7 @@ import { useSmallScreen } from "@/lib/hooks/useTouchDevice";
 
 export default function MagicHudOverlay() {
   const cpuMatch = useGameStore(s => s.opponentPlayerId?.startsWith("cpu_") === true);
-  const hasSpell = useGameStore(s => !!s.pendingMagic?.spell.card.name);
-  if (cpuMatch && hasSpell) return <CpuMagicChoices />;
-  if (cpuMatch) return <CpuAbilityChoices />;
+  if (cpuMatch) return <CpuAssistBar />;
   return <TabletopMagicHudOverlay />;
 }
 

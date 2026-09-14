@@ -5,6 +5,7 @@ import { useFrame, useLoader, invalidate } from "@react-three/fiber";
 import { useRef, useState, useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+import { soundManager } from "@/lib/audio/soundManager";
 import type { PlayerKey } from "../store";
 
 interface D20DiceProps {
@@ -75,6 +76,7 @@ export default function D20Dice({
       setHasCompletedRoll(false);
       setRollStartTime(Date.now());
       onRollCompleteCalledRef.current = false;
+      soundManager.play("dice");
     }
     prevIsRollingRef.current = isRolling;
     prevRollKeyRef.current = rollKey;

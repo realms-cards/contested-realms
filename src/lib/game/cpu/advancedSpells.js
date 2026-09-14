@@ -10,7 +10,7 @@ const MAJOR = [[3,5,3],[5,7,5],[3,5,3]];
  * @param {import('../store/types').PlayerKey} seat
  * @param {string} name
  * @param {import('./spellTypes').LocatedUnit} origin
- * @param {(key: string, label: string, target: import('../store/types').MagicTarget | null, operations: import('./spellTypes').SpellOperation[]) => import('./spellTypes').SpellChoice} add
+ * @param {(key: string, label: string, target: import('../store/types').MagicTarget | null, operations: import('./spellTypes').SpellOperation[], picks?: import('./spellTypes').SpellChoice['picks']) => import('./spellTypes').SpellChoice} add
  * @param {string} casterKey
  * @param {string} [selectionKey]
  */
@@ -52,7 +52,10 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
         const preferred = requested[step];
         const next = preferred === 'stop' ? null : eligible.find(u => id(u) === preferred) ||
           (scoreOf(best) > 2 ? best : null);
-        decisions.push({label:`After ${previous.card.name}: spend 2 additional mana or stop`,options:[{key:'stop',label:'Stop the chain'},...eligible.map(u => ({key:id(u),label:`${u.card.name} at ${u.at}`}))]});
+        // A tile click names an option only when no other eligible unit shares that tile; the rest are picked from the list.
+        const onTile = new Map();
+        for (const u of eligible) onTile.set(u.at,(onTile.get(u.at) || 0)+1);
+        decisions.push({label:`After ${previous.card.name}: spend 2 additional mana or stop`,options:[{key:'stop',label:'Stop the chain'},...eligible.map(u => { const key = id(u), label = `${u.card.name} at ${u.at}`; return onTile.get(u.at) === 1 ? {key,label,at:u.at} : {key,label}; })]});
         selections.push(next ? id(next) : 'stop');
         if (!next) break;
         chain.push(next);
@@ -73,7 +76,7 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
       // Decisions are re-labelled into fresh objects by getSpellChoices; selections and operations stay per choice.
       const {chain,decisions} = planned, selections = [...planned.selections];
       const operations = [{kind:'spend',seat,amount:2*(chain.length-1)},{kind:'damageEvent',hits:chain.map(u => ({target:u.target,amount:2}))}];
-      const choice = add(suffix,`Chain from ${first.card.name}: ${chain.length} units; ${2*(chain.length-1)} additional mana`,first.target,operations);
+      const choice = add(suffix,`Chain from ${first.card.name}: ${chain.length} units; ${2*(chain.length-1)} additional mana`,first.target,operations,[first.at]);
       choice.projectile = {baseKey,selections,decisions};
       if (requested.length) choice.key = projectileKey(baseKey,selections);
     }
@@ -82,12 +85,13 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
   if (name === 'Cone of Flame') {
     const [ox,oy] = origin.at.split(',').map(Number);
     for (const [direction,dx,dy] of [['N',0,-1],['E',1,0],['S',0,1],['W',-1,0]]) {
-      const hits = [];
+      const hits = [], wedge = [];
       for (let step=1;step<=3;step++) for (let side=1-step;side<step;side++) {
-        const at = `${ox+dx*step-dy*side},${oy+dy*step+dx*side}`;
+        const x = ox+dx*step-dy*side, y = oy+dy*step+dx*side, at = `${x},${y}`;
+        if (x>=0 && y>=0 && x<state.board.size.w && y<state.board.size.h) wedge.push(at);
         for (const unit of units.filter(u => u.at === at && u.region === origin.region)) hits.push({ target: unit.target,amount: 7-2*step,element: 'fire' });
       }
-      add(direction,`Cone ${direction}: 5, 3, then 1 damage`,{ kind: 'projectile',direction },[{ kind: 'damageEvent',hits }]);
+      add(direction,`Cone ${direction}: 5, 3, then 1 damage`,{ kind: 'projectile',direction },[{ kind: 'damageEvent',hits }],wedge.length ? [wedge] : []);
     }
     return true;
   }
@@ -106,8 +110,8 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
       if (crater) {
         for (const {card,index} of discards) add(`${at}/${card.instanceId || index}`,`Discard ${card.name}; destroy ${at}; resolve impact`,{kind:'location',at},[
           {kind:'discard',seat,instanceId:card.instanceId,index}, {kind:'destroySite',at}, {kind:'damageGrid',at,grid:CRATER},
-        ]);
-      } else add(at,`Explosion centered at ${at}: 7 / 5 / 3 damage`,{kind:'location',at},[{kind:'damageEvent',hits}]);
+        ],[at]);
+      } else add(at,`Explosion centered at ${at}: 7 / 5 / 3 damage`,{kind:'location',at},[{kind:'damageEvent',hits}],[at]);
     }
     return true;
   }
@@ -139,7 +143,7 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
     const outcomes = state.pendingMagic?.cpuRandomMinionOptions;
     if (outcomes?.length) {
       outcomes.forEach((selected,index) => advancedSpellChoices({...state,pendingMagic:{...state.pendingMagic,cpuRandomMinion:selected,cpuRandomMinionOptions:undefined}},seat,name,origin,
-        (key,label,target,operations) => add(`outcome-${index}/${key}`,`Lucky Charm result ${index+1}: ${label}`,target,operations),casterKey,selectionKey));
+        (key,label,target,operations,picks) => add(`outcome-${index}/${key}`,`Lucky Charm result ${index+1}: ${label}`,target,operations,picks),casterKey,selectionKey));
       return true;
     }
     const selected = state.pendingMagic?.spell.card.name === name ? state.pendingMagic.cpuRandomMinion : null;
@@ -152,7 +156,7 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
         // The effect summons without casting: no ownership, mana, or threshold restrictions.
         for (const region of site ? ['surface',isWater(state,at) ? 'underwater' : 'underground'] : ['void']) {
           if (site?.name === 'Mountain Pass' && region === 'surface' && units.some(u => u.at === at && u.region === 'surface' && u.target.kind === 'permanent')) continue;
-          add(`${at}/${region}`,`Summon ${selected.card.name} at ${at} (${region})`,{kind:'location',at},[{kind:'raise',seat,to:at,region,...selected}]);
+          add(`${at}/${region}`,`Summon ${selected.card.name} at ${at} (${region})`,{kind:'location',at},[{kind:'raise',seat,to:at,region,...selected}],[at]);
         }
       }
     }

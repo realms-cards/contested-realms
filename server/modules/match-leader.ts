@@ -73,7 +73,7 @@ interface AvatarState {
   pos: [number, number] | null;
   tapped: boolean;
   offset?: unknown;
-  cpuTurnEffect?: { turn: string; power: number; movement: number; blaze?: boolean } | null;
+  cpuTurnEffect?: { turn: string; power: number; movement: number; blaze?: boolean; steps?: number } | null;
 }
 
 interface AvatarsState {
@@ -611,7 +611,8 @@ function ensureAvatar(value: unknown, fallback: AvatarState): AvatarState {
   else if (isRecord(effect) && typeof effect.turn === "string" &&
       typeof effect.power === "number" && Number.isFinite(effect.power) &&
       typeof effect.movement === "number" && Number.isFinite(effect.movement)) {
-    avatar.cpuTurnEffect = { turn: effect.turn, power: effect.power, movement: effect.movement,...(effect.blaze === true ? {blaze:true} : {}) };
+    avatar.cpuTurnEffect = { turn: effect.turn, power: effect.power, movement: effect.movement,...(effect.blaze === true ? {blaze:true} : {}),
+      ...(typeof effect.steps === "number" && Number.isFinite(effect.steps) ? {steps:effect.steps} : {}) };
   }
   return avatar;
 }

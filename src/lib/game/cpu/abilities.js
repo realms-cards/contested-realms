@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Shared with the Node CPU client. */
-const { enterScope, leaveScope, realmUnits, scopedChoiceTiles, scopedTileLabel } = require('./evalScope');
-const { bodyOfWater, isDisabled, isWater, hasStealth, sameTarget, inRange, unitStats, scoreOperations } = require('./spells');
+const { enterScope, leaveScope, realmUnits, scopedTileLabel } = require('./evalScope');
+const { bodyOfWater, isDisabled, isWater, hasStealth, sameTarget, inRange, projectilePath, unitStats, scoreOperations } = require('./spells');
 
 /** @param {Partial<import('./spellTypes').SpellState> & {phase?: string, cpuPendingTriggerCount?: number, cpuEffectContinuations?: unknown[]}} state
  * @param {import('../store/types').PlayerKey} seat
@@ -24,7 +24,7 @@ function choicesFor(state, seat) {
   const units = realmUnits(state), choices = [];
   const entity = u => u.target.kind === 'avatar' ? state.avatars[u.owner] : state.permanents[u.at][u.target.index];
   const canTap = u => !entity(u).tapped && !entity(u).summonedThisTurn && !isDisabled(state,u);
-  const add = (source,key,label,operations) => choices.push({source,key,label,operations,caster:source.target,target:null,score:scoreOperations(state,seat,operations)});
+  const add = (source,key,label,operations,picks) => choices.push({source,key,label,operations,caster:source.target,target:null,score:scoreOperations(state,seat,operations),...(picks ? {picks} : {})});
   const owner = seat === 'p1' ? 1 : 2;
   const sites = Object.entries(state.board.sites).filter(([,tile]) => tile.card && !tile.cpuNeutral);
   const fire = sites.filter(([,tile]) => tile.owner === owner).reduce((sum,[,tile]) => sum+Number(tile.card.thresholds?.fire || 0),0);
@@ -33,7 +33,7 @@ function choicesFor(state, seat) {
     const source = {card:tile.card,at,owner:seat,target:{kind:'site',at}};
     const sacrifice = {kind:'destroySite',at,sacrifice:true,instanceId:tile.card.instanceId};
     if (tile.card.name === 'Sinkhole') for (const [to] of sites.filter(([to]) => inRange(at,to,'nearby'))) {
-      add(source,`sinkhole/${tile.card.instanceId || at}/${to}`,`Sinkhole: destroy the site at ${to}, then sacrifice Sinkhole`,[{kind:'destroySite',at:to},sacrifice]);
+      add(source,`sinkhole/${tile.card.instanceId || at}/${to}`,`Sinkhole: destroy the site at ${to}, then sacrifice Sinkhole`,[{kind:'destroySite',at:to},sacrifice],[to]);
     }
     if (tile.card.name === 'Vesuvius' && fire>=3) {
       add(source,`vesuvius/${tile.card.instanceId || at}`,'Vesuvius: deal 3 to every unit occupying nearby sites, then sacrifice Vesuvius',[
@@ -51,7 +51,7 @@ function choicesFor(state, seat) {
         const targets = units.filter(unit => unit.at === at && unit.region === source.region && !sameTarget(unit.target,source.target)).map(unit => unit.target);
         add(source,`sparkmage/${id}/${at}`,`Sparkmage: tap; deal ${amount} to another random unit at ${at}`,[
           {kind:'tapUnits',targets:[source.target]},{kind:'damage',targets,amount,random:true},
-        ]);
+        ],[at]);
       }
     }
     if (source.card.name === 'Waveshaper' && canTap(source)) {
@@ -60,7 +60,7 @@ function choicesFor(state, seat) {
         if (!tile.card || !water.some(cell => inRange(cell,at,'nearby'))) continue;
         add(source,`waveshaper/${id}/${at}`,`Waveshaper: flood ${at}; tap minions without Submerge and skip their next untap`,[
           {kind:'tapUnits',targets:[source.target]}, {kind:'waveshaperFlood',seat,at}, {kind:'stunAt',at},
-        ]);
+        ],[at]);
       }
     }
     if (canTap(source)) state.permanents[source.at]?.forEach((item,index) => {
@@ -70,17 +70,20 @@ function choicesFor(state, seat) {
       const position = state.permanentPositions[artifactId]?.state;
       const region = position === 'submerged' ? 'underwater' : position === 'burrowed' ? 'underground' : state.board.sites[source.at]?.card ? 'surface' : 'void';
       if (region !== source.region) return;
-      for (const direction of ['N','E','S','W']) add(source,`boulder/${id}/${artifactId}/${direction}`,`${source.card.name}: tap to push Rolling Boulder ${direction}`,[
-        {kind:'tapUnits',targets:[source.target]},
-        {kind:'rollBoulder',target:{kind:'permanent',at:source.at,index,instanceId:artifactId},direction,region},
-      ]);
+      for (const direction of ['N','E','S','W']) {
+        const roll = projectilePath(state,source.at,region,direction,1);
+        add(source,`boulder/${id}/${artifactId}/${direction}`,`${source.card.name}: tap to push Rolling Boulder ${direction}`,[
+          {kind:'tapUnits',targets:[source.target]},
+          {kind:'rollBoulder',target:{kind:'permanent',at:source.at,index,instanceId:artifactId},direction,region},
+        ],roll.length ? [roll] : []);
+      }
     });
     if (source.card.name === 'Geomancer' && canTap(source) && state.zones[seat].atlas.length) {
       for (const [at,tile] of Object.entries(state.board.sites)) {
         if (tile.card?.name !== 'Rubble' || at === source.at || !inRange(source.at,at,'adjacent')) continue;
         add(source,`geomancer/${id}/${at}`,`Geomancer: replace Rubble at ${at} with the top site of your atlas`,[
           {kind:'tapUnits',targets:[source.target]},{kind:'replaceRubble',seat,at},
-        ]);
+        ],[at]);
       }
     }
     if (['Flamecaller','Pudge Butcher'].includes(source.card.name) && canTap(source)) {
@@ -101,10 +104,10 @@ function choicesFor(state, seat) {
             {kind:'tapUnits',targets:[source.target]},
             {kind:'dragUnit',target:hit.target,path:path.slice(0,-1).reverse(),region:source.region},
             {kind:'offerFight',source:source.target,target:hit.target},
-          ]);
+          ],[at]);
           else add(source,`flamecaller/${id}/${direction}/${hit.target.kind === 'avatar' ? hit.owner : hit.target.instanceId}`,`Flamecaller: banish all dead fire minions; shoot ${direction}, dealing ${amount} to ${hit.card.name}`,[
             {kind:'tapUnits',targets:[source.target]},{kind:'banishDeadFire',seat},{kind:'damageEvent',hits:[{target:hit.target,amount,element:'fire'}]},
-          ]);
+          ],[at]);
           break;
         }
       }
@@ -149,7 +152,7 @@ function choicesFor(state, seat) {
               {kind:'tapUnits',targets:[source.target,ally.target]},
               {kind:'discard',seat,index,instanceId:card.instanceId,cardType:'any'},
               {kind:'damageEvent',hits:targets.map(u => ({target:u.target,amount}))},
-            ]);
+            ],[at]);
           });
         }
       }
@@ -158,10 +161,10 @@ function choicesFor(state, seat) {
         const targetId = target.target.kind === 'avatar' ? target.owner : target.target.instanceId;
         add(source,`ballista/${id}/${allyId}/${targetId}`,`Siege Ballista: tap ${source.card.name} and ${ally.card.name}; deal 3 to ${target.card.name} at ${target.at}`,[
           {kind:'tapUnits',targets:[source.target,ally.target]}, {kind:'damageEvent',hits:[{target:target.target,amount:3}]},
-        ]);
+        ],[target.at]);
       }
     }
   }
-  return choices.map(choice => ({...choice,boardTiles:scopedChoiceTiles(choice.label,state.board.size),label:scopedTileLabel(choice.label,state.board.size)}));
+  return choices.map(choice => ({...choice,label:scopedTileLabel(choice.label,state.board.size)}));
 }
 module.exports = { abilityChoices };

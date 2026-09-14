@@ -1329,6 +1329,14 @@ async function finalizeMatch(
     if (loserId) rematchRoster.add(loserId);
     (match as AnyRecord).rematchRoster = Array.from(rematchRoster);
   } catch {}
+  // Any match against a CPU bot (vs CPU precons, goldfish) is practice and is
+  // never rated. Checked before draw handling nulls the result, and on both
+  // sides because a forfeiting leaver is already gone from playerIds.
+  const hasCpuPlayer = [
+    ...(Array.isArray(match.playerIds) ? match.playerIds : []),
+    winnerId,
+    loserId,
+  ].some((pid) => typeof pid === "string" && isCpuPlayerId(pid));
 
   let isDraw = options?.isDraw === true;
   if (!winnerId && !isDraw) {
@@ -1402,6 +1410,7 @@ async function finalizeMatch(
     reason,
     turn: gameTurn,
     durationSec,
+    hasCpu: hasCpuPlayer,
     hasGuest: hasGuestPlayer,
     sameNetwork: sameNetworkDetected && sameNetworkGuardOn,
     verified,

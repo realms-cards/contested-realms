@@ -27,6 +27,7 @@ async function resolveFirst(store: ReturnType<typeof setup>["store"]) {
   store.getState().resolveMagic();
   await Promise.resolve();
 }
+const settle = async () => { for (let i=0;i<6;i++) await Promise.resolve(); };
 beforeEach(() => { vi.spyOn(HTMLMediaElement.prototype,"play").mockResolvedValue(); });
 afterEach(() => vi.restoreAllMocks());
 
@@ -52,11 +53,13 @@ describe("CPU End phase", () => {
     expect(store.getState().cpuTriggerOptions?.every(option => option.label.startsWith("Thunderstorm"))).toBe(true);
   });
   it("does not increment a silenced duration counter", async () => {
-    const {store} = setup({"1,1":[{...item("Entangle Terrain"),cpuAuraTicks:2},{owner:1,card:{cardId:2,name:"Silenced",type:"Token"},attachedTo:{at:"1,1",index:0}}]});
+    const {store,transport} = setup({"1,1":[{...item("Entangle Terrain"),cpuAuraTicks:2},{owner:1,card:{cardId:2,name:"Silenced",type:"Token"},attachedTo:{at:"1,1",index:0}}]});
     store.setState({phase:"End"});
-    await Promise.resolve();
-    await resolveFirst(store);
+    await settle();
+    // The silenced aura's lone "finish" choice resolves unprompted and the End phase completes.
+    expect(store.getState().pendingMagic).toBeNull();
     expect(store.getState().permanents["1,1"][0].cpuAuraTicks).toBe(2);
+    expect(transport.sendAction).toHaveBeenLastCalledWith({currentPlayer:2,phase:"Start",cpuEndResolved:"3:1"});
   });
   it("interposes End before a bot pass and rejects retries until human resolution", () => {
     const game = {turn:3,currentPlayer:2,phase:"Main",permanents:{"1,1":[item("Wildfire")]}};
@@ -88,9 +91,10 @@ describe("CPU End phase", () => {
     const counter = store.getState().cpuTriggerOptions?.find(option => option.id.endsWith("_counter"));
     if (!counter) throw new Error("Missing counter choice");
     store.getState().chooseCpuTrigger(counter.id);
-    await Promise.resolve();
-    await resolveFirst(store);
-    await resolveFirst(store); // Source is gone, so the remaining effect fizzles.
+    await settle();
+    // The counter's lone tick dispels the storm, so the damage trigger's only choice is to fizzle: neither prompts.
+    expect(store.getState().pendingMagic).toBeNull();
+    expect(store.getState().cpuTriggerOptions || []).toHaveLength(0);
     expect(store.getState().zones.p1.graveyard.map(card => card.name)).toContain("Thunderstorm");
     expect(store.getState().permanents["1,1"][0].damage || 0).toBe(0);
   });
@@ -101,12 +105,14 @@ describe("CPU End phase", () => {
     const located = jinn();
     if (!located) throw new Error("Missing Jinn");
     expect(hasAirborne(store.getState(),located)).toBe(false);
+    const ticks = () => Object.values(store.getState().permanents).flat().find(item => item.card.name === "Entangle Terrain")?.cpuAuraTicks || 0;
     for (let turn=3;turn<=7;turn++) {
       store.setState({phase:"Main",turn,currentPlayer:turn%2 === 1 ? 1 : 2});
       store.setState({phase:"End"});
-      await Promise.resolve();
-      if (turn%2 === 1) await resolveFirst(store);
-      else expect(store.getState().pendingMagic).toBeNull();
+      await settle();
+      // The owner's lone tick resolves unprompted; the opponent's End phase leaves the counter alone.
+      expect(store.getState().pendingMagic).toBeNull();
+      if (turn<7) expect(ticks()).toBe(Math.ceil((turn-2)/2));
     }
     expect(store.getState().zones.p1.graveyard.map(card => card.name)).toContain("Entangle Terrain");
     const freed = jinn();

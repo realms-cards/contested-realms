@@ -23,6 +23,7 @@ import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import KeyboardShortcutsHelp, {
   useHelpShortcut,
 } from "@/components/ui/KeyboardShortcutsHelp";
+import { soundManager } from "@/lib/audio/soundManager";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import {
@@ -517,8 +518,17 @@ export default function OnlineDraft3DScreen({
   useEffect(() => {
     if (!transport) return;
 
+    let lastPackKey: string | null = null;
     const handleDraftUpdate = (state: DraftState) => {
       setDraftState(state);
+      // Whoosh when a new pack reaches you (not on the first update).
+      if (state.phase === "picking") {
+        const packKey = `${state.packIndex}:${state.pickNumber}`;
+        if (lastPackKey !== null && lastPackKey !== packKey) {
+          soundManager.play("packPassed");
+        }
+        lastPackKey = packKey;
+      }
       {
         const myPackSize = (state.currentPacks?.[myPlayerIndex] || []).length;
         console.log(
@@ -890,6 +900,7 @@ export default function OnlineDraft3DScreen({
         }
       }
 
+      soundManager.play("pick");
       const boosterCard = draftCardToBoosterCard(stagedCard);
       const newPick: Pick3D = {
         id: nextPickId,
@@ -1045,6 +1056,22 @@ export default function OnlineDraft3DScreen({
     const id = window.setInterval(update, 1000);
     return () => window.clearInterval(id);
   }, [draftState.phase, draftState.packIndex, draftState.pickNumber, amPicker]);
+
+  // Tick at 15, 10 and 5 seconds left on my pick; buzz when it runs out.
+  const pickSecondsLeft = pickTimer.hasTimeRemaining
+    ? pickTimer.timeRemaining
+    : pickTimeRemaining;
+  const lastPickSecondsRef = useRef(pickSecondsLeft);
+  useEffect(() => {
+    const previous = lastPickSecondsRef.current;
+    lastPickSecondsRef.current = pickSecondsLeft;
+    if (pickSecondsLeft === previous) return;
+    if (pickSecondsLeft === 15 || pickSecondsLeft === 10 || pickSecondsLeft === 5) {
+      soundManager.play("timerWarning");
+    } else if (pickSecondsLeft === 0 && previous === 1) {
+      soundManager.play("timerExpired");
+    }
+  }, [pickSecondsLeft]);
 
   // Create sorted stack positions for picked cards
   const stackedPositions = useMemo(() => {

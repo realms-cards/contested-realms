@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { soundManager } from "@/lib/audio/soundManager";
 import type { CardRef, CellKey, GameState, PlayerKey } from "./types";
 
 const CAMERA_MODE_KEY = "sorcery:cameraMode";
@@ -449,6 +450,7 @@ export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (
       state.endTurn();
     } else {
       // Avatar is untapped, show confirmation dialog
+      soundManager.play("targetLock");
       set({ showEndTurnConfirm: true });
     }
   },

@@ -5,7 +5,7 @@ const { advancedSpellChoices } = require('./advancedSpells');
 const { affectedByAura } = require('./auras');
 const cards = require('./cards.json');
 const { evaluateDamage } = require('./damageRules');
-const { bestByScore, cellOf, enterScope, facts, findUnit, freshUnits, leaveScope, realmUnits, scopedChoiceTiles, scopedTileLabel, snapshotOf, unitPosition } = require('./evalScope');
+const { bestByScore, cellOf, enterScope, facts, findUnit, freshUnits, leaveScope, realmUnits, scopedTileLabel, snapshotOf, unitPosition } = require('./evalScope');
 
 /** @typedef {import('./spellTypes').SpellState} SpellState */
 /** @typedef {import('./spellTypes').SpellChoice} SpellChoice */
@@ -26,6 +26,7 @@ const SUPPORTED_SPELLS = new Set([
   'Chain Lightning', 'Blaze',
 ]);
 const PROJECTILES = new Set(['Fireball', 'Firebolts', 'Heat Ray', 'Ice Lance']);
+const DIRECTIONS = { N: [0,-1], E: [1,0], S: [0,1], W: [-1,0] };
 
 /** @param {string} name */
 function supportsSpell(name) { return SUPPORTED_SPELLS.has(name); }
@@ -173,7 +174,7 @@ function computeStealth(state,unit) {
 function getSpellChoices(state, seat, name, selectionKey) {
   enterScope();
   try {
-    return rawSpellChoices(state,seat,name,selectionKey).map(choice => ({...choice,boardTiles:scopedChoiceTiles(choice.label,state.board.size),label:scopedTileLabel(choice.label,state.board.size),
+    return rawSpellChoices(state,seat,name,selectionKey).map(choice => ({...choice,label:scopedTileLabel(choice.label,state.board.size),
       ...(choice.projectile ? {projectile:{...choice.projectile,decisions:choice.projectile.decisions.map(decision => ({...decision,label:scopedTileLabel(decision.label,state.board.size),options:decision.options.map(option => ({...option,label:scopedTileLabel(option.label,state.board.size)}))}))}} : {})}));
   } finally { leaveScope(); }
 }
@@ -188,7 +189,8 @@ function rawSpellChoices(state, seat, name, selectionKey) {
     return ['N','E','S','W'].map(direction => {
       const projectile = {kind:'projectileStep',name:'Colicky Dragonettes',seat,origin:source.at,region:source.region,direction,step:0,shot:0};
       const impacts = impactChoices(state,projectile);
-      return {key:`unit-end/${direction}`,label:`Shoot ${direction} from ${source.at}`,caster:source.target,target:{kind:'projectile',direction},operations:[stamp,projectile],score:Math.max(...impacts.map(choice => choice.score))};
+      return {key:`unit-end/${direction}`,label:`Shoot ${direction} from ${source.at}`,caster:source.target,target:{kind:'projectile',direction},operations:[stamp,projectile],score:Math.max(...impacts.map(choice => choice.score)),
+        picks:directionPicks(flightPath(state,source.at,source.region,direction).slice(1))};
     });
   }
   if (state.pendingMagic?.cpuEvent?.kind === 'projectileImpact') return impactChoices(state,state.pendingMagic.cpuEvent.projectile);
@@ -199,7 +201,7 @@ function rawSpellChoices(state, seat, name, selectionKey) {
       const x=pos[0]+dx,y=pos[1]+dy,at=`${x},${y}`;
       if (x<0 || y<0 || x>=state.board.size.w || y>=state.board.size.h || state.board.sites[at]?.card || state.permanents[at]?.some(item => item.card.name === 'Rubble')) continue;
       const enemy = state.avatars[owner === 'p1' ? 'p2' : 'p1']?.pos;
-      choices.push({key:`geomancer/fill/${at}`,label:`Fill adjacent void at ${at} with neutral Rubble`,caster:{kind:'avatar',seat:owner},target:null,operations:[{kind:'fillRubble',seat:owner,at}],score:enemy ? 10-Math.abs(x-enemy[0])-Math.abs(y-enemy[1]) : 0});
+      choices.push({key:`geomancer/fill/${at}`,label:`Fill adjacent void at ${at} with neutral Rubble`,caster:{kind:'avatar',seat:owner},target:null,operations:[{kind:'fillRubble',seat:owner,at}],score:enemy ? 10-Math.abs(x-enemy[0])-Math.abs(y-enemy[1]) : 0,picks:[at]});
     }
     return choices.length ? choices : [{key:'geomancer/no-void',label:'No adjacent void remains',caster:{kind:'avatar',seat:owner},target:null,operations:[],score:0}];
   }
@@ -237,9 +239,9 @@ function rawSpellChoices(state, seat, name, selectionKey) {
     const casterKey = origin.target.kind === 'avatar' ? seat : origin.target.instanceId || `${origin.at}:${origin.target.index}`;
     const visible = units.filter(u => u.region === origin.region);
     const targetable = visible.filter(u => u.owner === seat || !stealthOf(state,u));
-    const add = (suffix, description, target, operations) => {
+    const add = (suffix, description, target, operations, picks) => {
       const choice = { key: `${casterKey}/${suffix}`, label: `${origin.card.name}: ${description}`,
-        caster, target, operations, score: scoreOps(state, seat, operations) };
+        caster, target, operations, score: scoreOps(state, seat, operations), ...(picks ? { picks } : {}) };
       choices.push(choice);
       return choice;
     };
@@ -260,13 +262,13 @@ function rawSpellChoices(state, seat, name, selectionKey) {
           label: `${origin.card.name}: shoot ${direction} — projected: ${plan.decisions.map(d => d.label).join('; ') || 'no impact'}`,
           operations: plan.operations, score: scoreOps(state, seat, plan.operations),
           resolutionOperations: [{kind:'projectileStep',name,seat,origin:origin.at,region:origin.region,direction,step:0,shot:0,preferred:selections}],
-          projectile: { baseKey, selections: plan.selections, decisions: plan.decisions } });
+          projectile: { baseKey, selections: plan.selections, decisions: plan.decisions }, picks: directionPicks(plan.path.slice(1, name === 'Ice Lance' ? 3 : undefined)) });
       }
     } else if (name === 'Overpower' || name === 'Mad Dash' || name === 'Blaze') {
       for (const ally of targetable.filter(u => u.owner === seat)) {
         const operations = [{ kind: 'buff', target: ally.target, power: name === 'Overpower' ? 2 : 0, movement: name === 'Mad Dash' ? 1 : name === 'Blaze' ? 2 : 0,blaze:name === 'Blaze' }];
         if (name === 'Mad Dash') operations.unshift({ kind: 'draw', seat, count: 1 });
-          add(targetKey(ally.target), `${ally.card.name}: ${name === 'Overpower' ? '+2 power' : name === 'Blaze' ? 'Movement +2; cannot be intercepted; fire trail' : 'draw a card; Movement +1'} this turn`, ally.target, operations);
+          add(targetKey(ally.target), `${ally.card.name}: ${name === 'Overpower' ? '+2 power' : name === 'Blaze' ? 'Movement +2; cannot be intercepted; fire trail' : 'draw a card; Movement +1'} this turn`, ally.target, operations, [ally.at]);
       }
     } else if (name === 'Font of Life') {
       const operations = units.filter(u => u.owner === seat).map(u => ({ kind: 'mend', target: u.target, amount: bodyAt(state, u.at).length }));
@@ -281,7 +283,7 @@ function rawSpellChoices(state, seat, name, selectionKey) {
           const operations = [{ kind: 'move', target: ally.target, to }];
           if (name === 'Blink') operations.push({ kind: 'draw', seat, count: 1 });
           add(`${ally.at}:${ally.target.index ?? seat}/${to}`, `Move ${ally.card.name} to ${to}${name === 'Blink' ? '; draw a card' : ''}`,
-            ally.target, operations);
+            ally.target, operations, [ally.at, to]);
         }
       }
     } else if (name === 'Bury' || name === 'Drown' || name === 'Cave-In' || name === 'Stormy Seas') {
@@ -304,13 +306,13 @@ function rawSpellChoices(state, seat, name, selectionKey) {
         for (const group of groups) add(`${at}/${area ? 'all' : group[0].target.index}`,
           `${water ? 'Submerge' : 'Burrow'} ${area ? `minions and artifacts at ${at}` : group[0].card.name}`,
           area ? { kind: 'location', at } : group[0].target,
-          [{ kind: 'subsurface', targets: group.map(u => u.target), state: water ? 'submerged' : 'burrowed' }]);
+          [{ kind: 'subsurface', targets: group.map(u => u.target), state: water ? 'submerged' : 'burrowed' }], [at]);
       }
     } else if (name === 'Riptide') {
       for (const at of sites.filter(at => waterAt(state, at))) {
         for (const unit of visible.filter(u => u.region === 'surface' && inRange(u.at, at, 'adjacent') && u.at !== at)) {
           add(`${at}/${unit.at}:${unit.target.index ?? unit.owner}`, `Pull ${unit.card.name} to ${at}; draw a card`,
-            { kind: 'location', at }, [{ kind: 'move', target: unit.target, to: at }, { kind: 'draw', seat, count: 1 }]);
+            { kind: 'location', at }, [{ kind: 'move', target: unit.target, to: at }, { kind: 'draw', seat, count: 1 }], [unit.at, at]);
         }
       }
     } else {
@@ -325,7 +327,7 @@ function rawSpellChoices(state, seat, name, selectionKey) {
         const amount = name === 'Incinerate' ? 4 : 3;
         add(at, `${name === 'Lightning Bolt' ? 'Random unit' : 'Each unit'} at ${at}: ${amount} damage`,
           { kind: 'location', at }, [{ kind: 'damage', targets: affected.map(u => u.target), amount, random: name === 'Lightning Bolt',
-            ...(name !== 'Lightning Bolt' ? { element: 'fire' } : {}) }]);
+            ...(name !== 'Lightning Bolt' ? { element: 'fire' } : {}) }], [at]);
       }
     }
   }
@@ -444,21 +446,10 @@ function projectilePlan(state, seat, name, origin, direction, requested) {
   const shared = realmUnits(state);
   const units = shared.map(unit => ({ ...unit }));
   const originalOf = new Map(units.map((unit,index) => [unit,shared[index]]));
-  const [dx,dy] = { N: [0,-1], E: [1,0], S: [0,1], W: [-1,0] }[direction];
-  const [ox,oy] = origin.at.split(',').map(Number);
-  const path = [];
-  for (let step = 0; step < Math.max(state.board.size.w, state.board.size.h); step++) {
-    const x = ox+dx*step, y = oy+dy*step, at = `${x},${y}`;
-    if (x < 0 || y < 0 || x >= state.board.size.w || y >= state.board.size.h) break;
-    const site = state.board.sites[at]?.card;
-    if (origin.region === 'void' ? !!site : !site) break;
-    if (origin.region === 'underwater' && !waterAt(state, at)) break;
-    if (origin.region === 'underground' && waterAt(state, at)) break;
-    path.push(at);
-  }
+  const path = flightPath(state, origin.at, origin.region, direction);
   /** @type {import('./spellTypes').SpellOperation[]} */
   const operations = [];
-  /** @type {{label: string, options: {key: string, label: string}[]}[]} */
+  /** @type {{label: string, options: {key: string, label: string, at?: string}[]}[]} */
   const decisions = [];
   const selections = [];
   const dead = new Set();
@@ -473,7 +464,8 @@ function projectilePlan(state, seat, name, origin, direction, requested) {
         !dead.has(targetKey(u.target)) && !(step === 0 && u.owner === seat) && !stealthOf(state,originalOf.get(u)));
       if (!eligible.length) continue;
       const amount = name === 'Firebolts' ? 1 : name === 'Fireball' ? 4 : name === 'Heat Ray' ? 2 : 3-step;
-      const options = eligible.map(u => ({ key: targetKey(u.target), label: `${u.card.name} (${u.owner === seat ? 'ally' : 'enemy'}) at ${at}` }));
+      // Every option stands at this one location, so a tile click names an option only when it is alone there.
+      const options = eligible.map(u => ({ key: targetKey(u.target), label: `${u.card.name} (${u.owner === seat ? 'ally' : 'enemy'}) at ${at}`, ...(eligible.length === 1 ? { at } : {}) }));
       const preferred = requested[decisions.length];
       const target = eligible.find(u => targetKey(u.target) === preferred) || bestByScore(eligible,u => damageScore(state, seat, u.target, amount, undefined));
       decisions.push({ label: `${name === 'Firebolts' ? `Bolt ${shot+1}` : `Impact ${step+1}`}: ${target.card.name} takes ${amount}`, options });
@@ -502,8 +494,34 @@ function projectilePlan(state, seat, name, origin, direction, requested) {
       if (name === 'Fireball' || name === 'Firebolts') break;
     }
   }
-  return { operations, decisions, selections };
+  return { operations, decisions, selections, path };
 }
+
+/**
+ * Locations a straight flight from `origin` passes, from step `first` (0 = the origin itself), until the
+ * board edge or a location outside `region` (void flies over voids, subsurface regions follow water).
+ * @param {SpellState} state @param {string} origin @param {string} region @param {'N'|'E'|'S'|'W'} direction @param {number} [first] @returns {string[]}
+ */
+function flightPath(state, origin, region, direction, first = 0) {
+  const [dx,dy] = DIRECTIONS[direction], [ox,oy] = cellOf(origin), path = [];
+  for (let step = first; step < Math.max(state.board.size.w, state.board.size.h); step++) {
+    const x = ox+dx*step, y = oy+dy*step, at = `${x},${y}`;
+    if (x < 0 || y < 0 || x >= state.board.size.w || y >= state.board.size.h) break;
+    if (region === 'void' ? !!state.board.sites[at]?.card : !state.board.sites[at]?.card) break;
+    if (region === 'underwater' && !waterAt(state, at) || region === 'underground' && waterAt(state, at)) break;
+    path.push(at);
+  }
+  return path;
+}
+
+/** flightPath for callers outside an evaluation scope. @param {SpellState} state @param {string} origin @param {string} region @param {'N'|'E'|'S'|'W'} direction @param {number} [first] @returns {string[]} */
+function projectilePath(state, origin, region, direction, first) {
+  enterScope();
+  try { return flightPath(state, origin, region, direction, first); } finally { leaveScope(); }
+}
+
+/** Board picks of a direction choice: one click on any location the flight reaches after its origin. @param {string[]} tiles @returns {string[][]} */
+function directionPicks(tiles) { return tiles.length ? [tiles] : []; }
 
 /**
  * Resolve area membership at the moment this step of the storyline executes.
@@ -580,7 +598,7 @@ function impactChoices(state, op) {
       if (op.name === 'Heat Ray' || op.name === 'Ice Lance') operations.push({...op,step:step+1,preferred:op.preferred?.slice(1)});
       else operations.push(...nextBolt);
       return {key:targetKey(unit.target),label:`${op.name === 'Firebolts' ? `Bolt ${op.shot+1}` : 'Impact'}: ${unit.card.name} at ${at} takes ${amount}`,
-        caster:{kind:'avatar',seat:op.seat},target:unit.target,operations,score:scoreOps(state,op.seat,[operations[0]])};
+        caster:{kind:'avatar',seat:op.seat},target:unit.target,operations,score:scoreOps(state,op.seat,[operations[0]]),picks:[at]};
     });
   }
   return [{key:'projectile/no-impact',label:'No further impact in this region',caster:{kind:'avatar',seat:op.seat},target:null,operations:nextBolt,score:0}];
@@ -690,7 +708,7 @@ function scoreOps(state, seat, operations) {
       if (source) score += scoreOps(state,seat,[{kind:'damageEvent',hits:units.filter(unit => unit.region === source.region && inRange(source.at,unit.at,'nearby') && !sameTarget(unit.target,source.target)).map(unit => ({target:unit.target,amount:statsOf(state,source).atk}))}]);
       continue;
     }
-    if (op.kind === 'auraUpdate') continue;
+    if (op.kind === 'auraUpdate' || op.kind === 'moveSpent') continue;
     if (op.kind === 'tapUnits') { score -= op.targets.length; continue; }
     if (op.kind === 'surface') continue;
     if (op.kind === 'gainMana') { score += op.amount; continue; }
@@ -778,4 +796,4 @@ function sameTarget(a, b) {
     (a.instanceId && b.instanceId ? a.instanceId === b.instanceId : a.at === b.at && a.index === b.index);
 }
 
-module.exports = { supportsSpell, getSpellChoices, getSpellChoice, projectileKey, unitsInRealm, inRange, isWater, bodyOfWater, cardText, sameTarget, unitDefence, unitStats, getAttackTargets, scoreOperations,isDisabled,hasStealth,hasAirborne,expandAreaOperation,projectileImpactChoices };
+module.exports = { supportsSpell, getSpellChoices, getSpellChoice, projectileKey, unitsInRealm, inRange, isWater, bodyOfWater, cardText, sameTarget, unitDefence, unitStats, getAttackTargets, scoreOperations,isDisabled,hasStealth,hasAirborne,expandAreaOperation,projectileImpactChoices,projectilePath };

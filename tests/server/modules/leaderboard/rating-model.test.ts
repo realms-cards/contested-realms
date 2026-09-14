@@ -124,6 +124,23 @@ describe("classifyResult", () => {
     );
   });
 
+  it("never rates a match against a CPU bot", () => {
+    expect(classifyResult({ ...base, hasCpu: true })).toEqual({
+      rated: false,
+      ratedMode: "full",
+      unratedReason: "cpu",
+    });
+    expect(
+      classifyResult({
+        ...base,
+        hasCpu: true,
+        hasGuest: true,
+        reason: "forfeit",
+        turn: 2,
+      }).unratedReason,
+    ).toBe("cpu");
+  });
+
   it("treats early disconnects as unrated and early leaves as leaver_only", () => {
     expect(classifyResult({ ...base, reason: "disconnect", turn: 3 })).toEqual({
       rated: false,

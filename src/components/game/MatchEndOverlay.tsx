@@ -2,9 +2,11 @@
 
 import { Trophy, Skull, Users } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { LeagueReportStatus } from "@/components/game/LeagueReportStatus";
 import { SoatcLeagueResultCard } from "@/components/game/SoatcLeagueResultCard";
+import { soundManager } from "@/lib/audio/soundManager";
 import type { PlayerKey } from "@/lib/game/store";
 import type { LeagueMatchResult } from "@/lib/soatc/types";
 
@@ -59,6 +61,27 @@ export default function MatchEndOverlay({
   isTournament,
   rematch,
 }: MatchEndOverlayProps) {
+  // One result sound per opening. A null winner can be transient while the
+  // result is still arriving, so wait for a concrete outcome before playing.
+  const playedResultSoundRef = useRef(false);
+  useEffect(() => {
+    if (!isVisible) {
+      playedResultSoundRef.current = false;
+      return;
+    }
+    if (playedResultSoundRef.current || !myPlayerKey) return;
+    const opponentLeft = reason === "forfeit" || reason === "disconnect";
+    const knownWinnerId = typeof winnerId === "string" && winnerId.length > 0;
+    if (!winner && !knownWinnerId && !opponentLeft) return;
+    playedResultSoundRef.current = true;
+    const won =
+      opponentLeft && knownWinnerId && typeof myPlayerId === "string"
+        ? winnerId === myPlayerId
+        : winner === myPlayerKey;
+    if (opponentLeft && (won || !knownWinnerId)) soundManager.play("playerLeft");
+    else soundManager.play(won ? "victory" : "defeat");
+  }, [isVisible, myPlayerKey, myPlayerId, reason, winner, winnerId]);
+
   if (!isVisible) return null;
 
   const winnerName = winner ? playerNames[winner] : null;

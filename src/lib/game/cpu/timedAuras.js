@@ -16,7 +16,7 @@ function choicesFor(state) {
   const entry = Object.entries(state.permanents).flatMap(([at,items]) => items.map((item,index) => ({at,index,item})))
     .find(({item,at,index}) => source.instanceId ? (item.instanceId || item.card.instanceId) === source.instanceId : source.at === at && source.index === index);
   const seat = state.pendingMagic.spell.owner === 1 ? 'p1' : 'p2';
-  const add = (key,label,operations) => ({key,label,operations:operations.map(op => op.kind === 'auraUpdate' ? {...op,endKey:`${state.turn}:${state.currentPlayer}`,counter:event.counter || state.pendingMagic.spell.card.name === 'Entangle Terrain'} : op),caster:{kind:'avatar',seat},target:null,score:scoreOperations(state,seat,operations)});
+  const add = (key,label,operations,picks) => ({key,label,operations:operations.map(op => op.kind === 'auraUpdate' ? {...op,endKey:`${state.turn}:${state.currentPlayer}`,counter:event.counter || state.pendingMagic.spell.card.name === 'Entangle Terrain'} : op),caster:{kind:'avatar',seat},target:null,score:scoreOperations(state,seat,operations),...(picks ? {picks} : {})});
   if (!entry) return [add('gone','Aura has left the realm; finish',[])];
   const {at,index,item} = entry, name = item.card.name;
   if (state.permanents[at].some(token => token.card.name === 'Silenced' && token.attachedTo?.at === at && token.attachedTo.index === index)) return [add('silenced','Aura is silenced; finish',[])];
@@ -34,13 +34,18 @@ function choicesFor(state) {
     const destinations = [[x-1,y],[x+1,y],[x,y-1],[x,y+1]].filter(([x,y]) => x>=0 && y>=0 && x<state.board.size.w && y<state.board.size.h)
       .map(([x,y]) => `${x},${y}`).filter(at => !visited.includes(at));
     if (!destinations.length) return [add('dispel','Wildfire: deal 3 here, then dispel (no unvisited adjacent location)',[{kind:'damageEvent',hits},{kind:'auraUpdate',target,dispel:true}])];
-    return destinations.map(to => add(`wildfire/${to}`,`Wildfire: deal 3 here, then move to ${to}`,[{kind:'damageEvent',hits},{kind:'auraUpdate',target,to,visited:[...visited,to]}]));
+    return destinations.map(to => add(`wildfire/${to}`,`Wildfire: deal 3 here, then move to ${to}`,[{kind:'damageEvent',hits},{kind:'auraUpdate',target,to,visited:[...visited,to]}],[to]));
   }
   const affected = units.filter(unit => { const [ux,uy] = unit.at.split(',').map(Number); return ux>=x && ux<=x+1 && uy>=y && uy<=y+1; });
   const damage = affected.length ? [{kind:'damage',targets:affected.map(unit => unit.target),amount:3,random:true}] : [];
   const destinations = [at,...[[x-1,y],[x+1,y],[x,y-1],[x,y+1]].filter(([x,y]) => x>=0 && y>=0 && x<state.board.size.w-1 && y<state.board.size.h-1).map(([x,y]) => `${x},${y}`)];
+  // Click where the storm will be: any tile it covers now to stay, or a tile only the moved storm covers (these sets never overlap).
+  const {w,h} = state.board.size;
+  /** @param {number[]} anchor @returns {string[]} */
+  const covers = ([ax,ay]) => [[ax,ay],[ax+1,ay],[ax,ay+1],[ax+1,ay+1]].filter(([ux,uy]) => ux<w && uy<h).map(([ux,uy]) => `${ux},${uy}`);
+  const here = covers([x,y]);
   return destinations.map(to => add(`storm/${to}`,`Thunderstorm: strike a random unit, ${to === at ? 'stay' : `move to ${to}`}`,[
     ...damage,{kind:'auraUpdate',target,to:to === at ? undefined : to},
-  ]));
+  ],[to === at ? here : covers(to.split(',').map(Number)).filter(tile => !here.includes(tile))]));
 }
 module.exports = { auraEndChoices };

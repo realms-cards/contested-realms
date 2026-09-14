@@ -22,7 +22,7 @@
 // position map and target index are only built once a snapshot has served a few lookups
 // through the equivalent linear scans.
 const cards = require('./cards.json');
-const { choiceTiles, tileLabel } = require('./tileLabels');
+const { tileLabel } = require('./tileLabels');
 
 /** @typedef {import('./spellTypes').SpellState} SpellState */
 /** @typedef {import('./spellTypes').LocatedUnit} LocatedUnit */
@@ -38,8 +38,8 @@ const { choiceTiles, tileLabel } = require('./tileLabels');
 const LINEAR_LOOKUPS = 8;
 
 let depth = 0;
-/** @type {{snapshots: Snapshot[], labels: Map<unknown, Map<string, string>> | null, tiles: Map<unknown, Map<string, string | null>> | null}} */
-const ACTIVE = { snapshots: [], labels: null, tiles: null };
+/** @type {{snapshots: Snapshot[], labels: Map<unknown, Map<string, string>> | null}} */
+const ACTIVE = { snapshots: [], labels: null };
 /** @type {typeof ACTIVE | null} */
 let scope = null;
 
@@ -50,7 +50,7 @@ function enterScope() {
 function leaveScope() {
   if (--depth === 0) {
     ACTIVE.snapshots.length = 0;
-    ACTIVE.labels = ACTIVE.tiles = null;
+    ACTIVE.labels = null;
     scope = null;
   }
 }
@@ -237,18 +237,4 @@ function scopedTileLabel(label, size) {
   return result;
 }
 
-/** choiceTiles memoized for the active scope; always a fresh array. @param {string} label @param {{w:number,h:number}} size @returns {string[]} */
-function scopedChoiceTiles(label, size) {
-  if (!scope || typeof label !== 'string') return choiceTiles(label, size);
-  const tiles = scope.tiles || (scope.tiles = new Map());
-  let bySize = tiles.get(size);
-  if (!bySize) tiles.set(size, bySize = new Map());
-  let cell = bySize.get(label);
-  if (cell === undefined) {
-    const tiles = choiceTiles(label, size);
-    bySize.set(label, cell = tiles.length ? tiles[0] : null);
-  }
-  return cell === null ? [] : [cell];
-}
-
-module.exports = { enterScope, leaveScope, snapshotOf, facts, realmUnits, freshUnits, unitPosition, findUnit, bestByScore, cellOf, scopedTileLabel, scopedChoiceTiles };
+module.exports = { enterScope, leaveScope, snapshotOf, facts, realmUnits, freshUnits, unitPosition, findUnit, bestByScore, cellOf, scopedTileLabel };

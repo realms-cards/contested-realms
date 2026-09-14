@@ -144,7 +144,7 @@ export type EntityBase<TCard> = {
   card: TCard;
   offset?: [number, number] | null;
   tapped?: boolean;
-  cpuTurnEffect?: { turn: string; power: number; movement: number; blaze?: boolean } | null;
+  cpuTurnEffect?: { turn: string; power: number; movement: number; blaze?: boolean; steps?: number } | null;
   cpuAirCast?: { turn: string; air: number };
   cpuPlanarVoidwalk?: boolean;
   cpuAsleep?: boolean;
@@ -546,7 +546,7 @@ export type PendingMagic = {
     | { kind: "randomChoice"; outcomes: import("@/lib/game/cpu/spellTypes").SpellOperation[] }
     | { kind: "fightChoice"; source: import("@/lib/game/cpu/spellTypes").UnitTarget; target: import("@/lib/game/cpu/spellTypes").UnitTarget; strikeOnly?: boolean }
     | { kind: "auraEnd"; source: import("@/lib/game/cpu/spellTypes").UnitTarget; counter?: boolean }
-    | { kind: "blazeTrail"; from: string; to: string; region: string; source: import("@/lib/game/cpu/spellTypes").UnitTarget; forced?: boolean }
+    | { kind: "blazeTrail"; from: string; to: string; region: string; source: import("@/lib/game/cpu/spellTypes").UnitTarget; forced?: boolean; budget?: number }
     | { kind: "genesis"; region: string; source?: import("@/lib/game/cpu/spellTypes").UnitTarget; sourceSite?: { at: string; name: string; instanceId?: string | null } };
   tile: { x: number; y: number };
   // The spell card placed on board for UX; resolved to cemetery on completion

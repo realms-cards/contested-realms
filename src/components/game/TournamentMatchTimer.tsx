@@ -1,7 +1,8 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
+import { soundManager } from "@/lib/audio/soundManager";
 
 interface TournamentMatchTimerProps {
   /** Match start time (timestamp) */
@@ -127,6 +128,19 @@ export function TournamentMatchTimer({
       onTimeExpired();
     }
   }, [isExpired, hasExpired, onTimeExpired]);
+
+  // Sound when the clock crosses into warning, critical or expired. The first
+  // reading after the start time is known is the baseline, so reloading a
+  // match that is already in warning stays quiet.
+  const lastUrgencyRef = useRef<typeof urgency | null>(null);
+  useEffect(() => {
+    if (!isTournamentMatch || mode !== "countdown" || !matchStartedAt) return;
+    const previous = lastUrgencyRef.current;
+    lastUrgencyRef.current = urgency;
+    if (previous === null || previous === urgency) return;
+    if (urgency === "expired") soundManager.play("timerExpired");
+    else if (urgency === "warning" || urgency === "critical") soundManager.play("timerWarning");
+  }, [urgency, mode, isTournamentMatch, matchStartedAt]);
 
   // Don't render if not a tournament match
   if (!isTournamentMatch) return null;

@@ -1,5 +1,13 @@
 // Lobby feature module: encapsulates lobby state, helpers, and socket handlers.
 
+const {
+  STALE_MATCH_DISPLAY_MS,
+  isPracticeLobby,
+  lobbyListForViewer,
+  partitionLobbyList,
+  planLobbyListEmits,
+} = require("../../modules/lobby/listing");
+
 /**
  * @param {object} deps
  * @param {import('socket.io').Server} deps.io
@@ -239,6 +247,9 @@ function createLobbyFeature(deps) {
       ready: Array.from(lobby.ready || []),
       plannedTimer: lobby.plannedTimer || null,
       plannedEnableSeer: lobby.plannedEnableSeer === true,
+      // Practice game marker (startCpuMatch): other instances must keep the
+      // lobby out of the public list before the bot's cpu_ id is replicated.
+      cpuPractice: lobby.cpuPractice === true,
     };
   }
 
@@ -279,6 +290,7 @@ function createLobbyFeature(deps) {
       lb.plannedEnableSeer = obj.plannedEnableSeer === true;
     if ("reservationExpiresAt" in obj)
       lb.reservationExpiresAt = obj.reservationExpiresAt ?? null;
+    if ("cpuPractice" in obj) lb.cpuPractice = obj.cpuPractice === true;
     lb.lastActive = obj.lastActive || Date.now();
     lb.playerIds = new Set(Array.isArray(obj.playerIds) ? obj.playerIds : []);
     lb.ready = new Set(Array.isArray(obj.ready) ? obj.ready : []);
@@ -679,7 +691,7 @@ function createLobbyFeature(deps) {
     await (async () => {
       const leader = await getOrClaimLobbyLeader();
       if (leader === INSTANCE_ID)
-        io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
+        emitLobbyList(lobbyList());
     })();
     return true;
   }
@@ -1016,8 +1028,8 @@ function createLobbyFeature(deps) {
     return { ok: true, matchId: match.id };
   }
 
-  // Hide started matches that have been inactive for more than 1 hour
-  const STALE_MATCH_DISPLAY_MS = 60 * 60 * 1000; // 1 hour
+  // Started matches inactive for more than STALE_MATCH_DISPLAY_MS (1 hour,
+  // see modules/lobby/listing) are hidden from the lobby list.
 
   /**
    * Convert Redis lobby format to internal format with Sets
@@ -1047,12 +1059,11 @@ function createLobbyFeature(deps) {
   }
 
   /**
-   * Get lobby list - uses Redis for cross-instance visibility when enabled
-   * @returns {Promise<Array>} Array of lobby info objects
+   * Collect lobbies - uses Redis for cross-instance visibility when enabled
+   * @returns {Promise<Array>} Internal lobby objects (closed ones included)
    */
-  async function lobbiesArrayAsync() {
+  async function lobbySourceAsync() {
     let allLobbies = [];
-    const now = Date.now();
 
     // If Redis is enabled, fetch from Redis (includes all instances)
     if (redisState && redisState.isEnabled()) {
@@ -1086,40 +1097,54 @@ function createLobbyFeature(deps) {
       allLobbies = Array.from(lobbies.values());
     }
 
-    const arr = [];
-    for (const lobby of allLobbies) {
-      if (lobby.status === "closed") continue;
-      // Hide stale started matches from the lobby list (but don't delete them)
-      if (lobby.status === "started") {
-        // Check both lobby.lastActive and match.lastTs for activity
-        let lastActivity = lobby.lastActive || 0;
-        if (lobby.matchId) {
-          const match = matches.get(lobby.matchId);
-          // Hide lobbies whose match has ended
-          if (
-            match &&
-            (match.status === "ended" ||
-              match.status === "completed" ||
-              match._finalized)
-          ) {
-            continue;
-          }
-          if (match && typeof match.lastTs === "number") {
-            lastActivity = Math.max(lastActivity, match.lastTs);
-          }
-        }
-        const inactiveMs = now - lastActivity;
-        if (inactiveMs > STALE_MATCH_DISPLAY_MS) continue;
-      }
-      const info = getLobbyInfo(lobby);
-      info._sortTs = lobby.lastActive || lobby.createdAt || 0;
-      arr.push(info);
-    }
-    // Sort by newest first (most recent activity)
-    arr.sort((a, b) => (b._sortTs || 0) - (a._sortTs || 0));
-    // Remove internal sort field before returning
-    for (const item of arr) delete item._sortTs;
-    return arr;
+    return allLobbies;
+  }
+
+  /** isCpuPlayerId that tolerates the dependency being absent. */
+  function isCpuSeatId(id) {
+    return typeof isCpuPlayerId === "function" && isCpuPlayerId(id);
+  }
+
+  /**
+   * Build the lobby list from a set of lobbies: the public entries every
+   * client sees, and CPU practice games (vs CPU / goldfish) kept apart so they
+   * only ever reach the human players inside them.
+   * @param {Iterable<any>} source - internal lobby objects
+   */
+  function buildLobbyList(source) {
+    const { listed, practice } = partitionLobbyList(source, {
+      getMatch: (matchId) => matches.get(matchId),
+      isCpuPlayerId: isCpuSeatId,
+      now: Date.now(),
+    });
+    return {
+      lobbies: listed.map((lobby) => getLobbyInfo(lobby)),
+      practice: practice.map((lobby) => ({
+        id: lobby.id,
+        playerIds: Array.from(lobby.playerIds || []).filter(
+          (pid) => !isCpuSeatId(pid),
+        ),
+        info: getLobbyInfo(lobby),
+      })),
+    };
+  }
+
+  /** Lobby list across instances (Redis when enabled, else local). */
+  async function lobbyListAsync() {
+    return buildLobbyList(await lobbySourceAsync());
+  }
+
+  /** Lobby list from this instance's cache only. */
+  function lobbyList() {
+    return buildLobbyList(lobbies.values());
+  }
+
+  /**
+   * Public lobby list (practice games excluded) - cross-instance via Redis
+   * @returns {Promise<Array>} Array of lobby info objects
+   */
+  async function lobbiesArrayAsync() {
+    return (await lobbyListAsync()).lobbies;
   }
 
   /**
@@ -1128,41 +1153,26 @@ function createLobbyFeature(deps) {
    * @deprecated Use lobbiesArrayAsync() for cross-instance visibility
    */
   function lobbiesArray() {
-    const arr = [];
-    const now = Date.now();
-    for (const lobby of lobbies.values()) {
-      if (lobby.status === "closed") continue;
-      // Hide stale started matches from the lobby list (but don't delete them)
-      if (lobby.status === "started") {
-        // Check both lobby.lastActive and match.lastTs for activity
-        let lastActivity = lobby.lastActive || 0;
-        if (lobby.matchId) {
-          const match = matches.get(lobby.matchId);
-          // Hide lobbies whose match has ended
-          if (
-            match &&
-            (match.status === "ended" ||
-              match.status === "completed" ||
-              match._finalized)
-          ) {
-            continue;
-          }
-          if (match && typeof match.lastTs === "number") {
-            lastActivity = Math.max(lastActivity, match.lastTs);
-          }
-        }
-        const inactiveMs = now - lastActivity;
-        if (inactiveMs > STALE_MATCH_DISPLAY_MS) continue;
+    return lobbyList().lobbies;
+  }
+
+  /**
+   * Emit `lobbiesUpdated` for a list built by buildLobbyList. Everyone gets
+   * the public list; each player in a practice game gets, through their
+   * `player:<id>` room, one list with their practice lobbies added instead
+   * (the client drops its joined lobby when a list omits it).
+   */
+  function emitLobbyList(list) {
+    for (const emit of planLobbyListEmits(list.lobbies, list.practice)) {
+      const payload = { lobbies: emit.lobbies };
+      if (emit.room) {
+        io.to(emit.room).emit("lobbiesUpdated", payload);
+      } else if (emit.exceptRooms.length > 0) {
+        io.except(emit.exceptRooms).emit("lobbiesUpdated", payload);
+      } else {
+        io.emit("lobbiesUpdated", payload);
       }
-      const info = getLobbyInfo(lobby);
-      info._sortTs = lobby.lastActive || lobby.createdAt || 0;
-      arr.push(info);
     }
-    // Sort by newest first (most recent activity)
-    arr.sort((a, b) => (b._sortTs || 0) - (a._sortTs || 0));
-    // Remove internal sort field before returning
-    for (const item of arr) delete item._sortTs;
-    return arr;
   }
 
   function playersArray() {
@@ -1187,8 +1197,7 @@ function createLobbyFeature(deps) {
         const leader = await getOrClaimLobbyLeader();
         if (leader === INSTANCE_ID) {
           // Use async version for cross-instance visibility
-          const lobbyList = await lobbiesArrayAsync();
-          io.emit("lobbiesUpdated", { lobbies: lobbyList });
+          emitLobbyList(await lobbyListAsync());
         }
       } catch {}
     })();
@@ -1258,7 +1267,7 @@ function createLobbyFeature(deps) {
       await (async () => {
         const leader = await getOrClaimLobbyLeader();
         if (leader === INSTANCE_ID)
-          io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
+          emitLobbyList(lobbyList());
       })();
       await maybeAutoStartConstructedMatchmakingLobby(lobby);
       return;
@@ -1334,7 +1343,7 @@ function createLobbyFeature(deps) {
       await (async () => {
         const leader = await getOrClaimLobbyLeader();
         if (leader === INSTANCE_ID)
-          io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
+          emitLobbyList(lobbyList());
       })();
       await maybeAutoStartConstructedMatchmakingLobby(lobby);
       return;
@@ -1374,7 +1383,7 @@ function createLobbyFeature(deps) {
         await (async () => {
           const leader = await getOrClaimLobbyLeader();
           if (leader === INSTANCE_ID)
-            io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
+            emitLobbyList(lobbyList());
         })();
         return;
       } else if (!lobbyHasHumanPlayers(lobby)) {
@@ -1389,7 +1398,7 @@ function createLobbyFeature(deps) {
         await (async () => {
           const leader = await getOrClaimLobbyLeader();
           if (leader === INSTANCE_ID)
-            io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
+            emitLobbyList(lobbyList());
         })();
         return;
       } else if (lobby.hostId === playerId) {
@@ -1429,7 +1438,7 @@ function createLobbyFeature(deps) {
           await (async () => {
             const leader = await getOrClaimLobbyLeader();
             if (leader === INSTANCE_ID)
-              io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
+              emitLobbyList(lobbyList());
           })();
           return;
         }
@@ -1443,7 +1452,7 @@ function createLobbyFeature(deps) {
       await (async () => {
         const leader = await getOrClaimLobbyLeader();
         if (leader === INSTANCE_ID)
-          io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
+          emitLobbyList(lobbyList());
       })();
       return;
     }
@@ -1467,7 +1476,7 @@ function createLobbyFeature(deps) {
       await (async () => {
         const leader = await getOrClaimLobbyLeader();
         if (leader === INSTANCE_ID)
-          io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
+          emitLobbyList(lobbyList());
       })();
       // A lobby flipped to public after the host already opened it is just as
       // joinable as one opened while public.
@@ -1495,7 +1504,7 @@ function createLobbyFeature(deps) {
       await (async () => {
         const leader = await getOrClaimLobbyLeader();
         if (leader === INSTANCE_ID)
-          io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
+          emitLobbyList(lobbyList());
       })();
       return;
     }
@@ -1515,7 +1524,7 @@ function createLobbyFeature(deps) {
       await (async () => {
         const leader = await getOrClaimLobbyLeader();
         if (leader === INSTANCE_ID)
-          io.emit("lobbiesUpdated", { lobbies: lobbiesArray() });
+          emitLobbyList(lobbyList());
       })();
       return;
     }
@@ -2225,6 +2234,19 @@ function createLobbyFeature(deps) {
       }
 
       try {
+        // 0. "New game" on the CPU screen only leaves the previous practice
+        // match. Leave its lobby too (closing it and stopping its bot) before
+        // host.lobbyId moves on; otherwise the player stays seated in it, its
+        // socket stays in its room, and the old lobby resurfaces in the list.
+        const previousLobby = host.lobbyId ? lobbies.get(host.lobbyId) : null;
+        if (previousLobby && isPracticeLobby(previousLobby, isCpuSeatId)) {
+          await handleLobbyControlAsLeader({
+            type: "leave",
+            playerId: host.id,
+            socketId: socket.id,
+          });
+        }
+
         // 1. Create a private lobby for the human player
         const lobby = createLobby(host.id, {
           visibility: "private",
@@ -2232,9 +2254,14 @@ function createLobbyFeature(deps) {
         });
         const cpuMatchType = payload.mode === "goldfish" ? "constructed" : "precon";
         lobby.plannedMatchType = cpuMatchType;
+        // Practice game: kept out of the public lobby list from the start, not
+        // only once the bot has taken its seat (see modules/lobby/listing).
+        lobby.cpuPractice = true;
         host.lobbyId = lobby.id;
         lobby.playerIds.add(host.id);
         lobby.ready.add(host.id);
+        // Replicate the practice marker to other instances right away.
+        await publishLobbyState(lobby);
         notifyPlayerEnteredGame(host.id, {
           lobbyId: lobby.id,
           reason: "cpu_match",
@@ -2397,9 +2424,13 @@ function createLobbyFeature(deps) {
 
     socket.on("requestLobbies", async () => {
       if (!isAuthed()) return;
-      // Use async version for cross-instance visibility
-      const lobbyList = await lobbiesArrayAsync();
-      socket.emit("lobbiesUpdated", { lobbies: lobbyList });
+      // Use async version for cross-instance visibility. Practice games are
+      // only included for the player inside them.
+      const list = await lobbyListAsync();
+      const viewer = getPlayerBySocket(socket);
+      socket.emit("lobbiesUpdated", {
+        lobbies: lobbyListForViewer(list.lobbies, list.practice, viewer?.id),
+      });
     });
 
     socket.on("requestPlayers", () => {

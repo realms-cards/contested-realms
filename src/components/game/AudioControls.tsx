@@ -19,8 +19,15 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useMusicPlayer } from "@/hooks/useMusicPlayer";
+import type { SfxGroup } from "@/lib/audio/soundManager";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { MUSIC_TRACKS } from "@/lib/music/music-config";
+
+const SFX_GROUP_OPTIONS: ReadonlyArray<{ group: SfxGroup; label: string; hint: string }> = [
+  { group: "board", label: "Board", hint: "Cards, combat, dice and turn changes" },
+  { group: "alerts", label: "Alerts", hint: "Your turn, invites, timers and match results" },
+  { group: "interface", label: "Interface", hint: "Selections, targeting, denied actions and draft picks" },
+];
 
 interface AudioControlsProps {
   /** Whether to enable music player (disabled during drafts) */
@@ -30,7 +37,7 @@ interface AudioControlsProps {
 export default function AudioControls({ enableMusic = true }: AudioControlsProps) {
   // Always call hooks unconditionally (React Hooks rules)
   const [musicState, musicControls] = useMusicPlayer();
-  const { volume: soundVolume, setVolume: setSoundVolume } = useSound();
+  const { volume: soundVolume, setVolume: setSoundVolume, mix, setMixGroup } = useSound();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showTrackList, setShowTrackList] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -53,14 +60,27 @@ export default function AudioControls({ enableMusic = true }: AudioControlsProps
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isExpanded]);
 
+  // Music is on but the browser refused autoplay; any click/keypress will start it.
+  const waitingForGesture =
+    enableMusic &&
+    musicState.isEnabled &&
+    musicState.autoplayBlocked &&
+    !musicState.isPlaying;
+
   return (
     <div ref={containerRef} className="relative">
       {/* Collapsed State: Just note icon */}
       {!isExpanded && (
         <button
           onClick={() => setIsExpanded(true)}
-          className="text-white/70 hover:text-white transition-colors p-1"
-          title="Audio controls (Music & Sound)"
+          className={`text-white/70 hover:text-white transition-colors p-1 ${
+            waitingForGesture ? "animate-pulse text-rc-accent-ring" : ""
+          }`}
+          title={
+            waitingForGesture
+              ? "Music is ready — click anywhere to start it"
+              : "Audio controls (Music & Sound)"
+          }
           aria-label="Open audio controls"
         >
           <Music className="w-4 h-4" />
@@ -259,6 +279,30 @@ export default function AudioControls({ enableMusic = true }: AudioControlsProps
               <div className="text-xs text-slate-400 w-8 text-right">
                 {Math.round(soundVolume * 100)}%
               </div>
+            </div>
+
+            {/* Sound groups */}
+            <div
+              className="mt-3 flex flex-wrap gap-x-4 gap-y-2"
+              role="group"
+              aria-label="Sound effect groups"
+            >
+              {SFX_GROUP_OPTIONS.map((option) => (
+                <label
+                  key={option.group}
+                  className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none"
+                  title={option.hint}
+                >
+                  <input
+                    id={`sfx-group-${option.group}`}
+                    type="checkbox"
+                    className="accent-amber-400"
+                    checked={mix[option.group]}
+                    onChange={(e) => setMixGroup(option.group, e.target.checked)}
+                  />
+                  {option.label}
+                </label>
+              ))}
             </div>
           </div>
         </div>

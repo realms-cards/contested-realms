@@ -3,6 +3,7 @@
 */
 "use client";
 
+import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { VoiceOutgoingRequest } from "@/app/online/online-context";
 import { CustomSelect } from "@/components/ui/CustomSelect";
@@ -10,6 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
 import type { SoatcStatus } from "@/lib/hooks/useSoatcStatus";
 import { playerColor, shortId } from "@/lib/lobby/playerColor";
+import {
+  isPracticeLobby,
+  practiceIcon,
+  practiceLabel,
+  practiceModeForMatchType,
+  withoutForeignPracticeLobbies,
+} from "@/lib/lobby/practice";
 import { buildLobbyInviteUrl } from "@/lib/lobby-links";
 import type { TournamentInfo, LobbyInfo } from "@/lib/net/protocol";
 import { generateLobbyName } from "@/lib/random-name-generator";
@@ -402,6 +410,7 @@ export default function LobbiesCentral({
   onCreate,
   // optional lobby actions
   onLeaveLobby,
+  onEndPractice,
   onSetLobbyVisibility,
   onResync,
   onAddCpuBot: _onAddCpuBot,
@@ -427,6 +436,8 @@ export default function LobbiesCentral({
   onJoin: (lobbyId: string) => void;
   onCreate: (config: CreateLobbyConfig) => void;
   onLeaveLobby?: () => void;
+  /** Ends the viewer's own vs-CPU / goldfish practice game (match + lobby). */
+  onEndPractice?: () => void;
   onSetLobbyVisibility?: (
     visibility: "open" | "private" | "tournament",
   ) => void;
@@ -517,6 +528,8 @@ export default function LobbiesCentral({
       : null;
   }, [lobbies, joinedLobbyId]);
   const isInLobby = joinedLobbyId !== null;
+  // The viewer's own practice game is ended (match + lobby) from its card.
+  const joinedIsPractice = !!joinedLobby && isPracticeLobby(joinedLobby);
   const joinedTournament = tournaments.find(
     (t) =>
       t.registeredPlayers.some(
@@ -646,7 +659,8 @@ export default function LobbiesCentral({
     const q = query.trim().toLowerCase();
     const statusWeight = (s: string) =>
       s === "open" ? 0 : s === "started" ? 1 : 2;
-    const list = lobbies.filter((l) => {
+    // Other players' practice games (vs CPU / goldfish) are never listed.
+    const list = withoutForeignPracticeLobbies(lobbies, myId).filter((l) => {
       // Pin the currently joined lobby regardless of filters
       const pinned = joinedLobbyId === l.id;
       // Don't hide the joined lobby even if it's full or started; otherwise apply filters
@@ -683,6 +697,7 @@ export default function LobbiesCentral({
     return list;
   }, [
     lobbies,
+    myId,
     query,
     hideFull,
     hideStarted,
@@ -835,7 +850,9 @@ export default function LobbiesCentral({
             : ""}
         </span>
         <div className="flex-1" />
-        {onLeaveLobby && !!joinedLobbyId && (
+        {onLeaveLobby &&
+          !!joinedLobbyId &&
+          !(onEndPractice && joinedIsPractice) && (
           <RcButton
             variant="destructive"
             size="sm"
@@ -948,11 +965,15 @@ export default function LobbiesCentral({
 
           {filtered.map((l) => {
             const isMine = joinedLobbyId === l.id; // Source of truth: joinedLobbyId
+            // Only the viewer's own practice games reach this point
+            const practiceMode = isPracticeLobby(l)
+              ? practiceModeForMatchType(l.plannedMatchType)
+              : null;
             const hostPlayer = l.players.find((p) => p.id === l.hostId);
             const opponentPlayer = l.players.find((p) => p.id !== l.hostId);
             const host = hostPlayer?.displayName || "Host";
             const playerDisplay =
-              l.status === "started" && opponentPlayer
+              l.status === "started" && opponentPlayer && !practiceMode
                 ? `${host} vs ${opponentPlayer.displayName}`
                 : host;
             const open = l.status === "open";
@@ -967,7 +988,8 @@ export default function LobbiesCentral({
               );
             }
             if (l.plannedEnableSeer) meta.push("seer");
-            if (l.visibility === "private") meta.push("invite only");
+            if (l.visibility === "private" && !practiceMode)
+              meta.push("invite only");
             if (l.visibility === "tournament" && l.soatcLeagueMatch) {
               meta.push(l.soatcLeagueMatch.tournamentName);
             }
@@ -1003,12 +1025,28 @@ export default function LobbiesCentral({
                 }`}
               >
                 <div className="min-w-0">
-                  <div
-                    className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong"
-                    title={l.name || "Unnamed Lobby"}
-                  >
-                    {l.name || "Unnamed Lobby"}
-                  </div>
+                  {practiceMode ? (
+                    <div
+                      className="flex min-w-0 items-center gap-2 font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong"
+                      title={practiceLabel(practiceMode)}
+                    >
+                      <Icon
+                        icon={practiceIcon(practiceMode)}
+                        aria-hidden
+                        className="h-[18px] w-[18px] shrink-0 text-rc-accent"
+                      />
+                      <span className="truncate">
+                        {practiceLabel(practiceMode)}
+                      </span>
+                    </div>
+                  ) : (
+                    <div
+                      className="truncate font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong"
+                      title={l.name || "Unnamed Lobby"}
+                    >
+                      {l.name || "Unnamed Lobby"}
+                    </div>
+                  )}
                   <div
                     className="truncate text-[11px] tracking-[0.1em] text-rc-fg-dim"
                     title={l.id}
@@ -1040,7 +1078,28 @@ export default function LobbiesCentral({
                   <span>{statusLabel}</span>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  {isMine ? (
+                  {practiceMode ? (
+                    // A practice game is private: no join, spectate or invite.
+                    // After a reconnect mid-game the server lists it without
+                    // re-sending joinedLobby, so it can be ended unjoined too.
+                    onEndPractice &&
+                    (isMine ||
+                      (!isInLobby &&
+                        !!myId &&
+                        l.players.some((p) => p.id === myId))) ? (
+                      <RcButton
+                        variant="outline"
+                        size="sm"
+                        className="text-rc-danger hover:text-rc-danger-hover"
+                        onClick={() => onEndPractice()}
+                        title="End this practice game and close its lobby"
+                      >
+                        End practice
+                      </RcButton>
+                    ) : (
+                      <span className={HINT}>practice game</span>
+                    )
+                  ) : isMine ? (
                     <>
                       {myId &&
                       l.hostId === myId &&

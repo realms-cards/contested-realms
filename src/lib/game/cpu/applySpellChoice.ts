@@ -119,7 +119,7 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
     if (!entity) return;
     const turn = `${get().turn}:${get().currentPlayer}`;
     const previous = entity.cpuTurnEffect?.turn === turn ? entity.cpuTurnEffect : null;
-    const cpuTurnEffect = { turn, power: power+(previous?.power || 0), movement: movement+(previous?.movement || 0),blaze:blaze || previous?.blaze || false };
+    const cpuTurnEffect = { turn, power: power+(previous?.power || 0), movement: movement+(previous?.movement || 0),blaze:blaze || previous?.blaze || false,...(previous?.steps ? {steps:previous.steps} : {}) };
     if (target.kind === "avatar") {
       const avatars = { ...get().avatars, [target.seat]: { ...entity, cpuTurnEffect } } as GameState["avatars"];
       set({ avatars }); get().trySendPatch({ avatars });
@@ -424,6 +424,25 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
       continue;
     }
     if (op.kind === "buff") { buff(op.target, op.power, op.movement,op.blaze); continue; }
+    if (op.kind === "moveSpent") {
+      // Only a turn effect already in force keeps a step ledger; plain movement is not tracked.
+      const found = locate(op.target), entity = op.target.kind === "avatar" ? get().avatars[op.target.seat] : found?.unit;
+      const effect = entity?.cpuTurnEffect;
+      if (!op.steps || !effect || effect.turn !== `${get().turn}:${get().currentPlayer}`) continue;
+      const cpuTurnEffect = {...effect,steps:(effect.steps || 0)+op.steps};
+      if (op.target.kind === "avatar") {
+        const seat = op.target.seat;
+        set({avatars:{...get().avatars,[seat]:{...get().avatars[seat],cpuTurnEffect}}});
+        // Only the ledger: `tapped` on the opponent's avatar would make the server reject the whole trail action.
+        get().trySendPatch({avatars:{[seat]:{cpuTurnEffect}} as GameState["avatars"]});
+      } else if (found) {
+        const items = [...get().permanents[found.at]];
+        items[found.index] = {...found.unit,cpuTurnEffect,version:(found.unit.version || 0)+1};
+        set({permanents:{...get().permanents,[found.at]:items}});
+        get().trySendPatch({permanents:{[found.at]:items}});
+      }
+      continue;
+    }
     if (op.kind === "mend") {
       if (op.target.kind === "avatar") get().addLife(op.target.seat, op.amount);
       else {

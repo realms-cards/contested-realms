@@ -24,9 +24,11 @@ function crowdedRealm(): SpellState {
     players:{p1:{life:20,lifeState:"alive",mana:0},p2:{life:20,lifeState:"alive",mana:0}},zones:{p1:zones(),p2:zones()}};
 }
 
-/** FNV-1a over the serialized choices. */
+/** FNV-1a over the serialized choices, without the board-pick metadata (picks, decision option `at`) this pin does not cover. */
 function digest(value: unknown) {
-  const text = JSON.stringify(value);
+  const text = JSON.stringify(value,function (this: unknown, key: string, field: unknown) {
+    return key === "picks" || (key === "at" && typeof this === "object" && this !== null && "key" in this && "label" in this) ? undefined : field;
+  });
   let hash = 0x811c9dc5;
   for (let i=0;i<text.length;i++) hash = Math.imul(hash ^ text.charCodeAt(i),0x01000193);
   return (hash >>> 0).toString(16);
@@ -42,8 +44,9 @@ describe("per-snapshot evaluation cache", () => {
     const narrowed = getSpellChoices(state,"p1","Chain Lightning",key);
     expect(choices).toHaveLength(285);
     expect(narrowed.some(choice => choice.key === key)).toBe(true);
-    // Recorded from the implementation that rescanned the realm for every score (84,025 scans).
-    expect(digest([choices,narrowed])).toBe("7ee7f6aa");
+    // Recorded from the implementation that rescanned the realm for every score (84,025 scans; full digest 7ee7f6aa),
+    // re-derived from that pre-metadata output with the board-pick metadata removed.
+    expect(digest([choices,narrowed])).toBe("49c49fd2");
   });
 
   it("scans the realm once per evaluation", () => {

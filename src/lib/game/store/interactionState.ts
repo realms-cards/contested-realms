@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { soundManager } from "@/lib/audio/soundManager";
 import type {
   InteractionEnvelope,
   InteractionMessage,
@@ -213,6 +214,15 @@ export const createInteractionSlice: StateCreator<
     const now = Date.now();
     if (message.type === "interaction:request") {
       const payload = (message.payload ?? {}) as Record<string, unknown>;
+      // A new request addressed to this player needs their decision.
+      const recipientId = get().localPlayerId;
+      if (
+        recipientId &&
+        message.to === recipientId &&
+        !get().interactionLog[message.requestId]
+      ) {
+        soundManager.play("consent");
+      }
       const proposedGrant =
         normalizeGrantRequest(payload.grant) ??
         normalizeGrantRequest(payload.proposedGrant);

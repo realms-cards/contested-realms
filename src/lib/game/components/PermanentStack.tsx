@@ -12,6 +12,7 @@ import {
 import { flushSync } from "react-dom";
 import { Group, MathUtils } from "three";
 import { getGraphicsSettings } from "@/hooks/useGraphicsSettings";
+import { soundManager } from "@/lib/audio/soundManager";
 import { BodyApi, getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
 import { pendingOrigins } from "@/lib/game/cardAnimOrigins";
 import CardOutline from "@/lib/game/components/CardOutline";
@@ -441,11 +442,23 @@ export function PermanentStack({
   void _touchPreviewTimerRef;
   void _touchContextTimerRef;
   const {
-    selectPermanent,
+    selectPermanent: selectPermanentQuietly,
     selectedPermanent,
     lastTouchedId,
     setLastTouchedId,
   } = selectionContext;
+  // Pointer selection ticks when it changes the selection. Drops and other
+  // code paths call the store action directly and stay quiet.
+  const selectPermanent: GameState["selectPermanent"] = (at, index) => {
+    if (
+      !selectedPermanent ||
+      selectedPermanent.at !== at ||
+      selectedPermanent.index !== index
+    ) {
+      soundManager.play("cardSelect");
+    }
+    selectPermanentQuietly(at, index);
+  };
   const {
     attackTargetChoice,
     setAttackConfirm,

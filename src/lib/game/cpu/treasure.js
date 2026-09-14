@@ -33,7 +33,7 @@ function treasureChoices(state) {
   const caster = state.avatars[event.castOwner === 1 ? 'p1' : 'p2'].pos;
   return sites.map(([at]) => {
     const [x,y] = at.split(',').map(Number);
-    return {...base,key:`treasure/place/${at}`,label:`Conjure Sunken Treasure underwater at ${at}`,operations:[{kind:'placeTreasure',source:event.source,at}],score:caster ? Math.abs(x-caster[0])+Math.abs(y-caster[1]) : 0};
+    return {...base,key:`treasure/place/${at}`,label:`Conjure Sunken Treasure underwater at ${at}`,operations:[{kind:'placeTreasure',source:event.source,at}],score:caster ? Math.abs(x-caster[0])+Math.abs(y-caster[1]) : 0,picks:[at]};
   });
 }
 module.exports = {treasures,treasureChoices};

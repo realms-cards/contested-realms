@@ -6,7 +6,7 @@
  * (prevents double-play when multiple components call useMusicPlayer).
  */
 
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import {
   MUSIC_TRACKS,
   MUSIC_DEFAULTS,
@@ -128,6 +128,9 @@ interface SingletonState {
 
 let singletonAudio: HTMLAudioElement | null = null;
 let shouldBePlaying = false;
+// Consecutive media load failures; stops the "skip on error" hop from looping
+// through the whole playlist forever when /music is unreachable.
+let consecutiveLoadErrors = 0;
 const gameState: GameMusicState = {
   currentHealth: 20,
   isDeathsDoor: false,
@@ -188,12 +191,68 @@ function getServerSnapshot() {
   return serverSnapshot;
 }
 
+// ─── Ducking under sound-effect alerts ───────────────────────────────────
+// Alert sounds (your turn, invites, timers, match results) dispatch
+// "sfx:duck"; the music dips to half volume (about -6 dB) while they play.
+const DUCK_LEVEL = 0.5;
+const DUCK_ATTACK_MS = 80;
+const DUCK_RELEASE_MS = 400;
+let duckFactor = 1;
+let duckRampTimer: ReturnType<typeof setInterval> | null = null;
+let duckReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+let duckListenerInstalled = false;
+
+function applyMusicVolume() {
+  if (singletonAudio) {
+    singletonAudio.volume = Math.max(0, Math.min(1, snapshot.volume * duckFactor));
+  }
+}
+
+function rampDuck(target: number, durationMs: number) {
+  if (duckRampTimer) clearInterval(duckRampTimer);
+  const start = duckFactor;
+  const steps = Math.max(1, Math.round(durationMs / 40));
+  let step = 0;
+  const timer = setInterval(() => {
+    step++;
+    duckFactor = start + (target - start) * (step / steps);
+    applyMusicVolume();
+    if (step >= steps) {
+      clearInterval(timer);
+      if (duckRampTimer === timer) duckRampTimer = null;
+    }
+  }, 40);
+  duckRampTimer = timer;
+}
+
+function onDuck(event: Event) {
+  const detail: unknown = (event as CustomEvent<unknown>).detail;
+  const seconds =
+    detail && typeof detail === "object" && typeof (detail as { seconds?: unknown }).seconds === "number"
+      ? (detail as { seconds: number }).seconds
+      : 1;
+  if (!singletonAudio || singletonAudio.paused) return;
+  rampDuck(DUCK_LEVEL, DUCK_ATTACK_MS);
+  if (duckReleaseTimer) clearTimeout(duckReleaseTimer);
+  duckReleaseTimer = setTimeout(() => {
+    duckReleaseTimer = null;
+    rampDuck(1, DUCK_RELEASE_MS);
+  }, Math.max(200, seconds * 1000));
+}
+
+function installDuckListener() {
+  if (duckListenerInstalled || typeof window === "undefined") return;
+  duckListenerInstalled = true;
+  window.addEventListener("sfx:duck", onDuck);
+}
+
 /** Ensure the singleton audio element exists (browser only) */
 function ensureAudio(): HTMLAudioElement {
   if (!singletonAudio) {
     singletonAudio = new Audio();
     singletonAudio.preload = "auto";
-    singletonAudio.volume = snapshot.volume;
+    singletonAudio.volume = snapshot.volume * duckFactor;
+    installDuckListener();
 
     // Set initial source
     const track = getTrackByIndex(snapshot.currentTrackIndex);
@@ -210,8 +269,18 @@ function ensureAudio(): HTMLAudioElement {
       changeTrack(nextIndex);
     });
 
-    // Handle errors — skip to next track
+    singletonAudio.addEventListener("playing", () => {
+      consecutiveLoadErrors = 0;
+    });
+
+    // Handle errors — skip to next track, but give up once every track failed
     singletonAudio.addEventListener("error", () => {
+      consecutiveLoadErrors++;
+      if (consecutiveLoadErrors >= MUSIC_TRACKS.length) {
+        shouldBePlaying = false;
+        updateSnapshot({ isPlaying: false });
+        return;
+      }
       const nextIndex = selectTrackForGameState(
         gameState.currentHealth,
         gameState.isDeathsDoor,
@@ -235,11 +304,13 @@ function changeTrack(index: number) {
     if (playPromise) {
       playPromise
         .then(() => {
-          updateSnapshot({ currentTrackIndex: index, isPlaying: true });
+          disarmGestureRetry();
+          updateSnapshot({ currentTrackIndex: index, isPlaying: true, autoplayBlocked: false });
         })
         .catch(() => {
           shouldBePlaying = false;
           updateSnapshot({ currentTrackIndex: index, isPlaying: false, autoplayBlocked: true });
+          armGestureRetry();
         });
     }
   } else {
@@ -254,49 +325,92 @@ function tryPlay() {
   if (playPromise) {
     playPromise
       .then(() => {
+        disarmGestureRetry();
         updateSnapshot({ isPlaying: true, autoplayBlocked: false });
       })
       .catch(() => {
         shouldBePlaying = false;
         updateSnapshot({ isPlaying: false, autoplayBlocked: true });
+        armGestureRetry();
       });
   }
 }
 
+// ─── Autoplay recovery ───────────────────────────────────────────────────
+// When the browser refuses play() (no user activation yet, e.g. the match URL
+// was opened directly), retry on the first activation-granting input instead
+// of staying silent until the player popover is opened. pointerup covers mouse,
+// touch and pen (pointerdown from touch does not grant activation); keydown
+// covers keyboard users.
+let gestureRetryArmed = false;
+
+function onFirstGesture() {
+  disarmGestureRetry();
+  if (snapshot.isEnabled && !shouldBePlaying && mountCount > 0) {
+    tryPlay();
+  }
+}
+
+function armGestureRetry() {
+  if (gestureRetryArmed || typeof window === "undefined") return;
+  gestureRetryArmed = true;
+  window.addEventListener("pointerup", onFirstGesture, { capture: true });
+  window.addEventListener("keydown", onFirstGesture, { capture: true });
+}
+
+function disarmGestureRetry() {
+  if (!gestureRetryArmed) return;
+  gestureRetryArmed = false;
+  window.removeEventListener("pointerup", onFirstGesture, { capture: true });
+  window.removeEventListener("keydown", onFirstGesture, { capture: true });
+}
+
 // Track how many hook instances are mounted so we know when to clean up
 let mountCount = 0;
+// Teardown is deferred so back-to-back unmount/mount pairs (StrictMode's
+// double-invoke in dev, HUD swaps on uiHidden, route transitions between match
+// screens) keep the same audio element and the music keeps playing.
+let teardownTimer: ReturnType<typeof setTimeout> | null = null;
+const TEARDOWN_DELAY_MS = 250;
 
 export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
   const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  // Track whether this instance has already triggered the initial auto-play
-  const didAutoPlayRef = useRef(false);
-
-  // On first mount (browser only), ensure audio element exists and auto-play if enabled
+  // On mount (browser only), ensure the audio element exists and auto-play if enabled
   useEffect(() => {
     mountCount++;
+    if (teardownTimer) {
+      clearTimeout(teardownTimer);
+      teardownTimer = null;
+    }
     ensureAudio();
 
-    // Auto-play on first mount if enabled (only once across all consumers)
-    if (state.isEnabled && !didAutoPlayRef.current) {
-      didAutoPlayRef.current = true;
+    // Read the module snapshot, not the render-time `state`: the play pages are
+    // server-rendered, so this effect's closure comes from the hydration render,
+    // where useSyncExternalStore reports the server snapshot (music disabled).
+    // shouldBePlaying keeps this idempotent across several consumers mounting.
+    if (snapshot.isEnabled && !shouldBePlaying) {
       tryPlay();
     }
 
     return () => {
       mountCount--;
-      // When no consumers remain, pause and clean up
       if (mountCount <= 0) {
         mountCount = 0;
-        if (singletonAudio) {
-          singletonAudio.pause();
-          singletonAudio = null;
-        }
-        shouldBePlaying = false;
-        updateSnapshot({ isPlaying: false });
+        if (teardownTimer) clearTimeout(teardownTimer);
+        teardownTimer = setTimeout(() => {
+          teardownTimer = null;
+          if (mountCount > 0) return;
+          disarmGestureRetry();
+          if (singletonAudio) {
+            singletonAudio.pause();
+            singletonAudio = null;
+          }
+          shouldBePlaying = false;
+          updateSnapshot({ isPlaying: false });
+        }, TEARDOWN_DELAY_MS);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const currentTrack = getTrackByIndex(state.currentTrackIndex);
@@ -329,9 +443,9 @@ export function useMusicPlayer(): [MusicPlayerState, MusicPlayerControls] {
 
   const setVolume = useCallback((newVolume: number) => {
     const clampedVolume = Math.max(0, Math.min(1, newVolume));
-    if (singletonAudio) singletonAudio.volume = clampedVolume;
     saveSetting(MUSIC_STORAGE_KEYS.volume, clampedVolume);
     updateSnapshot({ volume: clampedVolume });
+    applyMusicVolume();
   }, []);
 
   const nextTrack = useCallback(() => {

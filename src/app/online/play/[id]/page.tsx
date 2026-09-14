@@ -124,6 +124,8 @@ import { GlobalVideoOverlay } from "@/components/ui/GlobalVideoOverlay";
 import KeyboardShortcutsHelp, {
   useHelpShortcut,
 } from "@/components/ui/KeyboardShortcutsHelp";
+import { GameSoundEffects } from "@/lib/audio/gameSfx";
+import { soundManager } from "@/lib/audio/soundManager";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import { MarqueeActionBar } from "@/lib/game/components/MarqueeActionBar";
@@ -2295,6 +2297,14 @@ export default function OnlineMatchPage() {
     };
   }, [transport, matchId]);
 
+  // Chime when the opponent asks for a rematch.
+  const opponentWantsRematch =
+    !!myPlayerId &&
+    !!rematchInfo?.requestedBy.some((id) => id !== myPlayerId);
+  useEffect(() => {
+    if (opponentWantsRematch) soundManager.play("invite");
+  }, [opponentWantsRematch]);
+
   // --- Board preload: the canvas only mounts once setup closes, so start
   // loading the lighting, grid overlay and both players' playmats while the
   // D20 and mulligan screens are up.
@@ -3610,6 +3620,8 @@ export default function OnlineMatchPage() {
           )}
           {/* Music-Game state sync for mood-based track selection */}
           {!shouldShowDraft && <MusicGameSync myPlayerKey={viewPlayerKey} />}
+          {/* Sound effects for game state changes (yours and the opponent's) */}
+          {!shouldShowDraft && <GameSoundEffects store={useGameStore} />}
           {/* Life counters - always visible */}
           <OnlineLifeCounters
             dragFromHand={dragFromHand}

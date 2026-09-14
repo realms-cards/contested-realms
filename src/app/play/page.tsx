@@ -99,6 +99,7 @@ import {
 import KeyboardShortcutsHelp, {
   useHelpShortcut,
 } from "@/components/ui/KeyboardShortcutsHelp";
+import { GameSoundEffects } from "@/lib/audio/gameSfx";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import {
   hasAnyHarbinger,
@@ -1261,6 +1262,8 @@ export default function PlayPage() {
       )}
       {/* Music-Game state sync for mood-based track selection */}
       <MusicGameSync myPlayerKey={currentPlayerKey} />
+      {/* Sound effects for game state changes */}
+      <GameSoundEffects store={useGameStore} />
 
       {/* Life counters - always visible */}
       <OnlineLifeCounters

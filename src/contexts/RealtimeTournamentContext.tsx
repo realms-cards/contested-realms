@@ -17,7 +17,18 @@ import { useTournamentPhases } from "@/hooks/useTournamentPhases";
 import { useTournamentPreparation } from "@/hooks/useTournamentPreparation";
 import { useTournamentSocket } from "@/hooks/useTournamentSocket";
 import { useTournamentStatistics } from "@/hooks/useTournamentStatistics";
+import { soundManager } from "@/lib/audio/soundManager";
 import { useViewer } from "@/lib/guest/useViewer";
+
+/** Chime for a tournament pairing once per match, however many events announce it. */
+function playPairingChime(matchId: string): void {
+  try {
+    const key = `sfx:pairing:${matchId}`;
+    if (window.sessionStorage.getItem(key)) return;
+    window.sessionStorage.setItem(key, "1");
+  } catch {}
+  soundManager.play("invite");
+}
 
 interface RegisteredTournamentPlayer {
   id: string;
@@ -849,6 +860,12 @@ export function RealtimeTournamentProvider({
           ),
         };
       });
+      if (
+        currentTournament?.id === data.tournamentId &&
+        data.playerId !== currentUserId
+      ) {
+        soundManager.play("playerLeft");
+      }
       try {
         const hostId = currentTournament?.creatorId || null;
         if (
@@ -999,6 +1016,7 @@ export function RealtimeTournamentProvider({
               matchId: String(mine.id),
               opponentName: opp ?? null,
             });
+            playPairingChime(String(mine.id));
           }
         }
       }
@@ -1020,6 +1038,7 @@ export function RealtimeTournamentProvider({
         queueStatisticsRefresh({ matches: true });
         setLastUpdated(new Date().toISOString());
         // Treat this as an assignment for the current user
+        playPairingChime(String(data.matchId));
         setAssignedMatch({
           matchId: String(data.matchId),
           opponentName: data.opponentName ?? null,
