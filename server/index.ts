@@ -4179,11 +4179,17 @@ io.on("connection", async (socket: SocketClient) => {
                 : null;
             if (!at || !Number.isFinite(indexVal) || !Number.isFinite(ownerVal))
               return null;
+            // A defending Avatar (CPU matches) has no permanents slot; clients validate the seat.
+            const avatarSeat =
+              d.isAvatar === true && (d.avatarSeat === "p1" || d.avatarSeat === "p2")
+                ? d.avatarSeat
+                : null;
             return {
               at,
               index: Number(indexVal),
               owner: Number(ownerVal) as 1 | 2,
               instanceId,
+              ...(avatarSeat ? { isAvatar: true, avatarSeat } : {}),
             };
           })
           .filter(Boolean);

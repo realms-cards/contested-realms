@@ -20,7 +20,9 @@ export function resolveCpuCombat(set: StoreSet, get: StoreGet) {
   if (!attacker) { state.log("Waiting for the attacker's position to synchronize."); return; }
   const defenders: LocatedUnit[] = [];
   for (const selected of pending.defenders) {
-    const unit = locateUnit(state,{ kind: "permanent", ...selected });
+    // Only the defending seat's own Avatar can defend (rulebook "Defend"/"Intercept": Avatars are units).
+    if (selected.isAvatar && selected.avatarSeat && selected.avatarSeat !== defenderSeat) continue;
+    const unit = locateUnit(state,selected.isAvatar ? { kind: "avatar", seat: defenderSeat } : { kind: "permanent", ...selected });
     if (!unit || unit.at !== attacker.at || unit.region !== attacker.region) {
       state.log("Waiting for defenders to reach the combat location."); return;
     }
@@ -46,17 +48,20 @@ export function resolveCpuCombat(set: StoreSet, get: StoreGet) {
   };
   const attackPower = power(attacker);
   const allocation = new Map<LocatedUnit,number>();
+  // Assignment entries address a defending Avatar as { at, index: -1 } (it has no permanents slot).
+  const assignedTo = (unit: LocatedUnit, entry: { at: string; index: number }) => unit.at === entry.at &&
+    (unit.target.kind === "avatar" ? entry.index === -1 : unit.target.index === entry.index);
   if (defenders.length === 1) allocation.set(defenders[0],attackPower);
   else if (defenders.length > 1) {
     const assigned = pending.assignment || [];
     const valid = assigned.every(entry => Number.isInteger(entry.amount) && entry.amount >= 0 &&
-      defenders.some(unit => unit.target.kind === "permanent" && unit.at === entry.at && unit.target.index === entry.index)) &&
+      defenders.some(unit => assignedTo(unit,entry))) &&
       assigned.reduce((sum,entry) => sum+entry.amount,0) === attackPower;
     if (state.actorKey === attackerSeat && !valid) {
       state.log(`Allocate ${attackPower} damage among the defenders before resolving.`); return;
     }
     if (valid && state.actorKey === attackerSeat) {
-      for (const unit of defenders) allocation.set(unit,assigned.filter(entry => unit.target.kind === "permanent" && unit.at === entry.at && unit.target.index === entry.index).reduce((sum,entry) => sum+entry.amount,0));
+      for (const unit of defenders) allocation.set(unit,assigned.filter(entry => assignedTo(unit,entry)).reduce((sum,entry) => sum+entry.amount,0));
     } else {
       // The CPU owns its attack allocation, even though the human client is
       // adjudicating the fight. Prefer affordable kills over spreading damage.

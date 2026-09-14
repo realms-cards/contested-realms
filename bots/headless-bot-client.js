@@ -9,6 +9,7 @@ const { io } = require("socket.io-client");
 const botEngine = require("./engine");
 const { ActionPacing } = require("./action-pacing");
 const { changeLife, lifeTurnKey } = require("../src/lib/game/cpu/life");
+const { evaluateDamage } = require("../src/lib/game/cpu/damageRules");
 const cpuSpells = require("../src/lib/game/cpu/spells");
 const { abilityChoices } = require("../src/lib/game/cpu/abilities");
 const { reachableCells } = require("../src/lib/game/cpu/movement");
@@ -2777,14 +2778,79 @@ class BotClient {
         if (threatenedAvatar) score += life?.lifeState === "dd" ? 1000 : stats.atk * 2;
         else if (payload.target?.kind === "site" && life?.lifeState !== "dd") score += stats.atk;
         if (/strikes first|strike first/i.test(cpuSpells.cardText(attacker)) && dies) score -= 8;
-        choices.push({ at, index, instanceId: unit.instanceId, owner: myNum, to, score });
+        choices.push({ at, index, instanceId: unit.instanceId, owner: myNum, to, score, good: wins || !dies });
       });
     }
     choices.sort((a,b) => b.score-a.score);
-    return choices[0]?.score > 0 ? choices[0] : null;
+    const minion = choices[0]?.score > 0 ? choices[0] : null;
+    const avatar = this._findAvatarDefender(payload, intercept, { state, meKey, myNum, attack, attacker, locatedAttacker, stats, to, realmUnits });
+    // A good minion defender (it wins or survives) is preferred; the Avatar only replaces a losing trade or no defence.
+    if (avatar && (!minion || (!minion.good && avatar.score >= minion.score))) return avatar;
+    return minion;
+  }
+
+  /**
+   * The CPU's own Avatar as defender or interceptor. Avatars are units (rulebook "Basic Abilities", "Defend",
+   * "Intercept"): defend = tap and move within its range of motion to the attack; intercept = tap, already at
+   * the location, Airborne movers only by Airborne or Ranged units. Conservative: the Avatar must kill the
+   * attacker (or deal an attacking Avatar its death blow) and keep AVATAR_DEFENCE_LIFE_FLOOR life after the
+   * attacker's strike. Never at death's door, where any damage is a death blow.
+   */
+  _findAvatarDefender(payload, intercept, ctx) {
+    // Only the human client's resolver handles Avatar defenders; bot-vs-bot combat resolves minion defenders only.
+    if (!this._hasHumanOpponent()) return null;
+    const AVATAR_DEFENCE_LIFE_FLOOR = 6;
+    const { state, meKey, myNum, attack, attacker, locatedAttacker, stats, to, realmUnits } = ctx;
+    const avatar = state.avatars?.[meKey];
+    const located = realmUnits.find(unit => unit.target.kind === "avatar" && unit.target.seat === meKey);
+    if (!avatar?.card || avatar.tapped || !located || cpuSpells.isDisabled(state, located)) return null;
+    // An attack on the Avatar already makes it fight; it cannot also defend.
+    if (payload.target?.kind === "avatar") return null;
+    const life = state.players?.[meKey];
+    if (!life || life.lifeState !== "alive" || !Number.isFinite(Number(life.life))) return null;
+    if ((state.permanentPositions?.[attack.instanceId]?.state || "surface") !== "surface") return null;
+    const from = located.at;
+    if (intercept) {
+      if (from !== to) return null;
+      if (locatedAttacker && cpuSpells.hasAirborne(state, locatedAttacker) &&
+          !cpuSpells.hasAirborne(state, located) && !/\bRanged\b/i.test(cpuSpells.cardText(avatar.card))) return null;
+    } else {
+      // The move patch does not carry artifacts, so an Avatar holding one stays put.
+      const carries = (state.permanents?.[from] || []).some(item => item.attachedTo?.at === from && item.attachedTo.index === -1 && Number(item.owner) === myNum);
+      if (from !== to && carries) return null;
+      if (!reachableCells(state, from, { ...avatar, owner: myNum, instanceId: `avatar:${meKey}` }).includes(to)) return null;
+    }
+    const power = Math.max(0, cpuSpells.unitStats(state, located).atk);
+    if (power <= 0) return null;
+    const turn = lifeTurnKey(state.turn || 1, state.currentPlayer || 1);
+    const choice = { isAvatar: true, avatarSeat: meKey, at: from, index: -1, instanceId: avatar.card.instanceId || null, owner: myNum, to, good: true };
+    if (attack.isAvatar) {
+      const enemy = state.players?.[attack.avatarSeat || (myNum === 1 ? "p2" : "p1")];
+      // Damage to an Avatar at death's door is a death blow, except on the turn it got there.
+      return enemy?.lifeState === "dd" && enemy.deathsDoorTurn !== turn ? { ...choice, score: 1000 } : null;
+    }
+    if (!locatedAttacker) return null;
+    const lance = (state.permanents?.[attack.at] || []).some(item => item.card?.name === "Lance" && item.attachedTo?.at === attack.at && item.attachedTo.index === attack.index);
+    const incoming = Math.max(0, cpuSpells.unitStats(state, locatedAttacker).atk + (lance ? 1 : 0));
+    if (Number(life.life) - incoming < AVATAR_DEFENCE_LIFE_FLOOR) return null;
+    const attackerItem = state.permanents?.[attack.at]?.[attack.index];
+    const outcome = evaluateDamage({ name: cpuSpells.isDisabled(state, locatedAttacker) ? "" : attacker.name, damage: locatedAttacker.damage || 0,
+      defence: cpuSpells.unitStats(state, locatedAttacker).def, damagePreventedTurn: attackerItem?.cpuDamagePreventedTurn, avatar: false },
+    [{ target: locatedAttacker.target, amount: power, lethal: /\bLethal\b/.test(cpuSpells.cardText(avatar.card)), sourcePower: power }], turn);
+    if (!outcome.killed) return null;
+    let score = 8 + this._getCostForCardRef(attacker);
+    // An undefended site attack costs that life anyway; otherwise the strike is life the Avatar would have kept.
+    if (payload.target?.kind !== "site") score -= incoming;
+    if (payload.target?.kind === "permanent") {
+      const target = state.permanents?.[payload.target.at]?.[payload.target.index];
+      const defence = target && Number(target.owner) === myNum ? this._getCardCombatStats(target.card) : null;
+      if (defence && stats.atk + (target.damage || 0) >= Math.max(1, defence.def)) score += this._getCostForCardRef(target.card) + 3;
+    }
+    return score > 0 ? { ...choice, score } : null;
   }
 
   _commitDefender(choice, onApplied, onDropped) {
+    if (choice.isAvatar) return this._commitAvatarDefender(choice, onApplied, onDropped);
     const unit = this._game.permanents[choice.at]?.[choice.index];
     if (!unit || unit.instanceId !== choice.instanceId) return null;
     const moved = moveUnit(this._game, choice.at, choice.index, choice.to);
@@ -2792,6 +2858,23 @@ class BotClient {
     const defender = { at: choice.to, index: moved.index, instanceId: unit.instanceId, owner: unit.owner };
     const sent = this._sendCpuAction(moved.patch, () => {
       if (!this._hasHumanOpponent()) this._mergeGamePatch(moved.patch);
+      onApplied?.(defender);
+    }, onDropped);
+    return sent ? defender : null;
+  }
+
+  /** Tap (and for a defence, move) the CPU's own Avatar; same contract as _commitDefender. */
+  _commitAvatarDefender(choice, onApplied, onDropped) {
+    const meKey = this._getMeKey();
+    const avatar = this._game?.avatars?.[meKey];
+    if (choice.avatarSeat !== meKey || !avatar?.card || avatar.tapped || !Array.isArray(avatar.pos) || avatar.pos.join(",") !== choice.at) return null;
+    const [x, y] = String(choice.to).split(",").map(Number);
+    if (!Number.isInteger(x) || !Number.isInteger(y)) return null;
+    // Partial single-seat patch, the shape of the store's moveAvatarTo: the server rejects taps on the other avatar.
+    const patch = { avatars: { [meKey]: choice.to === choice.at ? { tapped: true } : { pos: [x, y], offset: null, tapped: true } } };
+    const defender = { at: choice.to, index: -1, instanceId: avatar.card.instanceId || null, owner: meKey === "p1" ? 1 : 2, isAvatar: true, avatarSeat: meKey };
+    const sent = this._sendCpuAction(patch, () => {
+      if (!this._hasHumanOpponent()) this._mergeGamePatch(patch);
       onApplied?.(defender);
     }, onDropped);
     return sent ? defender : null;

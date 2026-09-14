@@ -1957,11 +1957,18 @@ export type GameState = {
       index: number | null;
     } | null;
     defenderSeat: PlayerKey | null;
+    /**
+     * A defending Avatar (CPU matches) is `{ at: <its tile after moving>, index: -1, isAvatar: true,
+     * avatarSeat }`. It has no permanents slot, so never look it up as `permanents[at][index]`;
+     * damage assignment addresses it as `{ at, index: -1 }`.
+     */
     defenders: Array<{
       at: CellKey;
       index: number;
       instanceId?: string | null;
       owner: 1 | 2;
+      isAvatar?: boolean;
+      avatarSeat?: PlayerKey;
     }>;
     status: "declared" | "defending" | "committed" | "resolved" | "cancelled";
     assignment?: Array<{ at: CellKey; index: number; amount: number }> | null;

@@ -705,6 +705,8 @@ export function handleCustomMessage(
       index: number;
       owner: 1 | 2;
       instanceId: string | null;
+      isAvatar?: boolean;
+      avatarSeat?: PlayerKey;
     }> = [];
     if (Array.isArray(defendersAny)) {
       defenders = defendersAny
@@ -720,6 +722,13 @@ export function handleCustomMessage(
               : null;
           if (!at || !Number.isFinite(idx) || !Number.isFinite(ownerVal))
             return null;
+          if (rec.isAvatar === true) {
+            // A defending Avatar must be its owner's own Avatar (see pendingCombat.defenders).
+            const seat = rec.avatarSeat;
+            if ((seat !== "p1" && seat !== "p2") || seat !== (ownerVal === 1 ? "p1" : ownerVal === 2 ? "p2" : null))
+              return null;
+            return { at: at as CellKey, index: -1, owner: ownerVal as 1 | 2, instanceId, isAvatar: true, avatarSeat: seat as PlayerKey };
+          }
           return {
             at: at as CellKey,
             index: Number(idx),
@@ -732,6 +741,8 @@ export function handleCustomMessage(
         index: number;
         owner: 1 | 2;
         instanceId: string | null;
+        isAvatar?: boolean;
+        avatarSeat?: PlayerKey;
       }>;
     }
     let target: {

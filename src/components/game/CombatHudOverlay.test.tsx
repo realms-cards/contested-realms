@@ -105,3 +105,16 @@ describe("combat attack targets are picked on the board", () => {
     expect(picker().request).toBe("");
   });
 });
+
+describe("combat HUD names a defending CPU Avatar", () => {
+  it("shows the Avatar's card name as the defender and the life it would lose", () => {
+    useGameStore.setState({pendingCombat:{id:"cmb",tile:{x:2,y:3},attacker:{at:"2,3",index:0,owner:1,instanceId:"archer"},
+      target:{kind:"site",at:"2,3",index:null},defenderSeat:"p2",status:"committed",createdAt:0,
+      defenders:[{at:"2,3",index:-1,owner:2,instanceId:"Geomancer",isAvatar:true,avatarSeat:"p2"}]}});
+    render(<CombatHudOverlay />);
+    expect(screen.getByText(/Defenders:\s*Geomancer/)).toBeTruthy();
+    // Belmotte Longbowmen strikes for 3; the Avatar's 1 does not kill it.
+    expect(document.body.textContent).toContain("Geomancer (Avatar) defends! Attacker 3 Avatar 1 → P2 life 20 → 17; attacker survives");
+    expect(screen.getByRole("button",{name:"Auto Resolve"})).toBeTruthy();
+  });
+});

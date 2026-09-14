@@ -349,12 +349,27 @@ export default function CombatHudOverlay() {
     );
   }
 
+  type CombatDefender = NonNullable<typeof pendingCombat>["defenders"][number];
+
+  // A defending Avatar has no permanents slot (index -1); its card lives in avatars[avatarSeat].
+  function defenderCard(d: CombatDefender) {
+    if (d.isAvatar) return d.avatarSeat ? avatars?.[d.avatarSeat]?.card ?? null : null;
+    return permanents[d.at]?.[d.index]?.card ?? null;
+  }
+
+  function defenderAtkDef(d: CombatDefender): { atk: number; def: number } {
+    if (!d.isAvatar) return getAtkDef(d.at, d.index);
+    const card = defenderCard(d);
+    const atk = Number(card?.attack ?? 1) || 1;
+    return { atk, def: Number(card?.defence ?? atk) || atk };
+  }
+
   function defenderNames(limit = 3): string {
     const list = pendingCombat?.defenders || [];
     const names = list
       .map((d) => {
         try {
-          return permanents[d.at]?.[d.index]?.card?.name || null;
+          return defenderCard(d)?.name || null;
         } catch {
           return null;
         }
@@ -593,7 +608,7 @@ export default function CombatHudOverlay() {
       tDef = getAtkDef(attackConfirm.target.at, attackConfirm.target.index).def;
     } else if (pendingCombat?.defenders?.length) {
       tDef = pendingCombat.defenders.reduce(
-        (s, d) => s + getAtkDef(d.at, d.index).def,
+        (s, d) => s + defenderAtkDef(d).def,
         0,
       );
     } else if (
@@ -631,7 +646,7 @@ export default function CombatHudOverlay() {
     let haveAny = false;
     for (const d of pendingCombat.defenders || []) {
       haveAny = true;
-      const m = getAtkDef(d.at, d.index);
+      const m = defenderAtkDef(d);
       sumDef += Number(m.def);
       sumAtk += Number(m.atk);
     }
@@ -882,7 +897,7 @@ export default function CombatHudOverlay() {
       const d0 = defs[0];
       const defName = (() => {
         try {
-          return permanents[d0.at]?.[d0.index]?.card?.name || "Defender";
+          return defenderCard(d0)?.name || "Defender";
         } catch {
           return "Defender";
         }
@@ -893,9 +908,43 @@ export default function CombatHudOverlay() {
       const dEff = computeEffectiveAttack({
         at: d0.at as CellKey,
         index: d0.index,
+        isAvatar: d0.isAvatar,
+        avatarSeat: d0.avatarSeat,
         fightingUnit: true, // Defenders are always fighting the attacker
       });
       const defenderPower = dEff.atk;
+
+      // A defending Avatar never dies from the strike: its player takes the damage.
+      if (d0.isAvatar && d0.avatarSeat) {
+        const seat = d0.avatarSeat;
+        const life = Number(players[seat]?.life ?? 0);
+        const after = Math.max(0, life - Math.max(0, Math.floor(a.atk)));
+        const lifeText =
+          players[seat]?.lifeState === "dd"
+            ? "death blow"
+            : after <= 0
+              ? "reaches Death's Door"
+              : `life ${life} → ${after}`;
+        const attackerOutcome =
+          attackerDef == null
+            ? ""
+            : defenderPower >= attackerDef
+              ? "; attacker dies"
+              : "; attacker survives";
+        return (
+          <span className="text-rc-fg-muted ml-2">
+            <span className="font-medium">{defName}</span> (Avatar) defends!
+            Attacker <span className="font-semibold">{a.atk}</span>
+            {a.firstStrike ? " (FS)" : ""} Avatar{" "}
+            <span className="font-semibold">{defenderPower}</span> →{" "}
+            <span style={{ color: PLAYER_COLORS[seat] }}>
+              {seat.toUpperCase()}
+            </span>{" "}
+            {lifeText}
+            {attackerOutcome}
+          </span>
+        );
+      }
       const defenderDef = sumDef; // single defender => its defence
       const attackerPower = a.atk;
 
