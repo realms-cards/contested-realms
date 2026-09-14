@@ -18,6 +18,7 @@ import { pendingOrigins } from "@/lib/game/cardAnimOrigins";
 import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
 import ResolverOutline from "@/lib/game/components/ResolverOutline";
+import { UnitPickCapture, UnitPickSpread } from "@/lib/game/components/UnitPickTarget";
 import {
   CARD_LONG,
   CARD_SHORT,
@@ -28,6 +29,12 @@ import {
   PLAYER_COLORS,
   TILE_SIZE,
 } from "@/lib/game/constants";
+import {
+  permanentUnitToken,
+  tileUnitTokens,
+  unitPickLayout,
+  useUnitPicks,
+} from "@/lib/game/cpu/usePickUnit";
 import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import { useGameStore } from "@/lib/game/store";
 import type {
@@ -403,6 +410,11 @@ export function PermanentStack({
     if (stillMoving) invalidate();
   });
 
+  // CPU board picks on this tile's cards: subscribes to their tones only, so other stacks stay put.
+  const unitTokens = tileUnitTokens(tileKey, items, magicContext.avatars);
+  const unitPicks = useUnitPicks(unitTokens);
+  const pickLayout = unitPickLayout(unitTokens, unitPicks);
+
   if (items.length === 0) {
     return null;
   }
@@ -542,6 +554,8 @@ export function PermanentStack({
           return null;
         }
         const hoverKey = `${key}:${idx}`;
+        const unitToken = permanentUnitToken(key, idx, p);
+        const unitPick = isSpectator ? null : (unitPicks.get(unitToken) ?? null);
 
         const owner = p.owner;
         const ownerSeat = seatFromOwner(owner);
@@ -837,6 +851,7 @@ export function PermanentStack({
               restitution={0}
               sensor
             />
+            <UnitPickSpread offset={pickLayout.get(unitToken)}>
             <group ref={animEntry?.refCb}>
             <group
               visible={!isLocalDragGhost}
@@ -1503,6 +1518,21 @@ export function PermanentStack({
                 }
               }}
             >
+              <UnitPickCapture
+                token={unitToken}
+                state={unitPick}
+                width={
+                  tokenDef && tokenDef.size === "small"
+                    ? CARD_SHORT * 0.5
+                    : CARD_SHORT
+                }
+                height={
+                  tokenDef && tokenDef.size === "small"
+                    ? CARD_LONG * 0.5
+                    : CARD_LONG
+                }
+                rotationZ={rotZ}
+              />
               {showPermanentGlow && (
                 <CardOutline
                   width={
@@ -1885,6 +1915,7 @@ export function PermanentStack({
               </group>
             </group>
             </group>{/* /entry animation wrapper */}
+            </UnitPickSpread>
           </RigidBody>
         );
       })}

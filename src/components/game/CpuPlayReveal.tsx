@@ -16,7 +16,7 @@ const DRAIN = "@keyframes cpu-reveal-drain{from{transform:scaleX(1)}to{transform
 const rulesCache = new Map<string, string>();
 
 /** Same image resolution as CardPreview: tokens from assets, everything else by slug. */
-function cardImage(card: CardRef): {src: string | null; landscape: boolean} {
+export function cardImage(card: Pick<CardRef, "name"> & Partial<Pick<CardRef, "slug" | "type">>): {src: string | null; landscape: boolean} {
   const slug = card.slug || "";
   const token = slug.startsWith("token:") ? TOKEN_BY_KEY[slug.split(":")[1]?.toLowerCase() || ""] : undefined;
   const landscape = (card.type || "").toLowerCase().includes("site") || isTransformableSiteName(card.name) || token?.siteReplacement === true;

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Shared pure choice generation. */
 const { enterScope, leaveScope, realmUnits } = require('./evalScope');
 const { movementAllowance, movementRoutes, movementSteps } = require('./movement');
+const { optToken } = require('./pickTokens');
 
 /** @param {import('./spellTypes').SpellState} state @param {string} [key] @returns {import('./spellTypes').SpellChoice[]} */
 function blazeTrailChoices(state,key) {
@@ -46,6 +47,8 @@ function trailChoices(state,key) {
   const entity = mover?.target.kind === 'permanent' ? state.permanents[mover.at][mover.target.index] : state.avatars[seat];
   const unit = {...entity,card:pending.spell.card,owner:pending.spell.owner};
   const baseKey = 'blaze-trail', decisions = [], selections = [], path = [event.from];
+  /** @type {Record<string,string>} */
+  const pickLabels = {};
   // The controller bounds a drag by the steps left when it was queued; trails resolved since then shrink that budget.
   const effect = mover && entity?.cpuTurnEffect?.turn === `${state.turn}:${state.currentPlayer}` ? entity.cpuTurnEffect : null;
   const left = movementAllowance(state,unit)-(effect?.steps || 0);
@@ -73,7 +76,9 @@ function trailChoices(state,key) {
     const preferred = requested[step];
     const next = at === event.to && (!preferred || preferred === 'stop') ? null : options.find(o => o.at === preferred) || options.find(o => o.at === shortest);
     if (!options.length && at !== event.to) return [];
-    decisions.push({label:`Trail step ${step+1} from ${at}`,options:[...(at === event.to ? [{key:'stop',label:'Stop here'}] : []),...options.map(o => ({key:o.at,label:o.at,at:o.at}))]});
+    const stop = optToken(at,'stop');
+    if (at === event.to) pickLabels[stop] = 'Stop here';
+    decisions.push({label:`Trail step ${step+1} from ${at}`,options:[...(at === event.to ? [{key:'stop',label:'Stop here',at:stop}] : []),...options.map(o => ({key:o.at,label:o.at,at:o.at}))]});
     selections.push(next?.at || 'stop');
     if (!next) break;
     path.push(next.at); budget-=next.cost; spent+=next.cost;
@@ -86,6 +91,7 @@ function trailChoices(state,key) {
   // With a single cheapest route the default plan needs no prompt.
   const unique = !requested.length && !event.forced && !!route && !!mover && shortestRouteCount(state,event.from,event.to,unit,allowance) === 1;
   return [{key:requested.length ? projectileKey(baseKey,selections) : baseKey,label:`Fire trail: ${[...departed].join(' → ')}; 2 damage to each unit there`,
-    caster:{kind:'avatar',seat},target:null,operations,score:scoreOperations(state,seat,operations),...(unique ? {autoResolve:true} : {}),projectile:{baseKey,selections,decisions}}];
+    caster:{kind:'avatar',seat},target:null,operations,score:scoreOperations(state,seat,operations),...(unique ? {autoResolve:true} : {}),projectile:{baseKey,selections,decisions},
+    ...(Object.keys(pickLabels).length ? {pickLabels} : {})}];
 }
 module.exports = { blazeTrailChoices };

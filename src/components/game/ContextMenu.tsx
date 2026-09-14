@@ -53,7 +53,6 @@ import {
 } from "@/lib/game/store/types";
 import {
   getCellNumber,
-  parseCellKey,
   seatFromOwner,
   toCellKey,
   opponentOwner,

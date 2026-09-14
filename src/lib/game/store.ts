@@ -111,8 +111,8 @@ import { createRevealOverlaySlice } from "./store/revealOverlayState";
 import { createRiverGenesisSlice } from "./store/riverGenesisState";
 import { createSeaRaiderSlice } from "./store/seaRaiderState";
 import { createSearingTruthSlice } from "./store/searingTruthState";
-import { createSelfsameSimulacrumSlice } from "./store/selfsameSimulacrumState";
 import { createSeerSlice } from "./store/seerState";
+import { createSelfsameSimulacrumSlice } from "./store/selfsameSimulacrumState";
 import { createSessionSlice } from "./store/sessionState";
 import { createShapeshiftSlice } from "./store/shapeshiftState";
 import {

@@ -109,7 +109,8 @@ export default function ReplayViewerPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const matchId = params?.id as string;
-  const initialActionParam = searchParams?.get("t") ?? null;
+  // Only the ?t= present on first load seeds the start position
+  const initialActionParamRef = useRef(searchParams?.get("t") ?? null);
 
   const [recording, setRecording] = useState<MatchRecording | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,6 +153,7 @@ export default function ReplayViewerPage() {
           store.resetGameState();
           store.clearSnapshotsForNewMatch();
           useGameStore.setState({ showPlaymat: false, showPlaymatOverlay: true });
+          const initialActionParam = initialActionParamRef.current;
           const tParam = initialActionParam ? parseInt(initialActionParam, 10) : NaN;
           if (!isNaN(tParam) && tParam > 0 && tParam < data.recording.actions.length) {
             for (let i = 0; i <= tParam; i++) {

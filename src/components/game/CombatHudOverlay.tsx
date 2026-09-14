@@ -4,6 +4,8 @@ import { Icon } from "@iconify/react";
 import React, { useEffect, useRef, useState } from "react";
 import { RcButton } from "@/components/ui/rc-button";
 import { PLAYER_COLORS } from "@/lib/game/constants";
+import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
+import { attackTargetToken, attackerToken } from "@/lib/game/cpu/stationaryAttack";
 import { useGameStore, type CellKey, type Permanents } from "@/lib/game/store";
 import {
   getBoudiccaBonus,
@@ -982,6 +984,52 @@ export default function CombatHudOverlay() {
     return () => window.clearTimeout(id);
   }, [lastCombatSummary, setLastCombatSummary]);
 
+  // Stationary / Ranged targets are picked on the board: the candidates' cards (or the tile, for a site) light up and
+  // take the click; the attacker glows as the source. Cleared when the choice closes or moves on to the confirm step.
+  const targetPick = (() => {
+    if (!combatGuidesActive || !attackTargetChoice || attackConfirm || !attackTargetChoice.candidates.length) return null;
+    const state = { permanents };
+    const byToken = new Map(
+      attackTargetChoice.candidates.map((c) => [attackTargetToken(state, attackTargetChoice, c), c] as const),
+    );
+    const { attacker } = attackTargetChoice;
+    return {
+      request: `combat-target:${attacker.at}:${attacker.index}:${attackTargetChoice.ranged ? "ranged" : "melee"}`,
+      tokens: [...byToken.keys()],
+      source: attackerToken(state, attackTargetChoice),
+      byToken,
+    };
+  })();
+  const targetPickRequest = targetPick?.request ?? null;
+  const targetPickLayer = targetPick ? `${targetPick.tokens.join(" ")}|${targetPick.source}` : "";
+  const targetPickRef = useRef(targetPick);
+  targetPickRef.current = targetPick;
+  useEffect(() => {
+    if (!targetPickRequest) return;
+    const [tokens, source] = targetPickLayer.split("|");
+    const picker = useCpuBoardPicker.getState();
+    picker.configure(targetPickRequest, tokens ? tokens.split(" ") : []);
+    picker.setGlow(targetPickRequest, [], source ? [source] : []);
+    const unsubscribe = useCpuBoardPicker.subscribe((next, previous) => {
+      if (next.request !== targetPickRequest || !next.selected || next.selected === previous.selected) return;
+      const live = targetPickRef.current;
+      const choice = useGameStore.getState().attackTargetChoice;
+      const candidate = live?.byToken.get(next.selected);
+      if (!choice || !candidate) return;
+      setAttackConfirm({
+        tile: choice.tile,
+        ...(choice.ranged ? { ranged: true } : {}),
+        attacker: choice.attacker,
+        target: { kind: candidate.kind, at: candidate.at, index: candidate.index },
+        targetLabel: candidate.label,
+      });
+    });
+    return () => {
+      unsubscribe();
+      useCpuBoardPicker.getState().clear(targetPickRequest);
+    };
+  }, [targetPickRequest, targetPickLayer, setAttackConfirm]);
+
   const isMobileScreen = useSmallScreen();
 
   // Shared mobile-responsive bar classes
@@ -1092,31 +1140,12 @@ export default function CombatHudOverlay() {
         ) : attackTargetChoice && !attackConfirm ? (
           <div className={barLg}>
             {attackTargetChoice.ranged ? (
-              <>
-                <span className="text-rc-fg-muted">Ranged strike · pick a target</span>
-                {attackTargetChoice.candidates.map((c) => (
-                  <RcButton
-                    key={`${c.kind}:${c.at}:${c.index}`}
-                    variant="danger-soft"
-                    size="xs"
-                    className={`mx-1 ${btnSm}`}
-                    onClick={() =>
-                      setAttackConfirm({
-                        tile: attackTargetChoice.tile,
-                        ranged: true,
-                        attacker: attackTargetChoice.attacker,
-                        target: { kind: c.kind, at: c.at, index: c.index },
-                        targetLabel: c.label,
-                      })
-                    }
-                  >
-                    <span className="font-rc-display">{c.label}</span>
-                  </RcButton>
-                ))}
-              </>
+              <span className="text-rc-fg-muted" aria-live="polite">
+                Ranged strike · pick a target on the board
+              </span>
             ) : (
-              <span className="text-rc-fg-muted">
-                Select a target at{" "}
+              <span className="text-rc-fg-muted" aria-live="polite">
+                Pick a target on the board at{" "}
                 <span className="font-rc-display">T{tileNum}</span>
               </span>
             )}

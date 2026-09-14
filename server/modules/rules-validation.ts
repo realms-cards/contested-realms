@@ -285,6 +285,12 @@ export function validateAction(
     const idx = playerIds.indexOf(playerId);
     const meKey: SeatKey | null = idx === 0 ? "p1" : idx === 1 ? "p2" : null;
     const meNum: number | null = idx >= 0 ? idx + 1 : null;
+    // The human client adjudicates a CPU match (ability costs, stuns), so it may tap and
+    // untap the CPU's avatar and permanents; a CPU gets no such right over the human.
+    const isCpuId = (id: unknown) => typeof id === "string" && id.startsWith("cpu_");
+    const cpuIdx = isCpuId(playerId) ? -1 : playerIds.findIndex(isCpuId);
+    const cpuNum: number | null = cpuIdx >= 0 ? cpuIdx + 1 : null;
+    const cpuKey: SeatKey | null = cpuIdx === 0 ? "p1" : cpuIdx === 1 ? "p2" : null;
 
     const effectivePlayer =
       typeof (action as AnyRecord).currentPlayer === "number"
@@ -436,7 +442,7 @@ export function validateAction(
               )
                 ? !!nextItem.tapped
                 : prevTapped;
-              if (prevTapped !== nextTapped && owner !== meNum) {
+              if (prevTapped !== nextTapped && owner !== meNum && owner !== cpuNum) {
                 // Allow untapping opponent permanents during turn transition
                 const isTurnTransition =
                   typeof (action as AnyRecord).currentPlayer === "number" &&
@@ -520,7 +526,8 @@ export function validateAction(
         const patch: AnyRecord = avatarsPatch[k] || {};
         if (
           Object.prototype.hasOwnProperty.call(patch, "tapped") &&
-          k !== meKey
+          k !== meKey &&
+          k !== cpuKey
         ) {
           return {
             ok: false,

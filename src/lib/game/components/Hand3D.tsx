@@ -3,6 +3,7 @@
 import { useFrame, useThree, invalidate } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Group, PerspectiveCamera } from "three";
+import { useShallow } from "zustand/react/shallow";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { cardbackAtlasUrl, cardbackSpellbookUrl } from "@/lib/assets";
 import { useSound } from "@/lib/contexts/SoundContext";
@@ -26,6 +27,15 @@ import {
   TILE_SIZE,
 } from "@/lib/game/constants";
 import { DRAG_HOLD_MS } from "@/lib/game/constants";
+import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
+import {
+  handCardTone,
+  handPickFrom,
+  NO_HAND_PICK,
+  PICK_TONE_COLORS,
+  selectHandPick,
+} from "@/lib/game/cpu/handPilePicks";
+import { handToken } from "@/lib/game/cpu/pickTokens";
 import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
@@ -101,6 +111,18 @@ export default function Hand3D({
   const attackChoice = useGameStore((s) => s.attackChoice);
   const attackConfirm = useGameStore((s) => s.attackConfirm);
   const { playCardSelect } = useSound();
+  // CPU-match hand pick (e.g. the card to discard): candidates light up and a
+  // click picks the card instead of dragging, playing or opening a menu.
+  const actorKey = useGameStore((s) => s.actorKey);
+  const handPickSelector = useMemo(() => selectHandPick(owner), [owner]);
+  const handPickSlice = useCpuBoardPicker(useShallow(handPickSelector));
+  const handPick = useMemo(
+    () =>
+      showCardBacks || flatCards || (actorKey && actorKey !== owner)
+        ? NO_HAND_PICK
+        : handPickFrom(handPickSlice),
+    [showCardBacks, flatCards, actorKey, owner, handPickSlice],
+  );
 
   const hand = useMemo(() => zones?.[owner]?.hand ?? [], [zones, owner]);
   const { settings: graphicsSettings } = useGraphicsSettings();
@@ -468,7 +490,7 @@ export default function Hand3D({
       isXRPresenting;
     const targetShownCheck = isEdgePlacementCheck
       ? 1
-      : overCardsArea || mouseInZone
+      : handPick.active || overCardsArea || mouseInZone
         ? 1
         : 0;
     // Hand is always fully spread (handSpreadLerp is pinned to 1 below), so the
@@ -530,7 +552,10 @@ export default function Hand3D({
     // Reveal logic: edge hands always visible; overlay hands show on interaction
     // handVisibilityMode: null = default, "hidden" = force hide, "visible" = force show
     let targetShown: number;
-    if (!showCardBacks && castPlacementMode) {
+    if (!showCardBacks && handPick.active) {
+      // A hand card must be picked: keep the hand raised (also over mobile prompts).
+      targetShown = 1;
+    } else if (!showCardBacks && castPlacementMode) {
       // Hide hand during cast placement (user is clicking a tile)
       targetShown = 0;
     } else if (
@@ -787,6 +812,8 @@ export default function Hand3D({
     const minSpacing = CARD_SHORT * 0.5; // Tighter for large hands
     const spacingFactor = Math.max(0, Math.min(1, (8 - n) / 5)); // 1 at n≤3, 0 at n≥8
     let baseSpacing = minSpacing + (maxSpacing - minSpacing) * spacingFactor;
+    // During a hand pick every card is laid out as wide as the screen allows.
+    if (handPick.active) baseSpacing = maxSpacing;
 
     // Fit-to-width clamp: hand size is unbounded in Sorcery (e.g. Seelie Court +
     // fairies draws huge hands), so the fan can run past the screen edges and
@@ -876,7 +903,9 @@ export default function Hand3D({
       const x = (baseX + arrivalX) * fitScale;
 
       // Y position: arc + hover pop-up
-      const arcY = -Math.abs(Math.sin(angle)) * HAND_FAN_ARC_Y * 1.5;
+      const arcY = handPick.active
+        ? 0
+        : -Math.abs(Math.sin(angle)) * HAND_FAN_ARC_Y * 1.5;
       // Focus-based lift without sliding the fan
       // Scale by revealAmount so lift fades when collapsed
       const w = Math.max(0, 1 - Math.abs(i - focusLerp)); // 0..1 focus weight
@@ -908,8 +937,15 @@ export default function Hand3D({
         ? (n - Math.abs(i - half) + (onSpellSide ? 0.5 : 0)) * backsDepthStep
         : 0;
 
+      const pickLift =
+        sortedCard.instanceId &&
+        (handPick.candidates.has(sortedCard.instanceId) ||
+          handPick.selected === sortedCard.instanceId)
+          ? CARD_LONG * 0.1 * revealAmount
+          : 0;
       const y =
         arcY +
+        pickLift +
         liftFromFocus +
         CARD_LONG * 0.08 * hoverWeight +
         siteCollapsedLift +
@@ -947,7 +983,10 @@ export default function Hand3D({
         y,
         z,
         // Reduce rotation toward upright for focused cards
-        rot: isSelected ? 0 : rot * (1 - 0.6 * Math.max(w, hoverWeight)),
+        rot:
+          isSelected || handPick.active
+            ? 0
+            : rot * (1 - 0.6 * Math.max(w, hoverWeight)),
         scale,
         originalIndex,
         hoverWeight,
@@ -969,6 +1008,7 @@ export default function Hand3D({
     camera,
     size.width,
     size.height,
+    handPick,
   ]);
 
   // Clamp focus to hand size changes
@@ -1398,6 +1438,14 @@ export default function Hand3D({
         // Touch-selected card gets a border outline on mobile
         const isTouchSelected =
           isCoarsePointer && touchSelectedIndex === originalIndex;
+        const pickTone = showCardBacks
+          ? null
+          : handCardTone(handPick, c.instanceId);
+        const pickToken =
+          c.instanceId && (pickTone === "candidate" || pickTone === "selected")
+            ? handToken(owner, c.instanceId)
+            : null;
+        const pickDimmed = handPick.active && !pickToken;
         return (
           <group
             key={`${c.cardId}-${owner}-${i}`}
@@ -1416,6 +1464,21 @@ export default function Hand3D({
                 renderOrder={renderOrder + 10000 - 3}
               />
             )}
+            {/* CPU-match pick outline (amber candidate, green chosen, cyan source).
+                CardBorder lies flat; the group undoes that tilt for the upright hand card. */}
+            {pickTone ? (
+              <group rotation-x={Math.PI / 2}>
+                <CardBorder
+                  width={CARD_SHORT}
+                  height={CARD_LONG}
+                  rotationZ={cardRotationZ}
+                  elevation={0.03}
+                  color={PICK_TONE_COLORS[pickTone]}
+                  thickness={pickTone === "selected" ? 0.08 : 0.06}
+                  renderOrder={renderOrder + 10000 + 1}
+                />
+              </group>
+            ) : null}
             {/* Remote highlight glow */}
             {remoteHighlightColor ? (
               <CardGlow
@@ -1430,6 +1493,8 @@ export default function Hand3D({
             {/* Purple resolver outline for cards with custom automated behavior */}
             {!showCardBacks &&
               !remoteHighlightColor &&
+              !pickTone &&
+              !pickDimmed &&
               !resolversDisabled &&
               graphicsSettings.showResolverGlow &&
               hasCustomResolver(c.name) && (
@@ -1501,6 +1566,11 @@ export default function Hand3D({
                   }, 30); // Short debounce - onPointerOver cancels this when moving between cards
                 }}
                 onContextMenu={(e) => {
+                  if (handPick.active) {
+                    e.stopPropagation();
+                    e.nativeEvent.preventDefault();
+                    return;
+                  }
                   if (isDragging) return;
                   e.stopPropagation();
                   e.nativeEvent.preventDefault();
@@ -1515,6 +1585,11 @@ export default function Hand3D({
                   );
                 }}
                 onPointerDown={(e) => {
+                  if (handPick.active) {
+                    // The pick lands on click; swallow the press so no drag or tap-to-play starts.
+                    e.stopPropagation();
+                    return;
+                  }
                   if (isDragging) return; // don't start another drag
 
                   // XR mode: select card on pinch but defer dragFromHand to pointerUp
@@ -1568,7 +1643,7 @@ export default function Hand3D({
                 }}
                 onPointerMove={(e) => {
                   // Start drag only after a tiny hold and some pointer travel
-                  if (isHandDrag || isPileDrag) return;
+                  if (handPick.active || isHandDrag || isPileDrag) return;
                   const s = handDragStart.current;
                   if (!s || s.index !== originalIndex) return;
                   const held = Date.now() - s.time;
@@ -1593,7 +1668,20 @@ export default function Hand3D({
                     tapStartRef.current = null;
                   }
                 }}
+                onClick={(e) => {
+                  if (!handPick.active) return;
+                  e.stopPropagation();
+                  if (!pickToken) return;
+                  useCpuBoardPicker.getState().select(pickToken);
+                  try {
+                    playCardSelect();
+                  } catch {}
+                }}
                 onPointerUp={(e) => {
+                  if (handPick.active) {
+                    e.stopPropagation();
+                    return;
+                  }
                   // XR mode: short tap completes card selection for playing
                   // Long-press (>500ms) opens radial menu instead (VRBoardIntegration)
                   if (gl.xr.isPresenting) {
@@ -1689,7 +1777,15 @@ export default function Hand3D({
                   lit={false} // Unlit material - completely isolated from scene lighting
                   castShadow={false}
                   receiveShadow={false}
-                  opacity={isDraggedCard ? 0.6 : showCardBacks ? 1 : 0.9999} // Opponent: solid; Own: slightly < 1 for renderOrder
+                  opacity={
+                    isDraggedCard
+                      ? 0.6
+                      : showCardBacks
+                        ? 1
+                        : pickDimmed
+                          ? 0.35 // not a candidate of the current hand pick
+                          : 0.9999
+                  } // Opponent: solid; Own: slightly < 1 for renderOrder
                   textureUrl={
                     showCardBacks
                       ? ownerIsMagician

@@ -1,3 +1,4 @@
+import { unitToken } from "@/lib/game/cpu/pickTokens";
 import type { LocatedUnit } from "@/lib/game/cpu/spellTypes";
 import { getAttackTargets, getRangedTargets, isDisabled, unitsInRealm } from "@/lib/game/cpu/spells";
 import type { GameState, PlayerKey } from "@/lib/game/store/types";
@@ -48,6 +49,23 @@ export function stationaryAttack(state: GameState, from?: AttackSource): GameSta
     if (kind !== "site" && kind !== "avatar" && kind !== "permanent") return [];
     return [{...target,kind,label:`${nameAt(state,kind,target.at,target.index)} — Tile #${tile}`}];
   }),false);
+}
+
+type Choice = NonNullable<GameState["attackTargetChoice"]>;
+
+/** The board pick for a candidate: the unit's card (unit token), or the tile for a site. */
+export function attackTargetToken(state: Pick<GameState, "permanents">, choice: Choice, candidate: Candidate): string {
+  if (candidate.kind === "site") return candidate.at;
+  if (candidate.kind === "avatar") return unitToken({kind:"avatar",seat:choice.attacker.owner === 1 ? "p2" : "p1"});
+  const index = candidate.index ?? 0;
+  return unitToken({kind:"permanent",at:candidate.at,index,instanceId:state.permanents[candidate.at]?.[index]?.instanceId ?? null});
+}
+
+/** The attacking unit's card token, lit as the source while its target is picked. */
+export function attackerToken(state: Pick<GameState, "permanents">, choice: Choice): string {
+  const {attacker} = choice;
+  if (attacker.isAvatar) return unitToken({kind:"avatar",seat:attacker.avatarSeat ?? (attacker.owner === 1 ? "p1" : "p2")});
+  return unitToken({kind:"permanent",at:attacker.at,index:attacker.index,instanceId:state.permanents[attacker.at]?.[attacker.index]?.instanceId ?? attacker.instanceId ?? null});
 }
 
 /** Ranged X: tap to strike the first unit up to X steps away in a straight line. No movement, no defenders, no strike back. */

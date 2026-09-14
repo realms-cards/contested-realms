@@ -2099,7 +2099,8 @@ export type GameState = {
   cpuResolvingEffect?: boolean;
   cpuEffectContinuations?: import("@/lib/game/cpu/spellTypes").CpuEffectContinuation[];
   finishCpuEffect: (completion: import("@/lib/game/cpu/spellTypes").CpuEffectCompletion) => void;
-  cpuTriggerOptions?: {id: string; label: string}[];
+  /** Simultaneous triggers the actor orders: the triggering card (public or the actor's own) and the event it resolves. */
+  cpuTriggerOptions?: {id: string; label: string; card?: Pick<CardRef, "name"> & Partial<Pick<CardRef, "slug" | "cardId" | "instanceId" | "type">>; badge?: string}[];
   cpuChosenTrigger?: string | null;
   chooseCpuTrigger: (id: string) => void;
   completeCpuMagicManual: () => void;

@@ -11,6 +11,7 @@ import {
 } from "@/lib/game/boardShared";
 import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
+import { UnitPickCapture, UnitPickSpread } from "@/lib/game/components/UnitPickTarget";
 import {
   CARD_LONG,
   CARD_SHORT,
@@ -21,6 +22,12 @@ import {
   PLAYER_COLORS,
   TILE_SIZE,
 } from "@/lib/game/constants";
+import {
+  avatarUnitToken,
+  tileUnitTokens,
+  unitPickLayout,
+  useUnitPicks,
+} from "@/lib/game/cpu/usePickUnit";
 import type { BoardDragControls } from "@/lib/game/hooks/useBoardDragControls";
 import { useGameStore } from "@/lib/game/store";
 import type {
@@ -245,7 +252,16 @@ export function AvatarCard({
   avatarActions,
 }: AvatarCardProps) {
   const avatarTouchDragTimerRef = useRef<number | null>(null);
+  // CPU board picks: this avatar's tone, plus its tile's cards so a shared tile spreads the same way as the stack.
+  const pickTileKey = avatar.pos ? `${avatar.pos[0]},${avatar.pos[1]}` : "";
+  const pickTokens = avatar.pos
+    ? tileUnitTokens(pickTileKey, permanents[pickTileKey] || [], magicContext.avatars)
+    : [];
+  const unitPicks = useUnitPicks(pickTokens);
   if (!avatar.pos) return null;
+  const pickToken = avatarUnitToken(seat);
+  const unitPick = isSpectator ? null : (unitPicks.get(pickToken) ?? null);
+  const pickOffset = unitPickLayout(pickTokens, unitPicks).get(pickToken);
   const {
     dragAvatar,
     setDragAvatar,
@@ -738,6 +754,16 @@ export function AvatarCard({
           restitution={0}
           sensor
         />
+        <UnitPickSpread offset={pickOffset}>
+        {!hideAvatar && (
+          <UnitPickCapture
+            token={pickToken}
+            state={unitPick}
+            width={CARD_SHORT}
+            height={CARD_LONG}
+            rotationZ={rotZ}
+          />
+        )}
         {(isSel || highlight) && !isHandVisible && !hideAvatar && (
           <CardOutline
             width={CARD_SHORT}
@@ -861,6 +887,7 @@ export function AvatarCard({
         </group>
         {renderCounters()}
         {renderAttachedItems()}
+        </UnitPickSpread>
       </RigidBody>
     </group>
   );

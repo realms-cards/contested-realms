@@ -45,19 +45,6 @@ const ROLE_STYLE: Record<
   area: { opacity: 0.1, pulse: 0.04, useHighlight: true },
 };
 
-function avatarTile(
-  avatars: GameState["avatars"],
-  seat: "p1" | "p2",
-): TilePos | null {
-  const pos = avatars?.[seat]?.pos as [number, number] | null | undefined;
-  if (!Array.isArray(pos)) return null;
-  return { x: Number(pos[0]), y: Number(pos[1]) };
-}
-
-function samePos(a: TilePos | null, b: TilePos): boolean {
-  return !!a && a.x === b.x && a.y === b.y;
-}
-
 function computeRole(
   props: MagicTargetOverlayProps,
 ): TileRole | null {

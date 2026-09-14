@@ -238,6 +238,57 @@ describe("CPU resolution lifecycle", () => {
     expect(applied).toHaveBeenCalledTimes(1);
     bot.stop();
   });
+  it("never waits forever for an acknowledgment: a busy send fails, a silent patch resyncs and is then dropped", () => {
+    vi.useFakeTimers();
+    const bot = new BotClient({ serverUrl: "http://localhost:3010" });
+    const socket = io("http://localhost:3010", { autoConnect: false });
+    const emit = vi.spyOn(socket,"emit").mockReturnValue(socket), applied = vi.fn(), dropped = vi.fn(), later = vi.fn();
+    bot.socket = socket;
+    vi.spyOn(bot,"_hasHumanOpponent").mockReturnValue(true);
+    vi.spyOn(bot,"_maybeAct").mockImplementation(() => {});
+    try {
+      expect(bot._sendCpuAction({ phase: "Main" },applied,dropped)).toBe(true);
+      const action = emit.mock.calls[0][1].action;
+      expect(bot._sendCpuAction({ phase: "Main" },later,later)).toBe(false);
+      vi.advanceTimersByTime(8000);
+      expect(emit).toHaveBeenCalledWith("resyncRequest",{});
+      expect(dropped).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(8000);
+      expect(dropped).toHaveBeenCalledTimes(1);
+      expect(bot._inflightAction).toBeNull();
+      // A late acknowledgment of the dropped patch changes nothing.
+      bot._acknowledgeCpuAction(action.__cpuActionId);
+      expect(applied).not.toHaveBeenCalled();
+      expect(later).not.toHaveBeenCalled();
+      // A server rejection (or a resync without the action) drops it at once.
+      expect(bot._sendCpuAction({ phase: "Main" },applied,dropped)).toBe(true);
+      bot._dropCpuAction();
+      expect(dropped).toHaveBeenCalledTimes(2);
+    } finally { bot.stop(); }
+  });
+  it("answers an attack with no defenders when its defender move is dropped, instead of hanging", () => {
+    vi.useFakeTimers();
+    const bot = new BotClient({ serverUrl: "http://localhost:3010" });
+    const socket = io("http://localhost:3010", { autoConnect: false });
+    const emit = vi.spyOn(socket,"emit").mockReturnValue(socket);
+    bot.socket = socket;
+    bot.playerIndex = 1;
+    let dropMove: (() => void) | undefined;
+    vi.spyOn(bot,"_findBestDefender").mockReturnValue({ at: "2,2",index: 0,instanceId: "guard",owner: 2,to: "2,1",score: 5 });
+    vi.spyOn(bot,"_commitDefender").mockImplementation((...args: unknown[]) => {
+      dropMove = args[2] as () => void;
+      return { at: "2,1",index: 0,instanceId: "guard",owner: 2 };
+    });
+    const commits = () => emit.mock.calls.filter(([event,message]) => event === "message" && (message as {type?: string})?.type === "combatCommit")
+      .map(([,message]) => (message as {defenders: unknown[]}).defenders);
+    try {
+      bot._handleCombatMessage("attackDeclare",{ id: "cmb_1",attacker: { at: "2,1",index: 0,owner: 1 },target: { kind: "permanent",at: "2,1",index: 1 },tile: { x: 2,y: 1 } });
+      vi.advanceTimersByTime(800);
+      expect(commits()).toEqual([]);
+      dropMove?.();
+      expect(commits()).toEqual([[]]);
+    } finally { bot.stop(); }
+  });
   it("does not guess unsupported spell effects and waits for explicit manual completion", () => {
     const store = position();
     const unsupported: CardRef = {cardId:999,name:"Browse",type:"Magic"};

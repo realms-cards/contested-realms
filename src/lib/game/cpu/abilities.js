@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Shared with the Node CPU client. */
 const { enterScope, leaveScope, realmUnits, scopedTileLabel } = require('./evalScope');
-const { bodyOfWater, isDisabled, isWater, hasStealth, sameTarget, inRange, projectilePath, unitStats, scoreOperations } = require('./spells');
+const { handToken, unitToken } = require('./pickTokens');
+const { bodyOfWater, directionPick, isDisabled, isWater, hasStealth, sameTarget, inRange, unitStats, scoreOperations } = require('./spells');
 
 /** @param {Partial<import('./spellTypes').SpellState> & {phase?: string, cpuPendingTriggerCount?: number, cpuEffectContinuations?: unknown[]}} state
  * @param {import('../store/types').PlayerKey} seat
@@ -24,7 +25,7 @@ function choicesFor(state, seat) {
   const units = realmUnits(state), choices = [];
   const entity = u => u.target.kind === 'avatar' ? state.avatars[u.owner] : state.permanents[u.at][u.target.index];
   const canTap = u => !entity(u).tapped && !entity(u).summonedThisTurn && !isDisabled(state,u);
-  const add = (source,key,label,operations,picks) => choices.push({source,key,label,operations,caster:source.target,target:null,score:scoreOperations(state,seat,operations),...(picks ? {picks} : {})});
+  const add = (source,key,label,operations,picks,pickLabels) => choices.push({source,key,label,operations,caster:source.target,target:null,score:scoreOperations(state,seat,operations),...(picks ? {picks} : {}),...(pickLabels ? {pickLabels} : {})});
   const owner = seat === 'p1' ? 1 : 2;
   const sites = Object.entries(state.board.sites).filter(([,tile]) => tile.card && !tile.cpuNeutral);
   const fire = sites.filter(([,tile]) => tile.owner === owner).reduce((sum,[,tile]) => sum+Number(tile.card.thresholds?.fire || 0),0);
@@ -63,19 +64,23 @@ function choicesFor(state, seat) {
         ],[at]);
       }
     }
-    if (canTap(source)) state.permanents[source.at]?.forEach((item,index) => {
+    // With several boulders here, the boulder's card is clicked before its direction.
+    const boulders = canTap(source) ? (state.permanents[source.at] || []).filter(item => item.card.name === 'Rolling Boulder').length : 0;
+    if (boulders) state.permanents[source.at].forEach((item,index) => {
       if (item.card.name !== 'Rolling Boulder') return;
       const artifactId = item.instanceId || item.card.instanceId;
       if (!artifactId) return;
       const position = state.permanentPositions[artifactId]?.state;
       const region = position === 'submerged' ? 'underwater' : position === 'burrowed' ? 'underground' : state.board.sites[source.at]?.card ? 'surface' : 'void';
       if (region !== source.region) return;
+      const boulder = {kind:'permanent',at:source.at,index,instanceId:artifactId};
       for (const direction of ['N','E','S','W']) {
-        const roll = projectilePath(state,source.at,region,direction,1);
+        const {picks,pickLabels} = directionPick(source.at,direction);
         add(source,`boulder/${id}/${artifactId}/${direction}`,`${source.card.name}: tap to push Rolling Boulder ${direction}`,[
           {kind:'tapUnits',targets:[source.target]},
-          {kind:'rollBoulder',target:{kind:'permanent',at:source.at,index,instanceId:artifactId},direction,region},
-        ],roll.length ? [roll] : []);
+          {kind:'rollBoulder',target:boulder,direction,region},
+        // The board card's token comes from the item's own id (a slot without one), as PermanentStack draws it.
+        ],boulders>1 ? [unitToken({kind:'permanent',at:source.at,index,instanceId:item.instanceId}),...picks] : picks,pickLabels);
       }
     });
     if (source.card.name === 'Geomancer' && canTap(source) && state.zones[seat].atlas.length) {
@@ -100,14 +105,16 @@ function choicesFor(state, seat) {
           path.push(at);
           const hits = units.filter(unit => unit.at === at && unit.region === source.region && !(step === 0 && unit.owner === seat) && !hasStealth(state,unit));
           if (!hits.length) continue;
+          // A unit on the source's own location is hit from every direction: its card, then an arrow, tells those apart.
+          const aim = step === 0 ? directionPick(source.at,direction) : null;
           for (const hit of hits) if (pudge) add(source,`pudge/${id}/${direction}/${hit.target.kind === 'avatar' ? hit.owner : hit.target.instanceId}`,`Pudge Butcher: shoot ${direction}, drag ${hit.card.name} here, then choose whether to fight`,[
             {kind:'tapUnits',targets:[source.target]},
             {kind:'dragUnit',target:hit.target,path:path.slice(0,-1).reverse(),region:source.region},
             {kind:'offerFight',source:source.target,target:hit.target},
-          ],[at]);
+          ],[unitToken(hit.target),...(aim ? aim.picks : [])],aim?.pickLabels);
           else add(source,`flamecaller/${id}/${direction}/${hit.target.kind === 'avatar' ? hit.owner : hit.target.instanceId}`,`Flamecaller: banish all dead fire minions; shoot ${direction}, dealing ${amount} to ${hit.card.name}`,[
             {kind:'tapUnits',targets:[source.target]},{kind:'banishDeadFire',seat},{kind:'damageEvent',hits:[{target:hit.target,amount,element:'fire'}]},
-          ],[at]);
+          ],[unitToken(hit.target),...(aim ? aim.picks : [])],aim?.pickLabels);
           break;
         }
       }
@@ -120,7 +127,7 @@ function choicesFor(state, seat) {
         add(source,`jinn/${id}/${card.instanceId || index}`,`Nimbus Jinn: discard ${card.name}; deal 3 to another random unit here`,[
           {kind:'discard',seat,index,instanceId:card.instanceId,cardType:'spell'},
           {kind:'damage',targets,amount:3,random:true},
-        ]);
+        ],[handToken(seat,card.instanceId || String(index))]);
       });
     }
     if (source.card.name === 'Diluvian Kraken' && source.region === 'underwater' && canTap(source)) {
@@ -152,7 +159,7 @@ function choicesFor(state, seat) {
               {kind:'tapUnits',targets:[source.target,ally.target]},
               {kind:'discard',seat,index,instanceId:card.instanceId,cardType:'any'},
               {kind:'damageEvent',hits:targets.map(u => ({target:u.target,amount}))},
-            ],[at]);
+            ],[at,unitToken(ally.target),handToken(seat,card.instanceId || String(index))]);
           });
         }
       }
@@ -161,7 +168,7 @@ function choicesFor(state, seat) {
         const targetId = target.target.kind === 'avatar' ? target.owner : target.target.instanceId;
         add(source,`ballista/${id}/${allyId}/${targetId}`,`Siege Ballista: tap ${source.card.name} and ${ally.card.name}; deal 3 to ${target.card.name} at ${target.at}`,[
           {kind:'tapUnits',targets:[source.target,ally.target]}, {kind:'damageEvent',hits:[{target:target.target,amount:3}]},
-        ],[target.at]);
+        ],[unitToken(ally.target),unitToken(target.target)]);
       }
     }
   }

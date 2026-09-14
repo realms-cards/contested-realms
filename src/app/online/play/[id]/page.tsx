@@ -21,13 +21,13 @@ import { AnimistCastChoiceOverlay } from "@/components/game/AnimistCastChoiceOve
 import AnnualFairOverlay from "@/components/game/AnnualFairOverlay";
 import ArtifactCastOverlay from "@/components/game/ArtifactCastOverlay";
 import AssimilatorSnailOverlay from "@/components/game/AssimilatorSnailOverlay";
-import SelfsameSimulacrumOverlay from "@/components/game/SelfsameSimulacrumOverlay";
 import AssortedAnimalsOverlay from "@/components/game/AssortedAnimalsOverlay";
 import AtlanteanFateOverlay from "@/components/game/AtlanteanFateOverlay";
 import AttackHereButton from "@/components/game/AttackHereButton";
 import AudioControls from "@/components/game/AudioControls";
 import AutoResolveConfirmOverlay from "@/components/game/AutoResolveConfirmOverlay";
 import BabelTowerOverlay from "@/components/game/BabelTowerOverlay";
+import BanishedButton from "@/components/game/BanishedButton";
 import BetrayalOverlay from "@/components/game/BetrayalOverlay";
 import BlackMassOverlay from "@/components/game/BlackMassOverlay";
 import BrowseOverlay from "@/components/game/BrowseOverlay";
@@ -39,7 +39,6 @@ import CardPreview from "@/components/game/CardPreview";
 import CastPlacementBanner from "@/components/game/CastPlacementBanner";
 import ChaosTwisterOverlay from "@/components/game/ChaosTwisterOverlay";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
-import BanishedButton from "@/components/game/BanishedButton";
 import CollectionButton from "@/components/game/CollectionButton";
 import CombatHudOverlay from "@/components/game/CombatHudOverlay";
 import CommonSenseOverlay from "@/components/game/CommonSenseOverlay";
@@ -52,10 +51,10 @@ import DemonicContractOverlay from "@/components/game/DemonicContractOverlay";
 import DholChantsOverlay from "@/components/game/DholChantsOverlay";
 import DoomsdayCultOverlay from "@/components/game/DoomsdayCultOverlay";
 import EarthquakeOverlay from "@/components/game/EarthquakeOverlay";
-import FeastForCrowsOverlay from "@/components/game/FeastForCrowsOverlay";
 import { ElementChoiceOverlay } from "@/components/game/ElementChoiceOverlay";
 import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
 import EnhancedOnlineDraft3DScreen from "@/components/game/EnhancedOnlineDraft3DScreen";
+import FeastForCrowsOverlay from "@/components/game/FeastForCrowsOverlay";
 import FrontierSettlersOverlay from "@/components/game/FrontierSettlersOverlay";
 import GameToolbox from "@/components/game/GameToolbox";
 import GeomancerOverlay from "@/components/game/GeomancerOverlay";
@@ -69,6 +68,7 @@ import InquisitionSummonOverlay from "@/components/game/InquisitionSummonOverlay
 import { InteractionConsentDialog } from "@/components/game/InteractionConsentDialog";
 import InterrogatorChoiceOverlay from "@/components/game/InterrogatorChoiceOverlay";
 import KelpCavernOverlay from "@/components/game/KelpCavernOverlay";
+import KettletopLeprechaunOverlay from "@/components/game/KettletopLeprechaunOverlay";
 import KingswoodPoachersOverlay from "@/components/game/KingswoodPoachersOverlay";
 import LegionOfGallOverlay from "@/components/game/LegionOfGallOverlay";
 import LilithOverlay from "@/components/game/LilithOverlay";
@@ -94,7 +94,6 @@ import OnlineSealedDeckLoader from "@/components/game/OnlineSealedDeckLoader";
 import OnlineStatusBar from "@/components/game/OnlineStatusBar";
 import OverlayBackdrop from "@/components/game/OverlayBackdrop";
 import PathfinderPlayOverlay from "@/components/game/PathfinderPlayOverlay";
-import KettletopLeprechaunOverlay from "@/components/game/KettletopLeprechaunOverlay";
 import PigsOfTheSounderOverlay from "@/components/game/PigsOfTheSounderOverlay";
 import PileSearchDialog from "@/components/game/PileSearchDialog";
 import PiracyCastOverlay from "@/components/game/PiracyCastOverlay";
@@ -107,6 +106,7 @@ import RestoreUiButton from "@/components/game/RestoreUiButton";
 import RevealOverlay from "@/components/game/RevealOverlay";
 import { RiverGenesisOverlay } from "@/components/game/RiverGenesisOverlay";
 import SearingTruthOverlay from "@/components/game/SearingTruthOverlay";
+import SelfsameSimulacrumOverlay from "@/components/game/SelfsameSimulacrumOverlay";
 import ShapeshiftOverlay from "@/components/game/ShapeshiftOverlay";
 import PlayerStatusEffects from "@/components/game/StatusEffectIcons";
 // SeerScreen is now integrated into OnlineMulliganScreen
@@ -130,22 +130,27 @@ import { GameSoundEffects } from "@/lib/audio/gameSfx";
 import { soundManager } from "@/lib/audio/soundManager";
 import { useVideoOverlay } from "@/lib/contexts/VideoOverlayContext";
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
-import { MarqueeActionBar } from "@/lib/game/components/MarqueeActionBar";
-import {
-  MarqueeOverlayWithRef,
-  useMarqueeOverlayRef,
-} from "@/lib/game/components/MarqueeOverlay";
 import {
   detectHarbingerSeats,
   hasAnyHarbinger,
 } from "@/lib/game/avatarAbilities";
 import {
+  countSettledTextures,
+  getBoardAssetStatus,
+  getBoardAssetsServerVersion,
+  getBoardAssetsVersion,
+  isBoardEnvironmentReady,
+  resetBoardAssets,
+  subscribeToBoardAssets,
+} from "@/lib/game/boardReveal";
+import {
   computeTopdownFitDistance,
   phoneHudInsets,
 } from "@/lib/game/cameraFit";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
+import { preloadBoardEnvironment } from "@/lib/game/components/BoardEnvironment";
+import { useMarqueeOverlayRef } from "@/lib/game/components/MarqueeOverlay";
 import TextureCache from "@/lib/game/components/TextureCache";
-import { getStoredCardPreviewsEnabled } from "@/lib/game/store/uiState";
 import {
   MAT_PIXEL_W,
   MAT_PIXEL_H,
@@ -165,16 +170,7 @@ import {
   arePortalsFullyAssigned,
   needsPortalPhaseForHarbinger,
 } from "@/lib/game/store/portalState";
-import {
-  countSettledTextures,
-  getBoardAssetStatus,
-  getBoardAssetsServerVersion,
-  getBoardAssetsVersion,
-  isBoardEnvironmentReady,
-  resetBoardAssets,
-  subscribeToBoardAssets,
-} from "@/lib/game/boardReveal";
-import { preloadBoardEnvironment } from "@/lib/game/components/BoardEnvironment";
+import { getStoredCardPreviewsEnabled } from "@/lib/game/store/uiState";
 import { prefetchCardImages } from "@/lib/game/textures/prefetchCardImages";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { useSoatcPlayers } from "@/lib/hooks/useSoatcStatus";
@@ -2597,8 +2593,7 @@ export default function OnlineMatchPage() {
   const setCameraMode = useGameStore((s) => s.setCameraMode);
   const controlScheme = useGameStore((s) => s.controlScheme);
   const isTTS = controlScheme === "tts";
-  const { rectRef: marqueeRectRef, updateRect: updateMarqueeRect } =
-    useMarqueeOverlayRef();
+  const { updateRect: updateMarqueeRect } = useMarqueeOverlayRef();
 
   // Restore camera mode and playmat settings from API (authenticated users) or localStorage after hydration
   const settingsRestoredRef = useRef(false);

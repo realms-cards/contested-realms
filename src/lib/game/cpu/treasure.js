@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Shared with the Node CPU client. */
+const { drawToken } = require('./pickTokens');
 /** @param {import('./spellTypes').SpellState} state
  * @returns {{target:import('./spellTypes').UnitTarget,card:import('../store/types').CardRef,at:string,carried:boolean,region:string,owner:1|2}[]} */
 function treasures(state) {
@@ -23,7 +24,12 @@ function treasureChoices(state) {
   if (!pending || !event) return [];
   const seat = pending.spell.owner === 1 ? 'p1' : 'p2';
   const base = {caster:{kind:'avatar',seat},target:null,score:0};
-  if (event.kind === 'drawChoice') return [0,1,2].map(spells => ({...base,key:`draw/${spells}`,label:`Draw ${spells} spell${spells === 1 ? '' : 's'} and ${2-spells} site${spells === 1 ? '' : 's'}`,operations:[{kind:'drawCards',seat,spells,sites:2-spells}],score:state.zones[seat].spellbook.length>=spells && state.zones[seat].atlas.length>=2-spells ? 2+spells : -1000}));
+  if (event.kind === 'drawChoice') return [0,1,2].map(spells => {
+    // Clicking the piles builds the split ("draw:<seat>:<spells>-<sites>"), so each split is one token.
+    const split = drawToken(seat,spells,2-spells);
+    return {...base,key:`draw/${spells}`,label:`Draw ${spells} spell${spells === 1 ? '' : 's'} and ${2-spells} site${spells === 1 ? '' : 's'}`,operations:[{kind:'drawCards',seat,spells,sites:2-spells}],score:state.zones[seat].spellbook.length>=spells && state.zones[seat].atlas.length>=2-spells ? 2+spells : -1000,
+      picks:[split],pickLabels:{[split]:`${spells} spell${spells === 1 ? '' : 's'}, ${2-spells} site${2-spells === 1 ? '' : 's'}`}};
+  });
   if (event.kind !== 'treasurePlace' && event.kind !== 'treasureRecover') return [];
   const source = treasures(state).find(item => sameTarget(item.target,event.source));
   if (!source) return [{...base,key:'treasure/gone',label:'Treasure has left the realm',operations:[]}];

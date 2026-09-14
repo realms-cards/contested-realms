@@ -328,17 +328,18 @@ export default function Editor2DView({
   const sortedDeckGroups = useMemo(() => {
     if (!isSortingEnabled) return null;
     const groups = new Map<number, { pick: Pick3D; count: number }>();
-    const order: number[] = [];
+    const ordered: { pick: Pick3D; count: number }[] = [];
     for (const p of deckCards) {
       const existing = groups.get(p.card.cardId);
       if (existing) {
         existing.count++;
       } else {
-        groups.set(p.card.cardId, { pick: p, count: 1 });
-        order.push(p.card.cardId);
+        const group = { pick: p, count: 1 };
+        groups.set(p.card.cardId, group);
+        ordered.push(group);
       }
     }
-    return order.map((cid) => groups.get(cid)!);
+    return ordered;
   }, [deckCards, isSortingEnabled]);
 
   // Suppress unused warnings for batch operations (available for future toolbar)

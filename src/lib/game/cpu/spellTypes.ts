@@ -67,8 +67,14 @@ export interface DamageHit {
 }
 
 export interface SpellChoice {
-  /** Board-first selection: one entry per click needed to reach this choice, in order. An entry is a tile key "x,y" or an array of tile keys any of which counts (e.g. every tile along a projectile direction). Choices that need no click (e.g. "Gain 7 life") omit it or use []. Caster tiles are NOT included; the UI prepends the caster when choices differ by caster. */
+  /** Board-first selection: one entry per click needed to reach this choice, in order. An entry is a pick token (pickTokens.js: a tile "x,y", a board card "unit:…", a hand card "hand:…", a direction "dir:…", a pile "pile:…", a draw split "draw:…" or a tile-anchored button "opt:…") or an array of tokens any of which counts. Choices that need no click (e.g. "Gain 7 life") omit it or use []. Caster tiles are NOT included; the UI prepends the caster when choices differ by caster. */
   picks?: (string | string[])[];
+  /** Short button text for the opt/dir/pile/draw tokens used in this choice's picks or its decision options (e.g. {"opt:2,3:decline":"Skip"}). */
+  pickLabels?: Record<string, string>;
+  /** The card a choice is about when it is picked from a card row instead of the board (a random outcome, a Lucky Charm result). */
+  card?: { name: string; slug?: string | null; cardId?: number; instanceId?: string | null; type?: string | null };
+  /** Short text shown on `card` (e.g. "3 damage"). */
+  badge?: string;
   key: string;
   label: string;
   caster: NonNullable<PendingMagic["caster"]>;
@@ -85,7 +91,7 @@ export interface SpellChoice {
   projectile?: {
     baseKey: string;
     selections: string[];
-    /** `at` marks an option that a click on that board tile selects (internal cell key); it is unique within a decision, so options sharing a tile omit it and are picked from the list. */
+    /** `at` is the pick token a click selects this option with: a unit token for a unit, a tile for a location, an "opt:<x,y>:stop" button for stopping; unique within a decision. */
     decisions: { label: string; options: { key: string; label: string; at?: string }[] }[];
   };
 }

@@ -7,6 +7,7 @@ import { getSpellChoices, isWater } from "@/lib/game/cpu/spells";
 import { createGameStore } from "@/lib/game/store";
 import type { CardRef, GameState, PermanentItem } from "@/lib/game/store/types";
 import { LocalTransport } from "@/lib/net/localTransport";
+import { validateAction } from "../../../../server/modules/rules-validation";
 
 const card = (name: keyof typeof cards, id: string = name): CardRef => ({cardId:1,...cards[name],text:cards[name].rulesText,instanceId:id});
 const unit = (name: keyof typeof cards, owner: 1 | 2 = 1): PermanentItem => ({owner,card:card(name),instanceId:name,tapped:false});
@@ -182,6 +183,44 @@ describe("CPU activated abilities", () => {
     expect(isWater(store.getState(),"2,2")).toBe(false);
     expect(isWater(store.getState(),"3,2")).toBe(true);
     expect(store.getState().permanents["2,2"][0].skipNextUntap).toBe(true);
+  });
+  it("lets the human client tap the CPU Waveshaper, so the CPU cannot repeat its ability", () => {
+    const store = setup();
+    store.setState({currentPlayer:2,
+      avatars:{...store.getState().avatars,p2:{card:card("Waveshaper"),pos:[2,2],tapped:false}},
+      board:{...store.getState().board,sites:{...store.getState().board.sites,"1,2":{owner:1,card:card("Red Desert")}}},
+      permanents:{"1,2":[unit("Ogre Goons",1)]}});
+    const before = store.getState();
+    const game = {currentPlayer:2,phase:"Main",avatars:before.avatars,permanents:before.permanents,board:before.board};
+    const choice = abilityChoices(before,"p2").find(entry => entry.key.startsWith("waveshaper/") && entry.key.endsWith("/1,2"));
+    if (!choice) throw new Error("Missing CPU flood");
+    const patches: Parameters<GameState["trySendPatch"]>[0][] = [];
+    const send = store.getState().trySendPatch;
+    store.setState({trySendPatch:patch => { patches.push(patch); return send(patch); }});
+    store.getState().activateCpuAbility(choice.key,"p2","cpu_ability_test");
+    expect(store.getState().avatars.p2.tapped).toBe(true);
+    expect(abilityChoices(store.getState(),"p2").some(entry => entry.key.startsWith("waveshaper/"))).toBe(false);
+    // Only the tapped avatar's field is sent, and the server accepts it from the human adjudicating a CPU match.
+    const avatarPatches = patches.filter(patch => patch.avatars);
+    expect(avatarPatches.map(patch => patch.avatars)).toEqual([{p2:{tapped:true}}]);
+    const cpuMatch = {match:{playerIds:["human","cpu_bot"]}};
+    for (const patch of patches) expect(validateAction(game,patch,"human",cpuMatch).error ?? "").not.toMatch(/Cannot tap or untap/);
+    // Between people the same tap stays forbidden, and a CPU may not tap the human avatar.
+    expect(validateAction(game,avatarPatches[0],"human",{match:{playerIds:["human","rival"]}})).toEqual({ok:false,error:"Cannot tap or untap opponent avatar"});
+    const humanTap = {avatars:{p1:{tapped:true}}} as unknown as Parameters<typeof validateAction>[1];
+    expect(validateAction(game,humanTap,"cpu_bot",cpuMatch)).toEqual({ok:false,error:"Cannot tap or untap opponent avatar"});
+  });
+  it("sends only the buffed avatar's turn effect, which the server accepts", () => {
+    const store = setup();
+    const patches: Parameters<GameState["trySendPatch"]>[0][] = [];
+    const send = store.getState().trySendPatch;
+    store.setState({trySendPatch:patch => { patches.push(patch); return send(patch); }});
+    applySpellChoice(store.setState,store.getState,{key:"buff-test",label:"Movement +1",caster:{kind:"avatar",seat:"p1"},target:null,score:0,operations:[{kind:"buff",target:{kind:"avatar",seat:"p1"},power:0,movement:1}]});
+    expect(store.getState().avatars.p1.cpuTurnEffect).toMatchObject({power:0,movement:1});
+    const avatarPatches = patches.filter(patch => patch.avatars);
+    expect(avatarPatches.map(patch => Object.keys(patch.avatars ?? {}))).toEqual([["p1"]]);
+    const game = {currentPlayer:1,phase:"Main",avatars:store.getState().avatars,permanents:{},board:store.getState().board};
+    expect(validateAction(game,avatarPatches[0],"human",{match:{playerIds:["human","cpu_bot"]}})).toEqual({ok:true});
   });
   it("interrupts a Boulder roll before impact and rechecks the remaining path after the trigger", async () => {
     const store = setup();

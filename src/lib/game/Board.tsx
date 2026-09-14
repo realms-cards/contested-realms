@@ -16,6 +16,7 @@ import {
   STACK_MARGIN_Z,
   STACK_SPACING,
 } from "@/lib/game/boardShared";
+import { pendingOrigins } from "@/lib/game/cardAnimOrigins";
 import { AvatarCard } from "@/lib/game/components/AvatarCard";
 import BoardCursorLayer from "@/lib/game/components/BoardCursorLayer";
 import { BoardDragGhost } from "@/lib/game/components/BoardDragGhost";
@@ -37,7 +38,6 @@ import { useBoardHotkeys } from "@/lib/game/hooks/useBoardHotkeys";
 import { useRemoteCursorSystem } from "@/lib/game/hooks/useRemoteCursorSystem";
 import { useTTSHotkeys } from "@/lib/game/hooks/useTTSHotkeys";
 import { useTileDropHandler } from "@/lib/game/hooks/useTileDropHandler";
-import { pendingOrigins } from "@/lib/game/cardAnimOrigins";
 import type { CellKey } from "@/lib/game/store";
 import {
   useGameStore,

@@ -10,6 +10,9 @@ import type { CardRef, GameState, PendingMagic, PlayerKey } from "@/lib/game/sto
 import { getCellNumber } from "@/lib/game/store/utils/boardHelpers";
 import type { CustomMessage } from "@/lib/net/transport";
 
+/** How long the human client waits for the CPU to declare defenders before the attack goes ahead unblocked (the bot's own worst case is about 17 s). */
+export const CPU_DEFENDER_TIMEOUT_MS = 20000;
+
 /** The human client adjudicates CPU matches; tabletop stores are untouched. */
 export function installCpuController(store: StoreApi<GameState>) {
   const queue: PendingMagic[] = [];
@@ -17,6 +20,8 @@ export function installCpuController(store: StoreApi<GameState>) {
   let nextBatch = 0;
   let endQueued: string | null = null;
   let endRequested: string | null = null;
+  let defenderWait: {id: string; timer: ReturnType<typeof setTimeout>} | null = null;
+  const stopDefenderWait = () => { if (defenderWait) clearTimeout(defenderWait.timer); defenderWait = null; };
   const enqueue = (pending: PendingMagic,batch: number) => {
     batches.set(pending.id,batch);
     const first = queue.findIndex(event => batches.get(event.id) === batch);
@@ -67,7 +72,12 @@ export function installCpuController(store: StoreApi<GameState>) {
       if (seat === state.actorKey && candidates.length > 1) {
         const chosen = state.cpuChosenTrigger === CPU_TRIGGERS_IN_ORDER ? candidates[0] : candidates.find(candidate => candidate.id === state.cpuChosenTrigger);
         if (!chosen) {
-          const options = candidates.map(candidate => ({id:candidate.id,label:`${candidate.spell.card.name} — ${candidate.cpuEvent?.kind === "unitEnd" ? "end-of-turn projectile" : candidate.cpuEvent?.kind === "auraEnd" ? candidate.cpuEvent.counter ? "duration counter" : "end effect" : candidate.cpuEvent?.kind === "genesis" ? "Genesis" : candidate.cpuEvent?.kind === "fightChoice" ? "fight after arrival" : candidate.cpuEvent?.kind === "treasureRecover" ? "recover treasure" : candidate.cpuEvent?.kind === "treasurePlace" ? "underwater placement" : candidate.cpuEvent?.kind === "drawChoice" ? "choose draws" : candidate.cpuEvent?.kind === "randomChoice" ? "choose random outcome" : "fire trail"}`}));
+          // Shown as the triggering cards (all on the board or public: only the actor's own triggers are ordered here), badged with the event.
+          const options = candidates.map(candidate => {
+            const event = candidate.cpuEvent, {name,slug,cardId,instanceId,type} = candidate.spell.card;
+            const badge = event?.kind === "unitEnd" ? "end-of-turn projectile" : event?.kind === "auraEnd" ? event.counter ? "duration counter" : "end effect" : event?.kind === "genesis" ? "Genesis" : event?.kind === "fightChoice" ? "fight after arrival" : event?.kind === "treasureRecover" ? "recover treasure" : event?.kind === "treasurePlace" ? "underwater placement" : event?.kind === "drawChoice" ? "choose draws" : event?.kind === "randomChoice" ? "choose random outcome" : "fire trail";
+            return {id:candidate.id,label:`${name} — ${badge}`,card:{name,slug,cardId,instanceId,type},badge};
+          });
           if (JSON.stringify(state.cpuTriggerOptions) !== JSON.stringify(options)) store.setState({cpuTriggerOptions:options});
           return;
         }
@@ -100,6 +110,7 @@ export function installCpuController(store: StoreApi<GameState>) {
       batches.clear();
       endQueued = null;
       endRequested = null;
+      stopDefenderWait();
       if (state.cpuEffectContinuations?.length) store.setState({cpuEffectContinuations:[]});
       if (state.cpuPendingTriggerCount || state.cpuTriggerOptions?.length) store.setState({cpuPendingTriggerCount:0,cpuTriggerOptions:[],cpuChosenTrigger:null});
       if (useCpuReveals.getState().queue.length) useCpuReveals.getState().reset();
@@ -107,6 +118,22 @@ export function installCpuController(store: StoreApi<GameState>) {
     }
     const endKey = `${state.turn}:${state.currentPlayer}`;
     const restored = (state.cpuSnapshotRevision || 0) !== (previous.cpuSnapshotRevision || 0);
+    // The CPU answers an attack or intercept offer with combatCommit; if it never does (a disconnected or stalled bot),
+    // the attack goes ahead unblocked instead of waiting forever.
+    const combat = state.pendingCombat, defendingCpu: PlayerKey = state.actorKey === "p1" ? "p2" : "p1";
+    const awaiting = combat && combat.defenderSeat === defendingCpu && (combat.status === "declared" || combat.status === "defending") ? combat.id : null;
+    if (defenderWait && defenderWait.id !== awaiting) stopDefenderWait();
+    if (awaiting && !defenderWait) {
+      defenderWait = {id:awaiting,timer:setTimeout(() => {
+        defenderWait = null;
+        const current = store.getState(), pending = current.pendingCombat;
+        if (!pending || pending.id !== awaiting || (pending.status !== "declared" && pending.status !== "defending")) return;
+        const commit = {type:"combatCommit",id:pending.id,defenders:[],target:pending.target ?? null,tile:pending.tile,playerKey:defendingCpu,ts:Date.now()} as unknown as CustomMessage;
+        current.log("The CPU did not answer in time: the attack goes ahead unblocked");
+        current.receiveCustomMessage(commit);
+        current.transport?.sendMessage?.(commit);
+      },CPU_DEFENDER_TIMEOUT_MS)};
+    }
     /** Reveal a card the CPU just played from its hand (never the human's own plays). */
     const revealPlay = (card: CardRef, at: string, seat: PlayerKey, kind: "site" | "permanent") => {
       if (seat === state.actorKey) return;

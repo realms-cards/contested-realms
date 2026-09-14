@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Shared by the CommonJS bot and browser. */
 const { bestByScore, cellOf, facts, realmUnits, snapshotOf } = require('./evalScope');
+const { handToken, optToken, unitToken } = require('./pickTokens');
+
+/** @type {Record<string, string>} */
+const LAYER_NAMES = { surface: 'Surface', underwater: 'Underwater', underground: 'Underground', void: 'Void' };
 
 // Damage grids transcribed from data/beta/b_s/{cone_of_flame,major_explosion,craterize}_b_s.png.
 const CRATER = [[1,2,4,2,1],[2,4,7,4,2],[4,7,10,7,4],[2,4,7,4,2],[1,2,4,2,1]];
@@ -16,7 +20,7 @@ const MAJOR = [[3,5,3],[5,7,5],[3,5,3]];
  */
 function advancedSpellChoices(state, seat, name, origin, add, casterKey, selectionKey) {
   // Deferred import avoids executing the mutually shared helpers during module initialization.
-  const { inRange, isWater, hasStealth, scoreOperations, projectileKey } = require('./spells');
+  const { inRange, isWater, hasStealth, scoreOperations, projectileKey, directionPick, choiceCard } = require('./spells');
   // Shared read-only realm units of the active evaluation scope.
   const units = realmUnits(state);
   const sites = Object.keys(state.board.sites).filter(at => state.board.sites[at]?.card);
@@ -44,6 +48,8 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
     const id = unit => unit.target.kind === 'avatar' ? unit.owner : unit.target.instanceId || `${unit.at}:${unit.target.index}`;
     const plan = (first, requested) => {
       const chain = [first], selections = [], decisions = [];
+      /** @type {Record<string,string>} */
+      const pickLabels = {};
       for (let step=0;step<Math.floor(mana/2);step++) {
         const previous = chain[chain.length-1];
         const eligible = targetable.filter(u => !chain.includes(u) && inRange(previous.at,u.at,'nearby'));
@@ -52,15 +58,15 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
         const preferred = requested[step];
         const next = preferred === 'stop' ? null : eligible.find(u => id(u) === preferred) ||
           (scoreOf(best) > 2 ? best : null);
-        // A tile click names an option only when no other eligible unit shares that tile; the rest are picked from the list.
-        const onTile = new Map();
-        for (const u of eligible) onTile.set(u.at,(onTile.get(u.at) || 0)+1);
-        decisions.push({label:`After ${previous.card.name}: spend 2 additional mana or stop`,options:[{key:'stop',label:'Stop the chain'},...eligible.map(u => { const key = id(u), label = `${u.card.name} at ${u.at}`; return onTile.get(u.at) === 1 ? {key,label,at:u.at} : {key,label}; })]});
+        // Each link is clicked as its unit's card; stopping is a button at the last link.
+        const stop = optToken(previous.at,'stop');
+        pickLabels[stop] = 'Stop the chain';
+        decisions.push({label:`After ${previous.card.name}: spend 2 additional mana or stop`,options:[{key:'stop',label:'Stop the chain',at:stop},...eligible.map(u => ({key:id(u),label:`${u.card.name} at ${u.at}`,at:unitToken(u.target)}))]});
         selections.push(next ? id(next) : 'stop');
         if (!next) break;
         chain.push(next);
       }
-      return {chain,selections,decisions};
+      return {chain,selections,decisions,pickLabels};
     };
     for (const first of targetable.filter(u => inRange(origin.at,u.at,'nearby'))) {
       const suffix = `chain:${id(first)}`, baseKey = `${casterKey}/${suffix}`;
@@ -76,8 +82,10 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
       // Decisions are re-labelled into fresh objects by getSpellChoices; selections and operations stay per choice.
       const {chain,decisions} = planned, selections = [...planned.selections];
       const operations = [{kind:'spend',seat,amount:2*(chain.length-1)},{kind:'damageEvent',hits:chain.map(u => ({target:u.target,amount:2}))}];
-      const choice = add(suffix,`Chain from ${first.card.name}: ${chain.length} units; ${2*(chain.length-1)} additional mana`,first.target,operations,[first.at]);
+      const choice = add(suffix,`Chain from ${first.card.name}: ${chain.length} units; ${2*(chain.length-1)} additional mana`,first.target,operations,[unitToken(first.target)]);
       choice.projectile = {baseKey,selections,decisions};
+      // Shared by every caster's copy of this chain; never mutated.
+      if (decisions.length) choice.pickLabels = planned.pickLabels;
       if (requested.length) choice.key = projectileKey(baseKey,selections);
     }
     return true;
@@ -85,13 +93,13 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
   if (name === 'Cone of Flame') {
     const [ox,oy] = origin.at.split(',').map(Number);
     for (const [direction,dx,dy] of [['N',0,-1],['E',1,0],['S',0,1],['W',-1,0]]) {
-      const hits = [], wedge = [];
+      const hits = [];
       for (let step=1;step<=3;step++) for (let side=1-step;side<step;side++) {
         const x = ox+dx*step-dy*side, y = oy+dy*step+dx*side, at = `${x},${y}`;
-        if (x>=0 && y>=0 && x<state.board.size.w && y<state.board.size.h) wedge.push(at);
         for (const unit of units.filter(u => u.at === at && u.region === origin.region)) hits.push({ target: unit.target,amount: 7-2*step,element: 'fire' });
       }
-      add(direction,`Cone ${direction}: 5, 3, then 1 damage`,{ kind: 'projectile',direction },[{ kind: 'damageEvent',hits }],wedge.length ? [wedge] : []);
+      const {picks,pickLabels} = directionPick(origin.at,direction);
+      add(direction,`Cone ${direction}: 5, 3, then 1 damage`,{ kind: 'projectile',direction },[{ kind: 'damageEvent',hits }],picks).pickLabels = pickLabels;
     }
     return true;
   }
@@ -110,7 +118,7 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
       if (crater) {
         for (const {card,index} of discards) add(`${at}/${card.instanceId || index}`,`Discard ${card.name}; destroy ${at}; resolve impact`,{kind:'location',at},[
           {kind:'discard',seat,instanceId:card.instanceId,index}, {kind:'destroySite',at}, {kind:'damageGrid',at,grid:CRATER},
-        ],[at]);
+        ],[at,handToken(seat,card.instanceId || String(index))]);
       } else add(at,`Explosion centered at ${at}: 7 / 5 / 3 damage`,{kind:'location',at},[{kind:'damageEvent',hits}],[at]);
     }
     return true;
@@ -142,8 +150,9 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
   if (name === 'Raise Dead') {
     const outcomes = state.pendingMagic?.cpuRandomMinionOptions;
     if (outcomes?.length) {
+      // Every result offers the same tiles and layers; its card (shown in a card row) tells the results apart.
       outcomes.forEach((selected,index) => advancedSpellChoices({...state,pendingMagic:{...state.pendingMagic,cpuRandomMinion:selected,cpuRandomMinionOptions:undefined}},seat,name,origin,
-        (key,label,target,operations,picks) => add(`outcome-${index}/${key}`,`Lucky Charm result ${index+1}: ${label}`,target,operations,picks),casterKey,selectionKey));
+        (key,label,target,operations,picks) => Object.assign(add(`outcome-${index}/${key}`,`Lucky Charm result ${index+1}: ${label}`,target,operations,picks),{card:choiceCard(selected.card),badge:`Result ${index+1}`}),casterKey,selectionKey));
       return true;
     }
     const selected = state.pendingMagic?.spell.card.name === name ? state.pendingMagic.cpuRandomMinion : null;
@@ -156,7 +165,8 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
         // The effect summons without casting: no ownership, mana, or threshold restrictions.
         for (const region of site ? ['surface',isWater(state,at) ? 'underwater' : 'underground'] : ['void']) {
           if (site?.name === 'Mountain Pass' && region === 'surface' && units.some(u => u.at === at && u.region === 'surface' && u.target.kind === 'permanent')) continue;
-          add(`${at}/${region}`,`Summon ${selected.card.name} at ${at} (${region})`,{kind:'location',at},[{kind:'raise',seat,to:at,region,...selected}],[at]);
+          const layer = optToken(at,region);
+          add(`${at}/${region}`,`Summon ${selected.card.name} at ${at} (${region})`,{kind:'location',at},[{kind:'raise',seat,to:at,region,...selected}],[at,layer]).pickLabels = {[layer]:LAYER_NAMES[region]};
         }
       }
     }

@@ -1,14 +1,18 @@
 "use client";
 
+import { Text } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
-import { useMemo, useRef, useEffect, useLayoutEffect } from "react";
+import { useCallback, useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import * as THREE from "three";
+import { useShallow } from "zustand/react/shallow";
 import { cardbackAtlasUrl, cardbackSpellbookUrl } from "@/lib/assets";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { isMagician } from "@/lib/game/avatarAbilities";
 import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
+import CardBorder from "@/lib/game/components/CardBorder";
+import CardGlow from "@/lib/game/components/CardGlow";
 import CardPlane from "@/lib/game/components/CardPlane";
 import MaterialCardBack from "@/lib/game/components/MaterialCardBack";
 import {
@@ -17,6 +21,19 @@ import {
   CARD_THICK,
   TILE_SIZE,
 } from "@/lib/game/constants";
+import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
+import {
+  parseDrawSplits,
+  PICK_TONE_COLORS,
+  pileCanTake,
+  pileGlow,
+  pilePicks,
+  selectPilePick,
+  useDrawTally,
+  type DeckPile,
+  type PickTone,
+} from "@/lib/game/cpu/handPilePicks";
+import { pileToken } from "@/lib/game/cpu/pickTokens";
 import { SLEEVE_PRESETS } from "@/lib/game/sleevePresets";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
@@ -128,6 +145,134 @@ function PileBodies({
   );
 }
 
+const stopPick = (event: ThreeEvent<PointerEvent | MouseEvent>) =>
+  event.stopPropagation();
+const noPickRaycast = () => undefined;
+
+/**
+ * CPU-match pile pick (see handPilePicks.ts): outline + glow over one deck
+ * pile, a click target above the pile's own draw/drag mesh, and a draw counter
+ * badge that resets the tally when clicked. Mounted only while the pile is
+ * part of a pick, so an idle board keeps nothing extra; no frame loop.
+ */
+function PilePickOverlay({
+  width,
+  height,
+  rotationZ,
+  elevation,
+  textRotationZ,
+  tone,
+  count,
+  onPick,
+  onReset,
+}: {
+  width: number;
+  height: number;
+  rotationZ: number;
+  elevation: number;
+  textRotationZ: number;
+  tone: PickTone | null;
+  count: number;
+  onPick: (() => void) | null;
+  onReset: () => void;
+}) {
+  const color = tone ? PICK_TONE_COLORS[tone] : "#f59e0b";
+  const badgeRadius = Math.min(width, height) * 0.2;
+  // Badge sits on the pile's top-right corner as seen from the owner's seat.
+  const cornerSign = textRotationZ === 0 ? 1 : -1;
+  return (
+    <group>
+      {tone ? (
+        <>
+          <CardGlow
+            width={width + 0.1}
+            height={height + 0.1}
+            rotationZ={rotationZ}
+            elevation={elevation + 0.004}
+            color={color}
+            renderOrder={1100}
+          />
+          <CardBorder
+            width={width}
+            height={height}
+            rotationZ={rotationZ}
+            elevation={elevation + 0.006}
+            color={color}
+            thickness={tone === "selected" ? 0.07 : 0.05}
+            renderOrder={1101}
+          />
+        </>
+      ) : null}
+      {onPick ? (
+        <mesh
+          name="cpu-pick:pile"
+          rotation-x={-Math.PI / 2}
+          rotation-z={rotationZ}
+          position={[0, elevation + 0.01, 0]}
+          onPointerDown={stopPick}
+          onPointerUp={stopPick}
+          onContextMenu={(e: ThreeEvent<MouseEvent>) => {
+            e.stopPropagation();
+            e.nativeEvent.preventDefault();
+          }}
+          onClick={(e: ThreeEvent<MouseEvent>) => {
+            e.stopPropagation();
+            onPick();
+          }}
+        >
+          <planeGeometry args={[width * 1.08, height * 1.08]} />
+          <meshBasicMaterial
+            transparent
+            opacity={0}
+            depthWrite={false}
+            colorWrite={false}
+          />
+        </mesh>
+      ) : null}
+      {count > 0 ? (
+        <group
+          position={[
+            (cornerSign * width) / 2,
+            elevation + 0.02,
+            (-cornerSign * height) / 2,
+          ]}
+          rotation-x={-Math.PI / 2}
+        >
+          <group rotation-z={textRotationZ}>
+            <mesh
+              name="cpu-pick:pile-reset"
+              onPointerDown={stopPick}
+              onPointerUp={stopPick}
+              onClick={(e: ThreeEvent<MouseEvent>) => {
+                e.stopPropagation();
+                onReset();
+              }}
+            >
+              <circleGeometry args={[badgeRadius, 24]} />
+              <meshBasicMaterial color="#000000" transparent opacity={0.88} />
+            </mesh>
+            <mesh position={[0, 0, 0.001]} raycast={noPickRaycast}>
+              <ringGeometry args={[badgeRadius * 0.82, badgeRadius, 32]} />
+              <meshBasicMaterial color={color} />
+            </mesh>
+            <Text
+              position={[0, 0, 0.002]}
+              fontSize={badgeRadius * 1.2}
+              color="#ffffff"
+              anchorX="center"
+              anchorY="middle"
+              fontWeight={700}
+              raycast={noPickRaycast}
+            >
+              {String(count)}
+            </Text>
+          </group>
+        </group>
+      ) : null}
+    </group>
+  );
+}
+
 export interface Piles3DProps {
   matW: number;
   matH: number;
@@ -184,6 +329,55 @@ export default function Piles3D({
   // Intentionally unused in this component after layout refactor
   void _matW;
   void _matH;
+
+  // CPU-match pile picks: `pile:` tokens select a pile, `draw:` tokens are built by clicking the piles.
+  const actorKey = useGameStore((s) => s.actorKey);
+  const pilePickSelector = useMemo(() => selectPilePick(owner), [owner]);
+  const pilePick = useCpuBoardPicker(useShallow(pilePickSelector));
+  const pickEnabled = !noRaycast && (!actorKey || actorKey === owner);
+  const drawSplits = useMemo(
+    () => (pickEnabled ? parseDrawSplits(pilePick.draws, owner) : []),
+    [pickEnabled, pilePick.draws, owner],
+  );
+  const clickablePiles = useMemo(
+    () => (pickEnabled ? pilePicks(pilePick) : []),
+    [pickEnabled, pilePick],
+  );
+  const glowingPiles = useMemo(
+    () => (pickEnabled ? pileGlow(pilePick) : []),
+    [pickEnabled, pilePick],
+  );
+  const selectPickToken = useCallback((token: string) => {
+    useCpuBoardPicker.getState().select(token);
+    try {
+      playCardSelect();
+    } catch {}
+  }, [playCardSelect]);
+  const drawTally = useDrawTally(pilePick.request, drawSplits, selectPickToken);
+  const drawPick = drawSplits.length > 0;
+  const pileTone = (pile: DeckPile): PickTone | null => {
+    if (drawPick) {
+      const drawn =
+        pile === "spellbook" ? drawTally.tally.spells : drawTally.tally.sites;
+      if (drawTally.matched) return drawn > 0 ? "selected" : null;
+      if (pileCanTake(drawSplits, drawTally.tally, pile)) return "candidate";
+      return drawn > 0 ? "target" : null;
+    }
+    if (pilePick.selected === pileToken(owner, pile)) return "selected";
+    if (clickablePiles.includes(pile)) return "candidate";
+    return glowingPiles.includes(pile) ? "target" : null;
+  };
+  const pileAction = (pile: DeckPile): (() => void) | null => {
+    if (drawPick)
+      return pileCanTake(drawSplits, drawTally.tally, pile)
+        ? () => drawTally.add(pile)
+        : null;
+    return clickablePiles.includes(pile)
+      ? () => selectPickToken(pileToken(owner, pile))
+      : null;
+  };
+  // Text on the board faces its owner the same way the pile cards do.
+  const pickTextRotationZ = owner === "p1" ? 0 : Math.PI;
 
   const emptyPlayerZones = useMemo<PlayerZones>(
     () => ({
@@ -876,9 +1070,59 @@ export default function Piles3D({
                 )}
               </mesh>
             )}
+            {(key === "atlas" || key === "spellbook") &&
+            (pileTone(key) || pileAction(key)) ? (
+              <PilePickOverlay
+                width={w}
+                height={h}
+                rotationZ={pileRotZ}
+                elevation={
+                  cards.length > 0 ? topCardElevation + CARD_THICK : 0.002
+                }
+                textRotationZ={pickTextRotationZ}
+                tone={pileTone(key)}
+                count={
+                  drawPick
+                    ? key === "spellbook"
+                      ? drawTally.tally.spells
+                      : drawTally.tally.sites
+                    : 0
+                }
+                onPick={pileAction(key)}
+                onReset={drawTally.reset}
+              />
+            ) : null}
           </group>
         );
       })}
+      {/* Draw split progress ("1 / 2"), between the token pile and the atlas; click to start over. */}
+      {drawPick ? (
+        <group
+          position={[pilesX, 0.05, startZ + step * 4.05]}
+          rotation-x={-Math.PI / 2}
+        >
+          <group rotation-z={pickTextRotationZ}>
+            <Text
+              name="cpu-pick:draw-total"
+              fontSize={CARD_SHORT * 0.22}
+              color={drawTally.matched ? PICK_TONE_COLORS.selected : "#ffffff"}
+              anchorX="center"
+              anchorY="middle"
+              fontWeight={700}
+              outlineWidth={0.012}
+              outlineColor="#000000"
+              onPointerDown={stopPick}
+              onPointerUp={stopPick}
+              onClick={(e: ThreeEvent<MouseEvent>) => {
+                e.stopPropagation();
+                drawTally.reset();
+              }}
+            >
+              {`${drawTally.tally.spells + drawTally.tally.sites} / ${drawTally.total}`}
+            </Text>
+          </group>
+        </group>
+      ) : null}
     </group>
   );
 }

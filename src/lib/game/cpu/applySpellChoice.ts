@@ -122,7 +122,8 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
     const cpuTurnEffect = { turn, power: power+(previous?.power || 0), movement: movement+(previous?.movement || 0),blaze:blaze || previous?.blaze || false,...(previous?.steps ? {steps:previous.steps} : {}) };
     if (target.kind === "avatar") {
       const avatars = { ...get().avatars, [target.seat]: { ...entity, cpuTurnEffect } } as GameState["avatars"];
-      set({ avatars }); get().trySendPatch({ avatars });
+      // Only that avatar's changed field: sending the other avatar (with its tapped flag) makes the server reject the patch.
+      set({ avatars }); get().trySendPatch({ avatars: { [target.seat]: { cpuTurnEffect } } as GameState["avatars"] });
     } else if (found) {
       const items = [...get().permanents[found.at]];
       items[found.index] = { ...found.unit, cpuTurnEffect, version: (found.unit.version || 0)+1 };
@@ -315,7 +316,8 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
       for (const target of op.targets) {
         if (target.kind === "avatar") {
           const avatars = {...get().avatars,[target.seat]:{...get().avatars[target.seat],tapped:true}};
-          set({avatars}); get().trySendPatch({avatars});
+          // Only the tapped avatar's field (the server lets the human client adjudicating a CPU match tap the CPU's avatar).
+          set({avatars}); get().trySendPatch({avatars:{[target.seat]:{tapped:true}} as GameState["avatars"]});
         } else {
           const found = locate(target);
           if (!found) continue;

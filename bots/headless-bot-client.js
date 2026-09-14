@@ -16,6 +16,9 @@ const { moveUnit, mergePermanents } = require("../src/lib/game/cpu/move");
 const { tileLabel } = require("../src/lib/game/cpu/tileLabels");
 const { abilityLog, castLog, combatLog, endTurnLog, playLog } = require("./action-log");
 
+/** How long the bot waits for the server to acknowledge one of its patches before resyncing (then dropping it). */
+const CPU_ACTION_ACK_TIMEOUT_MS = 8000;
+
 // Lazy-loaded card database from data/cards_raw.json
 let _CARDS_DB = null;
 function _loadCardsDb() {
@@ -179,6 +182,8 @@ class BotClient {
     this._pendingCombats = new Map(); // combatId -> { meta, status, myRole }
     this._pendingResolutions = new Set();
     this._resolutionTimers = new Set();
+    this._inflightAction = null; // { id, onApplied, onDropped } while a patch awaits the server acknowledgment
+    this._inflightWatchdog = null;
     this._stopped = false;
     // Combat life tracking (separate from game state, which gets overwritten by server patches)
     this._combatLife = { p1: 20, p2: 20 };
@@ -437,7 +442,7 @@ class BotClient {
           this._reenforceSummoningSickness();
           this._resyncing = false;
           this._acknowledgeCpuAction(this._game.cpuActionReceipts?.[this._getMeKey()]);
-          if (this._inflightAction) this._inflightAction = null; // Snapshot did not contain that action.
+          if (this._inflightAction) this._dropCpuAction(); // Snapshot did not contain that action.
           this._maybeAct();
         }
       } catch (e) {
@@ -452,7 +457,7 @@ class BotClient {
       // Request a full state resync from the server
       try {
         this._pendingAction = false;
-        this._inflightAction = null;
+        this._dropCpuAction();
         this._resyncing = true;
         socket.emit("resyncRequest", {});
       } catch {}
@@ -574,6 +579,7 @@ class BotClient {
 
   stop() {
     this._stopped = true;
+    this._clearInflightWatchdog();
     this._inflightAction = null;
     for (const timer of this._resolutionTimers) clearTimeout(timer);
     this._resolutionTimers.clear();
@@ -1331,24 +1337,59 @@ class BotClient {
     return timer;
   }
 
-  _sendCpuAction(action, onApplied) {
-    if (this._stopped || !this.socket) return;
+  _sendCpuAction(action, onApplied, onDropped) {
+    if (this._stopped || !this.socket) return false;
     if (!this._hasHumanOpponent()) {
       this.socket.emit("action", { action });
       onApplied();
-      return;
+      return true;
     }
-    if (this._inflightAction) return;
+    if (this._inflightAction) return false;
     const id = `cpu_action_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
-    this._inflightAction = { id, onApplied };
+    this._inflightAction = { id, onApplied, onDropped };
     this.socket.emit("action", { action: { ...action, __cpuActionId: id } });
+    // A rejected or lost patch is never acknowledged. Resync (which acknowledges or drops it), and if even that
+    // stays silent, drop it, instead of blocking every later action and leaving an attack waiting for defenders.
+    const watch = (stage) => {
+      this._inflightWatchdog = setTimeout(() => {
+        this._inflightWatchdog = null;
+        if (this._stopped || this._inflightAction?.id !== id || !this.socket) return;
+        if (stage === 0) {
+          this._resyncing = true;
+          this.socket.emit("resyncRequest", {});
+          watch(1);
+          return;
+        }
+        this._resyncing = false;
+        this._dropCpuAction();
+        this._maybeAct();
+      }, CPU_ACTION_ACK_TIMEOUT_MS);
+    };
+    watch(0);
+    return true;
   }
 
   _acknowledgeCpuAction(id) {
     const pending = this._inflightAction;
     if (!pending || typeof id !== "string" || pending.id !== id || this._stopped) return;
+    this._clearInflightWatchdog();
     this._inflightAction = null;
     pending.onApplied();
+  }
+
+  /** Forget the in-flight action without its acknowledgment (rejected, missing from a resync, timed out) and tell its sender. */
+  _dropCpuAction() {
+    const pending = this._inflightAction;
+    this._clearInflightWatchdog();
+    this._inflightAction = null;
+    if (pending && !this._stopped) {
+      try { pending.onDropped?.(); } catch {}
+    }
+  }
+
+  _clearInflightWatchdog() {
+    if (this._inflightWatchdog) clearTimeout(this._inflightWatchdog);
+    this._inflightWatchdog = null;
   }
 
   _trackResolutionMessage(type, payload) {
@@ -2743,17 +2784,17 @@ class BotClient {
     return choices[0]?.score > 0 ? choices[0] : null;
   }
 
-  _commitDefender(choice, onApplied) {
+  _commitDefender(choice, onApplied, onDropped) {
     const unit = this._game.permanents[choice.at]?.[choice.index];
     if (!unit || unit.instanceId !== choice.instanceId) return null;
     const moved = moveUnit(this._game, choice.at, choice.index, choice.to);
     if (!moved) return null;
     const defender = { at: choice.to, index: moved.index, instanceId: unit.instanceId, owner: unit.owner };
-    this._sendCpuAction(moved.patch, () => {
+    const sent = this._sendCpuAction(moved.patch, () => {
       if (!this._hasHumanOpponent()) this._mergeGamePatch(moved.patch);
       onApplied?.(defender);
-    });
-    return defender;
+    }, onDropped);
+    return sent ? defender : null;
   }
   /**
    * Handle incoming combat messages from the server.
@@ -2797,7 +2838,8 @@ class BotClient {
               playerKey: meKey,
               ts: Date.now(),
             });
-            if (!bestDefender || !this._commitDefender(bestDefender, defender => commit([defender]))) commit([]);
+            // A defender move that never lands (busy, rejected, lost in a resync) still answers the attack, unblocked.
+            if (!bestDefender || !this._commitDefender(bestDefender, defender => commit([defender]), () => commit([]))) commit([]);
           } catch {}
         }, 800);
         break;
@@ -3160,8 +3202,15 @@ class BotClient {
 
       // DEBUG: Log game state before acting
       if (this._hasHumanOpponent()) {
-        const ability = abilityChoices(this._game,meKey).sort((a,b) => b.score-a.score)[0];
+        // An ability that taps its own source is used at most once per source per turn. If its tap never
+        // lands (a rejected patch), retrying would only repeat it up to the action cap and skip the rest of the turn.
+        if (this._abilityTaps?.turnKey !== turnKey) this._abilityTaps = { turnKey, sources: new Set() };
+        const sourceKey = choice => `${choice.source.card.instanceId || choice.source.card.name}@${choice.source.at}`;
+        const ability = abilityChoices(this._game,meKey).filter(choice => !this._abilityTaps.sources.has(sourceKey(choice))).sort((a,b) => b.score-a.score)[0];
         if (ability && ability.score > 0) {
+          if (ability.operations.some(op => op.kind === "tapUnits" && op.targets.some(target => cpuSpells.sameTarget(target, ability.source.target)))) {
+            this._abilityTaps.sources.add(sourceKey(ability));
+          }
           const id = `cpu_ability_${Date.now()}_${Math.random().toString(36).slice(2)}`;
           this._pendingResolutions.add(id);
           this._turnActionCount.set(turnKey,actionCount+1);

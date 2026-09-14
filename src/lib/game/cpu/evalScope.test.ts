@@ -24,10 +24,10 @@ function crowdedRealm(): SpellState {
     players:{p1:{life:20,lifeState:"alive",mana:0},p2:{life:20,lifeState:"alive",mana:0}},zones:{p1:zones(),p2:zones()}};
 }
 
-/** FNV-1a over the serialized choices, without the board-pick metadata (picks, decision option `at`) this pin does not cover. */
+/** FNV-1a over the serialized choices, without the board-pick metadata (picks, decision option `at`, a choice's pickLabels / card / badge) this pin does not cover. */
 function digest(value: unknown) {
   const text = JSON.stringify(value,function (this: unknown, key: string, field: unknown) {
-    return key === "picks" || (key === "at" && typeof this === "object" && this !== null && "key" in this && "label" in this) ? undefined : field;
+    return key === "picks" || (["at","pickLabels","card","badge"].includes(key) && typeof this === "object" && this !== null && "key" in this && "label" in this) ? undefined : field;
   });
   let hash = 0x811c9dc5;
   for (let i=0;i<text.length;i++) hash = Math.imul(hash ^ text.charCodeAt(i),0x01000193);
