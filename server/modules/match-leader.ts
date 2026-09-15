@@ -1638,7 +1638,9 @@ export function createMatchLeaderService(deps: MatchLeaderDeps) {
           });
         }
 
-        if (match.playerIds.some(id => isCpuPlayerId(id))) {
+        // The human client resolves end-of-turn triggers; a bot-vs-bot match (self-play) has no one
+        // to answer, so its turns pass straight through.
+        if (match.playerIds.some(id => isCpuPlayerId(id)) && match.playerIds.some(id => !isCpuPlayerId(id))) {
           patchToApply = cpuEndPhasePatch(baseForMerge,patchToApply,!isCpuPlayerId(playerId)) as MatchPatch;
         }
         const mergedGame = deepMergeReplaceArrays(

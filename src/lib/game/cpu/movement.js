@@ -18,6 +18,8 @@ function movementSteps(state,from,unit,origin = from) {
 /** @param {import('./spellTypes').SpellState} state @param {string} from @param {import('../store/types').PermanentItem} unit @param {string} origin */
 function stepsFrom(state,from,unit,origin) {
   const text = cardText(unit.card), layer = state.permanentPositions?.[unit.instanceId || unit.card.instanceId]?.state || 'surface';
+  // Server snapshots carry board.sites without board.size (the bot's live state); the realm is 5x4.
+  const size = state.board.size || { w: 5, h: 4 };
   if (/\bImmobile\b/.test(text)) return [];
   if (unit.card.type !== 'Avatar' && state.board.sites[from]?.card && affectedByAura(state.permanents,from,'Entangle Terrain')) return [];
   if ((state.board.sites[from]?.cpuImmobileUntil || 0)>state.turn) return [];
@@ -32,13 +34,13 @@ function stepsFrom(state,from,unit,origin) {
     if (/only move themselves sideways/.test(text) && dy !== 0) continue;
     const nx=x+dx;
     let ny=y+dy;
-    if (unit.card.name === 'Polar Bears') ny = (ny+state.board.size.h)%state.board.size.h;
+    if (unit.card.name === 'Polar Bears') ny = (ny+size.h)%size.h;
     const at = `${nx},${ny}`, destination = state.board.sites[at]?.card;
-    if (nx<0 || ny<0 || nx>=state.board.size.w || ny>=state.board.size.h) continue;
+    if (nx<0 || ny<0 || nx>=size.w || ny>=size.h) continue;
     if (!destination && (!voidwalk || unit.card.type === 'Avatar')) continue;
     // An oversized unit steps with all four of its locations: each must be on the board and able to hold it.
     const cells = occupiedCells(unit.card.name,at);
-    if (cells.length > 1 && cells.some(cell => { const [cx,cy] = cell.split(',').map(Number); return cx>=state.board.size.w || cy>=state.board.size.h || (!state.board.sites[cell]?.card && !voidwalk); })) continue;
+    if (cells.length > 1 && cells.some(cell => { const [cx,cy] = cell.split(',').map(Number); return cx>=size.w || cy>=size.h || (!state.board.sites[cell]?.card && !voidwalk); })) continue;
     if (layer === 'burrowed' && (!destination || isWater(state,at))) continue;
     if (layer === 'submerged' && (!destination || !isWater(state,at))) continue;
     if (dx && dy && (!destination || !site)) continue;

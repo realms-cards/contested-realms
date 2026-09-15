@@ -3,7 +3,7 @@ const cpuSpells = require("../../src/lib/game/cpu/spells");
 const { enterScope, leaveScope } = require("../../src/lib/game/cpu/evalScope");
 const { recordAirCast } = require("../../src/lib/game/cpu/castHistory");
 const { reachableCells } = require("../../src/lib/game/cpu/movement");
-const { moveUnit } = require("../../src/lib/game/cpu/move");
+const { moveUnit, mergePermanents } = require("../../src/lib/game/cpu/move");
 
 // Per-call / per-node diagnostics (candidate summaries, movement options, site placement) are off
 // by default because they ran for every node of the search tree. Set CPU_ENGINE_DEBUG=1 to print
@@ -125,6 +125,7 @@ function loadTheta() {
       w_life: 0.8,
       w_lethal_now: 10.0, // Increased: prioritize lethal
       w_opp_lethal_next: -4.5,
+      w_opp_threat: -0.5, // One-ply opponent reply (estimateOppThreat): damage, kills and site hits it can take next turn
       w_atk: 0.5,
       w_hp: 0.2,
       w_threats_my: 0.7,
@@ -202,9 +203,31 @@ function mergeReplaceArrays(dst, src) {
   return out;
 }
 
-function applyPatch(state, patch) {
+// tests/bot/engine-search-budget.js instruments this function by its exact text (both engines it
+// compiles must contain it once); the delta handling lives in applyPatch below.
+function applyPatchRaw(state, patch) {
   const next = mergeReplaceArrays(state || {}, patch || {});
   return next;
+}
+
+function applyPatch(state, patch) {
+  const next = applyPatchRaw(state, patch);
+  // Unit moves are delta patches: the source cell keeps its remaining items plus `__remove`
+  // tombstones for the movers (the multiplayer protocol). Replacing the array verbatim left
+  // cardless tombstones on the simulated board, and the first rules helper to read
+  // `item.card.name` threw, which ended the whole decision. Merge those cells the way the
+  // bot's live state does (identity-aware, honouring the tombstones); plain full-array cells
+  // keep the replacement semantics. `next` is never written to (copy-on-write invariant).
+  if (!patch || !patch.permanents || typeof patch.permanents !== "object") return next;
+  const deltas = {};
+  const base = { ...(next.permanents || {}) };
+  const before = (state && state.permanents) || {};
+  for (const [at, items] of Object.entries(patch.permanents)) {
+    if (!Array.isArray(items) || !items.some((item) => item && item.__remove)) continue;
+    deltas[at] = items;
+    base[at] = before[at] || []; // mergeReplaceArrays already swapped in the delta; merge onto the original cell
+  }
+  return Object.keys(deltas).length ? { ...next, permanents: mergePermanents(base, deltas) } : next;
 }
 
 function seatNum(seat) {
@@ -1904,6 +1927,75 @@ function sumBoardStats(state, seat) {
 // Damage the opponent could deliver to our avatar on their next turn:
 // their units within one move of our avatar (tapped or not — they untap at
 // the start of their turn) plus their avatar if it is adjacent.
+// One-ply opponent reply. Next turn every enemy unit untaps, then each takes its best single
+// option within reach (1 step + Movement +X; Airborne also moves diagonally; terrain ignored):
+// damage my avatar, kill one of my units, or hit one of my sites. A target my untapped units
+// could defend (their power, with the target's own strike back, meets the attacker's defence) is
+// worth half to the attacker, so keeping a guard untapped shows up in the score, and tapping it
+// to attack has a visible cost. Returns the summed option values and the avatar damage alone.
+function movementBonus(card) {
+  const m = String((card && (card.rulesText || card.text)) || "").match(/Movement\s*\+\s*(\d+)/i);
+  return m ? Number(m[1]) || 0 : 0;
+}
+function estimateOppThreat(state, seat, lifeMy) {
+  const myNum = seatNum(seat), oppNum = seatNum(otherSeat(seat)), opp = otherSeat(seat);
+  const per = (state && state.permanents) || {};
+  const sites = (state && state.board && state.board.sites) || {};
+  const myPos = getAvatarPos(state, seat);
+  const mine = [], enemies = [];
+  for (const cellKey of Object.keys(per)) {
+    const pos = parseCellKey(cellKey);
+    if (!pos) continue;
+    const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
+    for (const p of arr) {
+      if (!p || !p.card || p.attachedTo) continue;
+      const type = String(p.card.type || "").toLowerCase();
+      if (type.includes("aura") || type.includes("artifact") || type.includes("site") || type.includes("magic")) continue;
+      const atk = unitPower(state, cellKey, p);
+      const def = Math.max(0, (Number(p.card.defence || p.card.defense) || 0) - (Number(p.damage) || 0));
+      const entry = { x: pos.x, y: pos.y, atk, def, tapped: !!p.tapped, cost: Number(p.card.cost) || 1,
+        airborne: getCardKeywords(p.card).has("airborne"), steps: 1 + movementBonus(p.card) };
+      if (Number(p.owner) === myNum) mine.push(entry);
+      else if (Number(p.owner) === oppNum && atk > 0) enemies.push(entry);
+    }
+  }
+  const oppAv = (state && state.avatars && state.avatars[opp]) || {};
+  const oppPos = getOpponentAvatarPos(state, seat);
+  enemies.push({ x: oppPos[0], y: oppPos[1], atk: Number(oppAv.card && oppAv.card.attack) || 1, def: 99, tapped: false, cost: 0, airborne: false, steps: 1 });
+  const mySites = [];
+  for (const key of Object.keys(sites)) {
+    const t = sites[key], pos = parseCellKey(key);
+    if (t && t.card && !t.cpuNeutral && Number(t.owner) === myNum && pos) mySites.push(pos);
+  }
+  const reach = (e, x, y) => (e.airborne ? Math.max(Math.abs(e.x - x), Math.abs(e.y - y)) : Math.abs(e.x - x) + Math.abs(e.y - y)) <= e.steps;
+  const guardAt = (x, y, except) => mine.reduce((sum, m) => sum + (m !== except && !m.tapped && Math.abs(m.x - x) + Math.abs(m.y - y) <= 1 ? m.atk : 0), 0);
+  const dead = new Set();
+  let value = 0, avatarDamage = 0;
+  for (const e of enemies) {
+    let best = 0, bestKill = null, bestIsAvatar = false;
+    if (reach(e, myPos[0], myPos[1])) {
+      let v = Math.min(e.atk, Math.max(1, lifeMy));
+      if (guardAt(myPos[0], myPos[1], null) >= e.def) v *= 0.5;
+      if (v > best) { best = v; bestIsAvatar = true; bestKill = null; }
+    }
+    for (const m of mine) {
+      if (dead.has(m) || !reach(e, m.x, m.y) || e.atk < Math.max(1, m.def)) continue;
+      let v = m.cost + 2;
+      if (guardAt(m.x, m.y, m) + m.atk >= e.def) v *= 0.5;
+      if (v > best) { best = v; bestKill = m; bestIsAvatar = false; }
+    }
+    for (const s of mySites) {
+      if (!reach(e, s.x, s.y)) continue;
+      const v = e.atk * 0.7;
+      if (v > best) { best = v; bestKill = null; bestIsAvatar = false; }
+    }
+    value += best;
+    if (bestIsAvatar) avatarDamage += e.atk;
+    if (bestKill) dead.add(bestKill);
+  }
+  return { value, avatarDamage };
+}
+
 function estimateOppReachableDamage(state, seat) {
   const opp = otherSeat(seat);
   const oppNum = seatNum(opp);
@@ -2459,7 +2551,8 @@ function extractFeatures(prevState, nextState, seat) {
   const myStats = sumBoardStats(nextState, me);
   const oppStats = sumBoardStats(nextState, opp);
   // Lethal threat: at death's door (life <= 0) any reachable damage kills
-  const oppReachable = estimateOppReachableDamage(nextState, me);
+  const oppThreat = estimateOppThreat(nextState, me, lifeMy);
+  const oppReachable = Math.max(estimateOppReachableDamage(nextState, me), oppThreat.avatarDamage);
   const oppLethalNext = oppReachable >= Math.max(1, lifeMy) ? 1 : 0;
 
   return {
@@ -2478,6 +2571,7 @@ function extractFeatures(prevState, nextState, seat) {
     on_curve: onCurve,
     lethal_now: winCond.canDealLethal ? 1 : 0,
     opp_lethal_next: oppLethalNext,
+    opp_threat: oppThreat.value,
     removal_in_hand: 0,
     engines_online: 0,
     sweeper_risk: 0,
@@ -2518,6 +2612,7 @@ function evalFeatures(f, w) {
   s +=
     (w.w_lethal_now || 0) * f.lethal_now +
     (w.w_opp_lethal_next || 0) * f.opp_lethal_next;
+  s += (w.w_opp_threat || 0) * (f.opp_threat || 0);
   s +=
     (w.w_engine_online || 0) * f.engines_online +
     (w.w_sweeper_risk || 0) * f.sweeper_risk;
@@ -2556,6 +2651,7 @@ function evalFeaturesWithBreakdown(f, w) {
   breakdown.lethal =
     (w.w_lethal_now || 0) * f.lethal_now +
     (w.w_opp_lethal_next || 0) * f.opp_lethal_next;
+  breakdown.opp_threat = (w.w_opp_threat || 0) * (f.opp_threat || 0);
   breakdown.engines = (w.w_engine_online || 0) * f.engines_online;
   breakdown.sweeper_risk = (w.w_sweeper_risk || 0) * f.sweeper_risk;
   breakdown.advance = (w.w_advance || 0) * (f.advance || 0);
@@ -3019,8 +3115,13 @@ function generateCandidates(state, seat, options = {}) {
     return true;
   };
   const previewWouldOverrun = (spell) => {
-    if (!budget || Date.now() + estimateSpellPreviewMs(budget, spell) <= budget.deadline) return false;
-    budget.cut = true;
+    // Previews stop at the earlier preview deadline, so refinement keeps a share of the budget.
+    // Past that share but inside the hard deadline the skip is `previewCut`: the root list is
+    // reported as truncated, but a refinement that merely lacks spell candidates is still kept.
+    if (!budget) return false;
+    const eta = Date.now() + estimateSpellPreviewMs(budget, spell);
+    if (eta <= (budget.previewDeadline || budget.deadline)) return false;
+    if (eta > budget.deadline) budget.cut = true; else budget.previewCut = true;
     return true;
   };
   const timedSpellPatch = (from, spell) => {
@@ -3262,6 +3363,7 @@ function generateCandidates(state, seat, options = {}) {
 // A legal decision is always returned: a deterministic action first, else the best scored
 // candidate (pass is always generated last and scored), else endTurnPatch.
 const HARD_DEADLINE_FACTOR = 2;
+const PREVIEW_SHARE = 0.6;
 
 function search(state, seat, theta, rng, options) {
   const start = Date.now();
@@ -3275,7 +3377,9 @@ function search(state, seat, theta, rng, options) {
   const deadline = start + Math.floor(budgetMs * HARD_DEADLINE_FACTOR);
   const outOfTime = () => Date.now() >= deadline;
   // Shared with generateCandidates and bestChildValue: `cut` is set whenever work is skipped.
-  const budget = { deadline, cut: false };
+  // Spell previews (the expensive, uninterruptible part) only start in the first 60% of the time;
+  // on boards full of spellcasters they otherwise consumed the whole budget and nothing got refined.
+  const budget = { deadline, cut: false, previewDeadline: start + Math.floor(budgetMs * HARD_DEADLINE_FACTOR * PREVIEW_SHARE) };
   let truncatedAt = null; // first stage the deadline cut short: "generate" | "refine"
 
   // T100: Check for deterministic actions FIRST (bypass scoring for obvious plays)
@@ -3307,15 +3411,22 @@ function search(state, seat, theta, rng, options) {
   });
   const list = collectStats ? genResult.candidates : genResult;
   const generationStats = collectStats ? genResult.stats : null;
-  if (budget.cut) truncatedAt = "generate";
+  if (budget.cut || budget.previewCut) truncatedAt = "generate";
 
   // T011: Get strategic modifiers for phase-based strategy
   const strategicModifiers = getStrategicModifiers(state, seat, thetaUse);
 
   const scored = [];
+  let skipped = 0;
+  let lastSkipError = null;
   // Every generated candidate is scored, deadline or not (see HARD_DEADLINE_FACTOR).
   for (let i = 0; i < list.length; i++) {
     const p = list[i];
+    // A candidate whose simulation throws is dropped, never the whole decision: an error that
+    // escapes search() makes the bot pass its turn.
+    try { scoreCandidate(p); } catch (e) { skipped++; lastSkipError = (e && e.message) || String(e); }
+  }
+  function scoreCandidate(p) {
     const next = applyPatch(state, p);
     const f = extractFeatures(state, next, seat);
     let s = evalFeatures(f, w);
@@ -3625,7 +3736,13 @@ function search(state, seat, theta, rng, options) {
         break;
       }
       const root = scored[i];
+      // Pass ends the bot's turn, so its only follow-up is its own pass child (the same board,
+      // scored the same). Refining it against the full candidate list made "pass now, act later"
+      // outscore acting, more so the more ready units there were (every action taps something,
+      // pass taps nothing).
+      if (root.actionType === "pass") { root.refined = root.score + gamma * root.score; continue; }
       budget.cut = false;
+      budget.previewCut = false;
       const refinedTail = bestChildValue(
         root.state,
         root.features,
@@ -3690,7 +3807,7 @@ function search(state, seat, theta, rng, options) {
       ? `deadline ${deadline - start}ms reached during ${truncatedAt}, took ${timeMs}ms`
       : `${timeMs}ms`;
     console.log(
-      `[Engine] search: ${timing}; scored ${scored.length}/${list.length} candidates, refined ${refinedCount}, nodes ${nodes}, depth ${depthReached}; chose ${chosenLabel}`
+      `[Engine] search: ${timing}; scored ${scored.length}/${list.length} candidates${skipped ? ` (${skipped} skipped: ${lastSkipError})` : ""}, refined ${refinedCount}, nodes ${nodes}, depth ${depthReached}; chose ${chosenLabel}`
     );
   } catch {}
   function summarizeChosenCards(patch) {

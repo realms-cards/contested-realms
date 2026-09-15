@@ -1442,6 +1442,8 @@ class BotClient {
         ? mergePermanents(this._game.permanents || {}, patch.permanents) : null;
       this._game = merge({ ...this._game }, patch);
       if (permanents) this._game.permanents = permanents;
+      // The server never sends board.size; the shared rules helpers (movement, triggers) read it.
+      if (this._game.board && !this._game.board.size) this._game.board = { ...this._game.board, size: { w: 5, h: 4 } };
       this._syncLifeFromGame();
       // Track turn changes
       if (typeof this._game.currentPlayer === "number") {
@@ -2923,7 +2925,11 @@ class BotClient {
             });
             // A defender move that never lands (busy, rejected, lost in a resync) still answers the attack, unblocked.
             if (!bestDefender || !this._commitDefender(bestDefender, defender => commit([defender]), () => commit([]))) commit([]);
-          } catch {}
+          } catch (e) {
+            // An unanswered attack stalls the match: log the cause and still answer, unblocked.
+            try { console.warn("[Bot Combat] defender selection failed:", (e && e.stack) || e); } catch {}
+            try { this.socket.emit("message", { type: "combatCommit", id: payload.id, defenders: [], target: payload.target, tile: payload.tile, playerKey: meKey, ts: Date.now() }); } catch {}
+          }
         }, 800);
         break;
       }
@@ -3586,7 +3592,7 @@ class BotClient {
             return; // avoid running the legacy heuristic path
           }
         } catch (e) {
-          console.log("[Bot] AI engine failed:", e.message || e);
+          console.log("[Bot] AI engine failed:", (e && e.stack) || e.message || e);
         }
       }
       if (this._hasHumanOpponent()) {
