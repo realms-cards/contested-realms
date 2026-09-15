@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { memo, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { CodexTooltip } from "@/components/collection/CodexTooltip";
 import { RcButton } from "@/components/ui/rc-button";
 import { useCodex } from "@/contexts/CodexContext";
@@ -384,8 +385,10 @@ function CollectionCardInner({
         </div>
       </div>
 
-      {/* Mobile Fullscreen Modal */}
-      {showMobileModal && (
+      {/* Mobile Fullscreen Modal. Portaled to <body> so the app shell's
+          stacking context cannot put it under the nav header. */}
+      {showMobileModal &&
+        createPortal(
         <div
           className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[rgba(6,10,20,0.94)] p-4"
           onClick={() => setShowMobileModal(false)}
@@ -557,8 +560,9 @@ function CollectionCardInner({
               finish={card.finish}
             />
           </div>
-        </div>
-      )}
+        </div>,
+          document.body,
+        )}
 
       {/* Card Detail Overlay */}
       {showDetail && (

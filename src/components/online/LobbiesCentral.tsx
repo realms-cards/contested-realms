@@ -7,6 +7,7 @@ import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { VoiceOutgoingRequest } from "@/app/online/online-context";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/badge";
 import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
 import type { SoatcStatus } from "@/lib/hooks/useSoatcStatus";
@@ -122,9 +123,12 @@ function TournamentMatchesModal({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className={`absolute inset-0 ${BACKDROP}`} onClick={onClose} />
-      <div className="relative rc-panel w-full max-w-3xl p-5 text-rc-fg">
+    <Modal
+      onClose={onClose}
+      backdropClassName={BACKDROP}
+      className="w-full max-w-3xl"
+    >
+      <div className="rc-panel thin-scrollbar max-h-[90vh] overflow-y-auto p-5 text-rc-fg">
         <div className="flex items-center justify-between mb-2">
           <div className="font-rc-display text-[22px] leading-none text-rc-fg-strong">
             {data?.tournament?.name
@@ -369,7 +373,7 @@ function TournamentMatchesModal({
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1725,12 +1729,12 @@ export default function LobbiesCentral({
       )}
 
       {overlayOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className={`absolute inset-0 ${BACKDROP}`}
-            onClick={() => setOverlayOpen(false)}
-          />
-          <div className="relative rc-panel w-full max-w-md p-5 text-rc-fg">
+        <Modal
+          onClose={() => setOverlayOpen(false)}
+          backdropClassName={BACKDROP}
+          className="w-full max-w-md"
+        >
+          <div className="rc-panel thin-scrollbar max-h-[90vh] overflow-y-auto p-5 text-rc-fg">
             <div className="flex items-center justify-between">
               <div className="font-rc-display text-[22px] leading-none text-rc-fg-strong">
                 Create Match
@@ -1837,17 +1841,17 @@ export default function LobbiesCentral({
               </div>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Tournament Creation Overlay */}
       {tournamentsEnabled && tournamentOverlayOpen && onCreateTournament && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className={`absolute inset-0 ${BACKDROP}`}
-            onClick={() => setTournamentOverlayOpen(false)}
-          />
-          <div className="relative rc-panel w-full max-w-md p-5 text-rc-fg">
+        <Modal
+          onClose={() => setTournamentOverlayOpen(false)}
+          backdropClassName={BACKDROP}
+          className="w-full max-w-md"
+        >
+          <div className="rc-panel thin-scrollbar max-h-[90vh] overflow-y-auto p-5 text-rc-fg">
             <div className="flex items-center justify-between">
               <div className="font-rc-display text-[22px] leading-none text-rc-fg-strong">
                 Create Tournament
@@ -2543,15 +2547,21 @@ export default function LobbiesCentral({
               </RcButton>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Tournament Settings Modal */}
       {tournamentsEnabled && settingsModalOpen && editingTournament && (
-        <div
-          className={`fixed inset-0 ${BACKDROP} z-50 flex items-center justify-center p-4`}
+        <Modal
+          onClose={() => {
+            setSettingsModalOpen(false);
+            setEditingTournament(null);
+          }}
+          closeOnBackdrop={false}
+          backdropClassName={BACKDROP}
+          className="w-full max-w-md"
         >
-          <div className="rc-panel w-full max-w-md text-rc-fg">
+          <div className="rc-panel thin-scrollbar max-h-[90vh] overflow-y-auto text-rc-fg">
             <div className="p-6">
               <h3 className="mt-0 mb-4 font-rc-display text-[22px] leading-none text-rc-fg-strong">
                 Tournament Settings
@@ -2573,15 +2583,18 @@ export default function LobbiesCentral({
               />
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* End Tournament Confirmation Modal */}
       {tournamentsEnabled && endTournamentConfirm && (
-        <div
-          className={`fixed inset-0 ${BACKDROP} z-50 flex items-center justify-center p-4`}
+        <Modal
+          onClose={() => setEndTournamentConfirm(null)}
+          closeOnBackdrop={false}
+          backdropClassName={BACKDROP}
+          className="w-full max-w-md"
         >
-          <div className="rc-panel w-full max-w-md text-rc-fg">
+          <div className="rc-panel text-rc-fg">
             <div className="p-6">
               <h3 className="mt-0 mb-4 font-rc-display text-[22px] leading-none text-rc-fg-strong">
                 End Tournament
@@ -2612,7 +2625,7 @@ export default function LobbiesCentral({
               </div>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Tournament Matches Modal */}

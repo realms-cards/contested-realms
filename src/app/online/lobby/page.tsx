@@ -1993,12 +1993,12 @@ function LobbyPageContent({
 
         {/* Leave Match confirmation dialog */}
         {leaveConfirmOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div
-              className="absolute inset-0 bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px]"
-              onClick={() => setLeaveConfirmOpen(false)}
-            />
-            <div className="rc-panel relative w-full max-w-md p-5">
+          <Modal
+            onClose={() => setLeaveConfirmOpen(false)}
+            backdropClassName="bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px]"
+            className="w-full max-w-md"
+          >
+            <div className="rc-panel p-5">
               <div className="font-rc-display text-[26px] leading-none text-rc-fg-strong">
                 Leave match
               </div>
@@ -2030,7 +2030,7 @@ function LobbyPageContent({
                 </RcButton>
               </div>
             </div>
-          </div>
+          </Modal>
         )}
 
         {/* Social and Chat row */}
@@ -2065,12 +2065,12 @@ function LobbyPageContent({
         </div>
         {/* Match Configuration Overlay (Host) */}
         {isHost && configOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div
-              className="absolute inset-0 bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px]"
-              onClick={() => setConfigOpen(false)}
-            />
-            <div className="relative rc-panel w-full max-w-xl p-5">
+          <Modal
+            onClose={() => setConfigOpen(false)}
+            backdropClassName="bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px]"
+            className="w-full max-w-xl"
+          >
+            <div className="rc-panel thin-scrollbar max-h-[90vh] overflow-y-auto p-5">
               <div className="flex items-center justify-between">
                 <div className="font-rc-display text-[26px] leading-none text-rc-fg-strong">
                   Match Configuration
@@ -3072,7 +3072,7 @@ function LobbyPageContent({
                 </div>
               </div>
             </div>
-          </div>
+          </Modal>
         )}
 
         {/* end Social and Chat row */}
@@ -3221,8 +3221,12 @@ function LobbyPageContent({
 
       {/* SOATC Tournament Invite Ineligibility Modal */}
       {showIneligibleModal && (
-        <div className="fixed inset-0 bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px] flex items-center justify-center z-50 p-4">
-          <div className="rc-panel w-full max-w-md p-6">
+        <Modal
+          closeOnBackdrop={false}
+          backdropClassName="bg-[rgba(6,10,20,0.82)] backdrop-blur-[4px]"
+          className="w-full max-w-md"
+        >
+          <div className="rc-panel p-6">
             <div className="flex items-start gap-3 mb-4">
               <AlertCircle className="w-6 h-6 text-rc-warning shrink-0 mt-0.5" />
               <div>
@@ -3297,7 +3301,7 @@ function LobbyPageContent({
               </RcButton>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </AppShell>
   );
