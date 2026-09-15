@@ -369,10 +369,17 @@ export function SiteCard({
         ax === tileX &&
         ay === tileY;
     } catch {}
-    if (isEnemySite && onTile && sameTileAsAttacker) {
+    // Rules-computed candidates (attack buttons) are the only legal targets; a move-and-attack lists none.
+    const candidate = attackTargetChoice.candidates.find(
+      (c) => c.kind === "site" && c.at === tileKey,
+    );
+    const legal = attackTargetChoice.candidates.length
+      ? !!candidate
+      : isEnemySite && onTile && sameTileAsAttacker;
+    if (legal) {
       const label = site.card?.name || "Site";
       setAttackConfirm({
-        tile: attackTargetChoice.tile,
+        tile: candidate?.tile ?? attackTargetChoice.tile,
         attacker: attackTargetChoice.attacker,
         target: { kind: "site", at: tileKey, index: null },
         targetLabel: label,

@@ -1,5 +1,10 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
+import { CacheKeys, invalidateCache } from "@/lib/cache/redis-cache";
+import {
+  buildDeckLoadSnapshot,
+  type DeckLoadSnapshot,
+} from "@/lib/decks/external-deck-resolver";
 import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { prisma } from "@/lib/prisma";
 import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
@@ -249,12 +254,36 @@ export async function POST(
       }
     }
 
+    // Constructed: freeze a loadable copy of the submitted deck so edits to the
+    // saved deck after submission don't change what is played in matches
+    let constructedSnapshot: DeckLoadSnapshot | null = null;
+    if (format === "constructed" && isComplete && preparationData.constructed) {
+      constructedSnapshot = await buildDeckLoadSnapshot(
+        preparationData.constructed.deckId,
+      );
+      if (!constructedSnapshot) {
+        return new Response(
+          JSON.stringify({ error: "Selected deck not found" }),
+          { status: 400 },
+        );
+      }
+    }
+
     // Merge with existing preparation data
     const currentPrepData =
       (registration.preparationData as Record<string, unknown>) || {};
     const updatedPrepData = {
       ...currentPrepData,
       ...preparationData,
+      ...(constructedSnapshot && preparationData.constructed
+        ? {
+            constructed: {
+              ...preparationData.constructed,
+              deckSnapshot: constructedSnapshot,
+              snapshotAt: new Date().toISOString(),
+            },
+          }
+        : {}),
       // Mark ready for lobby list UX once a valid deck is submitted
       ready: isComplete
         ? true
@@ -278,6 +307,13 @@ export async function POST(
     console.log(
       `Preparation updated for player ${principal.id}: ${newStatus}, deckSubmitted: ${deckSubmitted}`,
     );
+
+    // The cached tournament detail carries this viewer's deck snapshot
+    try {
+      await invalidateCache(
+        `${CacheKeys.tournaments.detail(id)}:user:${principal.id}`,
+      );
+    } catch {}
 
     // Broadcast preparation progress
     try {

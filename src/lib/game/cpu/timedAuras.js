@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Shared CPU rule semantics. */
 const { enterScope, leaveScope, realmUnits } = require('./evalScope');
-const { scoreOperations } = require('./spells');
+const { occupies, scoreOperations } = require('./spells');
 
 /** @param {import('./spellTypes').SpellState} state @returns {import('./spellTypes').SpellChoice[]} */
 function auraEndChoices(state) {
@@ -29,14 +29,14 @@ function choicesFor(state) {
     return [add('tick',`${name}: turn counter ${ticks}/3`,[{kind:'auraUpdate',target,ticks,dispel:ticks>=3}])];
   }
   if (name === 'Wildfire') {
-    const hits = units.filter(unit => unit.at === at).map(unit => ({target:unit.target,amount:3,element:'fire'}));
+    const hits = units.filter(unit => occupies(unit,at)).map(unit => ({target:unit.target,amount:3,element:'fire'}));
     const visited = [...new Set([...(item.cpuAuraVisited || []),at])];
     const destinations = [[x-1,y],[x+1,y],[x,y-1],[x,y+1]].filter(([x,y]) => x>=0 && y>=0 && x<state.board.size.w && y<state.board.size.h)
       .map(([x,y]) => `${x},${y}`).filter(at => !visited.includes(at));
     if (!destinations.length) return [add('dispel','Wildfire: deal 3 here, then dispel (no unvisited adjacent location)',[{kind:'damageEvent',hits},{kind:'auraUpdate',target,dispel:true}])];
     return destinations.map(to => add(`wildfire/${to}`,`Wildfire: deal 3 here, then move to ${to}`,[{kind:'damageEvent',hits},{kind:'auraUpdate',target,to,visited:[...visited,to]}],[to]));
   }
-  const affected = units.filter(unit => { const [ux,uy] = unit.at.split(',').map(Number); return ux>=x && ux<=x+1 && uy>=y && uy<=y+1; });
+  const affected = units.filter(unit => (unit.cells || [unit.at]).some(cell => { const [ux,uy] = cell.split(',').map(Number); return ux>=x && ux<=x+1 && uy>=y && uy<=y+1; }));
   const damage = affected.length ? [{kind:'damage',targets:affected.map(unit => unit.target),amount:3,random:true}] : [];
   const destinations = [at,...[[x-1,y],[x+1,y],[x,y-1],[x,y+1]].filter(([x,y]) => x>=0 && y>=0 && x<state.board.size.w-1 && y<state.board.size.h-1).map(([x,y]) => `${x},${y}`)];
   // Click where the storm will be: any tile it covers now to stay, or a tile only the moved storm covers (these sets never overlap).

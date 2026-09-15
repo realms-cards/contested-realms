@@ -1,5 +1,6 @@
 // Pure engine module (no Node I/O). Consumers provide θ and optional telemetry logger.
 const cpuSpells = require("../../src/lib/game/cpu/spells");
+const { enterScope, leaveScope } = require("../../src/lib/game/cpu/evalScope");
 const { recordAirCast } = require("../../src/lib/game/cpu/castHistory");
 const { reachableCells } = require("../../src/lib/game/cpu/movement");
 const { moveUnit } = require("../../src/lib/game/cpu/move");
@@ -607,6 +608,17 @@ function playSitePatch(state, seat) {
       findAnyEmptyCell(state);
   }
 
+  // Cornerstone "may be played to any corner": take the empty corner nearest the opponent.
+  if (siteCount > 0 && pick.card && pick.card.name === "Cornerstone") {
+    const w = (state && state.board && state.board.size && state.board.size.w) || 5;
+    const h = (state && state.board && state.board.size && state.board.size.h) || 4;
+    const oppPos = getOpponentAvatarPos(state, seat);
+    const corners = [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1]]
+      .filter(([x, y]) => isEmpty(state, x, y))
+      .sort((a, b) => manhattan(a, oppPos) - manhattan(b, oppPos));
+    if (corners.length) cell = `${corners[0][0]},${corners[0][1]}`;
+  }
+
   const myNum = seatNum(seat);
   const patch = { zones: {}, board: { sites: {} }, avatars: {} };
   patch.zones[seat] = { ...z, hand };
@@ -780,7 +792,8 @@ function findBestUnitPlacementCell(state, seat, card) {
     const candidates = [];
     for (const key of Object.keys(sites)) {
       const t = sites[key];
-      if (!t || !t.card || Number(t.owner) !== myNum) continue;
+      // Roaming Monster "may be summoned to any site".
+      if (!t || !t.card || (Number(t.owner) !== myNum && !(card && card.name === "Roaming Monster"))) continue;
       const arr = Array.isArray(perms[key]) ? perms[key] : [];
       const friendlyCount = arr.filter(
         (p) => p && Number(p.owner) === myNum
@@ -790,7 +803,13 @@ function findBestUnitPlacementCell(state, seat, card) {
         ? Math.min(...enemyPositions.map(ep => manhattan([pos.x, pos.y], ep)))
         : 999;
       const distToMyAvatar = pos ? manhattan([pos.x, pos.y], myPos) : 999;
-      candidates.push({ key, friendlyCount, distToEnemy, distToMyAvatar });
+      // Mountain Giant occupies a 2x2 area of sites that includes the summoning site, stored at the area's anchor.
+      const placements = card && card.name === "Mountain Giant" && pos
+        ? [[pos.x - 1, pos.y - 1], [pos.x, pos.y - 1], [pos.x - 1, pos.y], [pos.x, pos.y]]
+          .filter(([ax, ay]) => [[ax, ay], [ax + 1, ay], [ax, ay + 1], [ax + 1, ay + 1]].every(([cx, cy]) => sites[`${cx},${cy}`] && sites[`${cx},${cy}`].card))
+          .map(([ax, ay]) => `${ax},${ay}`)
+        : [key];
+      for (const placed of placements) candidates.push({ key: placed, friendlyCount, distToEnemy, distToMyAvatar });
     }
     if (candidates.length === 0) return null;
 
@@ -1004,6 +1023,47 @@ function getOpponentAvatarPos(state, seat) {
   }
 }
 
+/**
+ * A unit's power under the shared CPU rules (counters, auras, Spire Lich atop a Tower); the printed attack misses
+ * those. Items that are not units in the realm fall back to the printed attack.
+ */
+// Search states are never mutated (copy-on-write), so one realm evaluation per state object serves every lookup.
+const powerByState = new WeakMap();
+// The only power modifiers in spells.js computeStats besides counters and turn effects. Without any of them the
+// printed attack is exact, so most search states skip the realm scan entirely.
+const POWER_SOURCES = new Set(["House Arn Bannerman", "King of the Realm", "Spire Lich", "Anui Undine"]);
+function hasPowerModifiers(state) {
+  for (const items of Object.values(state.permanents || {})) {
+    for (const p of items || []) {
+      if (p && (Number(p.counters) || p.cpuTurnEffect || (p.card && POWER_SOURCES.has(p.card.name)))) return true;
+    }
+  }
+  return false;
+}
+function unitPower(state, at, item) {
+  const printed = Number(item && item.card && item.card.attack) || 0;
+  if (!state || typeof state !== "object") return printed;
+  let powers = powerByState.get(state);
+  if (!powers) {
+    powers = new Map();
+    powerByState.set(state, powers);
+    if (!hasPowerModifiers(state)) return printed;
+    enterScope();
+    try {
+      for (const unit of cpuSpells.unitsInRealm(state)) {
+        if (unit.target.kind !== "permanent") continue;
+        const entity = state.permanents[unit.at] && state.permanents[unit.at][unit.target.index];
+        if (entity) powers.set(entity, cpuSpells.unitStats(state, unit).atk);
+      }
+    } catch {
+      // A partial search state: keep the printed attack for anything not evaluated.
+    } finally {
+      leaveScope();
+    }
+  }
+  return powers.has(item) ? powers.get(item) : printed;
+}
+
 function myUnits(state, seat) {
   const out = [];
   const myNum = seatNum(seat);
@@ -1159,7 +1219,7 @@ function generateMoveCandidates(state, seat, limit = Infinity) {
     // Exclude non-combat permanents (Auras, 0-attack units) from attack candidates
     const cardType = String(u.item?.card?.type || "").toLowerCase();
     if (cardType.includes("aura") || cardType.includes("enchantment") || cardType.includes("artifact")) return false;
-    const atk = Number(u.item?.card?.attack || 0);
+    const atk = unitPower(state, u.at, u.item);
     if (atk <= 0) return false; // No point attacking with 0-attack units
     return true;
   });
@@ -1310,7 +1370,7 @@ function generateMoveCandidates(state, seat, limit = Infinity) {
       : [];
 
     // T101: Attack priority - sites FIRST for mana denial (except lethal)
-    const chosenAtk = Number(chosen.item?.card?.attack || 0);
+    const chosenAtk = unitPower(state, chosen.at, chosen.item);
     const canDeliverLethal = oppAtDeathsDoor || chosenAtk >= oppLife;
 
     const intoAvatar = intoEnemy.filter((k) => k === oppAvatarKey);
@@ -1593,7 +1653,7 @@ function detectWinCondition(state, seat) {
     const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
     for (const p of arr) {
       if (p && Number(p.owner) === myNum && !p.tapped) {
-        const atk = Number(p.card && p.card.attack) || 0;
+        const atk = unitPower(state, cellKey, p);
         if (atk > 0) {
           canDealDamage = true;
           break;
@@ -1783,7 +1843,7 @@ function extractThreatDeployment(state, seat) {
     const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
     for (const p of arr) {
       if (!p || Number(p.owner) !== myNum || p.tapped === true) continue;
-      const atk = Number(p.card && p.card.attack) || 0;
+      const atk = unitPower(state, cellKey, p);
       totalAtk += atk;
     }
   }
@@ -1809,7 +1869,7 @@ function extractLifePressure(state, seat) {
     for (const p of arr) {
       if (!p || Number(p.owner) !== myNum || p.tapped === true) continue;
 
-      const atk = Number(p.card && p.card.attack) || 0;
+      const atk = unitPower(state, cellKey, p);
       if (atk === 0) continue;
 
       // Check if adjacent to opponent Avatar
@@ -1833,7 +1893,7 @@ function sumBoardStats(state, seat) {
     const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
     for (const p of arr) {
       if (!p || Number(p.owner) !== myNum || !p.card) continue;
-      atk += Number(p.card.attack) || 0;
+      atk += unitPower(state, cellKey, p);
       const def = Number(p.card.defence || p.card.defense) || 0;
       hp += Math.max(0, def - (Number(p.damage) || 0));
     }
@@ -1857,7 +1917,7 @@ function estimateOppReachableDamage(state, seat) {
     const arr = Array.isArray(per[cellKey]) ? per[cellKey] : [];
     for (const p of arr) {
       if (!p || Number(p.owner) !== oppNum) continue;
-      dmg += Number(p.card && p.card.attack) || 0;
+      dmg += unitPower(state, cellKey, p);
     }
   }
   const oppAvatarPos = getOpponentAvatarPos(state, seat);
@@ -3372,7 +3432,7 @@ function search(state, seat, theta, rng, options) {
             const tgtKw = getCardKeywords(targetEnemy.card);
             const atkAtk = Number(atkCard && atkCard.attack || 0);
             const atkDef = Number(atkCard && (atkCard.defence || atkCard.defense) || 0);
-            const tgtAtk = Number(targetEnemy.card.attack || 0);
+            const tgtAtk = unitPower(state, toKey, targetEnemy);
             const tgtDef = Number(targetEnemy.card.defence || targetEnemy.card.defense || 0);
             const tgtDamage = Number(targetEnemy.damage || 0);
             const tgtEffectiveDef = Math.max(0, tgtDef - tgtDamage);

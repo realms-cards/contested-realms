@@ -2237,6 +2237,34 @@ export const createPlayActionsSlice: StateCreator<
       const isInfiltrate = cardNameLower === "infiltrate";
       const isTheFlood = cardNameLower === "the flood";
       const isGreatOldOne = cardNameLower === "great old one";
+      // Register turn-trigger minions like playSelectedTo does. The server echo
+      // can't do it for the owner: networkState skips instanceIds already placed
+      // locally, so without this Lilith/Mother Nature never trigger.
+      if (
+        !state.resolversDisabled &&
+        newest?.instanceId &&
+        type.includes("minion")
+      ) {
+        const registration = {
+          instanceId: newest.instanceId,
+          location: key,
+          ownerSeat: who,
+        };
+        try {
+          if (cardNameLower === "lilith") {
+            get().registerLilith({ ...registration, cardName: card.name });
+          } else if (cardNameLower === "merlin") {
+            get().registerMerlin({ ...registration, cardName: card.name });
+          } else if (cardNameLower === "mother nature") {
+            get().registerMotherNature({
+              ...registration,
+              cardName: card.name,
+            });
+          }
+        } catch (e) {
+          console.error("[playActions] Error registering pile minion:", e);
+        }
+      }
       // If this is a Magic card, begin the magic casting flow after placing it
       try {
         if (isBetrayal && newest) {

@@ -16,7 +16,7 @@ function genesisChoices(state) {
 
 /** @param {import('./spellTypes').SpellState} state @returns {import('./spellTypes').SpellChoice[]} */
 function choicesFor(state) {
-  const { inRange,isWater,bodyOfWater,unitStats,hasStealth,sameTarget,scoreOperations } = require('./spells');
+  const { inRange,isWater,bodyOfWater,unitStats,hasStealth,occupies,sameTarget,scoreOperations } = require('./spells');
   const pending = state.pendingMagic;
   if (pending?.cpuEvent?.kind !== 'genesis') return [];
   const {card,owner} = pending.spell, seat = owner === 1 ? 'p1' : 'p2', event = pending.cpuEvent;
@@ -37,16 +37,16 @@ function choicesFor(state) {
     add('draw',name === 'Deep-Sea Mermaids' ? 'Draw your bottommost spell' : name === 'Land Surveyor' ? 'Draw a site' : 'Draw spells',
       [{kind:'draw',seat,count:name === 'Grandmaster Wizard' ? 3 : 1,pile:name === 'Land Surveyor' ? 'atlas' : 'spellbook',bottom:name === 'Deep-Sea Mermaids'}]);
   } else if (name === 'Slumbering Giantess' && source) add('sleep','Fall asleep until hurt',[{kind:'sleep',target:source.target}]);
-  else if (name === 'Wraetannis Titan' && source) add('strike','Strike each enemy here',[{kind:'damageEvent',hits:units.filter(u => u.owner !== seat && u.at === at && u.region === region).map(u => ({target:u.target,amount:unitStats(state,source).atk,sourcePower:unitStats(state,source).atk}))}]);
+  else if (name === 'Wraetannis Titan' && source) add('strike','Strike each enemy here',[{kind:'damageEvent',hits:units.filter(u => u.owner !== seat && occupies(u,at) && u.region === region).map(u => ({target:u.target,amount:unitStats(state,source).atk,sourcePower:unitStats(state,source).atk}))}]);
   else if (name === 'Clamor of Harpies' && source) {
     for (const target of visible.filter(u => u.target.kind === 'permanent' && !sameTarget(u.target,source.target) && unitStats(state,u).atk<unitStats(state,source).atk)) {
       const id = target.target.instanceId || `${target.at}:${target.target.index}`;
       add(`${id}/move`,`Teleport ${target.card.name} here, then choose whether to strike`,[{kind:'move',target:target.target,to:at,preserveRegion:true},{kind:'offerFight',source:source.target,target:target.target,strikeOnly:true}],[unitToken(target.target)]);
     }
   } else if (name === 'Brobdingnag Bullfrog' && source) {
-    for (const target of visible.filter(u => u.at === at && u.target.kind === 'permanent' && !sameTarget(u.target,source.target))) add(target.target.instanceId || String(target.target.index),`Swallow ${target.card.name}`,[{kind:'swallow',target:target.target,carrier:source.target}],[unitToken(target.target)]);
+    for (const target of visible.filter(u => occupies(u,at) && u.target.kind === 'permanent' && !sameTarget(u.target,source.target))) add(target.target.instanceId || String(target.target.index),`Swallow ${target.card.name}`,[{kind:'swallow',target:target.target,carrier:source.target}],[unitToken(target.target)]);
   } else if (['Arid Desert','Red Desert','Remote Desert'].includes(name)) {
-    for (const to of sites.filter(to => inRange(at,to,'nearby'))) add(to,`Deal 1 to every minion atop ${to}`,[{kind:'damageEvent',hits:units.filter(u => u.at === to && u.region === 'surface' && u.target.kind === 'permanent').map(u => ({target:u.target,amount:1,sourceName:name}))}],[to]);
+    for (const to of sites.filter(to => inRange(at,to,'nearby'))) add(to,`Deal 1 to every minion atop ${to}`,[{kind:'damageEvent',hits:units.filter(u => occupies(u,to) && u.region === 'surface' && u.target.kind === 'permanent').map(u => ({target:u.target,amount:1,sourceName:name}))}],[to]);
   } else if (name === 'Shifting Sands') add('deserts','Reactivate nearby Desert Genesis abilities',[{kind:'retriggerGenesis',ats:sites.filter(to => inRange(at,to,'nearby') && ['Arid Desert','Red Desert','Remote Desert'].includes(state.board.sites[to].card.name))}]);
   else if (name === 'Holy Ground') add('heal','Each nearby Avatar heals 3 life',units.filter(u => u.target.kind === 'avatar' && inRange(at,u.at,'nearby')).map(u => ({kind:'mend',target:u.target,amount:3})));
   else if (['Humble Village','Rustic Village','Simple Village'].includes(name)) {
@@ -72,4 +72,22 @@ function choicesFor(state) {
   if (!choices.length) add('none','No legal targets; finish Genesis',[]);
   return choices;
 }
-module.exports = { hasCpuGenesis,genesisChoices };
+// Deathrite: "when this dies, do what is stated", resolved where it died (spell.at, cpuEvent.region) after it left the realm.
+const DEATHRITES = new Set(['Sacred Scarabs']);
+/** @param {string} name */
+function hasCpuDeathrite(name) { return DEATHRITES.has(name); }
+
+/** @param {import('./spellTypes').SpellState} state @returns {import('./spellTypes').SpellChoice[]} */
+function deathriteChoices(state) {
+  enterScope();
+  try {
+    const { occupies, scoreOperations } = require('./spells');
+    const pending = state.pendingMagic;
+    if (pending?.cpuEvent?.kind !== 'deathrite') return [];
+    const {card,owner,at} = pending.spell, seat = owner === 1 ? 'p1' : 'p2', region = pending.cpuEvent.region;
+    if (card.name !== 'Sacred Scarabs') return [];
+    const operations = [{kind:'damageEvent',hits:realmUnits(state).filter(u => occupies(u,at) && u.region === region).map(u => ({target:u.target,amount:3,sourceName:card.name}))}];
+    return [{key:'deathrite/scarabs',label:`Deal 3 damage to each unit at ${at}`,operations,target:null,caster:{kind:'avatar',seat},score:scoreOperations(state,seat,operations),autoResolve:true}];
+  } finally { leaveScope(); }
+}
+module.exports = { hasCpuGenesis,genesisChoices,hasCpuDeathrite,deathriteChoices };

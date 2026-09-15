@@ -79,6 +79,30 @@ it("shoots the first unit in line with Ranged and resolves without defenders or 
   expect(rangedAttack(state)).toBeNull();
 });
 
+it("taps the attacker when an attack without moving is declared", () => {
+  const store = setup();
+  store.setState({selectedPermanent:{at:"2,3",index:0},permanents:{"2,3":[{owner:1,card:card("Raal Dromedary"),instanceId:"attacker",tapped:false}]}});
+  const choice = stationaryAttack(store.getState());
+  const site = choice?.candidates.find(candidate => candidate.kind === "site");
+  if (!choice || !site) throw new Error("expected an attack on the enemy site");
+  store.getState().declareAttack(choice.tile,choice.attacker,{kind:"site",at:site.at,index:null});
+  expect(store.getState().pendingCombat).not.toBeNull();
+  expect(store.getState().permanents["2,3"][0].tapped).toBe(true);
+});
+
+it("resolves Sacred Scarabs' Deathrite where they died", async () => {
+  const store = setup();
+  store.setState({permanents:{"2,2":[{owner:2,card:card("Sacred Scarabs"),instanceId:"scarabs"},
+    {owner:1,card:card("Raal Dromedary","ally"),instanceId:"ally"},{owner:2,card:card("Raal Dromedary","other"),instanceId:"other"}]}});
+  await settle();
+  store.getState().movePermanentToZone("2,2",0,"graveyard");
+  await settle();
+  const state = store.getState();
+  expect(state.zones.p2.graveyard.map(dead => dead.name)).toEqual(expect.arrayContaining(["Sacred Scarabs","Raal Dromedary"]));
+  expect(state.zones.p1.graveyard.map(dead => dead.name)).toContain("Raal Dromedary");
+  expect(state.permanents["2,2"] ?? []).toHaveLength(0);
+});
+
 it("resolves a dismissed trigger list in the listed order without asking again", async () => {
   const store = setup();
   const board = store.getState().board;

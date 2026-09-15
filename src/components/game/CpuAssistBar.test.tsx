@@ -387,7 +387,8 @@ function uniqueSorted(list: string[]) { return [...new Set(list)].sort(); }
 
 describe("CPU assist bar: projectile decisions", () => {
   it("Fireball: units sharing the impact tile are clicked as their cards; the option list only opens on request", () => {
-    realm({"2,1":[unit("Mountain Giant",2,"giant"),unit("Ogre Goons",2,"goon")]},cast("Fireball"));
+    // Single-location units: an oversized Mountain Giant at 2,1 would also stand in the flight's earlier locations.
+    realm({"2,1":[unit("Amazon Warriors",2,"giant"),unit("Ogre Goons",2,"goon")]},cast("Fireball"));
     render(<CpuAssistBar />);
     click("dir:2,3:N");
     expect(cpuChoice()).toBe("p1/N");
@@ -395,11 +396,11 @@ describe("CPU assist bar: projectile decisions", () => {
     expect(screen.getByText(/· click a card on the board$/)).toBeTruthy();
     expect(tiles()).toEqual(["unit:perm:giant","unit:perm:goon"]);
     expect(screen.queryByRole("region",{name:/^Impact 3/})).toBeNull();
-    expect(picker().labels).toMatchObject({"unit:perm:giant":"Mountain Giant (enemy) at Tile #8"});
+    expect(picker().labels).toMatchObject({"unit:perm:giant":"Amazon Warriors (enemy) at Tile #8"});
     // The list stays available for keyboard players, but never opens by itself.
     fireEvent.click(screen.getByRole("button",{name:"List the options"}));
     const list = screen.getByRole("region",{name:/^Impact 3/});
-    expect(within(list).getAllByRole("button",{name:/at Tile #8$/}).map(button => button.textContent)).toEqual(["Mountain Giant (enemy) at Tile #8","Ogre Goons (enemy) at Tile #8"]);
+    expect(within(list).getAllByRole("button",{name:/at Tile #8$/}).map(button => button.textContent)).toEqual(["Amazon Warriors (enemy) at Tile #8","Ogre Goons (enemy) at Tile #8"]);
     click("unit:perm:giant");
     expect(selections()).toEqual(["giant"]);
     expect(screen.queryByRole("region",{name:/^Impact 3/})).toBeNull();
@@ -461,7 +462,8 @@ describe("CPU assist bar: Escape", () => {
 
 describe("CPU assist bar: spell subscriptions", () => {
   it("ignores UI-only store updates and regenerates for realm and selection changes", () => {
-    act(() => { useGameStore.setState({pendingMagic:bolt()}); });
+    // Single-location units: the default oversized Mountain Giant at 2,1 would stand next to the caster.
+    act(() => { useGameStore.setState({pendingMagic:bolt(),permanents:{"2,1":[unit("Amazon Warriors",2,"giant")]}}); });
     renderCounted(<CpuAssistBar />);
     expect(screen.getByText("· click a target")).toBeTruthy();
     expect(spellCalls()).toBe(1);
@@ -469,9 +471,9 @@ describe("CPU assist bar: spell subscriptions", () => {
     applyUiUpdates();
     expect(spellCalls()).toBe(1);
     expect(renders).toBe(mounted);
-    act(() => { useGameStore.setState({permanents:{...useGameStore.getState().permanents,"3,1":[unit("Mountain Giant",2,"giant2")]}}); });
+    act(() => { useGameStore.setState({permanents:{...useGameStore.getState().permanents,"3,1":[unit("Amazon Warriors",2,"giant2")]}}); });
     expect(spellCalls()).toBe(2);
-    // Mountain Giants are not bolt targets here: only the two avatars' tiles are.
+    // These units are not bolt targets here: only the two avatars' tiles are.
     expect(tiles()).toEqual(["2,0","2,3"]);
     vi.mocked(getSpellChoices).mockClear();
     click("2,0");

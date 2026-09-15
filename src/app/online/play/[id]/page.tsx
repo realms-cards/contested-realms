@@ -682,6 +682,9 @@ export default function OnlineMatchPage() {
   const deckFetchAttemptsRef = useRef<number>(0);
   const deckRetryTimerRef = useRef<number | null>(null);
   const [tournamentDeckRetry, setTournamentDeckRetry] = useState(0);
+  const [tournamentDeckError, setTournamentDeckError] = useState<
+    string | null
+  >(null);
   const lastTournamentIdRef = useRef<string | null>(null);
   // Track if this page initiated a tournament bootstrap for the current route id
   const hasBootstrapRef = useRef<boolean>(false);
@@ -1297,6 +1300,14 @@ export default function OnlineMatchPage() {
       return;
     }
 
+    // Constructed matches only report a {name,type,zone} summary for meta
+    // stats (submitConstructedDeck) — not a loadable deck. Constructed
+    // tournaments load their submitted deck through loadDeckFor instead.
+    if (Array.isArray(rawDeck) && rawDeck.length > 0) {
+      const first = rawDeck[0] as Record<string, unknown>;
+      if (first.cardId == null && first.id == null) return;
+    }
+
     console.log("[match] Auto-loading deck from match.playerDecks:", {
       deckLength: Array.isArray(rawDeck) ? rawDeck.length : "not an array",
       sampleCards: Array.isArray(rawDeck)
@@ -1526,15 +1537,19 @@ export default function OnlineMatchPage() {
     resyncing,
   ]);
 
-  // Submit the tournament deck to the match server so it behaves like other auto-loaded decks
+  // Constructed tournaments load the submitted deck through the same loader as
+  // regular matches (zones, collection, champion, printings), validated with
+  // full constructed rules. Sealed/draft tournaments auto-load from
+  // match.playerDecks in the effect above.
   useEffect(() => {
     if (!tournamentId) return;
-    if (!transport?.submitDeck) return;
+    if (!transport) return;
     if (!matchId || match?.id !== matchId) return;
     if (match?.matchType !== "constructed") return;
     if (match?.status !== "waiting" && match?.status !== "deck_construction")
       return;
     if (!me?.id || !myPlayerKey) return;
+    if (prepared || storeActorKey !== myPlayerKey) return;
 
     // Reset attempts if tournament context changed
     if (lastTournamentIdRef.current !== tournamentId) {
@@ -1542,17 +1557,10 @@ export default function OnlineMatchPage() {
       lastTournamentIdRef.current = tournamentId;
     }
 
-    const currentDeck = (
-      match?.playerDecks as Record<string, unknown> | undefined
-    )?.[me.id];
-    if (currentDeck) {
-      tournamentDeckSubmittedRef.current = tournamentId;
-      return;
-    }
-
+    // In-flight / done guard; cleared again when a load attempt fails
     if (tournamentDeckSubmittedRef.current === tournamentId) return;
-
-    let cancelled = false;
+    tournamentDeckSubmittedRef.current = tournamentId;
+    setTournamentDeckError(null);
 
     (async () => {
       try {
@@ -1560,201 +1568,86 @@ export default function OnlineMatchPage() {
           `/api/tournaments/${encodeURIComponent(String(tournamentId))}`,
         );
         if (!res.ok) throw new Error("Failed to load tournament detail");
-        const detail = await res.json();
-        const list: Array<{ cardId: string; quantity: number }> | undefined =
-          detail?.viewerDeck;
-        const sideboardList:
-          | Array<{ cardId: string; quantity: number }>
-          | undefined = detail?.viewerSideboard;
-        if (!Array.isArray(list) || list.length === 0) return;
+        const detail = (await res.json()) as {
+          viewerDeckId?: unknown;
+          viewerDeckSnapshot?: unknown;
+        };
+        const {
+          getConstructedDeckSummary,
+          isDeckLoadPayload,
+          loadDeckFor,
+          loadDeckFromData,
+        } = await import("@/lib/game/deckLoader");
+        // Prefer the deck frozen at submission; registrations from before
+        // snapshots existed fall back to loading the saved deck by id
+        const rawSnapshot = detail?.viewerDeckSnapshot;
+        const snapshot = isDeckLoadPayload(rawSnapshot) ? rawSnapshot : null;
+        const deckId =
+          typeof detail?.viewerDeckId === "string" ? detail.viewerDeckId : null;
 
-        // Collect all card IDs from both deck and sideboard
-        const allIds = [
-          ...list.map((entry) => Number(entry.cardId)),
-          ...(sideboardList || []).map((entry) => Number(entry.cardId)),
-        ];
-        const ids = Array.from(
-          new Set(allIds.filter((n) => Number.isFinite(n) && n > 0)),
-        );
-        if (ids.length === 0) return;
-
-        const resMeta = await fetch(
-          `/api/cards/by-id?ids=${encodeURIComponent(ids.join(","))}`,
-        );
-        if (!resMeta.ok) throw new Error("Failed to load card meta");
-        const metas = (await resMeta.json()) as Array<{
-          cardId: number;
-          name: string;
-          slug: string;
-          setName: string;
-          type?: string | null;
-          subTypes?: string | null;
-        }>;
-        console.log(
-          "[match] Fetched card metadata for",
-          metas.length,
-          "cards. Sample:",
-          metas.slice(0, 3),
-        );
-        const byId = new Map<
-          number,
-          {
-            name: string;
-            slug: string;
-            setName: string;
-            type: string | null;
-            subTypes: string | null;
-            cost: number | null;
-            thresholds: Record<string, number> | null;
-          }
-        >();
-        for (const meta of metas) {
-          const cardType = meta.type || null;
-          const cardSubTypes = meta.subTypes || null;
-          byId.set(Number(meta.cardId), {
-            name: meta.name,
-            slug: meta.slug,
-            setName: meta.setName,
-            type: cardType,
-            subTypes: cardSubTypes,
-            cost: (meta as { cost?: number | null }).cost ?? null,
-            thresholds:
-              (meta as { thresholds?: Record<string, number> | null })
-                .thresholds ?? null,
-          });
-        }
-
-        console.log(
-          "[match] Building deck from list with",
-          list.length,
-          "unique cards",
-        );
-        console.log("[match] Metadata map has", byId.size, "entries");
-        console.log("[match] Sample list entry:", list[0]);
-        console.log(
-          "[match] Sample byId keys:",
-          Array.from(byId.keys()).slice(0, 5),
-        );
-
-        const deck: Array<Record<string, unknown>> = [];
-        for (const entry of list) {
-          const idNum = Number(entry.cardId);
-          const meta = byId.get(idNum);
-          if (!meta) {
-            console.error(
-              `[match] Missing metadata for card ID ${idNum} (type: ${typeof entry.cardId})`,
-              {
-                entry,
-                hasInMap: byId.has(idNum),
-                mapKeys: Array.from(byId.keys()),
-              },
-            );
-            continue;
-          }
-          const quantity = Math.max(1, Number(entry.quantity) || 0);
-          for (let i = 0; i < quantity; i++) {
-            deck.push({
-              id: String(idNum),
-              cardId: idNum,
-              name: meta.name,
-              slug: meta.slug,
-              set: meta.setName,
-              type: meta.type || "",
-              subTypes: meta.subTypes || null,
-              thresholds: meta.thresholds || null,
-            });
-          }
-        }
-
-        // Add sideboard cards as collection (per limited rules: unplayed cards in card pool)
-        if (Array.isArray(sideboardList) && sideboardList.length > 0) {
-          for (const entry of sideboardList) {
-            const idNum = Number(entry.cardId);
-            const meta = byId.get(idNum);
-            if (!meta) continue;
-            const quantity = Math.max(1, Number(entry.quantity) || 0);
-            for (let i = 0; i < quantity; i++) {
-              deck.push({
-                id: String(idNum),
-                cardId: idNum,
-                name: meta.name,
-                slug: meta.slug,
-                set: meta.setName,
-                type: meta.type || "",
-                subTypes: meta.subTypes || null,
-                thresholds: meta.thresholds || null,
-                zone: "collection",
-              });
-            }
-          }
-          console.log(
-            `[match] Added ${sideboardList.reduce((sum, e) => sum + (Number(e.quantity) || 1), 0)} sideboard cards as collection`,
-          );
-        }
-
-        console.log(
-          "[match] Built deck with",
-          deck.length,
-          "cards (including collection)",
-        );
-        if (cancelled) return;
-        if (deck.length === 0) {
+        if (!snapshot && !deckId) {
+          tournamentDeckSubmittedRef.current = null;
           // Graceful, bounded retry to handle brief propagation delays
           if (deckFetchAttemptsRef.current < 3) {
             deckFetchAttemptsRef.current += 1;
-            try {
-              if (deckRetryTimerRef.current != null) {
-                clearTimeout(deckRetryTimerRef.current);
-                deckRetryTimerRef.current = null;
-              }
-              deckRetryTimerRef.current = window.setTimeout(() => {
-                setTournamentDeckRetry((n) => n + 1);
-              }, 600);
-            } catch {}
-            console.warn(
-              `[match] Viewer deck empty (attempt ${deckFetchAttemptsRef.current}/3), retrying shortly...`,
-            );
+            if (deckRetryTimerRef.current != null) {
+              clearTimeout(deckRetryTimerRef.current);
+            }
+            deckRetryTimerRef.current = window.setTimeout(() => {
+              deckRetryTimerRef.current = null;
+              setTournamentDeckRetry((n) => n + 1);
+            }, 600);
             return;
           }
-          console.error("[match] Deck is empty after retries, not submitting!");
+          setTournamentDeckError(
+            "No submitted deck was found for this tournament.",
+          );
           return;
         }
 
-        transport.submitDeck(deck);
-        tournamentDeckSubmittedRef.current = tournamentId;
-
-        if (storeActorKey === myPlayerKey && !prepared) {
-          try {
-            const { loadSealedDeckFor } = await import("@/lib/game/deckLoader");
-            const ok = await loadSealedDeckFor(
-              myPlayerKey as "p1" | "p2",
-              deck,
-              (error) =>
-                console.error("[match] Tournament deck load error:", error),
+        let loadError: string | null = null;
+        const onLoadError = (error: string) => {
+          loadError = error;
+        };
+        const ok = snapshot
+          ? await loadDeckFromData(
+              myPlayerKey,
+              snapshot,
+              onLoadError,
+              "constructed",
+            )
+          : await loadDeckFor(
+              myPlayerKey,
+              deckId ?? "",
+              onLoadError,
+              "constructed",
             );
-            if (ok && !cancelled) {
-              useGameStore.getState().setPhase("Setup");
-              setPrepared(true);
-            }
-          } catch (error) {
-            console.warn("[match] Tournament deck local load failed:", error);
-          }
+        if (!ok) {
+          tournamentDeckSubmittedRef.current = null;
+          setTournamentDeckError(loadError ?? "Failed to load deck");
+          return;
         }
+
+        deckLoadedForMatchRef.current = matchId;
+        // Report the deck for meta statistics, exactly like regular matches
+        const deckCards = getConstructedDeckSummary(myPlayerKey);
+        if (deckCards.length > 0) {
+          transport.emit("submitConstructedDeck", { deck: deckCards });
+        }
+        useGameStore.getState().setPhase("Setup");
+        setPrepared(true);
       } catch (error) {
-        console.warn("[match] Tournament deck submission failed:", error);
+        tournamentDeckSubmittedRef.current = null;
+        console.warn("[match] Tournament deck load failed:", error);
+        setTournamentDeckError("Failed to load your tournament deck.");
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [
     tournamentId,
     transport,
     matchId,
     match?.id,
     match?.matchType,
-    match?.playerDecks,
     match?.status,
     me?.id,
     myPlayerKey,
@@ -3430,6 +3323,14 @@ export default function OnlineMatchPage() {
                   Waiting for the server to attach your submitted deck. This
                   may take a moment.
                 </div>
+                {tournamentDeckError && (
+                  <div
+                    className="rc-alert mt-4 px-4 py-3 text-left font-rc-sans text-sm"
+                    data-tone="danger"
+                  >
+                    Could not load your tournament deck: {tournamentDeckError}
+                  </div>
+                )}
               </div>
             ) : match?.matchType === "sealed" ? (
               hasSubmittedSealedDeck ? (

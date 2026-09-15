@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Shared with the Node CPU client. */
 const { enterScope, leaveScope, realmUnits, scopedTileLabel } = require('./evalScope');
 const { handToken, unitToken } = require('./pickTokens');
-const { bodyOfWater, directionPick, isDisabled, isWater, hasStealth, sameTarget, inRange, unitStats, scoreOperations } = require('./spells');
+const { bodyOfWater, cardText, directionPick, getRangedTargets, isDisabled, isWater, hasStealth, near, occupies, sameTarget, inRange, unitStats, scoreOperations } = require('./spells');
 
 /** @param {Partial<import('./spellTypes').SpellState> & {phase?: string, cpuPendingTriggerCount?: number, cpuEffectContinuations?: unknown[]}} state
  * @param {import('../store/types').PlayerKey} seat
@@ -28,7 +28,8 @@ function choicesFor(state, seat) {
   const add = (source,key,label,operations,picks,pickLabels) => choices.push({source,key,label,operations,caster:source.target,target:null,score:scoreOperations(state,seat,operations),...(picks ? {picks} : {}),...(pickLabels ? {pickLabels} : {})});
   const owner = seat === 'p1' ? 1 : 2;
   const sites = Object.entries(state.board.sites).filter(([,tile]) => tile.card && !tile.cpuNeutral);
-  const fire = sites.filter(([,tile]) => tile.owner === owner).reduce((sum,[,tile]) => sum+Number(tile.card.thresholds?.fire || 0),0);
+  const threshold = element => sites.filter(([,tile]) => tile.owner === owner).reduce((sum,[,tile]) => sum+Number(tile.card.thresholds?.[element] || 0),0);
+  const fire = threshold('fire'), turnKey = `${state.turn}:${state.currentPlayer}`;
   for (const [at,tile] of sites) {
     if (tile.owner !== owner || state.permanents[at]?.some(item => ['Silenced','Disabled'].includes(item.card.name) && !item.attachedTo)) continue;
     const source = {card:tile.card,at,owner:seat,target:{kind:'site',at}};
@@ -38,8 +39,22 @@ function choicesFor(state, seat) {
     }
     if (tile.card.name === 'Vesuvius' && fire>=3) {
       add(source,`vesuvius/${tile.card.instanceId || at}`,'Vesuvius: deal 3 to every unit occupying nearby sites, then sacrifice Vesuvius',[
-        {kind:'damageEvent',hits:units.filter(unit => state.board.sites[unit.at]?.card && inRange(at,unit.at,'nearby')).map(unit => ({target:unit.target,amount:3}))},sacrifice,
+        {kind:'damageEvent',hits:units.filter(unit => (unit.cells || [unit.at]).some(cell => state.board.sites[cell]?.card && inRange(at,cell,'nearby'))).map(unit => ({target:unit.target,amount:3}))},sacrifice,
       ]);
+    }
+    const siteId = tile.card.instanceId || at, [x,y] = at.split(',').map(Number), unused = tile.cpuAbilityTurn !== turnKey;
+    // "Adjacent" includes the site's own square, which Floodplain (already water) never needs to flood.
+    if (tile.card.name === 'Floodplain' && unused) for (const to of [at,`${x+1},${y}`,`${x-1},${y}`,`${x},${y+1}`,`${x},${y-1}`]) {
+      if (!state.board.sites[to]?.card || state.board.sites[to].card.name === 'Bedrock' || isWater(state,to)) continue;
+      add(source,`floodplain/${siteId}/${to}`,`Floodplain: flood ${to} this turn`,[{kind:'stampSite',at,turnKey},{kind:'flood',ats:[to],expiresTurn:turnKey}],[to]);
+    }
+    if (tile.card.name === 'Cloud City' && unused && threshold('air')>=3) for (const [dx,dy] of [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]]) {
+      const to = `${x+dx},${y+dy}`;
+      if (x+dx<0 || y+dy<0 || x+dx>=state.board.size.w || y+dy>=state.board.size.h || state.board.sites[to]?.card) continue;
+      add(source,`cloudcity/${siteId}/${to}`,`Cloud City: fly to the void at ${to}`,[{kind:'moveSite',from:at,to},{kind:'stampSite',at:to,turnKey}],[to]);
+    }
+    if (tile.card.name === 'Island Leviathan' && threshold('water')>=8) {
+      add(source,`leviathan/${siteId}`,'Island Leviathan: transform into a Monster atop flooded Rubble',[{kind:'transformLeviathan',at}]);
     }
   }
   for (const source of units.filter(u => u.owner === seat && !isDisabled(state,u))) {
@@ -48,8 +63,8 @@ function choicesFor(state, seat) {
     if (source.card.name === 'Sparkmage' && canTap(source)) {
       const history = state.avatars[seat].cpuAirCast;
       const amount = history?.turn === `${state.turn}:${state.currentPlayer}` ? history.air : 0;
-      if (amount>0) for (const at of new Set(units.filter(unit => unit.region === source.region && inRange(source.at,unit.at,'nearby') && !sameTarget(unit.target,source.target)).map(unit => unit.at))) {
-        const targets = units.filter(unit => unit.at === at && unit.region === source.region && !sameTarget(unit.target,source.target)).map(unit => unit.target);
+      if (amount>0) for (const at of new Set(units.filter(unit => unit.region === source.region && !sameTarget(unit.target,source.target)).flatMap(unit => unit.cells || [unit.at]).filter(cell => inRange(source.at,cell,'nearby')))) {
+        const targets = units.filter(unit => occupies(unit,at) && unit.region === source.region && !sameTarget(unit.target,source.target)).map(unit => unit.target);
         add(source,`sparkmage/${id}/${at}`,`Sparkmage: tap; deal ${amount} to another random unit at ${at}`,[
           {kind:'tapUnits',targets:[source.target]},{kind:'damage',targets,amount,random:true},
         ],[at]);
@@ -103,7 +118,7 @@ function choicesFor(state, seat) {
           if (source.region === 'void' ? !!state.board.sites[at]?.card : !state.board.sites[at]?.card) break;
           if (source.region === 'underwater' && !isWater(state,at) || source.region === 'underground' && isWater(state,at)) break;
           path.push(at);
-          const hits = units.filter(unit => unit.at === at && unit.region === source.region && !(step === 0 && unit.owner === seat) && !hasStealth(state,unit));
+          const hits = units.filter(unit => occupies(unit,at) && unit.region === source.region && !(step === 0 && unit.owner === seat) && !hasStealth(state,unit));
           if (!hits.length) continue;
           // A unit on the source's own location is hit from every direction: its card, then an arrow, tells those apart.
           const aim = step === 0 ? directionPick(source.at,direction) : null;
@@ -120,7 +135,7 @@ function choicesFor(state, seat) {
       }
     }
     if (source.card.name === 'Nimbus Jinn') {
-      const targets = units.filter(u => u.at === source.at && u.region === source.region && !sameTarget(u.target,source.target)).map(u => u.target);
+      const targets = units.filter(u => occupies(u,source.at) && u.region === source.region && !sameTarget(u.target,source.target)).map(u => u.target);
       if (!targets.length) continue;
       state.zones[seat].hand.forEach((card,index) => {
         if (card.type === 'Site' || card.type === 'Avatar') return;
@@ -136,14 +151,39 @@ function choicesFor(state, seat) {
         {kind:'tapUnits',targets:[source.target]}, {kind:'surface',target:source.target},
         {kind:'strikeNearby',source:source.target},
       ]);
-      choices[choices.length-1].score = scoreOperations(state,seat,[{kind:'damageEvent',hits:units.filter(u => u.region === 'surface' && !sameTarget(u.target,source.target) && inRange(source.at,u.at,'nearby')).map(u => ({target:u.target,amount:power,sourcePower:power}))}]);
+      choices[choices.length-1].score = scoreOperations(state,seat,[{kind:'damageEvent',hits:units.filter(u => u.region === 'surface' && !sameTarget(u.target,source.target) && near(source,u,'nearby')).map(u => ({target:u.target,amount:power,sourcePower:power}))}]);
+    }
+    // Ranged strikes and layer changes are offered for the bot's own turns; the human uses the Combat controls and the
+    // context menu, so abilityPicker filters these keys (ranged/, layer/) out of the ability buttons.
+    if (canTap(source)) for (const {target} of getRangedTargets(state,source)) {
+      const victim = units.find(u => target.kind === 'avatar' ? u.target.kind === 'avatar' && u.owner !== seat : u.target.kind === 'permanent' && u.at === target.at && u.target.index === target.index);
+      if (!victim) continue;
+      const victimId = victim.target.kind === 'avatar' ? victim.owner : victim.target.instanceId || `${victim.at}:${victim.target.index}`;
+      add(source,`ranged/${id}/${victimId}`,`${source.card.name}: tap to shoot ${victim.card.name} at ${victim.at}`,[
+        {kind:'tapUnits',targets:[source.target]},{kind:'strikeTarget',source:source.target,target:victim.target,ranged:true},
+      ],[unitToken(victim.target)]);
+    }
+    // Diluvian Kraken surfaces through its own ability.
+    if (canTap(source) && source.target.kind === 'permanent' && source.card.name !== 'Diluvian Kraken') {
+      const text = cardText(source.card), water = isWater(state,source.at), stats = unitStats(state,source);
+      // Enemy power that could reach this location next turn, against what the unit has left.
+      const exposed = units.filter(u => u.owner !== seat && u.region === 'surface' && near(u,source,'nearby')).reduce((sum,u) => sum+unitStats(state,u).atk,0) >= Math.max(1,stats.def-source.damage);
+      if (source.region === 'surface' && state.board.sites[source.at]?.card && (water ? /\bSubmerge\b/.test(text) : /\bBurrowing\b/.test(text))) {
+        const layer = water ? 'submerged' : 'burrowed';
+        add(source,`layer/${id}/${layer}`,`${source.card.name}: ${water ? 'submerge' : 'burrow'} out of reach`,[{kind:'tapUnits',targets:[source.target]},{kind:'subsurface',targets:[source.target],state:layer}]);
+        choices[choices.length-1].score = exposed ? Number(source.card.cost || 2)+2 : -1;
+      }
+      if (source.region === 'underwater' || source.region === 'underground') {
+        add(source,`layer/${id}/surface`,`${source.card.name}: surface`,[{kind:'tapUnits',targets:[source.target]},{kind:'surface',target:source.target}]);
+        choices[choices.length-1].score = exposed ? -1 : 1;
+      }
     }
     if (!canTap(source) || source.target.kind !== 'permanent') continue;
     const carried = state.permanents[source.at].filter(p => p.attachedTo?.at === source.at && p.attachedTo.index === source.target.index);
     const ballista = carried.some(p => p.card.name === 'Siege Ballista');
     const trebuchet = carried.some(p => p.card.name === 'Payload Trebuchet');
     if (!ballista && !trebuchet) continue;
-    for (const ally of units.filter(u => u.owner === seat && u.at === source.at && u.region === source.region && !sameTarget(u.target,source.target) && canTap(u))) {
+    for (const ally of units.filter(u => u.owner === seat && occupies(u,source.at) && u.region === source.region && !sameTarget(u.target,source.target) && canTap(u))) {
       const allyId = ally.target.kind === 'avatar' ? ally.owner : ally.target.instanceId;
       if (trebuchet) {
         const [sx,sy] = source.at.split(',').map(Number);
@@ -151,7 +191,7 @@ function choicesFor(state, seat) {
           const at = `${x},${y}`;
           if (Math.abs(x-sx)+Math.abs(y-sy)>3) continue;
           // A location target hits every unit there, including allies and Stealth.
-          const targets = units.filter(u => u.at === at && u.region === source.region);
+          const targets = units.filter(u => occupies(u,at) && u.region === source.region);
           if (!targets.length) continue;
           state.zones[seat].hand.forEach((card,index) => {
             const amount = Number(card.cost || 0);
@@ -163,7 +203,7 @@ function choicesFor(state, seat) {
           });
         }
       }
-      if (ballista) for (const target of units.filter(u => u.region === source.region && inRange(source.at,u.at,'two') && (u.owner === seat || !hasStealth(state,u)))) {
+      if (ballista) for (const target of units.filter(u => u.region === source.region && near(source,u,'two') && (u.owner === seat || !hasStealth(state,u)))) {
         const allyId = ally.target.kind === 'avatar' ? ally.owner : ally.target.instanceId;
         const targetId = target.target.kind === 'avatar' ? target.owner : target.target.instanceId;
         add(source,`ballista/${id}/${allyId}/${targetId}`,`Siege Ballista: tap ${source.card.name} and ${ally.card.name}; deal 3 to ${target.card.name} at ${target.at}`,[

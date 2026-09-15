@@ -1,10 +1,12 @@
 import type { StoreApi } from "zustand";
 import { applySpellChoice } from "@/lib/game/cpu/applySpellChoice";
-import { hasCpuGenesis } from "@/lib/game/cpu/genesis";
+import { cornerOf, hasEndTrigger, hasStartSiteTrigger, hasStartTrigger } from "@/lib/game/cpu/cardTriggers";
+import cpuCardData from "@/lib/game/cpu/cards.json";
+import { hasCpuDeathrite, hasCpuGenesis } from "@/lib/game/cpu/genesis";
 import { movementAllowance, movementRoutes } from "@/lib/game/cpu/movement";
 import { useCpuReveals } from "@/lib/game/cpu/revealQueue";
-import { CPU_TRIGGERS_IN_ORDER, type UnitTarget } from "@/lib/game/cpu/spellTypes";
-import { cardText, getSpellChoices, inRange, isDisabled, sameTarget, unitsInRealm } from "@/lib/game/cpu/spells";
+import { CPU_TRIGGERS_IN_ORDER, type TriggerSource, type UnitTarget } from "@/lib/game/cpu/spellTypes";
+import { cardText, getSpellChoices, inRange, isDisabled, isWater, sameTarget, unitsInRealm } from "@/lib/game/cpu/spells";
 import { treasures } from "@/lib/game/cpu/treasure";
 import type { CardRef, GameState, PendingMagic, PlayerKey } from "@/lib/game/store/types";
 import { getCellNumber } from "@/lib/game/store/utils/boardHelpers";
@@ -13,6 +15,12 @@ import type { CustomMessage } from "@/lib/net/transport";
 /** How long the human client waits for the CPU to declare defenders before the attack goes ahead unblocked (the bot's own worst case is about 17 s). */
 export const CPU_DEFENDER_TIMEOUT_MS = 20000;
 
+type CardTriggerEvent = Extract<NonNullable<PendingMagic["cpuEvent"]>, {kind: "cardTrigger"}>;
+const TRIGGER_BADGES: Record<CardTriggerEvent["trigger"], string> = {
+  start:"start of turn",end:"end of turn",corner:"corner reached",curse:"Mariner's Curse",kiteStep:"step after shooting",skirmish:"ranged strike on the move",
+};
+const CARD_SUBTYPES = cpuCardData as unknown as Record<string, {subTypes?: string}>;
+
 /** The human client adjudicates CPU matches; tabletop stores are untouched. */
 export function installCpuController(store: StoreApi<GameState>) {
   const queue: PendingMagic[] = [];
@@ -20,6 +28,7 @@ export function installCpuController(store: StoreApi<GameState>) {
   let nextBatch = 0;
   let endQueued: string | null = null;
   let endRequested: string | null = null;
+  let startScanned: string | null = null;
   let defenderWait: {id: string; timer: ReturnType<typeof setTimeout>} | null = null;
   const stopDefenderWait = () => { if (defenderWait) clearTimeout(defenderWait.timer); defenderWait = null; };
   const enqueue = (pending: PendingMagic,batch: number) => {
@@ -35,6 +44,13 @@ export function installCpuController(store: StoreApi<GameState>) {
     const active = store.getState().currentPlayer;
     siblings.sort((a,b) => Number(a.spell.owner === active)-Number(b.spell.owner === active));
     queue.splice(first,siblings.length-1,...siblings);
+  };
+  /** Queue a cardTrigger event once: ids are deterministic, so a re-scan never duplicates a queued or resolving trigger. */
+  const enqueueTrigger = (trigger: CardTriggerEvent["trigger"],source: TriggerSource,card: CardRef,at: string,owner: 1 | 2,batch: number,id: string,
+    extra: Pick<CardTriggerEvent,"path" | "corner" | "victim"> = {}) => {
+    if (queue.some(event => event.id === id) || store.getState().pendingMagic?.id === id) return;
+    const [x,y] = at.split(",").map(Number);
+    enqueue({id,tile:{x,y},spell:{at,index:-1,owner,instanceId:id,card},cpuEvent:{kind:"cardTrigger",trigger,source,...extra},status:"choosingTarget",createdAt:Date.now()},batch);
   };
   const enqueueGenesis = (card: CardRef,at: string,owner: 1 | 2,batch: number,region = "surface",source?: UnitTarget) => {
     if (!hasCpuGenesis(card.name)) return;
@@ -75,7 +91,7 @@ export function installCpuController(store: StoreApi<GameState>) {
           // Shown as the triggering cards (all on the board or public: only the actor's own triggers are ordered here), badged with the event.
           const options = candidates.map(candidate => {
             const event = candidate.cpuEvent, {name,slug,cardId,instanceId,type} = candidate.spell.card;
-            const badge = event?.kind === "unitEnd" ? "end-of-turn projectile" : event?.kind === "auraEnd" ? event.counter ? "duration counter" : "end effect" : event?.kind === "genesis" ? "Genesis" : event?.kind === "fightChoice" ? "fight after arrival" : event?.kind === "treasureRecover" ? "recover treasure" : event?.kind === "treasurePlace" ? "underwater placement" : event?.kind === "drawChoice" ? "choose draws" : event?.kind === "randomChoice" ? "choose random outcome" : "fire trail";
+            const badge = event?.kind === "unitEnd" ? "end-of-turn projectile" : event?.kind === "auraEnd" ? event.counter ? "duration counter" : "end effect" : event?.kind === "genesis" ? "Genesis" : event?.kind === "deathrite" ? "Deathrite" : event?.kind === "cardTrigger" ? TRIGGER_BADGES[event.trigger] : event?.kind === "fightChoice" ? "fight after arrival" : event?.kind === "treasureRecover" ? "recover treasure" : event?.kind === "treasurePlace" ? "underwater placement" : event?.kind === "drawChoice" ? "choose draws" : event?.kind === "randomChoice" ? "choose random outcome" : "fire trail";
             return {id:candidate.id,label:`${name} — ${badge}`,card:{name,slug,cardId,instanceId,type},badge};
           });
           if (JSON.stringify(state.cpuTriggerOptions) !== JSON.stringify(options)) store.setState({cpuTriggerOptions:options});
@@ -110,6 +126,7 @@ export function installCpuController(store: StoreApi<GameState>) {
       batches.clear();
       endQueued = null;
       endRequested = null;
+      startScanned = null;
       stopDefenderWait();
       if (state.cpuEffectContinuations?.length) store.setState({cpuEffectContinuations:[]});
       if (state.cpuPendingTriggerCount || state.cpuTriggerOptions?.length) store.setState({cpuPendingTriggerCount:0,cpuTriggerOptions:[],cpuChosenTrigger:null});
@@ -180,6 +197,10 @@ export function installCpuController(store: StoreApi<GameState>) {
           const id = `cpu_dragonettes_${endKey}_${item.instanceId || `${at}_${index}`}`, [x,y] = at.split(",").map(Number);
           enqueue({id,tile:{x,y},spell:{at,index:-1,owner:item.owner,instanceId:id,card:item.card},cpuEvent:{kind:"unitEnd",source:{kind:"permanent",at,index,instanceId:item.instanceId || item.card.instanceId},endKey},status:"choosingTarget",createdAt:Date.now()},batch);
         }
+        const unitId = item.instanceId || item.card.instanceId;
+        if (unitId && hasEndTrigger(name) && item.owner === state.currentPlayer && item.cpuTriggerStamps?.end !== endKey) {
+          enqueueTrigger("end",{kind:"permanent",at,index,instanceId:unitId},item.card,at,item.owner,batch,`cpu_end_${endKey}_${unitId}`);
+        }
         if (name !== "Wildfire" && !(item.owner === state.currentPlayer && ["Thunderstorm","Entangle Terrain"].includes(name))) return;
         const id = `cpu_aura_${endKey}_${item.instanceId || `${at}_${index}`}`;
         const [x,y] = at.split(",").map(Number);
@@ -189,12 +210,67 @@ export function installCpuController(store: StoreApi<GameState>) {
           cpuEvent:{kind:"auraEnd",counter:true,source:{kind:"permanent",at,index,instanceId:item.instanceId || item.card.instanceId}},status:"choosingTarget",createdAt:Date.now()},batch);
       });
     }
+    // Start-of-turn triggers of the player whose turn began, scanned once per turn once the board is known.
+    // Resolving stamps the source, so a reload later in the turn does not repeat a resolved trigger.
+    if (!restored && Object.keys(state.board.sites).length && (state.phase === "Start" || state.phase === "Main") && startScanned !== endKey) {
+      startScanned = endKey;
+      for (const [at,items] of Object.entries(state.permanents)) items.forEach((item,index) => {
+        const unitId = item.instanceId || item.card.instanceId;
+        if (!unitId || item.owner !== state.currentPlayer || !hasStartTrigger(item.card.name) || item.cpuTriggerStamps?.start === endKey) return;
+        enqueueTrigger("start",{kind:"permanent",at,index,instanceId:unitId},item.card,at,item.owner,batch,`cpu_start_${endKey}_${unitId}`);
+      });
+      for (const [at,tile] of Object.entries(state.board.sites)) {
+        if (!tile.card || tile.owner !== state.currentPlayer || !hasStartSiteTrigger(tile.card.name) || tile.cpuTriggerStamps?.start === endKey) continue;
+        enqueueTrigger("start",{kind:"site",at,instanceId:tile.card.instanceId},tile.card,at,tile.owner,batch,`cpu_start_${endKey}_${tile.card.instanceId || at}`);
+      }
+    }
     if (!restored && (state.permanents !== previous.permanents || state.avatars !== previous.avatars)) {
       const before = unitsInRealm(previous);
+      // Deathrite: a unit that left the realm for its owner's cemetery triggers where it died.
+      for (const prior of before) {
+        const id = prior.card.instanceId;
+        if (prior.target.kind !== "permanent" || !id || !hasCpuDeathrite(prior.card.name) || unitsNow().some(u => sameTarget(u.target,prior.target))) continue;
+        if (!state.zones[prior.owner]?.graveyard.some(card => card.instanceId === id) || previous.zones[prior.owner]?.graveyard.some(card => card.instanceId === id)) continue;
+        const eventId = `cpu_deathrite_${id}_${Date.now()}`, [x,y] = prior.at.split(",").map(Number);
+        enqueue({id:eventId,tile:{x,y},spell:{at:prior.at,index:-1,owner:prior.owner === "p1" ? 1 : 2,instanceId:eventId,card:prior.card},
+          cpuEvent:{kind:"deathrite",region:prior.region},status:"choosingTarget",createdAt:Date.now()},batch);
+      }
       for (const current of unitsNow()) {
         const prior = before.find(u => sameTarget(u.target,current.target));
         if (!prior && current.target.kind === "permanent") enqueueGenesis(current.card,current.at,current.owner === "p1" ? 1 : 2,batch,current.region,current.target);
+        const unitId = current.target.kind === "permanent" ? current.target.instanceId : null;
+        if (unitId && current.target.kind === "permanent" && (!prior || prior.at !== current.at) && (current.card.type || "").toLowerCase() !== "artifact") {
+          const item = state.permanents[current.at]?.[current.target.index];
+          // Wayfaring Pilgrim: the first entry into each corner (summoned into one counts) offers a draw.
+          const corner = cornerOf(current.at,state.board.size);
+          if (item && corner && current.card.name === "Wayfaring Pilgrim" && !(item.cpuCornersVisited || []).includes(corner)) {
+            enqueueTrigger("corner",current.target,current.card,current.at,current.owner === "p1" ? 1 : 2,batch,`cpu_corner_${unitId}_${corner}`,{corner});
+          }
+          // Mariner's Curse: a minion entering an affected (2x2) water site is submerged and the curse returns to hand.
+          if (current.region === "surface" && isWater(state,current.at)) {
+            const [cx,cy] = current.at.split(",").map(Number);
+            for (const [anchor,cursed] of Object.entries(state.permanents)) {
+              const [ax,ay] = anchor.split(",").map(Number);
+              if (cx<ax || cx>ax+1 || cy<ay || cy>ay+1) continue;
+              cursed.forEach((curse,curseIndex) => {
+                const curseId = curse.instanceId || curse.card.instanceId;
+                if (curse.card.name !== "Mariner's Curse" || !curseId ||
+                    cursed.some(token => token.card.name === "Silenced" && token.attachedTo?.at === anchor && token.attachedTo.index === curseIndex)) return;
+                enqueueTrigger("curse",{kind:"permanent",at:anchor,index:curseIndex,instanceId:curseId},curse.card,current.at,curse.owner,batch,
+                  `cpu_curse_${curseId}_${unitId}`,{victim:current.target});
+              });
+            }
+          }
+        }
         if (!prior || (prior.at === current.at && prior.region === current.region)) continue;
+        // Skirmishers of Mu: basic movement (not a forced relocation) may be followed by a ranged strike from any location on the path.
+        if (current.card.name === "Skirmishers of Mu" && prior.at !== current.at && prior.region === current.region && !state.cpuForcedMovement &&
+            current.target.kind === "permanent" && prior.target.kind === "permanent") {
+          const mover = previous.permanents[prior.at]?.[prior.target.index];
+          const path = mover ? movementRoutes(previous,prior.at,{...mover,card:prior.card}).get(current.at)?.path : undefined;
+          enqueueTrigger("skirmish",current.target,current.card,current.at,current.owner === "p1" ? 1 : 2,batch,
+            `cpu_skirmish_${current.target.instanceId || current.at}_${Date.now()}`,{path:path || [prior.at,current.at]});
+        }
         const entity = prior.target.kind === "avatar" ? previous.avatars[prior.target.seat] : previous.permanents[prior.at][prior.target.index];
         const effect = entity.cpuTurnEffect;
         if (!effect?.blaze || effect.turn !== `${previous.turn}:${previous.currentPlayer}`) continue;
@@ -258,6 +334,27 @@ export function installCpuController(store: StoreApi<GameState>) {
       if (Object.keys(changes).length) {
         store.setState({permanents:{...store.getState().permanents,...changes}});
         store.getState().trySendPatch({permanents:changes});
+      }
+    }
+    // King of the Realm: "You control all Mortals." Control returns to each Mortal's owner once no King rules;
+    // Kings under both controllers leave control as it is.
+    if (!restored && state.permanents !== previous.permanents) {
+      const rulers = new Set(unitsNow().filter(unit => unit.card.name === "King of the Realm" && !isDisabled(state,unit)).map(unit => unit.owner));
+      if (rulers.size <= 1) {
+        const ruler = rulers.has("p1") ? 1 as const : rulers.has("p2") ? 2 as const : null;
+        const permanents = store.getState().permanents, changes: GameState["permanents"] = {};
+        for (const [at,items] of Object.entries(permanents)) items.forEach((item,index) => {
+          const subTypes = item.card.subTypes || CARD_SUBTYPES[item.card.name]?.subTypes || "";
+          if (!/\bMortal\b/.test(subTypes) || !["Minion","Token"].includes(item.card.type || "")) return;
+          const native = item.cpuNativeOwner ?? item.owner, owner = ruler ?? native, keep = owner === native ? null : native;
+          if (item.owner === owner && (item.cpuNativeOwner ?? null) === keep) return;
+          changes[at] ||= [...permanents[at]];
+          changes[at][index] = {...item,owner,cpuNativeOwner:keep,version:(item.version || 0)+1};
+        });
+        if (Object.keys(changes).length) {
+          store.setState({permanents:{...store.getState().permanents,...changes}});
+          store.getState().trySendPatch({permanents:changes});
+        }
       }
     }
     if (store.getState().cpuPendingTriggerCount !== queue.length) store.setState({cpuPendingTriggerCount:queue.length});

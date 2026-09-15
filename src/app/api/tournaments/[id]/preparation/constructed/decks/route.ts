@@ -1,9 +1,11 @@
 import { NextRequest } from "next/server";
+import { CacheKeys, invalidateCache } from "@/lib/cache/redis-cache";
 import {
   CONSTRUCTED_REQUIREMENTS,
   formatValidationErrors,
   validateDeck,
 } from "@/lib/deck/validation-rules";
+import { buildDeckLoadSnapshot } from "@/lib/decks/external-deck-resolver";
 import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { prisma } from "@/lib/prisma";
 import { tournamentSocketService } from "@/lib/services/tournament-broadcast";
@@ -558,8 +560,18 @@ export async function POST(
       deckFull.cards as DeckCardWithRelations[]
     );
     const deckList = JSON.parse(JSON.stringify(deckListRaw));
+    // Frozen, loadable copy so later edits to the saved deck don't change
+    // what is played in matches (loaded like a regular deck in-match)
+    const deckSnapshot = await buildDeckLoadSnapshot(selectedDeckIdFinal);
+    if (!deckSnapshot) {
+      return new Response(JSON.stringify({ error: "Deck not found" }), {
+        status: 404,
+      });
+    }
 
     const updatedConstructedData = {
+      deckSnapshot,
+      snapshotAt: new Date().toISOString(),
       deckSelected: true,
       deckId: selectedDeckIdFinal,
       deckName: selectedDeckNameFinal,
@@ -587,6 +599,13 @@ export async function POST(
     console.log(
       `Player ${userId} selected deck ${deckId} for tournament ${id}`
     );
+
+    // The cached tournament detail carries this viewer's deck snapshot
+    try {
+      await invalidateCache(
+        `${CacheKeys.tournaments.detail(id)}:user:${userId}`
+      );
+    } catch {}
 
     // Broadcast preparation update so UI syncs immediately
     try {

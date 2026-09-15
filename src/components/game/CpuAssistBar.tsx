@@ -61,7 +61,7 @@ function eventLabel(event: NonNullable<PendingMagic["cpuEvent"]>): string {
     unitEnd:"End-of-turn projectile",projectileImpact:"Choose the next projectile impact",geomancerFill:"Fill adjacent void with Rubble",
     treasurePlace:"Opponent chooses underwater placement",treasureRecover:"Recover treasure",drawChoice:"Choose a deck to draw from",
     randomChoice:"Choose a random outcome",fightChoice:event.kind === "fightChoice" && event.strikeOnly ? "Strike after arrival" : "Fight after arrival",
-    genesis:"Genesis",auraEnd:"End-phase effect",blazeTrail:"Blaze trail",
+    genesis:"Genesis",deathrite:"Deathrite",cardTrigger:"Triggered ability",auraEnd:"End-phase effect",blazeTrail:"Blaze trail",
   };
   return labels[event.kind];
 }

@@ -20,7 +20,7 @@ const MAJOR = [[3,5,3],[5,7,5],[3,5,3]];
  */
 function advancedSpellChoices(state, seat, name, origin, add, casterKey, selectionKey) {
   // Deferred import avoids executing the mutually shared helpers during module initialization.
-  const { inRange, isWater, hasStealth, scoreOperations, projectileKey, directionPick, choiceCard } = require('./spells');
+  const { inRange, isWater, hasStealth, near, occupies, scoreOperations, projectileKey, directionPick, choiceCard } = require('./spells');
   // Shared read-only realm units of the active evaluation scope.
   const units = realmUnits(state);
   const sites = Object.keys(state.board.sites).filter(at => state.board.sites[at]?.card);
@@ -52,7 +52,7 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
       const pickLabels = {};
       for (let step=0;step<Math.floor(mana/2);step++) {
         const previous = chain[chain.length-1];
-        const eligible = targetable.filter(u => !chain.includes(u) && inRange(previous.at,u.at,'nearby'));
+        const eligible = targetable.filter(u => !chain.includes(u) && near(previous,u,'nearby'));
         if (!eligible.length) break;
         const best = bestByScore(eligible,scoreOf);
         const preferred = requested[step];
@@ -68,7 +68,7 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
       }
       return {chain,selections,decisions,pickLabels};
     };
-    for (const first of targetable.filter(u => inRange(origin.at,u.at,'nearby'))) {
+    for (const first of targetable.filter(u => near(origin,u,'nearby'))) {
       const suffix = `chain:${id(first)}`, baseKey = `${casterKey}/${suffix}`;
       let requested = [];
       if (selectionKey?.startsWith(`${baseKey}|`)) {
@@ -96,7 +96,7 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
       const hits = [];
       for (let step=1;step<=3;step++) for (let side=1-step;side<step;side++) {
         const x = ox+dx*step-dy*side, y = oy+dy*step+dx*side, at = `${x},${y}`;
-        for (const unit of units.filter(u => u.at === at && u.region === origin.region)) hits.push({ target: unit.target,amount: 7-2*step,element: 'fire' });
+        for (const unit of units.filter(u => occupies(u,at) && u.region === origin.region)) hits.push({ target: unit.target,amount: 7-2*step,element: 'fire' });
       }
       const {picks,pickLabels} = directionPick(origin.at,direction);
       add(direction,`Cone ${direction}: 5, 3, then 1 damage`,{ kind: 'projectile',direction },[{ kind: 'damageEvent',hits }],picks).pickLabels = pickLabels;
@@ -164,7 +164,7 @@ function advancedSpellChoices(state, seat, name, origin, add, casterKey, selecti
         const site = state.board.sites[at]?.card;
         // The effect summons without casting: no ownership, mana, or threshold restrictions.
         for (const region of site ? ['surface',isWater(state,at) ? 'underwater' : 'underground'] : ['void']) {
-          if (site?.name === 'Mountain Pass' && region === 'surface' && units.some(u => u.at === at && u.region === 'surface' && u.target.kind === 'permanent')) continue;
+          if (site?.name === 'Mountain Pass' && region === 'surface' && units.some(u => occupies(u,at) && u.region === 'surface' && u.target.kind === 'permanent')) continue;
           const layer = optToken(at,region);
           add(`${at}/${region}`,`Summon ${selected.card.name} at ${at} (${region})`,{kind:'location',at},[{kind:'raise',seat,to:at,region,...selected}],[at,layer]).pickLabels = {[layer]:LAYER_NAMES[region]};
         }

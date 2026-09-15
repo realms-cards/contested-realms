@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
 import { applyDamageEvent, locateUnit } from "@/lib/game/cpu/damage";
 import type { DamageHit, LocatedUnit, UnitTarget } from "@/lib/game/cpu/spellTypes";
-import { cardText, isDisabled, sameTarget, unitStats } from "@/lib/game/cpu/spells";
+import { cardText, isDisabled, sameTarget, shareLocation, unitStats } from "@/lib/game/cpu/spells";
 import type { GameState, PlayerKey } from "@/lib/game/store/types";
 import type { CustomMessage } from "@/lib/net/transport";
 
@@ -23,7 +23,7 @@ export function resolveCpuCombat(set: StoreSet, get: StoreGet) {
     // Only the defending seat's own Avatar can defend (rulebook "Defend"/"Intercept": Avatars are units).
     if (selected.isAvatar && selected.avatarSeat && selected.avatarSeat !== defenderSeat) continue;
     const unit = locateUnit(state,selected.isAvatar ? { kind: "avatar", seat: defenderSeat } : { kind: "permanent", ...selected });
-    if (!unit || unit.at !== attacker.at || unit.region !== attacker.region) {
+    if (!unit || !shareLocation(unit,attacker) || unit.region !== attacker.region) {
       state.log("Waiting for defenders to reach the combat location."); return;
     }
     if (!defenders.some(other => sameTarget(other.target,unit.target))) defenders.push(unit);
@@ -33,7 +33,7 @@ export function resolveCpuCombat(set: StoreSet, get: StoreGet) {
       : pending.target?.kind === "permanent" && pending.target.index !== null
         ? { kind: "permanent", at: pending.target.at, index: pending.target.index } : null;
     const unit = target ? locateUnit(state,target) : null;
-    if (target && (!unit || unit.at !== attacker.at || unit.region !== attacker.region)) return;
+    if (target && (!unit || !shareLocation(unit,attacker) || unit.region !== attacker.region)) return;
     if (unit) defenders.push(unit);
   }
   const attachments = (unit: LocatedUnit) => unit.target.kind === "permanent"

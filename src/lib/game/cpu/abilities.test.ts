@@ -67,7 +67,8 @@ describe("CPU activated abilities", () => {
   it("uses Sparkmage's current-turn air total and excludes itself and other regions", () => {
     const store = setup();
     store.setState({avatars:{...store.getState().avatars,p1:{card:card("Sparkmage"),pos:[2,3],tapped:false,cpuAirCast:{turn:"3:1",air:3}}},
-      permanents:{"2,3":[unit("Mountain Giant",2)],"2,2":[unit("Diluvian Kraken",2)]}});
+      // Amazon Warriors, not Mountain Giant: an oversized unit's extra locations would add a second target tile.
+      permanents:{"2,3":[unit("Amazon Warriors",2)],"2,2":[unit("Diluvian Kraken",2)]}});
     store.getState().setPermanentPosition("Diluvian Kraken",{permanentId:"Diluvian Kraken",state:"submerged",position:{x:2,y:-0.15,z:2}});
     const choices = abilityChoices(store.getState(),"p1").filter(choice => choice.key.startsWith("sparkmage/"));
     expect(choices).toHaveLength(1);
@@ -255,11 +256,12 @@ describe("CPU activated abilities", () => {
   it("banishes only dead fire minions and lets Flamecaller choose among the first projectile impacts", () => {
     const store = setup();
     store.setState({avatars:{...store.getState().avatars,p1:{...store.getState().avatars.p1,pos:[2,3]}},
-      permanents:{"2,3":[{...unit("Mountain Giant"),instanceId:"friendly-giant"}],"2,2":[unit("Ogre Goons",2),unit("Mountain Giant",2)]},
+      // Single-location units: an oversized Mountain Giant would also stand in the projectile's other lines.
+      permanents:{"2,3":[{...unit("Amazon Warriors"),instanceId:"friendly-warriors"}],"2,2":[unit("Ogre Goons",2),unit("Amazon Warriors",2)]},
       zones:{...store.getState().zones,p1:{...store.getState().zones.p1,graveyard:[card("Askelon Phoenix"),card("Ogre Goons"),card("Drown"),card("Mountain Giant")]}}});
     const choices = abilityChoices(store.getState(),"p1").filter(choice => choice.key.startsWith("flamecaller/"));
     expect(choices).toHaveLength(2);
-    const choice = choices.find(choice => choice.key.endsWith("Mountain Giant"));
+    const choice = choices.find(choice => choice.key.endsWith("Amazon Warriors"));
     if (!choice) throw new Error("Missing Flamecaller impact choice");
     store.getState().activateCpuAbility(choice.key);
     const amount = cards["Askelon Phoenix"].thresholds.fire+cards["Ogre Goons"].thresholds.fire;

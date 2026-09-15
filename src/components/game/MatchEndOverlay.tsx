@@ -59,7 +59,6 @@ export default function MatchEndOverlay({
   rated,
   soatcLeagueResult,
   viewerSoatcUuid,
-  isTournament,
   rematch,
 }: MatchEndOverlayProps) {
   // One result sound per opening. A null winner can be transient while the
@@ -420,7 +419,7 @@ export default function MatchEndOverlay({
           )}
         </div>
 
-        {matchId && !isTournament && (
+        {matchId && (
           <div className="mt-3 sm:mt-4">
             <Link
               href={`/replay/${matchId}`}

@@ -505,14 +505,15 @@ describe("live sequential projectile resolution", () => {
   });
   it.each(["Heat Ray","Ice Lance"] as const)("%s hits a new occupant, not the unit that left during interruption", async name => {
     const store = position();
-    store.setState({permanents:{"1,3":[unit("Mountain Giant",2,"first")],"2,3":[unit("Mountain Giant",2,"departed")]}});
+    // Single-location units: an oversized Mountain Giant at 1,3 would also stand at 2,3.
+    store.setState({permanents:{"1,3":[unit("Amazon Warriors",2,"first")],"2,3":[unit("Amazon Warriors",2,"departed")]}});
     online(store);
     const unsubscribe = interruptFirstDamage(store);
     cast(store,name);
     unsubscribe();
     await settle();
     const departed = store.getState().permanents["2,3"][0];
-    store.setState({permanents:{...store.getState().permanents,"2,3":[unit("Mountain Giant",2,"arrival")],"4,0":[departed]}});
+    store.setState({permanents:{...store.getState().permanents,"2,3":[unit("Amazon Warriors",2,"arrival")],"4,0":[departed]}});
     await resolve(store,"random/0");
     expect(store.getState().permanents["1,3"][0].damage).toBe(2);
     expect(store.getState().permanents["2,3"][0].damage).toBe(name === "Heat Ray" ? 2 : 1);

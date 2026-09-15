@@ -80,6 +80,23 @@ function facts(snap, name) {
   return known;
 }
 
+// Oversized units (rulebook) are at each location of a 2x2 area. Like 2x2 auras they are stored at the area's
+// minimum-x/minimum-y anchor; `cells` lists the locations, and only oversized units carry it.
+const OVERSIZED = new Set(['Mountain Giant']);
+
+/** Locations a unit card occupies when stored at `at` (off-board ones dropped when a size is given).
+ * @param {string} name @param {string} at @param {{w: number, h: number}} [size] @returns {string[]} */
+function occupiedCells(name, at, size) {
+  if (!OVERSIZED.has(name)) return [at];
+  const [x,y] = cellOf(at);
+  return [[x,y],[x+1,y],[x,y+1],[x+1,y+1]].filter(([cx,cy]) => !size || (cx < size.w && cy < size.h)).map(([cx,cy]) => `${cx},${cy}`);
+}
+
+/** True when the unit is at `at` (any of an oversized unit's locations). @param {LocatedUnit} unit @param {string} at */
+function occupies(unit, at) {
+  return unit.cells ? unit.cells.includes(at) : unit.at === at;
+}
+
 /** @param {SpellState} state @returns {LocatedUnit[]} */
 function buildUnits(state) {
   const result = [];
@@ -88,12 +105,13 @@ function buildUnits(state) {
       const type = item.card?.type || cards[item.card?.name]?.type;
       if (type !== 'Minion' && !(type === 'Token' && ['Foot Soldier','Skeleton','Frog','Bruin','Tawny'].includes(item.card.name)) && !/Automaton/i.test(cards[item.card?.name]?.subTypes || '')) return;
       const position = state.permanentPositions?.[item.instanceId || item.card?.instanceId];
+      const cells = OVERSIZED.has(item.card?.name) ? occupiedCells(item.card.name, at, state.board.size) : null;
       const region = position?.state === 'burrowed' ? 'underground'
         : position?.state === 'submerged' ? 'underwater'
-        : state.board.sites[at]?.card ? 'surface' : 'void';
+        : (cells ? cells.some(cell => state.board.sites[cell]?.card) : state.board.sites[at]?.card) ? 'surface' : 'void';
       result.push({
         target: { kind: 'permanent', at, index, instanceId: item.instanceId || item.card?.instanceId },
-        at, region, owner: item.owner === 1 ? 'p1' : 'p2', card: item.card, damage: item.damage || 0,
+        at, region, owner: item.owner === 1 ? 'p1' : 'p2', card: item.card, damage: item.damage || 0, ...(cells ? { cells } : {}),
       });
     });
   }
@@ -118,7 +136,7 @@ function realmUnits(state, snap = snapshotOf(state)) {
 /** Units the caller may keep or mutate. @param {SpellState} state @returns {LocatedUnit[]} */
 function freshUnits(state) {
   if (!scope) return buildUnits(state);
-  return realmUnits(state).map(unit => /** @type {LocatedUnit} */ ({ target: { ...unit.target }, at: unit.at, region: unit.region, owner: unit.owner, card: unit.card, damage: unit.damage }));
+  return realmUnits(state).map(unit => /** @type {LocatedUnit} */ ({ target: { ...unit.target }, at: unit.at, region: unit.region, owner: unit.owner, card: unit.card, damage: unit.damage, ...(unit.cells ? { cells: unit.cells } : {}) }));
 }
 
 /**
@@ -237,4 +255,4 @@ function scopedTileLabel(label, size) {
   return result;
 }
 
-module.exports = { enterScope, leaveScope, snapshotOf, facts, realmUnits, freshUnits, unitPosition, findUnit, bestByScore, cellOf, scopedTileLabel };
+module.exports = { enterScope, leaveScope, snapshotOf, facts, realmUnits, freshUnits, unitPosition, findUnit, bestByScore, cellOf, scopedTileLabel, occupiedCells, occupies };

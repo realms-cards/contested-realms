@@ -409,9 +409,11 @@ export const createPermanentMovementSlice: StateCreator<
           state.opponentPlayerId.startsWith("cpu_");
         const canMoveToDestructiveZone =
           target === "graveyard" || target === "banished";
+        // CPU effects may also return the bot's permanent to its hand (Mariner's Curse).
         if (
           !isOwner &&
-          !((isActingPlayer || opponentIsCpu) && canMoveToDestructiveZone)
+          !((isActingPlayer || opponentIsCpu) && canMoveToDestructiveZone) &&
+          !(opponentIsCpu && target === "hand")
         ) {
           get().log("Cannot move opponent's permanent to a zone");
           return state as GameState;

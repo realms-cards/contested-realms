@@ -2,8 +2,9 @@ import type { StateCreator } from "zustand";
 import { applyDamageEvent } from "@/lib/game/cpu/damage";
 import { luckyCharmCount } from "@/lib/game/cpu/luckyCharm";
 import type { CpuEffectCompletion, SpellChoice, SpellOperation, UnitTarget } from "@/lib/game/cpu/spellTypes";
-import { cardText, expandAreaOperation, inRange, isDisabled, isWater, projectileImpactChoices, sameTarget, unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
+import { cardText, expandAreaOperation, hasStealth, inRange, isDisabled, isWater, near, occupies, projectileImpactChoices, sameTarget, shareLocation, unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
 import type { CardRef, GameState, PlayerKey } from "@/lib/game/store/types";
+import { prepareCardForSeat, toTransformedSiteMinionCard } from "@/lib/game/store/utils/cardHelpers";
 import { buildMoveDeltaPatch } from "@/lib/game/store/utils/patchHelpers";
 import { movePermanentCore } from "@/lib/game/store/utils/permanentHelpers";
 import { createZonesPatchFor } from "@/lib/game/store/utils/zoneHelpers";
@@ -232,7 +233,7 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
     if (op.kind === "stunAt") {
       const state = get(), items = [...(state.permanents[op.at] || [])];
       for (const unit of unitsInRealm(state)) {
-        if (unit.at !== op.at || unit.target.kind !== "permanent" || (!isDisabled(state,unit) && /\bSubmerge\b/.test(cardText(unit.card)))) continue;
+        if (!occupies(unit,op.at) || unit.target.kind !== "permanent" || (!isDisabled(state,unit) && /\bSubmerge\b/.test(cardText(unit.card)))) continue;
         const item = items[unit.target.index];
         items[unit.target.index] = {...item,tapped:true,skipNextUntap:true,tapVersion:(item.tapVersion || 0)+1,version:(item.version || 0)+1};
       }
@@ -243,7 +244,7 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
     if (op.kind === "dragUnit") continue; // Expanded into interruptible movement above.
     if (op.kind === "offerFight" || op.kind === "fight" || op.kind === "strike") {
       const units = unitsInRealm(get()), source = units.find(unit => sameTarget(unit.target,op.source)), target = units.find(unit => sameTarget(unit.target,op.target));
-      if (!source || !target || source.at !== target.at || source.region !== target.region || isDisabled(get(),source)) continue;
+      if (!source || !target || !shareLocation(source,target) || source.region !== target.region || isDisabled(get(),source)) continue;
       if (op.kind === "offerFight") {
         const id = `cpu_fight_${Date.now()}_${Math.random().toString(36).slice(2)}`, [x,y] = source.at.split(",").map(Number);
         set({cpuEffectRequests:[{id,tile:{x,y},spell:{at:source.at,index:-1,owner:source.owner === "p1" ? 1 : 2,card:source.card},cpuEvent:{kind:"fightChoice",source:source.target,target:target.target,strikeOnly:op.strikeOnly},status:"choosingTarget",createdAt:Date.now()}]});
@@ -267,7 +268,7 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
     }
     if (op.kind === "damageAtSource") {
       const found = locate(op.source);
-      if (found) applyDamageEvent(set,get,unitsInRealm(get()).filter(unit => unit.at === found.at && unit.region === op.region).map(unit => ({target:unit.target,amount:op.amount})));
+      if (found) applyDamageEvent(set,get,unitsInRealm(get()).filter(unit => occupies(unit,found.at) && unit.region === op.region).map(unit => ({target:unit.target,amount:op.amount})));
       continue;
     }
     if (op.kind === "banishDeadFire") {
@@ -291,7 +292,7 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
       const units = unitsInRealm(get()), source = units.find(unit => sameTarget(unit.target,op.source));
       if (!source || isDisabled(get(),source)) continue;
       const power = unitStats(get(),source).atk;
-      applyDamageEvent(set,get,units.filter(unit => unit.region === source.region && inRange(source.at,unit.at,"nearby") && !sameTarget(unit.target,source.target)).map(unit => ({target:unit.target,amount:power,sourcePower:power,sourceName:source.card.name})));
+      applyDamageEvent(set,get,units.filter(unit => unit.region === source.region && near(source,unit,"nearby") && !sameTarget(unit.target,source.target)).map(unit => ({target:unit.target,amount:power,sourcePower:power,sourceName:source.card.name})));
       continue;
     }
     if (op.kind === "auraUpdate") {
@@ -423,6 +424,100 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
       }
       const board = {...get().board,sites};
       set({board}); get().trySendPatch({board});
+      continue;
+    }
+    if (op.kind === "strikeTarget") {
+      const state = get(), units = unitsInRealm(state);
+      const source = units.find(unit => sameTarget(unit.target,op.source)), target = units.find(unit => sameTarget(unit.target,op.target));
+      if (!source || !target || isDisabled(state,source)) continue;
+      const power = unitStats(state,source).atk;
+      applyDamageEvent(set,get,[{target:target.target,amount:power,lethal:/\bLethal\b/.test(cardText(source.card)),sourcePower:power,sourceName:source.card.name,...(op.ranged ? {ranged:true} : {})}]);
+      if (!op.ranged) continue;
+      const shooter = unitsInRealm(get()).find(unit => sameTarget(unit.target,op.source)), found = locate(op.source);
+      if (!shooter || !found) continue;
+      if (hasStealth(get(),shooter)) {
+        // A strike interacts with the realm, which ends Stealth.
+        const items = [...get().permanents[found.at]];
+        items[found.index] = {...found.unit,cpuStealthLost:true,version:(found.unit.version || 0)+1};
+        set({permanents:{...get().permanents,[found.at]:items}});
+        get().trySendPatch({permanents:{[found.at]:items}});
+      }
+      if (found.unit.card.name === "Kite Archer") {
+        const id = `cpu_kite_${Date.now()}_${Math.random().toString(36).slice(2)}`, [x,y] = found.at.split(",").map(Number);
+        set({cpuEffectRequests:[{id,tile:{x,y},spell:{at:found.at,index:-1,owner:found.unit.owner,card:found.unit.card},
+          cpuEvent:{kind:"cardTrigger",trigger:"kiteStep",source:{kind:"permanent",at:found.at,index:found.index,instanceId:found.unit.instanceId || found.unit.card.instanceId}},
+          status:"choosingTarget",createdAt:Date.now()}]});
+      }
+      continue;
+    }
+    if (op.kind === "teleportRandom") {
+      const state = get(), unit = unitsInRealm(state).find(candidate => sameTarget(candidate.target,op.target));
+      if (!unit) continue;
+      const cells: string[] = [];
+      for (let y=0;y<state.board.size.h;y++) for (let x=0;x<state.board.size.w;x++) if (`${x},${y}` !== unit.at) cells.push(`${x},${y}`);
+      if (!cells.length) continue;
+      const to = cells[Math.min(cells.length-1,Math.floor(rng()*cells.length))];
+      applyOperations(set,get,{...choice,operations:[{kind:"move",target:op.target,to}]},rng);
+      continue;
+    }
+    if (op.kind === "moveSite") {
+      const state = get(), [fx,fy] = op.from.split(",").map(Number), [tx,ty] = op.to.split(",").map(Number);
+      if (!state.board.sites[op.from]?.card || state.board.sites[op.to]?.card) continue;
+      // The site carries everything atop it (units, artifacts, avatars); auras and Rubble stay put.
+      state.switchSitePosition(fx,fy,tx,ty,{bypassOwnerCheck:true});
+      continue;
+    }
+    if (op.kind === "transformLeviathan") {
+      const state = get(), tile = state.board.sites[op.at];
+      if (tile?.card?.name !== "Island Leviathan") continue;
+      const seat: PlayerKey = tile.owner === 1 ? "p1" : "p2";
+      const definition = TOKEN_BY_NAME.rubble;
+      // Flooded Rubble: a neutral Rubble site that is always water.
+      const rubble = {owner:tile.owner,cpuNeutral:true,card:{cardId:newTokenInstanceId(definition),name:"Rubble",type:"Token",slug:tokenSlug(definition),thresholds:{water:1}}};
+      const monster = toTransformedSiteMinionCard(prepareCardForSeat(tile.card,seat));
+      const instanceId = monster.instanceId || `cpu_leviathan_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const items = [...(state.permanents[op.at] || []),{card:{...monster,instanceId},owner:tile.owner,instanceId,tapped:false,version:1}];
+      const board = {...state.board,sites:{...state.board.sites,[op.at]:rubble}};
+      set({board,permanents:{...state.permanents,[op.at]:items}});
+      get().trySendPatch({board,permanents:{[op.at]:items}});
+      continue;
+    }
+    if (op.kind === "stampSite") {
+      const tile = get().board.sites[op.at];
+      if (!tile) continue;
+      const board = {...get().board,sites:{...get().board.sites,[op.at]:{...tile,cpuAbilityTurn:op.turnKey}}};
+      set({board}); get().trySendPatch({board});
+      continue;
+    }
+    if (op.kind === "stampTrigger") {
+      const source = op.source;
+      if (source.kind === "site") {
+        const tile = get().board.sites[source.at];
+        if (!tile) continue;
+        const board = {...get().board,sites:{...get().board.sites,[source.at]:{...tile,cpuTriggerStamps:{...tile.cpuTriggerStamps,[op.timing]:op.turnKey}}}};
+        set({board}); get().trySendPatch({board});
+      } else if (source.kind === "permanent") {
+        const found = locate(source);
+        if (!found) continue;
+        const items = [...get().permanents[found.at]];
+        items[found.index] = {...found.unit,cpuTriggerStamps:{...found.unit.cpuTriggerStamps,[op.timing]:op.turnKey},version:(found.unit.version || 0)+1};
+        set({permanents:{...get().permanents,[found.at]:items}});
+        get().trySendPatch({permanents:{[found.at]:items}});
+      }
+      continue;
+    }
+    if (op.kind === "markCorner") {
+      const found = locate(op.target);
+      if (!found) continue;
+      const items = [...get().permanents[found.at]];
+      items[found.index] = {...found.unit,cpuCornersVisited:[...new Set([...(found.unit.cpuCornersVisited || []),op.corner])],version:(found.unit.version || 0)+1};
+      set({permanents:{...get().permanents,[found.at]:items}});
+      get().trySendPatch({permanents:{[found.at]:items}});
+      continue;
+    }
+    if (op.kind === "returnToHand") {
+      const found = locate(op.target);
+      if (found) get().movePermanentToZone(found.at,found.index,"hand");
       continue;
     }
     if (op.kind === "buff") { buff(op.target, op.power, op.movement,op.blaze); continue; }

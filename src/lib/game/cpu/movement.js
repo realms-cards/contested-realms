@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports -- Shared directly with the CommonJS CPU engine. */
 const { affectedByAura } = require('./auras');
-const { enterScope, leaveScope, realmUnits } = require('./evalScope');
+const { enterScope, leaveScope, occupiedCells, realmUnits } = require('./evalScope');
 const { cardText, isDisabled, isWater } = require('./spells');
 
 /** @param {import('./spellTypes').SpellState} state @param {import('../store/types').PermanentItem} unit */
@@ -36,6 +36,9 @@ function stepsFrom(state,from,unit,origin) {
     const at = `${nx},${ny}`, destination = state.board.sites[at]?.card;
     if (nx<0 || ny<0 || nx>=state.board.size.w || ny>=state.board.size.h) continue;
     if (!destination && (!voidwalk || unit.card.type === 'Avatar')) continue;
+    // An oversized unit steps with all four of its locations: each must be on the board and able to hold it.
+    const cells = occupiedCells(unit.card.name,at);
+    if (cells.length > 1 && cells.some(cell => { const [cx,cy] = cell.split(',').map(Number); return cx>=state.board.size.w || cy>=state.board.size.h || (!state.board.sites[cell]?.card && !voidwalk); })) continue;
     if (layer === 'burrowed' && (!destination || isWater(state,at))) continue;
     if (layer === 'submerged' && (!destination || !isWater(state,at))) continue;
     if (dx && dy && (!destination || !site)) continue;

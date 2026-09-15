@@ -7,6 +7,9 @@ export type UnitTarget =
   | { kind: "avatar"; seat: PlayerKey }
   | { kind: "permanent"; at: string; index: number; instanceId?: string | null };
 
+/** A card trigger's source: a unit, or a site (Maelström). */
+export type TriggerSource = UnitTarget | { kind: "site"; at: string; instanceId?: string | null };
+
 export type SpellOperation =
   | ProjectileOperation
   | { kind: "offerProjectile"; projectile: ProjectileOperation }
@@ -53,7 +56,16 @@ export type SpellOperation =
   | { kind: "buff"; target: UnitTarget; power: number; movement: number; blaze?: boolean }
   | { kind: "moveSpent"; target: UnitTarget; steps: number }
   | { kind: "mend"; target: UnitTarget; amount: number }
-  | { kind: "subsurface"; targets: UnitTarget[]; state: "burrowed" | "submerged" };
+  | { kind: "subsurface"; targets: UnitTarget[]; state: "burrowed" | "submerged" }
+  /** The source strikes the target wherever it is (Quarrelsome Kobolds; `ranged` for Ranged strikes). */
+  | { kind: "strikeTarget"; source: UnitTarget; target: UnitTarget; ranged?: boolean }
+  | { kind: "teleportRandom"; target: UnitTarget }
+  | { kind: "moveSite"; from: string; to: string }
+  | { kind: "transformLeviathan"; at: string }
+  | { kind: "stampSite"; at: string; turnKey: string }
+  | { kind: "stampTrigger"; source: TriggerSource; timing: "start" | "end"; turnKey: string }
+  | { kind: "markCorner"; target: UnitTarget; corner: string }
+  | { kind: "returnToHand"; target: UnitTarget };
 
 export interface DamageHit {
   target: UnitTarget;
@@ -127,6 +139,8 @@ export interface LocatedUnit {
   owner: PlayerKey;
   card: CardRef;
   damage: number;
+  /** Every location of an oversized unit (Mountain Giant); `at` is its 2x2 anchor. Absent for ordinary units. */
+  cells?: string[];
 }
 
 export type SpellState = Pick<GameState,

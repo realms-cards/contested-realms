@@ -373,7 +373,16 @@ export function validateAction(
             const sitesOwned = Object.values(currentSites).filter(
               (t) => t && t.card && Number(t.owner) === meNum,
             ).length;
-            if (sitesOwned === 0 && meKey) {
+            // Cornerstone: "You may play this site to any corner."
+            const [cornerX, cornerY] = key.split(",").map(Number);
+            const boardSize = (game.board as AnyRecord | undefined)?.size as AnyRecord | undefined;
+            const boardW = getBoardWidth(game);
+            const boardH = Number(boardSize?.h) || 4;
+            const cornerstone =
+              String((nextTile.card as AnyRecord).name || "") === "Cornerstone" &&
+              (cornerX === 0 || cornerX === boardW - 1) &&
+              (cornerY === 0 || cornerY === boardH - 1);
+            if (sitesOwned === 0 && meKey && !cornerstone) {
               const av = avatars[meKey as string] || {};
               const pos = Array.isArray(av.pos) ? (av.pos as number[]) : null;
               if (pos) {
@@ -390,7 +399,7 @@ export function validateAction(
                 }
               }
             }
-            if (sitesOwned > 0 && !isAdjacentToOwnedSite(game, meNum, key)) {
+            if (sitesOwned > 0 && !cornerstone && !isAdjacentToOwnedSite(game, meNum, key)) {
               return {
                 ok: false,
                 error: "New sites must be adjacent to your existing sites",

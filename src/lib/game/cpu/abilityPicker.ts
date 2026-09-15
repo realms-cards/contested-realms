@@ -35,7 +35,8 @@ const sameRules = (a: AbilityRulesState, b: AbilityRulesState) => {
 };
 function readyChoices(rules: AbilityRulesState, seat: PlayerKey): AbilityChoice[] {
   if (last && last.seat === seat && sameRules(last.rules,rules)) return last.choices;
-  const choices = abilityChoices(rules,seat);
+  // Ranged strikes use the Combat controls and layer changes the context menu; those choices serve the CPU's own turns.
+  const choices = abilityChoices(rules,seat).filter(choice => !/^(ranged|layer)\//.test(choice.key));
   last = {rules,seat,choices};
   return choices;
 }

@@ -95,12 +95,20 @@ export async function GET(
           ? tournament.registrations.find((r) => r.playerId === viewerId) ||
             null
           : null;
-        let viewerDeck: Array<{ cardId: string; quantity: number }> | null =
-          null;
+        let viewerDeck: Array<{
+          cardId: string;
+          quantity: number;
+          zone?: string;
+        }> | null = null;
         let viewerSideboard: Array<{
           cardId: string;
           quantity: number;
         }> | null = null;
+        // Constructed: the submitted deck id, loaded in-match through the
+        // same deck loader as regular matches
+        let viewerDeckId: string | null = null;
+        // Constructed: the deck frozen at submission (DeckLoadPayload shape)
+        let viewerDeckSnapshot: unknown = null;
         if (viewerReg && viewerReg.preparationData) {
           try {
             const prep = viewerReg.preparationData as unknown as Record<
@@ -149,6 +157,11 @@ export async function GET(
               }));
             }
 
+            viewerDeckId = constructed?.deckId ?? null;
+            viewerDeckSnapshot =
+              (prep?.constructed as { deckSnapshot?: unknown } | undefined)
+                ?.deckSnapshot ?? null;
+
             // Fallback for constructed: fetch the selected deck from database and aggregate
             if (!viewerDeck && constructed?.deckId) {
               const deck = await prisma.deck.findUnique({
@@ -156,15 +169,26 @@ export async function GET(
                 include: { cards: true },
               });
               if (deck) {
-                // Aggregate cards by cardId
-                const cardMap = new Map<string, number>();
+                // Aggregate cards by cardId + zone. The zone must survive so
+                // Collection cards stay in the collection (not the spellbook)
+                // and Sideboard cards stay out of the game, like regular decks.
+                const cardMap = new Map<
+                  string,
+                  { cardId: string; zone: string; quantity: number }
+                >();
                 for (const card of deck.cards) {
                   const id = String(card.cardId);
-                  cardMap.set(id, (cardMap.get(id) || 0) + (card.count || 1));
+                  const key = `${id}:${card.zone}`;
+                  const entry = cardMap.get(key);
+                  if (entry) entry.quantity += card.count || 1;
+                  else
+                    cardMap.set(key, {
+                      cardId: id,
+                      zone: card.zone,
+                      quantity: card.count || 1,
+                    });
                 }
-                viewerDeck = Array.from(cardMap.entries()).map(
-                  ([cardId, quantity]) => ({ cardId, quantity }),
-                );
+                viewerDeck = Array.from(cardMap.values());
               }
             }
           } catch {}
@@ -219,6 +243,8 @@ export async function GET(
           settings: tournament.settings,
           viewerDeck,
           viewerSideboard,
+          viewerDeckId,
+          viewerDeckSnapshot,
           createdAt:
             typeof tournament.createdAt === "string"
               ? new Date(tournament.createdAt).getTime()

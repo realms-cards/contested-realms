@@ -1,8 +1,8 @@
 import type { StateCreator } from "zustand";
 import { isInterrogator } from "@/lib/game/avatarAbilities";
+import { applySpellChoice } from "@/lib/game/cpu/applySpellChoice";
 import { resolveCpuCombat } from "@/lib/game/cpu/combat";
-import { applyDamageEvent, locateUnit } from "@/lib/game/cpu/damage";
-import { cardText, hasStealth, unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
+import { unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
 import { rangedAttack } from "@/lib/game/cpu/stationaryAttack";
 import type { CustomMessage } from "@/lib/net/transport";
 import {
@@ -38,6 +38,21 @@ function cpuAvatarPower(state: GameState, seat: PlayerKey | undefined) {
   if (!state.opponentPlayerId?.startsWith("cpu_") || !seat) return null;
   const unit = unitsInRealm(state).find(unit => unit.target.kind === "avatar" && unit.target.seat === seat);
   return unit ? unitStats(state, unit).atk : null;
+}
+
+/** Tap a unit paying an attack or Ranged cost; a unit already tapped (e.g. by its move) stays as it is. */
+function tapAttacker(
+  get: () => GameState,
+  unit: { at: CellKey; index: number; owner: 1 | 2; isAvatar?: boolean; avatarSeat?: PlayerKey },
+) {
+  const state = get();
+  if (unit.isAvatar) {
+    const seat = unit.avatarSeat ?? seatFromOwner(unit.owner);
+    if (!state.avatars[seat]?.tapped) state.toggleTapAvatar(seat);
+    return;
+  }
+  const item = state.permanents[unit.at]?.[unit.index];
+  if (item && !item.tapped) state.setTapPermanent(unit.at, unit.index, true);
 }
 
 type CombatSlice = Pick<
@@ -269,7 +284,8 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
     return true;
   },
 
-  declareAttack: (tile, attacker, target) =>
+  declareAttack: (tile, attacker, target) => {
+    const before = get().pendingCombat;
     set((state) => {
       if (state.opponentPlayerId?.startsWith("cpu_") && state.pendingMagic) {
         state.log("Finish the current effect before declaring an attack.");
@@ -454,7 +470,11 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       }
 
       return { pendingCombat: combatState } as Partial<GameState> as GameState;
-    }),
+    });
+    // Attacking taps the attacker once the attack is really declared.
+    const declared = get().pendingCombat;
+    if (declared && declared !== before) tapAttacker(get, attacker);
+  },
 
   // Ranged X is a tap ability, not an attack: nobody defends and the target does not strike back.
   rangedStrike: (attacker, target) => {
@@ -491,24 +511,16 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
     else get().setTapPermanent(source.at as CellKey, source.target.index, true);
 
     if (state.opponentPlayerId?.startsWith("cpu_")) {
-      // The bot has no client of its own, so this client applies the strike and any kill.
-      applyDamageEvent(set, get, [{
-        target: victim.target,
-        amount: power,
-        ranged: true,
-        lethal: /\bLethal\b/.test(cardText(source.card)),
-        sourcePower: power,
-        sourceName: source.card.name,
-      }]);
-      const shooter = locateUnit(get(), source.target);
-      if (shooter?.target.kind === "permanent" && hasStealth(get(), shooter)) {
-        // Striking interacts with the realm, which ends Stealth.
-        const items = [...get().permanents[shooter.at]];
-        const index = shooter.target.index;
-        items[index] = { ...items[index], cpuStealthLost: true, version: (items[index].version || 0) + 1 };
-        set({ permanents: { ...get().permanents, [shooter.at]: items } } as Partial<GameState> as GameState);
-        get().trySendPatch({ permanents: { [shooter.at]: items } });
-      }
+      // The bot has no client of its own, so this client applies the strike, any kill, lost Stealth and
+      // Kite Archer's optional step through the shared rules operation.
+      applySpellChoice(set, get, {
+        key: "ranged-strike",
+        label: `${source.card.name} shoots ${victim.card.name}`,
+        caster: { kind: "avatar", seat },
+        target: null,
+        score: 0,
+        operations: [{ kind: "strikeTarget", source: source.target, target: victim.target, ranged: true }],
+      });
     } else {
       // Owner-applies: the struck unit's client damages it (magicDamage handler).
       get().transport?.sendMessage?.({

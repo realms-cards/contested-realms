@@ -54,6 +54,10 @@ export type SiteTile = {
   cpuFloodedUntil?: string | null;
   cpuFloodOriginalThresholds?: CardRef["thresholds"];
   cpuImmobileUntil?: number;
+  /** CPU rules: turn key ("turn:player") of the last once-per-turn site ability (Floodplain, Cloud City). */
+  cpuAbilityTurn?: string | null;
+  /** CPU rules: turn keys of resolved start/end-of-turn triggers (Maelström). */
+  cpuTriggerStamps?: { start?: string; end?: string } | null;
   tapped?: boolean;
   card?: CardRef | null;
 };
@@ -156,6 +160,12 @@ export type EntityBase<TCard> = {
   cpuAuraTicks?: number;
   cpuAuraVisited?: string[];
   cpuAuraLastEnd?: {effect?: string; counter?: string};
+  /** CPU rules: turn keys of resolved start/end-of-turn triggers (Infernal Legion, Guile Sirens…). */
+  cpuTriggerStamps?: { start?: string; end?: string } | null;
+  /** CPU rules: corners Wayfaring Pilgrim has already entered. */
+  cpuCornersVisited?: string[];
+  /** CPU rules: the owner a Mortal returns to when King of the Realm stops controlling it. */
+  cpuNativeOwner?: 1 | 2 | null;
 };
 
 // Champion reference for Dragonlord avatar
@@ -547,7 +557,10 @@ export type PendingMagic = {
     | { kind: "fightChoice"; source: import("@/lib/game/cpu/spellTypes").UnitTarget; target: import("@/lib/game/cpu/spellTypes").UnitTarget; strikeOnly?: boolean }
     | { kind: "auraEnd"; source: import("@/lib/game/cpu/spellTypes").UnitTarget; counter?: boolean }
     | { kind: "blazeTrail"; from: string; to: string; region: string; source: import("@/lib/game/cpu/spellTypes").UnitTarget; forced?: boolean; budget?: number }
-    | { kind: "genesis"; region: string; source?: import("@/lib/game/cpu/spellTypes").UnitTarget; sourceSite?: { at: string; name: string; instanceId?: string | null } };
+    | { kind: "genesis"; region: string; source?: import("@/lib/game/cpu/spellTypes").UnitTarget; sourceSite?: { at: string; name: string; instanceId?: string | null } }
+    | { kind: "deathrite"; region: string }
+    | { kind: "cardTrigger"; trigger: "start" | "end" | "corner" | "curse" | "kiteStep" | "skirmish"; source: import("@/lib/game/cpu/spellTypes").TriggerSource;
+        path?: string[]; corner?: string; victim?: import("@/lib/game/cpu/spellTypes").UnitTarget };
   tile: { x: number; y: number };
   // The spell card placed on board for UX; resolved to cemetery on completion
   spell: {
@@ -2004,6 +2017,8 @@ export type GameState = {
       at: CellKey;
       index: number | null;
       label: string;
+      /** Where this fight happens, when it is not the choice's tile (an oversized attacker's other locations). */
+      tile?: { x: number; y: number };
     }>;
   } | null;
   attackConfirm: {

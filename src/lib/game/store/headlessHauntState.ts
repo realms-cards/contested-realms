@@ -154,6 +154,8 @@ export const createHeadlessHauntSlice: StateCreator<
       console.log("[HeadlessHaunt] Skipping trigger - resolvers disabled");
       return;
     }
+    // CPU matches teleport Headless Haunt in the CPU rules layer (cpu/cardTriggers.js), for both seats.
+    if (get().opponentPlayerId?.startsWith("cpu_")) return;
 
     // Guard: don't trigger if there's already a pending haunt move
     const existingPending = get().pendingHeadlessHauntMove;

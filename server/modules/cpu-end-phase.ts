@@ -1,4 +1,5 @@
-const timed = new Set(["Wildfire", "Thunderstorm", "Entangle Terrain"]);
+// Cards with end-of-turn effects the human client resolves before the turn may pass.
+const timed = new Set(["Wildfire", "Thunderstorm", "Entangle Terrain", "Infernal Legion", "Quarrelsome Kobolds"]);
 type State = Record<string, unknown>;
 const record = (value: unknown): value is State => !!value && typeof value === "object" && !Array.isArray(value);
 

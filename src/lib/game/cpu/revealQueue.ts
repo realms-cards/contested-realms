@@ -182,6 +182,8 @@ export function cpuRevealReadyIn(id: string, ms: number, now = Date.now()): numb
 export function cpuTriggerName(kind: string | undefined, counter?: boolean): string {
   switch (kind) {
     case "genesis": return "Genesis";
+    case "deathrite": return "Deathrite";
+    case "cardTrigger": return "triggered ability";
     case "unitEnd": return "end-of-turn projectile";
     case "auraEnd": return counter ? "duration counter" : "end effect";
     case "fightChoice": return "fight after arrival";

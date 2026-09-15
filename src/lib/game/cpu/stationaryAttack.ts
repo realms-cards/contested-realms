@@ -1,6 +1,6 @@
 import { unitToken } from "@/lib/game/cpu/pickTokens";
 import type { LocatedUnit } from "@/lib/game/cpu/spellTypes";
-import { getAttackTargets, getRangedTargets, isDisabled, unitsInRealm } from "@/lib/game/cpu/spells";
+import { cardText, getAttackTargets, getRangedTargets, isDisabled, unitsInRealm } from "@/lib/game/cpu/spells";
 import type { GameState, PlayerKey } from "@/lib/game/store/types";
 import { getCellNumber } from "@/lib/game/store/utils/boardHelpers";
 
@@ -21,7 +21,8 @@ function readyAttacker(state: GameState, from?: AttackSource): LocatedUnit | nul
     : wanted.kind === "permanent" && unit.at === wanted.at && unit.target.index === wanted.index));
   if (!source || isDisabled(state,source)) return null;
   const entity = source.target.kind === "avatar" ? state.avatars[seat] : state.permanents[source.at][source.target.index];
-  return entity.tapped || entity.summonedThisTurn ? null : source;
+  // Charge lets a unit act the turn it was summoned.
+  return entity.tapped || (entity.summonedThisTurn && !/\bCharge\b/.test(cardText(source.card))) ? null : source;
 }
 
 const tileOf = (state: GameState, at: string) => {
@@ -43,12 +44,13 @@ function choiceFor(source: LocatedUnit, candidates: Candidate[], ranged: boolean
 export function stationaryAttack(state: GameState, from?: AttackSource): GameState["attackTargetChoice"] {
   const source = readyAttacker(state,from);
   if (!source) return null;
-  const tile = tileOf(state,source.at);
-  return choiceFor(source,getAttackTargets(state,source).flatMap(({target}) => {
+  // An oversized attacker (Mountain Giant) fights at any of its locations; those candidates carry where the fight is.
+  return choiceFor(source,(source.cells || [source.at]).flatMap(at => getAttackTargets(state,source,at).flatMap(({target}) => {
     const kind = target.kind;
     if (kind !== "site" && kind !== "avatar" && kind !== "permanent") return [];
-    return [{...target,kind,label:`${nameAt(state,kind,target.at,target.index)} — Tile #${tile}`}];
-  }),false);
+    const [x,y] = at.split(",").map(Number);
+    return [{...target,kind,...(source.cells ? {tile:{x,y}} : {}),label:`${nameAt(state,kind,target.at,target.index)} — Tile #${tileOf(state,at)}`}];
+  })),false);
 }
 
 type Choice = NonNullable<GameState["attackTargetChoice"]>;

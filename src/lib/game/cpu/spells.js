@@ -28,6 +28,7 @@ const SUPPORTED_SPELLS = new Set([
 ]);
 const PROJECTILES = new Set(['Fireball', 'Firebolts', 'Heat Ray', 'Ice Lance']);
 const DIRECTIONS = { N: [0,-1], E: [1,0], S: [0,1], W: [-1,0] };
+const { occupies } = require('./evalScope');
 // Ranged cards cards.json lacks (verified against data/cards_raw.json); every other unit reads its keyword line.
 /** @type {Record<string, number>} */
 const RANGED_UNITS = { 'Hunting Party': 1, 'Sherwood Huntress': 1, 'Sir Bors the Younger': 2, 'Stygian Archers': 1, 'Yourke Crossbowmen': 1 };
@@ -42,6 +43,24 @@ function cardText(card) { return cards[card.name]?.rulesText || card.text || '';
 
 /** @param {string} a @param {string} b @param {'nearby' | 'adjacent' | 'two' | 'any'} range */
 function inRange(a, b, range) {
+  return cellsInRange(a, b, range);
+}
+
+/** inRange between two units' closest locations (an oversized unit is at each of its cells).
+ * @param {LocatedUnit} a @param {LocatedUnit} b @param {'nearby' | 'adjacent' | 'two' | 'any'} range */
+function near(a, b, range) {
+  if (!a.cells && !b.cells) return inRange(a.at, b.at, range);
+  return (a.cells || [a.at]).some(cell => (b.cells || [b.at]).some(other => inRange(cell, other, range)));
+}
+
+/** True when two units share a location. @param {LocatedUnit} a @param {LocatedUnit} b */
+function shareLocation(a, b) {
+  if (!a.cells && !b.cells) return a.at === b.at;
+  return (a.cells || [a.at]).some(cell => occupies(b, cell));
+}
+
+/** @param {string} a @param {string} b @param {'nearby' | 'adjacent' | 'two' | 'any'} range */
+function cellsInRange(a, b, range) {
   const [ax, ay] = cellOf(a);
   const [bx, by] = cellOf(b);
   if (!(Number.isFinite(ax) && Number.isFinite(ay) && Number.isFinite(bx) && Number.isFinite(by))) return false;
@@ -139,7 +158,7 @@ function computeDisabled(state,unit) {
   return basilisksOf(state).some(other => {
     if (sameTarget(other.target,unit.target) || other.region !== unit.region) return false;
     const [x,y] = other.at.split(',').map(Number);
-    return other.at === unit.at || unit.at === `${x},${y+(other.owner === 'p1' ? -1 : 1)}`;
+    return occupies(unit,other.at) || occupies(unit,`${x},${y+(other.owner === 'p1' ? -1 : 1)}`);
   });
 }
 
@@ -226,7 +245,7 @@ function rawSpellChoices(state, seat, name, selectionKey) {
     const source = findUnit(state,event.source), target = findUnit(state,event.target);
     const at = source?.at || target?.at || state.pendingMagic.spell.at, decline = optToken(at,'decline'), accept = optToken(at,'accept');
     const choices = [{key:'fight/decline',label:event.strikeOnly ? 'Do not strike' : 'Do not fight',caster:event.source,target:null,operations:[],score:0,picks:[decline],pickLabels:{[decline]:'Decline'}}];
-    if (source && target && source.at === target.at && source.region === target.region && !disabledOf(state,source)) {
+    if (source && target && shareLocation(source,target) && source.region === target.region && !disabledOf(state,source)) {
       const operations = [{kind:event.strikeOnly ? 'strike' : 'fight',source:event.source,target:event.target}];
       choices.push({key:'fight/accept',label:`${event.strikeOnly ? 'Strike' : 'Fight'} ${target.card.name}`,caster:event.source,target:null,operations,score:scoreOps(state,seat,operations),
         picks:[accept],pickLabels:{[accept]:event.strikeOnly ? 'Strike' : 'Fight'}});
@@ -236,12 +255,14 @@ function rawSpellChoices(state, seat, name, selectionKey) {
   if (state.pendingMagic?.cpuEvent?.kind === 'auraEnd') return require('./timedAuras').auraEndChoices(state);
   if (state.pendingMagic?.cpuEvent?.kind === 'blazeTrail') return require('./blaze').blazeTrailChoices(state,selectionKey);
   if (state.pendingMagic?.cpuEvent?.kind === 'genesis') return require('./genesis').genesisChoices(state);
+  if (state.pendingMagic?.cpuEvent?.kind === 'deathrite') return require('./genesis').deathriteChoices(state);
+  if (state.pendingMagic?.cpuEvent?.kind === 'cardTrigger') return require('./cardTriggers').cardTriggerChoices(state);
   if (!supportsSpell(name)) return [];
   const units = realmUnits(state);
   const casters = units.filter(u => u.owner === seat && !disabledOf(state,u) &&
     (u.target.kind === 'avatar' || /\bSpellcaster\b/.test(cardText(u.card))) &&
     (!/Fire Spellcaster/.test(cardText(u.card)) || Number(cards[name]?.thresholds?.fire || 0) > 0) &&
-    (u.card.name !== 'Spire Lich' || /Tower/i.test(state.board.sites[u.at]?.card?.name || '')));
+    (u.card.name !== 'Spire Lich' || (u.region === 'surface' && /Tower/i.test(state.board.sites[u.at]?.card?.name || ''))));
   const sites = Object.keys(state.board.sites || {}).filter(at => state.board.sites[at]?.card);
   /** @type {SpellChoice[]} */
   const choices = [];
@@ -313,7 +334,7 @@ function rawSpellChoices(state, seat, name, selectionKey) {
         });
       }
       for (const at of sites.filter(at => waterAt(state, at) === water)) {
-        const affected = objects.filter(u => u.at === at && u.region === 'surface');
+        const affected = objects.filter(u => occupies(u,at) && u.region === 'surface');
         if (!affected.length || origin.region !== 'surface') continue;
         const groups = area ? [affected] : affected.map(u => [u]);
         for (const group of groups) add(`${at}/${area ? 'all' : group[0].target.index}`,
@@ -323,7 +344,7 @@ function rawSpellChoices(state, seat, name, selectionKey) {
       }
     } else if (name === 'Riptide') {
       for (const at of sites.filter(at => waterAt(state, at))) {
-        for (const unit of visible.filter(u => u.region === 'surface' && inRange(u.at, at, 'adjacent') && u.at !== at)) {
+        for (const unit of visible.filter(u => u.region === 'surface' && (u.cells || [u.at]).some(cell => inRange(cell, at, 'adjacent')) && !occupies(u,at))) {
           add(`${at}/${unit.at}:${unit.target.index ?? unit.owner}`, `Pull ${unit.card.name} to ${at}; draw a card`,
             { kind: 'location', at }, [{ kind: 'move', target: unit.target, to: at }, { kind: 'draw', seat, count: 1 }], [unitToken(unit.target), at]);
         }
@@ -335,7 +356,7 @@ function rawSpellChoices(state, seat, name, selectionKey) {
       const dragonOrigins = name === 'Incinerate' ? units.filter(u => u.owner === seat && u.region === origin.region && /Dragon/i.test(cards[u.card.name]?.subTypes || '')) : [];
       for (const at of locations) {
         if (!inRange(origin.at, at, range) && !(name === 'Incinerate' && dragonOrigins.some(u => inRange(u.at, at, 'nearby')))) continue;
-        const affected = visible.filter(u => u.at === at && (name !== 'Incinerate' || u !== origin));
+        const affected = visible.filter(u => occupies(u,at) && (name !== 'Incinerate' || u !== origin));
         if (!affected.length) continue;
         const amount = name === 'Incinerate' ? 4 : 3;
         add(at, `${name === 'Lightning Bolt' ? 'Random unit' : 'Each unit'} at ${at}: ${amount} damage`,
@@ -398,10 +419,11 @@ function computeStats(state, unit) {
   for (const other of realmUnits(state)) {
     if (sameTarget(unit.target, other.target)) continue;
     if (disabledOf(state,other)) continue;
-    if (other.card.name === 'House Arn Bannerman' && other.owner === unit.owner && other.region === unit.region && inRange(unit.at, other.at, 'nearby')) bonus++;
+    if (other.card.name === 'House Arn Bannerman' && other.owner === unit.owner && other.region === unit.region && near(unit, other, 'nearby')) bonus++;
     if (other.card.name === 'King of the Realm' && /Mortal/.test(data.subTypes || '')) bonus++;
   }
-  if (unit.card.name === 'Spire Lich' && /Tower/i.test(state.board.sites[unit.at]?.card?.name || '')) bonus += 2;
+  // "Atop a Tower": a burrowed or submerged Lich is not atop its site.
+  if (unit.card.name === 'Spire Lich' && unit.region === 'surface' && /Tower/i.test(state.board.sites[unit.at]?.card?.name || '')) bonus += 2;
   if (unit.card.name === 'Anui Undine') bonus += bodyAt(state,unit.at).length;
   return { atk: Number(data.attack || 0)+bonus, def: Number(data.defence ?? data.attack ?? 0)+bonus };
 }
@@ -425,11 +447,11 @@ function getAttackTargets(state, attacker, at = attacker.at) {
     if (disabledOf(state,attacker)) return [];
     const stats = statsOf(state,attacker);
     const airborne = airborneOf(state,attacker);
-    const targets = realmUnits(state).filter(unit => unit.owner !== attacker.owner && unit.at === at && unit.region === attacker.region &&
+    const targets = realmUnits(state).filter(unit => unit.owner !== attacker.owner && occupies(unit,at) && unit.region === attacker.region &&
       !stealthOf(state,unit) &&
       !(airborneOf(state,unit) && !airborne)).map(unit => {
         const target = unit.target.kind === 'avatar' ? { kind: 'avatar', at, index: null }
-          : { kind: 'permanent', at, index: unit.target.index };
+          : { kind: 'permanent', at: unit.target.at, index: unit.target.index };
         const defending = statsOf(state,unit);
         const player = state.players[unit.owner];
         let score = unit.target.kind === 'avatar'
@@ -489,14 +511,15 @@ function getRangedTargets(state, attacker) {
       const path = flightPath(state,attacker.at,attacker.region,direction).slice(0,reach+1);
       for (let steps = 0; steps < path.length; steps++) {
         const at = path[steps];
-        const impacted = units.filter(unit => unit.at === at && unit.region === attacker.region &&
+        // The shooter never blocks its own shot (Skirmishers of Mu fire from a location along their path).
+        const impacted = units.filter(unit => occupies(unit,at) && unit.region === attacker.region && !sameTarget(unit.target,attacker.target) &&
           !(steps === 0 && unit.owner === attacker.owner) && !stealthOf(state,unit));
         if (!impacted.length) continue;
         for (const unit of impacted) {
           // Enemies at the origin are reached from every direction; offer them once.
           if (unit.owner === attacker.owner || offered.has(targetKey(unit.target))) continue;
           offered.add(targetKey(unit.target));
-          targets.push({ target: unit.target.kind === 'avatar' ? { kind: 'avatar', at, index: null } : { kind: 'permanent', at, index: unit.target.index }, direction, steps });
+          targets.push({ target: unit.target.kind === 'avatar' ? { kind: 'avatar', at, index: null } : { kind: 'permanent', at: unit.target.at, index: unit.target.index }, direction, steps });
         }
         break;
       }
@@ -531,7 +554,7 @@ function projectilePlan(state, seat, name, origin, direction, requested) {
     for (let step = 0; step < path.length; step++) {
       if (name === 'Ice Lance' && step >= 3) break;
       const at = path[step];
-      const eligible = units.filter(u => u.region === origin.region && u.at === at &&
+      const eligible = units.filter(u => u.region === origin.region && occupies(u,at) &&
         !dead.has(targetKey(u.target)) && !(step === 0 && u.owner === seat) && !stealthOf(state,originalOf.get(u)));
       if (!eligible.length) continue;
       const amount = name === 'Firebolts' ? 1 : name === 'Fireball' ? 4 : name === 'Heat Ray' ? 2 : 3-step;
@@ -545,7 +568,7 @@ function projectilePlan(state, seat, name, origin, direction, requested) {
       const damaged = [{ unit: target, amount }];
       const targets = [target.target];
       if (name === 'Fireball') {
-        const others = units.filter(u => u.region === origin.region && u.at === at && u !== target);
+        const others = units.filter(u => u.region === origin.region && occupies(u,at) && u !== target);
         targets.push(...others.map(u => u.target));
         damaged.push(...others.map(unit => ({ unit, amount: 2 })));
       }
@@ -670,12 +693,12 @@ function impactChoices(state, op) {
     const site = state.board.sites[at]?.card;
     if (op.region === 'void' ? !!site : !site) break;
     if (op.region === 'underwater' && !waterAt(state,at) || op.region === 'underground' && waterAt(state,at)) break;
-    const eligible = units.filter(unit => unit.at === at && unit.region === op.region && !(step === 0 && unit.owner === op.seat) && !stealthOf(state,unit));
+    const eligible = units.filter(unit => occupies(unit,at) && unit.region === op.region && !(step === 0 && unit.owner === op.seat) && !stealthOf(state,unit));
     if (!eligible.length) continue;
     const amount = op.name === 'Fireball' ? 4 : op.name === 'Firebolts' || op.name === 'Colicky Dragonettes' ? 1 : op.name === 'Heat Ray' ? 2 : 3-step;
     return eligible.map(unit => {
       const targets = [unit.target];
-      if (op.name === 'Fireball') targets.push(...units.filter(other => other !== unit && other.at === at && other.region === op.region).map(other => other.target));
+      if (op.name === 'Fireball') targets.push(...units.filter(other => other !== unit && occupies(other,at) && other.region === op.region).map(other => other.target));
       /** @type {import('./spellTypes').SpellOperation[]} */
       const operations = [{kind:'damage',targets,amount,...(op.name === 'Ice Lance' || op.name === 'Colicky Dragonettes' ? {} : {element:'fire'}),...(op.name === 'Fireball' ? {splash:2} : {})}];
       if (op.name === 'Heat Ray' || op.name === 'Ice Lance') operations.push({...op,step:step+1,preferred:op.preferred?.slice(1)});
@@ -723,7 +746,7 @@ function damageScore(state, seat, target, amount, element) {
 function threatAt(state, owner, to, snap) {
   const known = facts(snap, owner === 'p1' ? 'threat:p1' : 'threat:p2');
   let threat = known.get(to);
-  if (threat === undefined) known.set(to, threat = realmUnits(state, snap).filter(u => u.owner !== owner && u.at === to)
+  if (threat === undefined) known.set(to, threat = realmUnits(state, snap).filter(u => u.owner !== owner && occupies(u,to))
     .reduce((sum,u) => sum + Number(cards[u.card.name]?.attack || 0),0));
   return /** @type {number} */ (threat);
 }
@@ -753,7 +776,7 @@ function scoreOps(state, seat, operations) {
     if (op.kind === 'chooseRandom') { score += Math.max(0,...op.outcomes.map(outcome => scoreOps(state,seat,[outcome]))); continue; }
     if (op.kind === 'waveshaperFlood') continue;
     if (op.kind === 'stunAt') {
-      score += units.filter(unit => unit.at === op.at && unit.target.kind === 'permanent' && (disabledOf(state,unit) || !/\bSubmerge\b/.test(cardText(unit.card)))).reduce((sum,unit) => sum+(unit.owner === seat ? -1 : 1)*(2+statsOf(state,unit).atk),0);
+      score += units.filter(unit => occupies(unit,op.at) && unit.target.kind === 'permanent' && (disabledOf(state,unit) || !/\bSubmerge\b/.test(cardText(unit.card)))).reduce((sum,unit) => sum+(unit.owner === seat ? -1 : 1)*(2+statsOf(state,unit).atk),0);
       continue;
     }
     if (op.kind === 'dragUnit') { if (op.path.length) score += scoreOps(state,seat,[{kind:'move',target:op.target,to:op.path[op.path.length-1]}]); continue; }
@@ -779,7 +802,7 @@ function scoreOps(state, seat, operations) {
         if (op.region === 'void' ? !!state.board.sites[at]?.card : !state.board.sites[at]?.card) break;
         if (op.region === 'underwater' && !waterAt(state,at) || op.region === 'underground' && waterAt(state,at)) break;
         steps = step;
-        hits.push(...units.filter(unit => unit.at === at && unit.region === op.region).map(unit => ({target:unit.target,amount:4})));
+        hits.push(...units.filter(unit => occupies(unit,at) && unit.region === op.region).map(unit => ({target:unit.target,amount:4})));
       }
       if (steps) score += scoreOps(state,seat,[{kind:'damageEvent',hits}]);
       continue;
@@ -788,7 +811,7 @@ function scoreOps(state, seat, operations) {
     if (op.kind === 'replaceRubble') { score += 5; continue; }
     if (op.kind === 'strikeNearby') {
       const source = findUnit(state,op.source);
-      if (source) score += scoreOps(state,seat,[{kind:'damageEvent',hits:units.filter(unit => unit.region === source.region && inRange(source.at,unit.at,'nearby') && !sameTarget(unit.target,source.target)).map(unit => ({target:unit.target,amount:statsOf(state,source).atk}))}]);
+      if (source) score += scoreOps(state,seat,[{kind:'damageEvent',hits:units.filter(unit => unit.region === source.region && near(source,unit,'nearby') && !sameTarget(unit.target,source.target)).map(unit => ({target:unit.target,amount:statsOf(state,source).atk}))}]);
       continue;
     }
     if (op.kind === 'auraUpdate' || op.kind === 'moveSpent') continue;
@@ -810,11 +833,19 @@ function scoreOps(state, seat, operations) {
     if (op.kind === 'discard') { score -= 2; continue; }
     if (op.kind === 'spend') { score -= op.amount; continue; }
     if (op.kind === 'flood') continue;
+    if (op.kind === 'strikeTarget') {
+      const source = findUnit(state,op.source), target = findUnit(state,op.target);
+      if (source && target) score += scoreOps(state,seat,[{kind:'damageEvent',hits:[{target:target.target,amount:disabledOf(state,source) ? 0 : statsOf(state,source).atk}]}]);
+      continue;
+    }
+    if (op.kind === 'transformLeviathan') { score += 8; continue; }
+    if (op.kind === 'moveSite') { score += 1; continue; }
+    if (op.kind === 'teleportRandom' || op.kind === 'stampSite' || op.kind === 'stampTrigger' || op.kind === 'markCorner' || op.kind === 'returnToHand') continue;
     if (op.kind === 'raise') {
       const text = op.card ? cardText(op.card) : '';
       const unsafe = op.region === 'void' && !/\bVoidwalk\b/.test(text) || op.region === 'underwater' && !/\bSubmerge\b/.test(text) || op.region === 'underground' && !/\bBurrowing\b/.test(text);
       score += unsafe ? -50 : op.card ? Number(op.card.cost || 0)+4 : 6;
-      if (op.to) score -= units.filter(u => u.at === op.to && u.owner !== seat).reduce((sum,u) => sum+statsOf(state,u).atk,0);
+      if (op.to) score -= units.filter(u => occupies(u,op.to) && u.owner !== seat).reduce((sum,u) => sum+statsOf(state,u).atk,0);
       continue;
     }
     if (op.kind === 'draw') { score += op.count * 2; continue; }
@@ -879,4 +910,4 @@ function sameTarget(a, b) {
     (a.instanceId && b.instanceId ? a.instanceId === b.instanceId : a.at === b.at && a.index === b.index);
 }
 
-module.exports = { supportsSpell, getSpellChoices, getSpellChoice, projectileKey, directionPick, choiceCard, unitsInRealm, inRange, isWater, bodyOfWater, cardText, sameTarget, unitDefence, unitStats, getAttackTargets, getRangedTargets, scoreOperations,isDisabled,hasStealth,hasAirborne,expandAreaOperation,projectileImpactChoices,projectilePath };
+module.exports = { supportsSpell, getSpellChoices, getSpellChoice, projectileKey, directionPick, choiceCard, unitsInRealm, inRange, isWater, bodyOfWater, cardText, sameTarget, unitDefence, unitStats, getAttackTargets, getRangedTargets, near, occupies, shareLocation, scoreOperations,isDisabled,hasStealth,hasAirborne,expandAreaOperation,projectileImpactChoices,projectilePath };

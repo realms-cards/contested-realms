@@ -495,3 +495,70 @@ export async function buildDeckCardRefs(
   }
   return zones;
 }
+
+export interface DeckLoadSnapshot extends DeckCardRefZones {
+  champion: { cardId: number; name: string; slug: string | null } | null;
+}
+
+function isResolvedDeckZone(zone: string): zone is ResolvedDeckZone {
+  return zone === "Spellbook" || zone === "Atlas" || zone === "Collection";
+}
+
+/**
+ * Frozen, loadable copy of a stored deck: the same card refs and champion
+ * GET /api/decks/[id] serves. Tournaments store it at submission so later
+ * edits to the saved deck don't change what is played. Sideboard is excluded.
+ */
+export async function buildDeckLoadSnapshot(
+  deckId: string,
+): Promise<DeckLoadSnapshot | null> {
+  const deck = await prisma.deck.findUnique({
+    where: { id: deckId },
+    select: {
+      cards: {
+        select: {
+          cardId: true,
+          variantId: true,
+          setId: true,
+          zone: true,
+          count: true,
+          card: { select: { name: true } },
+        },
+      },
+      champion: {
+        select: {
+          id: true,
+          name: true,
+          variants: { select: { slug: true }, take: 1 },
+        },
+      },
+    },
+  });
+  if (!deck) return null;
+
+  const rows: ResolvedDeckRow[] = [];
+  for (const c of deck.cards) {
+    const zone = c.zone;
+    if (!isResolvedDeckZone(zone)) continue;
+    rows.push({
+      cardId: c.cardId,
+      variantId: c.variantId,
+      setId: c.setId,
+      zone,
+      count: c.count,
+      name: c.card.name,
+    });
+  }
+
+  const zones = await buildDeckCardRefs(rows);
+  return {
+    ...zones,
+    champion: deck.champion
+      ? {
+          cardId: deck.champion.id,
+          name: deck.champion.name,
+          slug: deck.champion.variants[0]?.slug ?? null,
+        }
+      : null,
+  };
+}

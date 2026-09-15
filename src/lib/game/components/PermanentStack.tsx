@@ -19,6 +19,7 @@ import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
 import ResolverOutline from "@/lib/game/components/ResolverOutline";
 import { UnitPickCapture, UnitPickSpread } from "@/lib/game/components/UnitPickTarget";
+import { occupiedCells } from "@/lib/game/cpu/evalScope";
 import {
   CARD_LONG,
   CARD_SHORT,
@@ -1032,24 +1033,25 @@ export function PermanentStack({
                   e.stopPropagation();
                   const enemyOwner =
                     attackTargetChoice.attacker.owner === 1 ? 2 : 1;
-                  const onTile =
-                    attackTargetChoice.tile.x === tileX &&
-                    attackTargetChoice.tile.y === tileY;
+                  // An oversized unit (Mountain Giant) is at each of its four locations.
+                  const onTile = occupiedCells(p.card?.name || "", key).includes(
+                    `${attackTargetChoice.tile.x},${attackTargetChoice.tile.y}`,
+                  );
                   // Attachments (like Lance, Disabled) cannot be targeted directly
                   const isAttachment = Boolean(p.attachedTo);
-                  // A ranged strike may only hit what its projectile reaches.
-                  const legal = attackTargetChoice.ranged
-                    ? attackTargetChoice.candidates.some(
-                        (c) =>
-                          c.kind === "permanent" &&
-                          c.at === key &&
-                          c.index === idx,
-                      )
+                  // Rules-computed candidates (attack buttons, Ranged) are the only legal targets;
+                  // a move-and-attack lists none and keeps the on-tile check.
+                  const candidate = attackTargetChoice.candidates.find(
+                    (c) =>
+                      c.kind === "permanent" && c.at === key && c.index === idx,
+                  );
+                  const legal = attackTargetChoice.candidates.length
+                    ? !!candidate
                     : onTile && owner === enemyOwner && !isAttachment;
                   if (legal) {
                     const label = p.card?.name || "Unit";
                     setAttackConfirm({
-                      tile: attackTargetChoice.tile,
+                      tile: candidate?.tile ?? attackTargetChoice.tile,
                       ranged: attackTargetChoice.ranged,
                       attacker: attackTargetChoice.attacker,
                       target: {
@@ -1067,9 +1069,9 @@ export function PermanentStack({
                   actorKey &&
                   pendingCombat.defenderSeat === actorKey
                 ) {
-                  const onTile =
-                    pendingCombat.tile.x === tileX &&
-                    pendingCombat.tile.y === tileY;
+                  const onTile = occupiedCells(p.card?.name || "", key).includes(
+                    `${pendingCombat.tile.x},${pendingCombat.tile.y}`,
+                  );
                   const myOwner: 1 | 2 =
                     pendingCombat.attacker.owner === 1 ? 2 : 1;
                   // Attachments cannot be assigned as defenders

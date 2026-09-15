@@ -499,16 +499,19 @@ export function AvatarCard({
         !!pos &&
         pos[0] === combatContext.attackTargetChoice.tile.x &&
         pos[1] === combatContext.attackTargetChoice.tile.y;
-      const reached = combatContext.attackTargetChoice.ranged
-        ? !!pos &&
-          combatContext.attackTargetChoice.candidates.some(
+      // Rules-computed candidates (attack buttons, Ranged) are the only legal targets; a move-and-attack lists none.
+      const candidate = pos
+        ? combatContext.attackTargetChoice.candidates.find(
             (c) => c.kind === "avatar" && c.at === `${pos[0]},${pos[1]}`,
           )
+        : undefined;
+      const reached = combatContext.attackTargetChoice.candidates.length
+        ? !!candidate
         : onTile;
       if (seat === enemySeat && reached && pos) {
         const label = avatar.card?.name || "Avatar";
         setAttackConfirm({
-          tile: combatContext.attackTargetChoice.tile,
+          tile: candidate?.tile ?? combatContext.attackTargetChoice.tile,
           ranged: combatContext.attackTargetChoice.ranged,
           attacker: combatContext.attackTargetChoice.attacker,
           target: {

@@ -648,8 +648,10 @@ export function useTileDropHandler({
           ).toLowerCase();
           const cardName = selectedCard.card?.name || "";
           // Check if it's an aura type and not in the exclusion list
+          // Oversized minions (Mountain Giant) occupy a 2x2 area and snap to its intersection the same way.
           const isAura =
-            cardType.includes("aura") && isAuraSubtype("aura", cardName); // Pass "aura" to check exclusion list only
+            (cardType.includes("aura") && isAuraSubtype("aura", cardName)) || // Pass "aura" to check exclusion list only
+            cardName === "Mountain Giant";
 
           console.log("[useTileDropHandler] Aura check:", {
             cardName,

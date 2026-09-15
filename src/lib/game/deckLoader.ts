@@ -15,11 +15,10 @@ import { preCacheDeckFromResponse } from "@/lib/service-worker/registration";
 type CardRefWithZone = CardRef & { __zone?: string | null };
 
 // Regular (non-tournament) matches use the limited floor so precons and
-// learning decks stay playable; tournaments enforce full constructed rules.
-// Both sets of minimums (and avatar exceptions like Magician) live in
-// `@/lib/deck/validation-rules`.
+// learning decks stay playable; constructed tournaments pass "constructed" to
+// enforce full rules. Both sets of minimums (and avatar exceptions like
+// Magician) live in `@/lib/deck/validation-rules`.
 const CASUAL_FORMAT: DeckFormat = "limited";
-const TOURNAMENT_FORMAT: DeckFormat = "constructed";
 
 /**
  * Validate a Duplicator deck: spellbook and atlas can only contain matching pairs of Uniques.
@@ -90,10 +89,18 @@ export interface DeckLoadPayload {
   champion?: { cardId: number; name: string; slug?: string | null } | null;
 }
 
+/** Shape check for deck payloads read from JSON (e.g. tournament snapshots). */
+export function isDeckLoadPayload(value: unknown): value is DeckLoadPayload {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return Array.isArray(record.spellbook) && Array.isArray(record.atlas);
+}
+
 export async function loadDeckFor(
   who: "p1" | "p2",
   deckId: string,
   setError: (error: string) => void,
+  format: DeckFormat = CASUAL_FORMAT,
 ): Promise<boolean> {
   if (!deckId) return false;
 
@@ -108,7 +115,7 @@ export async function loadDeckFor(
     }
 
     const data = (await res.json()) as DeckLoadPayload;
-    return loadDeckFromData(who, data, setError);
+    return loadDeckFromData(who, data, setError, format);
   } catch {
     setError("Error loading deck");
     return false;
@@ -117,12 +124,14 @@ export async function loadDeckFor(
 
 /**
  * Validate an already-fetched deck payload and seed the store for `who`
- * (libraries, avatar, opening hand). Shared by saved decks and guest imports.
+ * (libraries, avatar, opening hand). Shared by saved decks, guest imports and
+ * constructed tournaments (which pass `format: "constructed"`).
  */
 export async function loadDeckFromData(
   who: "p1" | "p2",
   data: DeckLoadPayload,
   setError: (error: string) => void,
+  format: DeckFormat = CASUAL_FORMAT,
 ): Promise<boolean> {
   try {
     // DEBUG: Log API response to see if thresholds are included
@@ -192,9 +201,9 @@ export async function loadDeckFromData(
         return false;
       }
     } else {
-      // Lenient validation for regular matches (precons stay playable).
-      // Avatar exceptions (Magician's sites-in-spellbook) are applied by the
-      // shared rules module.
+      // Lenient validation for regular matches (precons stay playable);
+      // constructed tournaments pass full constructed rules. Avatar exceptions
+      // (Magician's sites-in-spellbook) are applied by the shared rules module.
       const validationResult = validateDeck(
         {
           spellbookCount: spellbook.length,
@@ -202,7 +211,7 @@ export async function loadDeckFromData(
           collectionCount: collection.length,
           avatarCount: avatars.length,
         },
-        CASUAL_FORMAT,
+        format,
         avatarName,
       );
       if (!validationResult.isValid) {
@@ -571,162 +580,41 @@ export async function loadSealedDeckFor(
   }
 }
 
+export type ConstructedDeckSummaryCard = {
+  name: string;
+  type: string;
+  zone: string;
+};
+
 /**
- * Load a constructed tournament deck from the full deck object
- * This is used for tournament constructed matches where deck data is pre-loaded
+ * Name/type/zone list of the deck loaded for `who`, reported to the match
+ * server (`submitConstructedDeck`) for meta statistics. Call right after a
+ * constructed deck load, while the opening hand still counts as spellbook.
  */
-export async function loadTournamentConstructedDeck(
+export function getConstructedDeckSummary(
   who: "p1" | "p2",
-  deckData: unknown,
-  setError: (error: string) => void,
-): Promise<boolean> {
-  if (!deckData || typeof deckData !== "object") return false;
-
-  try {
-    const deck = deckData as { cards: Array<Record<string, unknown>> };
-    if (!Array.isArray(deck.cards)) {
-      setError("Invalid deck format");
-      return false;
-    }
-
-    // Convert database deck format to CardRef format
-    // Group cards by zone (spellbook/atlas)
-    let rawSpellbook: CardRef[] = [];
-    let rawAtlas: CardRef[] = [];
-
-    for (const deckCard of deck.cards) {
-      const card = deckCard.card as Record<string, unknown>;
-      const variant = deckCard.variant as Record<string, unknown> | null;
-      const count = Number(deckCard.count || 1);
-      const zone = String(deckCard.zone || "spellbook");
-
-      const cardRef: CardRef = {
-        cardId: Number(card.id),
-        variantId: variant ? Number(variant.id) : null,
-        name: String(card.name),
-        type: String(card.type || variant?.typeText || ""), // Use card.type (metadata.type) first, not typeText (flavor text)
-        subTypes: (card.subTypes as string | null | undefined) || null,
-        slug: String(variant?.slug || card.slug || ""),
-        thresholds: (card.thresholds as Record<string, number>) || null,
-      };
-
-      // Add the card `count` times
-      for (let i = 0; i < count; i++) {
-        if (zone === "atlas") {
-          rawAtlas.push(cardRef);
-        } else {
-          rawSpellbook.push(cardRef);
-        }
-      }
-    }
-
-    // Enrich all cards with full metadata (text, attack, defence, rarity)
-    [rawSpellbook, rawAtlas] = await Promise.all([
-      enrichCardRefs(rawSpellbook),
-      enrichCardRefs(rawAtlas),
-    ]);
-
-    // Validate and separate
-    const isAvatar = (c: CardRef) =>
-      typeof c?.type === "string" && c.type.toLowerCase().includes("avatar");
-
-    const avatars = [...rawSpellbook, ...rawAtlas].filter(isAvatar);
-
-    if (avatars.length !== 1) {
-      setError(
-        avatars.length === 0
-          ? "Deck requires exactly 1 Avatar"
-          : "Deck has multiple Avatars. Keep only one.",
-      );
-      return false;
-    }
-
-    const avatar = avatars[0];
-    const magicianDeck = isMagician(avatar.name);
-    const duplicatorDeck = isDuplicator(avatar.name);
-    const spellbook = rawSpellbook.filter((c: CardRef) => !isAvatar(c));
-
-    if (duplicatorDeck) {
-      // Duplicator: spellbook and atlas can only contain matching pairs
-      const validationResult = validateDuplicatorDeck(spellbook, rawAtlas);
-      if (!validationResult.valid) {
-        setError(validationResult.error || "Invalid Duplicator deck");
-        return false;
-      }
-    } else {
-      // Tournament matches enforce full constructed rules; avatar exceptions
-      // (Magician's sites-in-spellbook) are applied by the shared rules module
-      const validationResult = validateDeck(
-        {
-          spellbookCount: spellbook.length,
-          atlasCount: rawAtlas.length,
-          avatarCount: avatars.length,
-        },
-        TOURNAMENT_FORMAT,
-        avatar.name,
-      );
-      if (!validationResult.isValid) {
-        setError(formatValidationErrors(validationResult));
-        return false;
-      }
-    }
-
-    const {
-      initLibraries,
-      shuffleSpellbook,
-      shuffleAtlas,
-      setAvatarCard,
-      setAvatarChampion,
-      placeAvatarAtStart,
-      drawOpening,
-    } = useGameStore.getState();
-
-    // Magician: merge atlas into spellbook (sites go in spellbook, no atlas)
-    const spellbookToUse = magicianDeck
-      ? [...spellbook, ...rawAtlas]
-      : spellbook;
-    const atlasToUse = magicianDeck ? [] : rawAtlas;
-    initLibraries(who, spellbookToUse, atlasToUse);
-    shuffleSpellbook(who);
-    if (!magicianDeck) {
-      shuffleAtlas(who);
-    }
-
-    // IMPORTANT: Check if player has an active Imposter mask - don't overwrite masked avatar
-    const { imposterMasks, avatars: currentAvatars } = useGameStore.getState();
-    const existingMask = imposterMasks[who];
-    if (existingMask) {
-      // Player is masked - preserve the mask avatar, don't overwrite with original
-      console.log(
-        `[loadTournamentConstructedDeck] Preserving Imposter mask for ${who}:`,
-        existingMask.maskAvatar.name,
-      );
-      // Only place avatar if position isn't already set
-      if (!currentAvatars[who]?.pos) {
-        placeAvatarAtStart(who);
-      }
-    } else {
-      setAvatarCard(who, avatar);
-      placeAvatarAtStart(who);
-    }
-
-    // Set Dragonlord champion if present
-    const deckWithChampion = deckData as {
-      champion?: { cardId: number; name: string; slug?: string | null };
-    };
-    if (deckWithChampion.champion) {
-      setAvatarChampion(who, {
-        cardId: deckWithChampion.champion.cardId,
-        name: deckWithChampion.champion.name,
-        slug: deckWithChampion.champion.slug || null,
-      });
-    }
-    drawOpening(who);
-
-    return true;
-  } catch (e) {
-    console.error("Error loading tournament constructed deck:", e);
-    setError("Error loading tournament deck");
-    return false;
-  }
+): ConstructedDeckSummaryCard[] {
+  const { zones, avatars } = useGameStore.getState();
+  const seatZones = zones?.[who];
+  if (!seatZones) return [];
+  const toSummary = (c: CardRef, zone: string) => ({
+    name: c.name || "",
+    type: c.type || "",
+    zone,
+  });
+  const avatarCard = avatars?.[who]?.card;
+  return [
+    ...(avatarCard
+      ? [
+          {
+            name: avatarCard.name || "",
+            type: avatarCard.type || "Avatar",
+            zone: "avatar",
+          },
+        ]
+      : []),
+    ...(seatZones.spellbook || []).map((c) => toSummary(c, "spellbook")),
+    ...(seatZones.hand || []).map((c) => toSummary(c, "spellbook")),
+    ...(seatZones.atlas || []).map((c) => toSummary(c, "atlas")),
+  ];
 }

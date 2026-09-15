@@ -109,24 +109,9 @@ export default function OnlineDeckSelector({
     const { useGameStore } = await import("@/lib/game/store");
     // Send deck card list to server for meta statistics tracking
     try {
-      const state = useGameStore.getState();
-      const zones = state.zones?.[myPlayerKey];
-      const avatar = state.avatars?.[myPlayerKey];
-      if (zones && transport) {
-        type ZoneCard = { name?: string | null; type?: string | null };
-        const toDeckCard = (c: ZoneCard, zone: string) => ({
-          name: c.name || "",
-          type: c.type || "",
-          zone,
-        });
-        const deckCards = [
-          ...(avatar?.card
-            ? [{ name: avatar.card.name || "", type: avatar.card.type || "Avatar", zone: "avatar" }]
-            : []),
-          ...(zones.spellbook || []).map((c: ZoneCard) => toDeckCard(c, "spellbook")),
-          ...(zones.hand || []).map((c: ZoneCard) => toDeckCard(c, "spellbook")),
-          ...(zones.atlas || []).map((c: ZoneCard) => toDeckCard(c, "atlas")),
-        ];
+      const { getConstructedDeckSummary } = await import("@/lib/game/deckLoader");
+      const deckCards = getConstructedDeckSummary(myPlayerKey);
+      if (deckCards.length > 0 && transport) {
         transport.emit("submitConstructedDeck", { deck: deckCards });
       }
     } catch {
