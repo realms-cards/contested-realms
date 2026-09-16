@@ -100,7 +100,8 @@ class BotClient {
     this.socket = null;
     this.you = null; // { id, displayName }
     this.currentMatch = null; // { id, matchType, players, sealedPacks?, draftState? }
-    this.playerIndex = -1; // index into match.players
+    this.playerIndex = -1; // index into match.players; -1 means the seat is not known yet
+    this._seatWarned = false;
 
     // AI engine configuration (overridable per bot)
     this.engineMode =
@@ -168,6 +169,7 @@ class BotClient {
     this._turnIndex = 0; // increments when currentPlayer changes
     this._actedTurn = new Set(); // `${matchId}:${turnIndex}` — only set when we PASS (end turn)
     this._turnActionCount = new Map(); // turnKey → number of actions sent this turn
+    this._rejectedCards = { turnKey: null, ids: new Set() }; // cards the server refused this turn (cost_unpaid): never retried
     this._pendingAction = false; // true while waiting for server response after sending an action
     this._actionPacing = new ActionPacing();
     this._pacingTimer = null;
@@ -272,8 +274,9 @@ class BotClient {
       if (!match) return;
       this.currentMatch = match;
       this.playerIndex = this._resolvePlayerIndex(match);
-      const meKey = this.playerIndex === 1 ? "p2" : "p1";
-      console.log(`[Bot] Resolved seat: playerIndex=${this.playerIndex}, meKey=${meKey}, myId=${this.you?.id}, players=${JSON.stringify(match.players)}`);
+      this._seatWarned = false;
+      const meKey = this.playerIndex < 0 ? "unresolved" : this._getMeKey();
+      console.log(`[Bot] Resolved seat: playerIndex=${this.playerIndex}, meKey=${meKey}, myId=${this.you?.id}, playerIds=${JSON.stringify(match.playerIds)}, players=${JSON.stringify(match.players)}`);
       try {
         const seedStr = `${match.seed || match.id}|${
           this.you?.id || this.playerId
@@ -458,6 +461,9 @@ class BotClient {
       // Request a full state resync from the server
       try {
         this._pendingAction = false;
+        // The engine would make the same decision again after the resync (it disagreed with the
+        // server about the cost), so the cards of the rejected action sit out the rest of the turn.
+        this._rememberRejectedAction(this._inflightAction && this._inflightAction.action);
         this._dropCpuAction();
         this._resyncing = true;
         socket.emit("resyncRequest", {});
@@ -486,7 +492,8 @@ class BotClient {
           // one-shot opt-in at match start may have been missed, so answer
           // with ours. Replies are never answered (no ping-pong).
           try {
-            const meKey = this.playerIndex === 1 ? "p2" : "p1";
+            if (!this._ensurePlayerIndex()) return;
+            const meKey = this._getMeKey();
             if (payload.seat !== meKey && !payload.reply) {
               this.socket.emit("message", {
                 type: "guidePref",
@@ -603,14 +610,52 @@ class BotClient {
 
   _resolvePlayerIndex(match) {
     const me = this.you && this.you.id;
-    if (!me || !Array.isArray(match.players)) return -1;
+    if (!me || !match) return -1;
+    // playerIds is the raw seat-ordered roster (index 0 = p1, 1 = p2). Unlike `players` it is
+    // never filtered, so it still names our seat when the server cannot describe someone.
+    if (Array.isArray(match.playerIds)) {
+      const idx = match.playerIds.indexOf(me);
+      if (idx >= 0) return idx;
+    }
+    if (!Array.isArray(match.players)) return -1;
     for (let i = 0; i < match.players.length; i++) {
       const p = match.players[i];
       // Handle both object format ({id: 'cpu_A'}) and string format ('cpu_A')
       const pid = p && typeof p === "object" ? p.id : p;
-      if (pid === me) return i;
+      if (pid !== me) continue;
+      // getPlayerInfo() returns null for a player this instance has no socket for and the
+      // roster drops it, which shifts every later index; the entry's own seat outranks it.
+      const seat = p && typeof p === "object" ? p.seat : null;
+      if (seat === "p1") return 0;
+      if (seat === "p2") return 1;
+      return i;
     }
     return -1;
+  }
+
+  /**
+   * The seat drives every zone, owner and mana read, and `playerIndex === 1 ? "p2" : "p1"`
+   * silently turns an unresolved -1 into p1 — the opponent's seat half the time. A bot that
+   * acts then reads the human's hand and proposes their cards, which the server refuses for
+   * as long as it keeps trying. Re-resolve first, and stand down while the seat is unknown.
+   */
+  _ensurePlayerIndex() {
+    if (this.playerIndex === 0 || this.playerIndex === 1) return true;
+    if (this.currentMatch)
+      this.playerIndex = this._resolvePlayerIndex(this.currentMatch);
+    if (this.playerIndex === 0 || this.playerIndex === 1) {
+      console.log(
+        `[Bot] Seat resolved late: playerIndex=${this.playerIndex}, meKey=${this._getMeKey()}`
+      );
+      return true;
+    }
+    if (!this._seatWarned) {
+      this._seatWarned = true;
+      console.warn(
+        `[Bot] Seat unresolved (myId=${this.you?.id}); not acting until the roster names it.`
+      );
+    }
+    return false;
   }
 
   _handleSealedSetup(match) {
@@ -683,7 +728,8 @@ class BotClient {
       ) {
         const cur = this.currentMatch;
         if (cur && !this._seatChosen.has(cur.id)) {
-          const meKey = this.playerIndex === 1 ? "p2" : "p1";
+          if (!this._ensurePlayerIndex()) return;
+          const meKey = this._getMeKey();
           const winner = patch.setupWinner;
           const phase = patch.phase;
           if (winner === meKey && phase !== "Start") {
@@ -747,7 +793,8 @@ class BotClient {
       if (!cur) return;
       if (this._seerCompleted.has(cur.id)) return;
 
-      const meKey = this.playerIndex === 1 ? "p2" : "p1";
+      if (!this._ensurePlayerIndex()) return;
+      const meKey = this._getMeKey();
 
       // If seer is already complete, nothing to do
       if (seerState.setupComplete) {
@@ -799,7 +846,8 @@ class BotClient {
       if (!cur) return;
       if (this._seerCompleted.has(cur.id)) return;
 
-      const meKey = this.playerIndex === 1 ? "p2" : "p1";
+      if (!this._ensurePlayerIndex()) return;
+      const meKey = this._getMeKey();
       // Determine second seat from currentPlayer
       const game = this._game;
       if (!game) return;
@@ -842,7 +890,10 @@ class BotClient {
       if (match.matchType === "sealed" || match.matchType === "draft") return;
       const mid = match.id;
       if (this._constructedInitDone.has(mid)) return;
-      const meKey = this.playerIndex === 1 ? "p2" : "p1";
+      // This emits our deck into zones[meKey]: an unresolved seat would write it over the
+      // opponent's zones on the server, so never guess here.
+      if (!this._ensurePlayerIndex()) return;
+      const meKey = this._getMeKey();
       const zones = this._game && this._game.zones && this._game.zones[meKey];
       const needInit =
         !zones ||
@@ -1347,7 +1398,7 @@ class BotClient {
     }
     if (this._inflightAction) return false;
     const id = `cpu_action_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
-    this._inflightAction = { id, onApplied, onDropped };
+    this._inflightAction = { id, onApplied, onDropped, action };
     this.socket.emit("action", { action: { ...action, __cpuActionId: id } });
     // A rejected or lost patch is never acknowledged. Resync (which acknowledges or drops it), and if even that
     // stays silent, drop it, instead of blocking every later action and leaving an attack waiting for defenders.
@@ -1368,6 +1419,30 @@ class BotClient {
     };
     watch(0);
     return true;
+  }
+
+  /** Cards an action tried to play (new permanents, the cast spell): excluded from search for the rest of this turn. */
+  _rememberRejectedAction(action) {
+    if (!action || typeof action !== "object") return;
+    const turnKey = `${this.currentMatch?.id}:${this._turnIndex}`;
+    if (this._rejectedCards.turnKey !== turnKey) this._rejectedCards = { turnKey, ids: new Set() };
+    const onBoard = new Set();
+    for (const items of Object.values(this._game?.permanents || {})) for (const item of items || []) {
+      const id = item && (item.instanceId || (item.card && item.card.instanceId));
+      if (id) onBoard.add(id);
+    }
+    for (const items of Object.values(action.permanents || {})) for (const item of Array.isArray(items) ? items : []) {
+      const id = item && (item.instanceId || (item.card && item.card.instanceId));
+      if (id && !onBoard.has(id)) this._rejectedCards.ids.add(id);
+    }
+    const spell = action._spellCard && action._spellCard.instanceId;
+    if (spell) this._rejectedCards.ids.add(spell);
+    if (this._rejectedCards.ids.size) console.log(`[Bot] Rejected cards sit out this turn: ${[...this._rejectedCards.ids].join(", ")}`);
+  }
+
+  _rejectedCardIds() {
+    const turnKey = `${this.currentMatch?.id}:${this._turnIndex}`;
+    return this._rejectedCards.turnKey === turnKey ? [...this._rejectedCards.ids] : [];
   }
 
   _acknowledgeCpuAction(id) {
@@ -3200,6 +3275,7 @@ class BotClient {
     try {
       const match = this.currentMatch;
       if (!match || !this._game) return;
+      if (!this._ensurePlayerIndex()) return;
       if (this._stopped || this._gameEnded || this._inflightAction || this._resyncing || this._pendingResolutions.size > 0) return;
       // Do not act during setup. Wait until server has transitioned to in_progress
       if (match.status !== "in_progress") return;
@@ -3429,6 +3505,7 @@ class BotClient {
                 : null),
             {
               skipDrawThisTurn: true, // The start phase already supplied the mandatory draw.
+              excludeCards: this._rejectedCardIds(),
               mode: this.engineMode === "train" ? "train" : "evaluate",
               exploration: (mergedTheta && mergedTheta.exploration) || {
                 epsilon_root: 0,

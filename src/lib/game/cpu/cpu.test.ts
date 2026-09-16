@@ -222,6 +222,50 @@ describe("CPU resolution lifecycle", () => {
     expect(__testZoneHelpers.normalizeAvatar({ cpuTurnEffect: null },fallback).cpuTurnEffect).toBeNull();
     expect(__testZoneHelpers.normalizeAvatar({ cpuTurnEffect: { turn: "3:1",power: Infinity,movement: 1 } },fallback).cpuTurnEffect).toBeUndefined();
   });
+  it("resolves its seat from playerIds, and refuses to act when no source names it", () => {
+    const bot = new BotClient({ serverUrl: "http://localhost:3010", playerId: "cpu_A" });
+    bot.you = { id: "cpu_A", displayName: "CPU" };
+    // getPlayerInfo() returns null for a player this instance has no socket for, so `players`
+    // can arrive with the human missing and the p2 bot sitting at index 0. Trusting that index
+    // made the bot read the human's zones and propose their cards forever.
+    expect(
+      bot._resolvePlayerIndex({
+        playerIds: ["human_1", "cpu_A"],
+        players: [{ id: "cpu_A", seat: "p2" }],
+      })
+    ).toBe(1);
+    // Without playerIds, the entry's own seat still outranks its position.
+    expect(bot._resolvePlayerIndex({ players: [{ id: "cpu_A", seat: "p2" }] })).toBe(1);
+    // Nothing names the seat: stay unresolved rather than defaulting into the opponent's seat.
+    bot.playerIndex = -1;
+    bot.currentMatch = { id: "m", players: [{ id: "someone_else" }] };
+    expect(bot._ensurePlayerIndex()).toBe(false);
+    expect(bot.playerIndex).toBe(-1);
+    bot.stop();
+  });
+
+  it("never re-proposes a card the server rejected, and forgets it next turn", () => {
+    const bot = new BotClient({ serverUrl: "http://localhost:3010" });
+    const socket = io("http://localhost:3010", { autoConnect: false });
+    vi.spyOn(socket,"emit").mockReturnValue(socket);
+    bot.socket = socket;
+    bot.currentMatch = { id: "rejects", status: "in_progress" };
+    bot._turnIndex = 1;
+    bot._game = { permanents: { "2,3": [{ instanceId: "onboard", card: { instanceId: "onboard", name: "Ogre Goons" } }] } };
+    vi.spyOn(bot,"_hasHumanOpponent").mockReturnValue(true);
+    bot._sendCpuAction({ permanents: { "2,3": [
+      { instanceId: "onboard", card: { instanceId: "onboard", name: "Ogre Goons" } },
+      { instanceId: "fresh", card: { instanceId: "fresh", name: "Spectral Stalker" } },
+    ] } }, () => {});
+    // The server refuses it (cost_unpaid): the card it tried to play sits out the rest of the turn.
+    const inflight = bot._inflightAction;
+    expect(inflight).not.toBeNull();
+    bot._rememberRejectedAction(inflight?.action);
+    expect(bot._rejectedCardIds()).toEqual(["fresh"]);
+    bot._turnIndex = 2;
+    expect(bot._rejectedCardIds()).toEqual([]);
+    bot.stop();
+  });
   it("waits for the matching server acknowledgment and ignores duplicate acknowledgments", () => {
     const bot = new BotClient({ serverUrl: "http://localhost:3010" });
     const socket = io("http://localhost:3010", { autoConnect: false });

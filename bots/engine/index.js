@@ -3131,7 +3131,10 @@ function generateCandidates(state, seat, options = {}) {
     return patch;
   };
   const ownedSitesNow = countOwnedManaSites(base, seat);
-  const hand = getZones(base, seat).hand || [];
+  // options.excludeCards: instance ids the server refused this turn; they are never proposed again.
+  const excluded = new Set((options && options.excludeCards) || []);
+  const notExcluded = (c) => !c || !excluded.has(c.instanceId);
+  const hand = (getZones(base, seat).hand || []).filter(notExcluded);
 
   // T015: Track filtering stats
   const stats = {
@@ -3277,6 +3280,7 @@ function generateCandidates(state, seat, options = {}) {
     const newHand = getZones(afterDraw, seat).hand || [];
     const affordableAfterDraw = newHand
       .filter((c) => {
+        if (!notExcluded(c)) return false;
         const cardType = (c.type || "").toLowerCase();
         if (cardType.includes("site")) return false;
         if (cardType.includes("avatar")) return false; // CRITICAL: avatars can't be played
