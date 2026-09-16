@@ -251,6 +251,19 @@ export type PendingAnimistCast = {
   chosenMode: AnimistCastMode | null;
 };
 
+// --- Summon layer choice --------------------------------
+// A unit with Submerge or Burrowing (printed or granted) may be summoned into the subsurface.
+export type SummonLayer = "burrowed" | "submerged";
+
+export type PendingSummonLayer = {
+  permanentId: string;
+  at: CellKey;
+  seat: PlayerKey;
+  cardName: string;
+  /** The layers this unit may enter at `at`: never both, since water and land exclude each other. */
+  layers: SummonLayer[];
+};
+
 // --- Druid Flip State --------------------------------
 // Tracks when a Druid avatar has been flipped (one-way transformation)
 
@@ -2142,6 +2155,11 @@ export type GameState = {
   }) => void;
   resolveAnimistCast: (mode: AnimistCastMode) => void;
   cancelAnimistCast: () => void;
+  // Summon layer choice (local to the chooser; not snapshotted)
+  pendingSummonLayer: PendingSummonLayer | null;
+  beginSummonLayer: (input: { permanentId: string; at: CellKey; seat: PlayerKey }) => void;
+  resolveSummonLayer: (layer: SummonLayer | "surface") => void;
+  cancelSummonLayer: () => void;
   // Interrogator avatar ability (Gothic expansion)
   // Whenever an ally strikes an enemy Avatar, draw a spell unless they pay 3 life
   pendingInterrogatorChoice: PendingInterrogatorChoice | null;

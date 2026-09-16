@@ -267,8 +267,11 @@ export function ensureCosts(
         typeof ledgerPatchRaw === "number" &&
         Number.isFinite(ledgerPatchRaw) &&
         ledgerPatchRaw !== ledgerPrev;
+      // Never accept a client ledger kinder than the server's own arithmetic. A bot that re-plans
+      // before its echo arrives sends a stale (too high) ledger; taken verbatim that refunds the
+      // spend already booked and lets it keep casting past its mana for the rest of the turn.
       const ledgerNext = clientPaid
-        ? (ledgerPatchRaw as number)
+        ? Math.min(ledgerPatchRaw as number, ledgerPrev - totalCost)
         : ledgerPrev - totalCost;
       const available = computeAvailableMana(game, meKey) + ledgerPrev;
       if (totalCost > Math.max(0, available)) {
@@ -277,7 +280,8 @@ export function ensureCosts(
           error: "Insufficient resources to pay costs",
         };
       }
-      if (!clientPaid) {
+      // Book it ourselves when the client did not, and also when its figure had to be clamped.
+      if (!clientPaid || ledgerNext !== ledgerPatchRaw) {
         autoPlayers[meKey] = { mana: ledgerNext };
         hasAuto = true;
       }

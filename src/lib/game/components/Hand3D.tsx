@@ -1,7 +1,14 @@
 "use client";
 
 import { useFrame, useThree, invalidate } from "@react-three/fiber";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Group, PerspectiveCamera } from "three";
 import { useShallow } from "zustand/react/shallow";
 import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
@@ -41,6 +48,24 @@ import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store";
 import { useTouchDevice } from "@/lib/hooks/useTouchDevice";
 import { throttle } from "@/lib/utils/throttle";
+
+// Draw feedback: a card entering the hand raises the (collapsed) own hand for a
+// moment and flies the new card into the fan while the others slide apart.
+const DRAW_ENTER_MS = 520; // flight time of one entering card
+const DRAW_STAGGER_MS = 110; // delay between cards of a multi-card draw
+const DRAW_STAGGER_TOTAL_MS = 600; // cap for the whole stagger of a big draw
+const DRAW_REVEAL_HOLD_MS = 1100; // keep the hand raised after the flight lands
+
+type DrawAnim = {
+  start: number;
+  duration: number;
+  stagger: number;
+  entering: Map<string, number>; // card key -> stagger order
+  shiftFrom: Map<string, number>; // card key -> x before the draw
+};
+
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
 
 export interface Hand3DProps {
   matW: number;
@@ -153,6 +178,24 @@ export default function Hand3D({
       return 0; // maintain relative order within same type
     });
   }, [hand, graphicsSettings.handSortOrder]);
+  // Stable per-card keys (duplicates without an instanceId get an occurrence
+  // suffix) so a draw can tell which cards are new.
+  const cardKeys = useMemo(() => {
+    const seen = new Map<string, number>();
+    return sortedHand.map((c) => {
+      const base = c.instanceId ? `i:${c.instanceId}` : `c:${c.cardId}`;
+      const n = seen.get(base) ?? 0;
+      seen.set(base, n + 1);
+      return `${base}#${n}`;
+    });
+  }, [sortedHand]);
+  const drawAnimRef = useRef<DrawAnim | null>(null);
+  const drawRevealUntilRef = useRef(0);
+  const prevHandKeysRef = useRef<{ owner: PlayerKey; keys: Set<string> } | null>(
+    null,
+  );
+  const renderedXRef = useRef<Map<string, number>>(new Map());
+  const [drawTick, setDrawTick] = useState(0);
   const rootRef = useRef<Group | null>(null);
   const { camera, gl, size } = useThree();
   // Get mouse zone state from store
@@ -488,9 +531,12 @@ export default function Hand3D({
         (placement === "edgeTop" || placement === "edgeBottom")) ||
       showCardBacks ||
       isXRPresenting;
+    const frameNow = performance.now();
+    const drawRevealActive =
+      !showCardBacks && frameNow < drawRevealUntilRef.current;
     const targetShownCheck = isEdgePlacementCheck
       ? 1
-      : handPick.active || overCardsArea || mouseInZone
+      : handPick.active || overCardsArea || mouseInZone || drawRevealActive
         ? 1
         : 0;
     // Hand is always fully spread (handSpreadLerp is pinned to 1 below), so the
@@ -508,7 +554,21 @@ export default function Hand3D({
 
     // Skip frame only if animations are stable AND camera is stationary
     const threshold = 0.01;
+
+    // Draw animation: re-render the fan each frame while cards fly in, and
+    // while a draw reveal raises/lowers the hand (the fan angle follows it).
+    const drawAnim = drawAnimRef.current;
+    if (drawAnim && frameNow - drawAnim.start > drawAnim.duration) {
+      drawAnimRef.current = null;
+    }
+    const drawRevealMoving =
+      !showCardBacks &&
+      revealDelta >= threshold &&
+      frameNow < drawRevealUntilRef.current + 600;
+    if (drawAnim || drawRevealMoving) setDrawTick((t) => t + 1);
+
     if (
+      !drawAnim &&
       !cameraMoved &&
       revealDelta < threshold &&
       spreadDelta < threshold &&
@@ -579,7 +639,7 @@ export default function Hand3D({
     } else if (isEdgePlacement) {
       targetShown = 1;
     } else {
-      targetShown = overCardsArea || mouseInZone ? 1 : 0;
+      targetShown = overCardsArea || mouseInZone || drawRevealActive ? 1 : 0;
     }
     // When dragging from hand, only show hand in a small return zone (desktop/mobile only)
     // In XR, the hand stays visible at the board edge during drag
@@ -861,6 +921,9 @@ export default function Hand3D({
     const sitesFirst = graphicsSettings.handSortOrder !== "spellsFirst";
     // Depth gap per stacking rank for depth-tested card backs (see backsDepth)
     const backsDepthStep = 0.004;
+    void drawTick; // advanced per frame while a draw animates (see useFrame)
+    const drawAnim = drawAnimRef.current;
+    const drawElapsed = drawAnim ? performance.now() - drawAnim.start : 0;
 
     return new Array(n).fill(0).map((_, i) => {
       // Map sorted index back to original hand index
@@ -900,7 +963,27 @@ export default function Hand3D({
         arrivalX = slideAmount * (1 - slideEase);
       }
 
-      const x = (baseX + arrivalX) * fitScale;
+      let x = (baseX + arrivalX) * fitScale;
+
+      // Draw flight: new cards rise in from below-right (the piles); cards
+      // already in hand slide from their old slot to make room.
+      let drawEase = 1;
+      if (drawAnim) {
+        const key = cardKeys[i];
+        const order = drawAnim.entering.get(key);
+        if (order != null) {
+          drawEase = easeOutCubic(
+            clamp01((drawElapsed - order * drawAnim.stagger) / DRAW_ENTER_MS),
+          );
+          x += (1 - drawEase) * CARD_SHORT * 2.2;
+        } else {
+          const fromX = drawAnim.shiftFrom.get(key);
+          if (fromX != null) {
+            const t = easeOutCubic(clamp01(drawElapsed / DRAW_ENTER_MS));
+            x = fromX + (x - fromX) * t;
+          }
+        }
+      }
 
       // Y position: arc + hover pop-up
       const arcY = handPick.active
@@ -949,7 +1032,8 @@ export default function Hand3D({
         liftFromFocus +
         CARD_LONG * 0.08 * hoverWeight +
         siteCollapsedLift +
-        (flatCards ? backsDepth : 0);
+        (flatCards ? backsDepth : 0) -
+        (1 - drawEase) * CARD_LONG * 1.1;
 
       // Z position: hovered card on top, stacking down from it on both sides
       // When a card is hovered, it's on top (highest Z)
@@ -976,7 +1060,8 @@ export default function Hand3D({
       // fitScale uniformly shrinks the fan when even tight overlap overflows.
       const scale =
         Math.max(1 + 0.06 * w * revealAmount, 1.0 + 0.08 * hoverWeight) *
-        fitScale;
+        fitScale *
+        (0.7 + 0.3 * drawEase);
 
       return {
         x,
@@ -984,9 +1069,10 @@ export default function Hand3D({
         z,
         // Reduce rotation toward upright for focused cards
         rot:
-          isSelected || handPick.active
+          (isSelected || handPick.active
             ? 0
-            : rot * (1 - 0.6 * Math.max(w, hoverWeight)),
+            : rot * (1 - 0.6 * Math.max(w, hoverWeight))) -
+          (1 - drawEase) * 0.5,
         scale,
         originalIndex,
         hoverWeight,
@@ -1009,7 +1095,48 @@ export default function Hand3D({
     size.width,
     size.height,
     handPick,
+    cardKeys,
+    drawTick,
   ]);
+
+  // Detect cards entering the hand and start the draw flight (+ reveal for the
+  // own overlay hand). Runs before the paint, and before the x snapshot below
+  // is overwritten, so the fan never shows a frame with the card already placed.
+  useLayoutEffect(() => {
+    const keys = new Set(cardKeys);
+    const prev = prevHandKeysRef.current;
+    prevHandKeysRef.current = { owner, keys };
+    if (!prev || prev.owner !== owner) return;
+    // Edge/flat hands (opponent backs, spectators, commentator) stay as they are.
+    if (showCardBacks || flatCards || placement) return;
+    const entering = cardKeys.filter((k) => !prev.keys.has(k));
+    if (entering.length === 0) return;
+    // Every key changed on a non-empty hand: identity churn (resync), not a draw.
+    if (prev.keys.size > 0 && entering.length === cardKeys.length) return;
+    const stagger =
+      entering.length > 1
+        ? Math.min(DRAW_STAGGER_MS, DRAW_STAGGER_TOTAL_MS / (entering.length - 1))
+        : 0;
+    const duration = DRAW_ENTER_MS + stagger * (entering.length - 1);
+    const start = performance.now();
+    drawAnimRef.current = {
+      start,
+      duration,
+      stagger,
+      entering: new Map(entering.map((k, order) => [k, order])),
+      shiftFrom: new Map(renderedXRef.current),
+    };
+    drawRevealUntilRef.current = start + duration + DRAW_REVEAL_HOLD_MS;
+    setDrawTick((t) => t + 1);
+    invalidate();
+  }, [cardKeys, owner, showCardBacks, flatCards, placement]);
+
+  // Remember where each card was drawn so the next draw can slide it over.
+  useLayoutEffect(() => {
+    const xs = new Map<string, number>();
+    handLayout.forEach((l, i) => xs.set(cardKeys[i], l.x));
+    renderedXRef.current = xs;
+  }, [handLayout, cardKeys]);
 
   // Clamp focus to hand size changes
   useEffect(() => {

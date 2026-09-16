@@ -56,6 +56,66 @@ function hasSubType(card, subType) { return new RegExp(`\\b${subType}\\b`).test(
  * @param {CardRef} card */
 function isProtected(card) { return /Can't be banished, destroyed, or modified/i.test(cardText(card)); }
 
+/** One element's thresholds across a seat's own (non-neutral) sites, for card abilities gated on
+ * them ("(E)(E)(E) — ..."). The fuller mirror (Elementalist, carried cores, auras) is the server's
+ * rules-resources.ts; this matches what abilities.js already counts for site abilities.
+ * @param {SpellState} state @param {PlayerKey} seat @param {'air'|'water'|'earth'|'fire'} element */
+function thresholdTotal(state, seat, element) {
+  const owner = seat === 'p1' ? 1 : 2;
+  return Object.values(state.board?.sites || {}).reduce((sum, tile) =>
+    tile?.card && !tile.cpuNeutral && tile.owner === owner ? sum+Number(tile.card.thresholds?.[element] || 0) : sum, 0);
+}
+
+/**
+ * A region keyword as the unit actually has it: printed, or granted by a carried "Bearer has ..."
+ * artifact (All-terrain Vestments), a nearby ally (Dwarven Digging Team) or a threshold-gated site
+ * (Kingdom of Agartha). Anything deciding whether a unit survives underwater/underground must use
+ * this, not the printed text alone, or a legitimately granted minion dies on arrival.
+ * @param {SpellState} state @param {LocatedUnit} unit @param {'Submerge'|'Burrowing'|'Voidwalk'} keyword
+ */
+function hasKeyword(state, unit, keyword) {
+  enterScope();
+  try { return keywordOf(state, unit, keyword); } finally { leaveScope(); }
+}
+
+/**
+ * The subsurface layers a unit standing on a site may be summoned into: 'submerged' at a water site
+ * with Submerge, 'burrowed' at a land site with Burrowing — printed or granted. Empty when it can only
+ * stay on the surface. Rulebook: both keywords let a unit "be safely summoned to" that region, and a
+ * minion without them "immediately dies" there (line 261), so this is the whole legality check.
+ * @param {SpellState} state @param {LocatedUnit} unit @returns {('submerged'|'burrowed')[]}
+ */
+function summonLayerOptions(state, unit) {
+  enterScope();
+  try {
+    if (unit.target.kind !== 'permanent' || !state.board.sites[unit.at]?.card) return [];
+    const type = unit.card.type || cards[unit.card.name]?.type;
+    if (type !== 'Minion' && type !== 'Token') return [];
+    if (waterAt(state, unit.at)) return keywordOf(state, unit, 'Submerge') ? ['submerged'] : [];
+    return keywordOf(state, unit, 'Burrowing') ? ['burrowed'] : [];
+  } finally { leaveScope(); }
+}
+
+/** @param {SpellState} state @param {LocatedUnit} unit @param {string} keyword */
+function keywordOf(state, unit, keyword) {
+  if (new RegExp(`\\b${keyword}\\b`).test(cardText(unit.card))) return true;
+  if (unit.target.kind !== 'permanent') return false;
+  const type = unit.card.type || cards[unit.card.name]?.type;
+  if (type !== 'Minion' && type !== 'Token') return false;
+  // "Bearer has Burrowing, Submerge, and Voidwalk, if it's a minion."
+  const granted = new RegExp(`Bearer has [^.]*\\b${keyword}\\b`);
+  if ((state.permanents[unit.at] || []).some(item => item.attachedTo?.at === unit.at &&
+      item.attachedTo.index === unit.target.index && granted.test(cardText(item.card)))) return true;
+  if (keyword !== 'Burrowing') return false;
+  // Dwarven Digging Team: "Allied minions occupying nearby sites have Burrowing."
+  if (state.board.sites[unit.at]?.card && realmUnits(state).some(other => other.card.name === 'Dwarven Digging Team' &&
+      other.owner === unit.owner && !sameTarget(other.target, unit.target) && !disabledOf(state, other) &&
+      cellsInRange(other.at, unit.at, 'nearby'))) return true;
+  // Kingdom of Agartha: "(E)(E)(E) — All minions have Burrowing." Both players' minions.
+  return Object.values(state.board?.sites || {}).some(tile => tile?.card?.name === 'Kingdom of Agartha' &&
+    thresholdTotal(state, tile.owner === 1 ? 'p1' : 'p2', 'earth') >= 3);
+}
+
 /** @param {string} a @param {string} b @param {'nearby' | 'adjacent' | 'two' | 'any'} range */
 function inRange(a, b, range) {
   return cellsInRange(a, b, range);
@@ -356,6 +416,8 @@ function rawSpellChoices(state, seat, name, selectionKey) {
             owner: item.owner === 1 ? 'p1' : 'p2', card: item.card, damage: 0 });
         });
       }
+      // Rulebook: a minion that ends up in the subsurface without the matching keyword dies, which is
+      // exactly how Bury and Drown kill. Targets are NOT filtered by capability.
       for (const at of sites.filter(at => waterAt(state, at) === water)) {
         const affected = objects.filter(u => occupies(u,at) && u.region === 'surface');
         if (!affected.length || origin.region !== 'surface') continue;
@@ -946,4 +1008,4 @@ function sameTarget(a, b) {
     (a.instanceId && b.instanceId ? a.instanceId === b.instanceId : a.at === b.at && a.index === b.index);
 }
 
-module.exports = { supportsSpell, getSpellChoices, getSpellChoice, projectileKey, directionPick, choiceCard, unitsInRealm, inRange, isWater, bodyOfWater, cardText, cardSubTypes, hasSubType, isProtected, sameTarget, unitDefence, unitStats, getAttackTargets, getRangedTargets, near, occupies, shareLocation, scoreOperations,isDisabled,hasStealth,hasAirborne,expandAreaOperation,projectileImpactChoices,projectilePath };
+module.exports = { supportsSpell, getSpellChoices, getSpellChoice, projectileKey, directionPick, choiceCard, unitsInRealm, inRange, isWater, bodyOfWater, cardText, cardSubTypes, hasSubType, isProtected, hasKeyword, summonLayerOptions, thresholdTotal, sameTarget, unitDefence, unitStats, getAttackTargets, getRangedTargets, near, occupies, shareLocation, scoreOperations,isDisabled,hasStealth,hasAirborne,expandAreaOperation,projectileImpactChoices,projectilePath };

@@ -2,7 +2,7 @@ import type { StateCreator } from "zustand";
 import { applyDamageEvent } from "@/lib/game/cpu/damage";
 import { luckyCharmCount } from "@/lib/game/cpu/luckyCharm";
 import type { CpuEffectCompletion, SpellChoice, SpellOperation, UnitTarget } from "@/lib/game/cpu/spellTypes";
-import { cardSubTypes, cardText, expandAreaOperation, hasStealth, inRange, isDisabled, isProtected, isWater, near, occupies, projectileImpactChoices, sameTarget, shareLocation, unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
+import { cardSubTypes, cardText, expandAreaOperation, hasKeyword, hasStealth, inRange, isDisabled, isProtected, isWater, near, occupies, projectileImpactChoices, sameTarget, shareLocation, unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
 import type { CardRef, GameState, PlayerKey } from "@/lib/game/store/types";
 import { prepareCardForSeat, toTransformedSiteMinionCard } from "@/lib/game/store/utils/cardHelpers";
 import { buildMoveDeltaPatch } from "@/lib/game/store/utils/patchHelpers";
@@ -142,9 +142,13 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
     get().trySendPatch({ permanents: { [at]:items } });
     const [x,z] = at.split(",").map(Number);
     get().setPermanentPosition(instanceId,{ permanentId:instanceId,state:region === "underwater" ? "submerged" : region === "underground" ? "burrowed" : "surface",position:{x,y:region === "surface" || region === "void" ? 0 : -0.15,z} });
-    if ((region === "void" && !/\bVoidwalk\b/.test(cardText(card))) ||
-        (region === "underwater" && !/\bSubmerge\b/.test(cardText(card))) ||
-        (region === "underground" && !/\bBurrowing\b/.test(cardText(card)))) {
+    // Granted keywords count: a minion given Burrowing by Dwarven Digging Team survives underground.
+    const located = unitsInRealm(get()).find(candidate => candidate.target.kind === "permanent" && candidate.target.instanceId === instanceId);
+    const survives = (keyword: "Voidwalk" | "Submerge" | "Burrowing") =>
+      located ? hasKeyword(get(),located,keyword) : new RegExp(`\\b${keyword}\\b`).test(cardText(card));
+    if ((region === "void" && !survives("Voidwalk")) ||
+        (region === "underwater" && !survives("Submerge")) ||
+        (region === "underground" && !survives("Burrowing"))) {
       get().movePermanentToZone(at,items.length-1,"graveyard");
     }
   };
@@ -687,9 +691,9 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
         if (!id) continue;
         const [x, z] = found.at.split(",").map(Number);
         get().setPermanentPosition(id, { permanentId: id, state: op.state, position: { x, y: -0.15, z } });
-        const capability = op.state === "burrowed" ? /\bBurrowing\b/ : /\bSubmerge\b/;
-        const isUnit = unitsInRealm(get()).some(unit => unit.target.kind === "permanent" && unit.at === found.at && unit.target.index === found.index);
-        if (isUnit && !capability.test(cardText(found.unit.card))) {
+        // Artifacts are not units and never die down there; units need the keyword, printed or granted.
+        const located = unitsInRealm(get()).find(unit => unit.target.kind === "permanent" && unit.at === found.at && unit.target.index === found.index);
+        if (located && !hasKeyword(get(),located,op.state === "burrowed" ? "Burrowing" : "Submerge")) {
           get().movePermanentToZone(found.at, found.index, "graveyard");
         }
       }

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
-import { abilityChoices } from "@/lib/game/cpu/abilities";
+import { abilityChoices, tappedAbilitySources } from "@/lib/game/cpu/abilities";
 import type { SpellState } from "@/lib/game/cpu/spellTypes";
 import { useGameStore } from "@/lib/game/store";
 import type { GameState, PlayerKey } from "@/lib/game/store/types";
@@ -12,9 +12,13 @@ export type AbilitySource = AbilityChoice["source"];
 export type AbilityRulesState = SpellState & Pick<GameState, "phase" | "cpuPendingTriggerCount" | "cpuEffectContinuations">;
 
 const NO_ABILITIES: AbilityChoice[] = [];
+/** A source whose ability is hidden only because it is tapped, with the reason to show. */
+export type BlockedAbility = [id: string, source: AbilitySource, reason: string];
+const NO_BLOCKED: BlockedAbility[] = [];
 
 /** The site, avatar or permanent offering an ability. */
-export const abilitySourceId = (choice: AbilityChoice) => `${choice.source.card.instanceId || choice.source.card.name}@${choice.source.at}`;
+export const sourceKey = (source: AbilitySource) => `${source.card.instanceId || source.card.name}@${source.at}`;
+export const abilitySourceId = (choice: AbilityChoice) => sourceKey(choice.source);
 
 /** Rules inputs only while an ability can be activated: this mirrors abilityChoices' gate, which yields no choices in every other state. */
 export function selectAbilityRules(state: GameState): AbilityRulesState | null {
@@ -28,17 +32,20 @@ export function selectAbilityRules(state: GameState): AbilityRulesState | null {
 
 // Single-entry memo: the ability buttons and the targeting bar select equal rules inputs as separate objects,
 // so the second consumer reuses the first one's choices instead of generating them again.
-let last: {rules: AbilityRulesState; seat: PlayerKey; choices: AbilityChoice[]} | null = null;
+let last: {rules: AbilityRulesState; seat: PlayerKey; choices: AbilityChoice[]; blocked: BlockedAbility[]} | null = null;
 const sameRules = (a: AbilityRulesState, b: AbilityRulesState) => {
   const keys = Object.keys(a) as (keyof AbilityRulesState)[];
   return keys.length === Object.keys(b).length && keys.every(key => a[key] === b[key]);
 };
-function readyChoices(rules: AbilityRulesState, seat: PlayerKey): AbilityChoice[] {
-  if (last && last.seat === seat && sameRules(last.rules,rules)) return last.choices;
+function readyAbilities(rules: AbilityRulesState, seat: PlayerKey) {
+  if (last && last.seat === seat && sameRules(last.rules,rules)) return last;
   // Ranged strikes use the Combat controls and layer changes the context menu; those choices serve the CPU's own turns.
   const choices = abilityChoices(rules,seat).filter(choice => !/^(ranged|layer)\//.test(choice.key));
-  last = {rules,seat,choices};
-  return choices;
+  // A tapped source offers nothing at all, so without this the bar would claim the player simply
+  // has no ability — the Avatar's tap is spent by "Play or draw a site" on most turns.
+  const blocked: BlockedAbility[] = tappedAbilitySources(rules,seat).map(entry => [sourceKey(entry.source),entry.source,entry.reason]);
+  last = {rules,seat,choices,blocked};
+  return last;
 }
 
 const selectAbilityKey = (state: GameState) => ({actorKey:state.actorKey,matchId:state.matchId,turn:state.turn,currentPlayer:state.currentPlayer});
@@ -47,10 +54,12 @@ const selectAbilityKey = (state: GameState) => ({actorKey:state.actorKey,matchId
 export function useReadyAbilities() {
   const {actorKey,matchId,turn,currentPlayer} = useGameStore(useShallow(selectAbilityKey));
   const rules = useGameStore(useShallow(selectAbilityRules));
-  const choices = useMemo(() => rules && actorKey ? readyChoices(rules,actorKey) : NO_ABILITIES,[rules,actorKey]);
+  const ready = useMemo(() => rules && actorKey ? readyAbilities(rules,actorKey) : null,[rules,actorKey]);
+  const choices = ready?.choices ?? NO_ABILITIES;
+  const blocked = ready?.blocked ?? NO_BLOCKED;
   const sources = useMemo(() => [...new Map(choices.map(choice => [abilitySourceId(choice),choice.source])).entries()],[choices]);
   const size = rules?.board.size;
-  return {actorKey,matchId,request:`${matchId}:ability:${turn}:${currentPlayer}`,rules,choices,sources,size};
+  return {actorKey,matchId,request:`${matchId}:ability:${turn}:${currentPlayer}`,rules,choices,sources,blocked,size};
 }
 
 /** Transient UI state shared by the ability buttons and the targeting bar; never sent to the match.

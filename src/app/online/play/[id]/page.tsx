@@ -110,6 +110,7 @@ import SelfsameSimulacrumOverlay from "@/components/game/SelfsameSimulacrumOverl
 import ShapeshiftOverlay from "@/components/game/ShapeshiftOverlay";
 import PlayerStatusEffects from "@/components/game/StatusEffectIcons";
 // SeerScreen is now integrated into OnlineMulliganScreen
+import { SummonLayerChoiceOverlay } from "@/components/game/SummonLayerChoiceOverlay";
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
 import TurnStartOverlay from "@/components/game/TurnStartOverlay";
 import UnitHandsOverlay from "@/components/game/UnitHandsOverlay";
@@ -3801,6 +3802,8 @@ export default function OnlineMatchPage() {
               <InfiltrateOverlay />
               {/* Animist Cast Choice Overlay (magic or spirit) */}
               <AnimistCastChoiceOverlay />
+              {/* Summon Layer Choice Overlay (surface, submerge or burrow on summon) */}
+              <SummonLayerChoiceOverlay />
               {/* Browse Overlay (spell selection) */}
               <BrowseOverlay />
               {/* Common Sense Overlay (search for Ordinary card) */}

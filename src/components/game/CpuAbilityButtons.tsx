@@ -37,7 +37,7 @@ const selectCpuMatch = (state: GameState) => state.opponentPlayerId?.startsWith(
 export default function CpuAbilityButtons() {
   const cpu = useGameStore(selectCpuMatch);
   const combatBar = useGameStore(selectCombatBar);
-  const {matchId,request,sources,size} = useReadyAbilities();
+  const {matchId,request,sources,blocked,size} = useReadyAbilities();
   const picked = useCpuAbilityPicker(state => state.request === request ? state.picked : null);
   const hovered = useCpuAbilityPicker(state => state.request === request ? state.hovered : null);
   const [pulse,setPulse] = useState<{request: string; ids: string[]}>({request:"",ids:[]});
@@ -63,7 +63,7 @@ export default function CpuAbilityButtons() {
   const tileNo = (at: string) => { const [x,y] = at.split(",").map(Number); return size ? getCellNumber(x,y,size.w,size.h) : at; };
   const group = "flex max-w-full flex-wrap overflow-hidden rounded-rc-md bg-[rgba(7,10,20,0.85)] shadow-rc-panel ring-1 ring-rc-moonlight/35";
   const icon = <Icon icon="game-icons:magic-swirl" width={16} height={16} className="shrink-0" />;
-  if (!sources.length) return <div role="group" aria-label="Activated abilities" className={group}>
+  if (!sources.length && !blocked.length) return <div role="group" aria-label="Activated abilities" className={group}>
     <button type="button" disabled className={`${BTN} bg-rc-moonlight/10`} title="None of your cards has an ability you can activate right now">{icon}Abilities</button>
   </div>;
   return <div role="group" aria-label="Activated abilities" className={group}>
@@ -84,5 +84,14 @@ export default function CpuAbilityButtons() {
         {shared && <span className="font-rc-mono text-xs tabular-nums text-rc-fg-subtle">#{tileNo(source.at)}</span>}
       </button>;
     })}
+    {/* Tapped sources: shown disabled with the reason, rather than vanishing as if they had no ability. */}
+    {blocked.map(([id,source,reason],index) => <button key={id} type="button" disabled
+      aria-label={`${source.card.name} ability unavailable, Tile #${tileNo(source.at)}: ${reason}`}
+      title={`${reason} — untap it (right-click it) to use its ability`}
+      className={`${BTN} ${sources.length || index ? "border-l border-rc-moonlight/25" : ""} bg-rc-moonlight/8`}>
+      {!sources.length && index === 0 && icon}
+      <span className="max-w-[10rem] truncate font-rc-display">{source.card.name}</span>
+      <span className="font-rc-sans text-xs text-rc-fg-subtle">tapped</span>
+    </button>)}
   </div>;
 }

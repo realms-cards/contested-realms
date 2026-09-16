@@ -234,4 +234,38 @@ function choicesFor(state, seat) {
   }
   return choices.map(choice => ({...choice,label:scopedTileLabel(choice.label,state.board.size)}));
 }
-module.exports = { abilityChoices };
+/**
+ * Sources that would offer an ability if they were not tapped. The rules layer hides a tapped
+ * source's abilities entirely, which reads as "this card has no ability" — most visibly on the
+ * Avatar, whose tap is spent by "Tap → Play or draw a site" on the very first move of a turn.
+ * The UI shows these disabled with their reason; the bot never uses this (it reads abilityChoices).
+ * Pure: each check runs against a shallow clone with that one source untapped.
+ * @param {Parameters<typeof abilityChoices>[0]} state @param {import('../store/types').PlayerKey} seat
+ * @returns {{source: ReturnType<typeof abilityChoices>[number]['source'], reason: string}[]}
+ */
+function tappedAbilitySources(state, seat) {
+  const out = [];
+  const hasTapAbility = card => card && /Tap\s*(?:,[^→]*)?→/.test(cardText(card));
+  const avatar = state.avatars?.[seat];
+  if (avatar?.tapped && hasTapAbility(avatar.card)) {
+    const relaxed = {...state,avatars:{...state.avatars,[seat]:{...avatar,tapped:false}}};
+    const would = abilityChoices(relaxed,seat).filter(choice => choice.source.target?.kind === 'avatar');
+    if (would.length) out.push({source:would[0].source,reason:`${avatar.card.name} is tapped`});
+  }
+  const owner = seat === 'p1' ? 1 : 2;
+  for (const [at,items] of Object.entries(state.permanents || {})) {
+    if (!Array.isArray(items)) continue;
+    items.forEach((item,index) => {
+      if (!item?.tapped || Number(item.owner) !== owner || !hasTapAbility(item.card)) return;
+      const swapped = [...items];
+      swapped[index] = {...item,tapped:false};
+      const relaxed = {...state,permanents:{...state.permanents,[at]:swapped}};
+      const would = abilityChoices(relaxed,seat).filter(choice =>
+        choice.source.target?.kind === 'permanent' && choice.source.at === at && choice.source.target.index === index);
+      if (would.length) out.push({source:would[0].source,reason:`${item.card.name} is tapped`});
+    });
+  }
+  return out;
+}
+
+module.exports = { abilityChoices, tappedAbilitySources };

@@ -16,6 +16,7 @@ import { isGardenOfEden } from "../gardenOfEdenState";
 import { ensureFloodedTokenAtSite } from "../realmFloodState";
 import { isRiverGenesisSite } from "../riverGenesisState";
 import { isMismanagedMortuary } from "../specialSiteState";
+import { subsurfaceRecords, summonLayerFor } from "../summonLayerState";
 import type {
   CardRef,
   CellKey,
@@ -857,25 +858,25 @@ export const createPlayActionsSlice: StateCreator<
       if (isFaceDown) {
         setTimeout(() => get().setDragFaceDown(false), 0);
       }
-      // Build subsurface position/ability data synchronously (included in patch + state)
-      const subsurfacePosition = isSubsurface
-        ? {
-            permanentId: permanentInstanceId,
-            state: "burrowed" as const,
-            position: { x: 0, y: -0.25, z: 0 },
-          }
+      // Build subsurface position/ability data synchronously (included in patch + state). The layer
+      // follows the site (underwater on water, underground on land) and the unit must have the
+      // keyword, printed or granted — the projection already holds the new unit so grants count.
+      // Without it the unit enters on the surface: the rulebook kills a minion placed below without
+      // the keyword, and a misclick must never do that to your own unit.
+      const projected = { ...state, permanents: { ...state.permanents, [key]: arr } };
+      const layerChoice = summonLayerFor(projected, permanentInstanceId);
+      const castLayer = isSubsurface ? (layerChoice?.layers[0] ?? null) : null;
+      const castRecords = castLayer && layerChoice
+        ? subsurfaceRecords(permanentInstanceId, castLayer, layerChoice.abilities)
         : null;
-      const subsurfaceAbility = isSubsurface
-        ? {
-            permanentId: permanentInstanceId,
-            canBurrow: true,
-            canSubmerge: false,
-            requiresWaterSite: false,
-            abilitySource: "Cast subsurface",
-          }
-        : null;
+      const subsurfacePosition = castRecords?.position ?? null;
+      const subsurfaceAbility = castRecords?.ability ?? null;
       if (isSubsurface) {
+        if (!castLayer) get().log(`${card.name} cannot enter the subsurface here, so it enters on the surface.`);
         setTimeout(() => get().setCastSubsurface(false), 0);
+      } else if (layerChoice?.layers.length) {
+        // Not chosen up front: ask once the placement has landed in the store.
+        setTimeout(() => get().beginSummonLayer({ permanentId: permanentInstanceId, at: key, seat: who }), 0);
       }
       per[key] = arr;
       const logPlayerNum = who === "p1" ? "1" : "2";
@@ -2138,25 +2139,21 @@ export const createPlayActionsSlice: StateCreator<
       if (isFaceDown) {
         setTimeout(() => get().setDragFaceDown(false), 0);
       }
-      // Build subsurface position/ability data synchronously (included in patch + state)
-      const pileSubsurfacePosition = isSubsurfacePile
-        ? {
-            permanentId: pilePermInstanceId,
-            state: "burrowed" as const,
-            position: { x: 0, y: -0.25, z: 0 },
-          }
+      // Same layer rules as playSelectedTo: correct layer for the site, keyword required (printed or
+      // granted), surface otherwise; ask when the player did not choose up front.
+      const pileProjected = { ...state, permanents: { ...state.permanents, [key]: arr } };
+      const pileLayerChoice = summonLayerFor(pileProjected, pilePermInstanceId);
+      const pileCastLayer = isSubsurfacePile ? (pileLayerChoice?.layers[0] ?? null) : null;
+      const pileCastRecords = pileCastLayer && pileLayerChoice
+        ? subsurfaceRecords(pilePermInstanceId, pileCastLayer, pileLayerChoice.abilities)
         : null;
-      const pileSubsurfaceAbility = isSubsurfacePile
-        ? {
-            permanentId: pilePermInstanceId,
-            canBurrow: true,
-            canSubmerge: false,
-            requiresWaterSite: false,
-            abilitySource: "Cast subsurface",
-          }
-        : null;
+      const pileSubsurfacePosition = pileCastRecords?.position ?? null;
+      const pileSubsurfaceAbility = pileCastRecords?.ability ?? null;
       if (isSubsurfacePile) {
+        if (!pileCastLayer) get().log(`${card.name} cannot enter the subsurface here, so it enters on the surface.`);
         setTimeout(() => get().setCastSubsurface(false), 0);
+      } else if (pileLayerChoice?.layers.length) {
+        setTimeout(() => get().beginSummonLayer({ permanentId: pilePermInstanceId, at: key, seat: who }), 0);
       }
       per[key] = arr;
       const logPlayerNum2 = who === "p1" ? "1" : "2";

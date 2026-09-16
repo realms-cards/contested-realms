@@ -123,6 +123,7 @@ import {
   createSpecialSiteSlice,
   getEmptySpecialSiteState,
 } from "./store/specialSiteState";
+import { createSummonLayerSlice } from "./store/summonLayerState";
 import { createTorshammarSlice } from "./store/torshammarState";
 import {
   createTransportSlice,
@@ -258,6 +259,7 @@ const createGameStoreState: StateCreator<GameState> = (set, get, storeApi) => ({
   ...createDruidSlice(set, get, storeApi),
   ...createSpecialSiteSlice(set, get, storeApi),
   ...createAnimistSlice(set, get, storeApi),
+  ...createSummonLayerSlice(set, get, storeApi),
   ...createArtifactCastSlice(set, get, storeApi),
   ...createHeadlessHauntSlice(set, get, storeApi),
   ...createInterrogatorSlice(set, get, storeApi),

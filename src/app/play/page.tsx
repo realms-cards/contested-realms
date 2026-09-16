@@ -85,6 +85,7 @@ import SelfsameSimulacrumOverlay from "@/components/game/SelfsameSimulacrumOverl
 import ShapeshiftOverlay from "@/components/game/ShapeshiftOverlay";
 import StatusBar from "@/components/game/StatusBar";
 import PlayerStatusEffects from "@/components/game/StatusEffectIcons";
+import { SummonLayerChoiceOverlay } from "@/components/game/SummonLayerChoiceOverlay";
 import SwitchSiteHudOverlay from "@/components/game/SwitchSiteHudOverlay";
 import TurnStartOverlay from "@/components/game/TurnStartOverlay";
 import UnitHandsOverlay from "@/components/game/UnitHandsOverlay";
@@ -1105,6 +1106,9 @@ export default function PlayPage() {
 
           {/* Animist Cast Choice Overlay (magic or spirit) */}
           <AnimistCastChoiceOverlay />
+
+          {/* Summon Layer Choice Overlay (surface, submerge or burrow on summon) */}
+          <SummonLayerChoiceOverlay />
 
           {/* Browse Overlay (spell selection) */}
           <BrowseOverlay />

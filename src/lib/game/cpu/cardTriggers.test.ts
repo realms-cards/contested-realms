@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { abilityChoices } from "@/lib/game/cpu/abilities";
+import { abilityChoices, tappedAbilitySources } from "@/lib/game/cpu/abilities";
 import { applySpellChoice } from "@/lib/game/cpu/applySpellChoice";
 import cards from "@/lib/game/cpu/cards.json";
 import { movementSteps } from "@/lib/game/cpu/movement";
@@ -482,6 +482,117 @@ describe("Voidwalk cards", () => {
       permanents:{"0,3":[{owner:1,card:{name:"Raal Dromedary"}}]}};
     const monstrosity = {name:"Dormant Monstrosity",cost:7,type:"Minion",thresholds:{}};
     expect((price(crowded,"0,2",monstrosity).autoPatch as {players?:{p1?:{mana?:number}}})?.players?.p1?.mana).toBe(-5);
+  });
+
+  it("a stealthed attacker cannot be defended", async () => {
+    const store = setup();
+    // Dead of Night Demon's printed text is exactly "Stealth".
+    store.setState({permanents:{
+      "2,2":[unit("Dead of Night Demon",1,"sneak")],
+      "2,1":[unit("Raal Dromedary",2,"blocker")],
+    }});
+    await settle();
+    store.getState().declareAttack({x:2,y:1},{at:"2,2",index:0,owner:1},{kind:"permanent",at:"2,1",index:0});
+    store.getState().setDefenderSelection([{at:"2,1",index:0,owner:2,instanceId:"blocker"}]);
+    expect(store.getState().pendingCombat?.defenders).toEqual([]);
+  });
+
+  it("clamps a stale client mana ledger instead of refunding the spend", () => {
+    const sites = Object.fromEntries(Array.from({length:8},(_,i) => [`${i%4},${i<4 ? 2 : 3}`,{owner:1,card:{name:"Cornerstone"}}]));
+    const context = {match:{playerIds:["human","cpu_bot"]}};
+    // The server has already booked 4 mana of spending this turn.
+    const game = {turn:3,currentPlayer:1,board:{size:{w:5,h:4},sites},avatars:{},permanents:{},
+      players:{p1:{mana:-4},p2:{mana:0}}};
+    // A bot re-planning before its echo arrives reports only -3, which taken verbatim would refund
+    // a mana and let it keep casting. The server must book its own arithmetic instead.
+    const stale = ensureCosts(game,
+      {permanents:{"0,2":[{owner:1,card:{name:"Ogre Goons",cost:3,type:"Minion",thresholds:{}}}]},players:{p1:{mana:-3}}} as Parameters<typeof ensureCosts>[1],
+      "human",context);
+    expect(stale.ok).toBe(true);
+    expect((stale.autoPatch as {players?:{p1?:{mana?:number}}})?.players?.p1?.mana).toBe(-7);
+  });
+
+  it("untapping the avatar makes its tap ability available again", () => {
+    const store = setup();
+    // Sparkmage's zap needs air cast history this turn; the avatar's other tap ability
+    // ("Play or draw a site") is what normally leaves it tapped.
+    // The zap targets a nearby location, so the victim must sit beside the avatar at 4,3.
+    store.setState({avatars:{...store.getState().avatars,
+      p1:{...store.getState().avatars.p1,card:card("Sparkmage"),tapped:true,cpuAirCast:{turn:"3:1",air:2}}},
+      permanents:{"4,2":[unit("Raal Dromedary",2,"target")]}});
+    const sparkKeys = () => abilityChoices(store.getState(),"p1").filter(choice => choice.key.startsWith("sparkmage/"));
+    expect(sparkKeys()).toHaveLength(0);
+    store.getState().toggleTapAvatar("p1");
+    expect(store.getState().avatars.p1.tapped).toBe(false);
+    expect(sparkKeys().length).toBeGreaterThan(0);
+  });
+
+  it("reports a tapped source whose ability is only hidden by the tap", () => {
+    const store = setup();
+    store.setState({avatars:{...store.getState().avatars,
+      p1:{...store.getState().avatars.p1,card:card("Sparkmage"),tapped:true,cpuAirCast:{turn:"3:1",air:2}}},
+      permanents:{"4,2":[unit("Raal Dromedary",2,"target")]}});
+    const blocked = tappedAbilitySources(store.getState(),"p1");
+    expect(blocked.map(entry => entry.reason)).toEqual(["Sparkmage is tapped"]);
+    // Once untapped it is a real ability again, so it must no longer be reported as blocked.
+    store.getState().toggleTapAvatar("p1");
+    expect(tappedAbilitySources(store.getState(),"p1")).toEqual([]);
+    expect(abilityChoices(store.getState(),"p1").some(choice => choice.key.startsWith("sparkmage/"))).toBe(true);
+  });
+
+  it("asks to submerge a Submerge minion summoned onto a water site, and records it correctly", () => {
+    const store = setup({"2,2":site("Floodplain",1)});
+    store.setState({permanents:{"2,2":[unit("Diluvian Kraken",1,"kraken")]}});
+    store.getState().beginSummonLayer({permanentId:"kraken",at:"2,2",seat:"p1"});
+    expect(store.getState().pendingSummonLayer?.layers).toEqual(["submerged"]);
+    store.getState().resolveSummonLayer("submerged");
+    expect(store.getState().pendingSummonLayer).toBeNull();
+    expect(store.getState().permanentPositions.kraken?.state).toBe("submerged");
+    // canTransitionState gates every later move on these flags, so they must say what it can do.
+    expect(store.getState().permanentAbilities.kraken).toMatchObject({canSubmerge:true,canBurrow:false});
+  });
+
+  it("does not ask when the minion has no way below at that site", () => {
+    const store = setup({"2,2":site("Floodplain",1)});
+    // No keyword at all.
+    store.setState({permanents:{"2,2":[unit("Raal Dromedary",1,"plain")]}});
+    store.getState().beginSummonLayer({permanentId:"plain",at:"2,2",seat:"p1"});
+    expect(store.getState().pendingSummonLayer).toBeNull();
+    // Submerge on land: going underwater needs a water site.
+    store.setState({permanents:{"1,3":[unit("Diluvian Kraken",1,"beached")]}});
+    store.getState().beginSummonLayer({permanentId:"beached",at:"1,3",seat:"p1"});
+    expect(store.getState().pendingSummonLayer).toBeNull();
+  });
+
+  it("counts Burrowing granted by a nearby ALLIED Dwarven Digging Team only", () => {
+    const digging = "Burrowing\n\nAllied minions occupying nearby sites have Burrowing.";
+    const store = setup();
+    store.setState({permanents:{
+      "2,2":[voidUnit("Dwarven Digging Team",1,2,2,digging,"dwarves")],
+      "2,3":[unit("Raal Dromedary",1,"passenger")],
+    }});
+    store.getState().beginSummonLayer({permanentId:"passenger",at:"2,3",seat:"p1"});
+    expect(store.getState().pendingSummonLayer?.layers).toEqual(["burrowed"]);
+    // An enemy Digging Team grants nothing.
+    store.setState({pendingSummonLayer:null,permanents:{
+      "2,2":[voidUnit("Dwarven Digging Team",2,2,2,digging,"rival-dwarves")],
+      "2,3":[unit("Raal Dromedary",1,"passenger")],
+    }});
+    store.getState().beginSummonLayer({permanentId:"passenger",at:"2,3",seat:"p1"});
+    expect(store.getState().pendingSummonLayer).toBeNull();
+  });
+
+  it("Flamecaller banishes the dead fire minions it spends", () => {
+    const store = setup();
+    store.setState({permanents:{"4,2":[unit("Raal Dromedary",2,"victim")]},
+      zones:{...store.getState().zones,p1:{...store.getState().zones.p1,
+        graveyard:[card("Askelon Phoenix","dead1"),card("Clamor of Harpies","dead2")]}}});
+    const ability = abilityChoices(store.getState(),"p1").find(choice => choice.key.startsWith("flamecaller/"));
+    if (!ability) throw new Error("Missing Flamecaller ability");
+    store.getState().activateCpuAbility(ability.key);
+    // "Banish all your dead fire minions" — they leave the cemetery for the banished pile.
+    expect(store.getState().zones.p1.graveyard.map(dead => dead.name)).toEqual([]);
+    expect(store.getState().zones.p1.banished.map(gone => gone.name)).toEqual(["Askelon Phoenix","Clamor of Harpies"]);
   });
 
   it("Vril Revenant pays a mana for +1 power this turn", () => {

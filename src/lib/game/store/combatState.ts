@@ -2,7 +2,7 @@ import type { StateCreator } from "zustand";
 import { isInterrogator } from "@/lib/game/avatarAbilities";
 import { applySpellChoice } from "@/lib/game/cpu/applySpellChoice";
 import { resolveCpuCombat } from "@/lib/game/cpu/combat";
-import { unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
+import { hasStealth, unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
 import { rangedAttack } from "@/lib/game/cpu/stationaryAttack";
 import type { CustomMessage } from "@/lib/net/transport";
 import {
@@ -25,6 +25,23 @@ import {
   seatFromOwner,
   toCellKey,
 } from "./utils/boardHelpers";
+
+/**
+ * Rulebook (Stealth): a minion with Stealth "can't be intercepted" and "their attacks can't be
+ * defended". The bot already refuses to block one (_findBestDefender); this enforces the same rule
+ * for the human, whose defender picks all funnel through setDefenderSelection.
+ * Non-minions never have Stealth, so an attacking avatar is always defendable.
+ */
+function attackerHasStealth(
+  state: GameState,
+  attacker: { at: CellKey; index: number; isAvatar?: boolean },
+): boolean {
+  if (attacker.isAvatar) return false;
+  const unit = unitsInRealm(state).find(
+    (candidate) => candidate.target.kind === "permanent" && candidate.target.at === attacker.at && candidate.target.index === attacker.index,
+  );
+  return !!unit && hasStealth(state, unit);
+}
 
 function cpuCombatStats(state: GameState, at: string, index: number) {
   if (!state.opponentPlayerId?.startsWith("cpu_")) return null;
@@ -550,6 +567,7 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
       const state = get();
       const entity = attacker.isAvatar ? state.avatars[attacker.avatarSeat || seatFromOwner(attacker.owner)] : state.permanents[attacker.at]?.[attacker.index];
       if (state.opponentPlayerId?.startsWith("cpu_") && entity?.cpuTurnEffect?.blaze && entity.cpuTurnEffect.turn === `${state.turn}:${state.currentPlayer}`) return;
+      if (attackerHasStealth(state, attacker)) return; // Stealth: "they can't be intercepted".
       const defenderSeat = opponentSeat(seatFromOwner(attacker.owner));
       const key = toCellKey(tile.x, tile.y);
       const allPermanents = get().permanents as Permanents;
@@ -605,6 +623,11 @@ export const createCombatSlice: StateCreator<GameState, [], [], CombatSlice> = (
   },
 
   setDefenderSelection: (defenders) => {
+    const declared = get().pendingCombat;
+    if (declared && defenders.length && attackerHasStealth(get(), declared.attacker)) {
+      get().log("That attacker has Stealth: its attack cannot be defended.");
+      return;
+    }
     set((state) => {
       if (!state.pendingCombat) return state as GameState;
       return {
