@@ -30,6 +30,7 @@ function choicesFor(state, seat) {
   const sites = Object.entries(state.board.sites).filter(([,tile]) => tile.card && !tile.cpuNeutral);
   const threshold = element => sites.filter(([,tile]) => tile.owner === owner).reduce((sum,[,tile]) => sum+Number(tile.card.thresholds?.[element] || 0),0);
   const fire = threshold('fire'), turnKey = `${state.turn}:${state.currentPlayer}`;
+  const mana = sites.filter(([,tile]) => tile.owner === owner).length+(state.players[seat]?.mana || 0);
   for (const [at,tile] of sites) {
     if (tile.owner !== owner || state.permanents[at]?.some(item => ['Silenced','Disabled'].includes(item.card.name) && !item.attachedTo)) continue;
     const source = {card:tile.card,at,owner:seat,target:{kind:'site',at}};
@@ -69,6 +70,12 @@ function choicesFor(state, seat) {
           {kind:'tapUnits',targets:[source.target]},{kind:'damage',targets,amount,random:true},
         ],[at]);
       }
+    }
+    // No tap symbol: Vril Revenant may do this as often as its controller can pay.
+    if (source.card.name === 'Vril Revenant' && mana>=1) {
+      add(source,`vril/${id}`,'Vril Revenant: pay 1 mana for +1 power this turn',[
+        {kind:'spend',seat,amount:1},{kind:'buff',target:source.target,power:1,movement:0},
+      ]);
     }
     if (source.card.name === 'Waveshaper' && canTap(source)) {
       const water = bodyOfWater(state,source.at);

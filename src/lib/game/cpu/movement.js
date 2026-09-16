@@ -26,8 +26,16 @@ function stepsFrom(state,from,unit,origin) {
   if (/\bWaterbound\b/.test(text) && !isWater(state,from) || /\bLandbound\b/.test(text) && isWater(state,from)) return [];
   const airborne = layer === 'surface' && /\bAirborne\b/.test(text);
   const site = state.board.sites[from]?.card;
-  const voidwalk = /\bVoidwalk\b/.test(text) || site?.name === 'Planar Gate' ||
-    (!site && (unit.cpuPlanarVoidwalk || state.board.sites[origin]?.card?.name === 'Planar Gate'));
+  const here = state.permanents[from] || [];
+  // Granted Voidwalk: a "Bearer has ... Voidwalk" artifact carried by this minion (All-terrain
+  // Vestments), or Lucid Dreamers sharing its void — the same shape as Planar Gate granting it.
+  const printed = /\bVoidwalk\b/.test(text);
+  const bearer = printed ? -1 : here.findIndex(item => (item.instanceId || item.card?.instanceId) === (unit.instanceId || unit.card.instanceId));
+  const vested = !printed && unit.card.type === 'Minion' && bearer >= 0 && here.some(item =>
+    item.attachedTo?.at === from && item.attachedTo.index === bearer && /Bearer has [^.]*\bVoidwalk\b/.test(cardText(item.card)));
+  const voidwalk = printed || vested || site?.name === 'Planar Gate' ||
+    (!site && (unit.cpuPlanarVoidwalk || here.some(item => item.card?.name === 'Lucid Dreamers') ||
+      state.board.sites[origin]?.card?.name === 'Planar Gate'));
   const [x,y] = from.split(',').map(Number), result = [];
   for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1],...(airborne ? [[1,1],[1,-1],[-1,1],[-1,-1]] : [])]) {
     if (/only move themselves forward/.test(text) && (dx !== 0 || dy !== (unit.owner === 1 ? -1 : 1))) continue;

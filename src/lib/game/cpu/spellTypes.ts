@@ -65,7 +65,13 @@ export type SpellOperation =
   | { kind: "stampSite"; at: string; turnKey: string }
   | { kind: "stampTrigger"; source: TriggerSource; timing: "start" | "end"; turnKey: string }
   | { kind: "markCorner"; target: UnitTarget; corner: string }
-  | { kind: "returnToHand"; target: UnitTarget };
+  | { kind: "returnToHand"; target: UnitTarget }
+  /** Lord of the Void: the site leaves the realm for its owner's banished pile, leaving a void (no Rubble). */
+  | { kind: "banishSite"; at: string }
+  /** Phase Assassin: granted Stealth is modelled as an attached Stealth token, as computeStealth reads it. */
+  | { kind: "grantStealth"; target: UnitTarget }
+  /** The Ninth Legion: take a card back out of a cemetery (a Deathrite resolves after its card died). */
+  | { kind: "recoverCard"; seat: PlayerKey; instanceId?: string | null; name: string };
 
 export interface DamageHit {
   target: UnitTarget;

@@ -1,6 +1,6 @@
 import type { StoreApi } from "zustand";
 import { applySpellChoice } from "@/lib/game/cpu/applySpellChoice";
-import { cornerOf, hasEndTrigger, hasStartSiteTrigger, hasStartTrigger } from "@/lib/game/cpu/cardTriggers";
+import { cornerOf, hasEndTrigger, hasStartSiteTrigger, hasStartTrigger, hasVoidEntryTrigger } from "@/lib/game/cpu/cardTriggers";
 import cpuCardData from "@/lib/game/cpu/cards.json";
 import { hasCpuDeathrite, hasCpuGenesis } from "@/lib/game/cpu/genesis";
 import { movementAllowance, movementRoutes } from "@/lib/game/cpu/movement";
@@ -17,7 +17,7 @@ export const CPU_DEFENDER_TIMEOUT_MS = 20000;
 
 type CardTriggerEvent = Extract<NonNullable<PendingMagic["cpuEvent"]>, {kind: "cardTrigger"}>;
 const TRIGGER_BADGES: Record<CardTriggerEvent["trigger"], string> = {
-  start:"start of turn",end:"end of turn",corner:"corner reached",curse:"Mariner's Curse",kiteStep:"step after shooting",skirmish:"ranged strike on the move",
+  start:"start of turn",end:"end of turn",corner:"corner reached",curse:"Mariner's Curse",kiteStep:"step after shooting",skirmish:"ranged strike on the move",enterVoid:"entered the void",
 };
 const CARD_SUBTYPES = cpuCardData as unknown as Record<string, {subTypes?: string}>;
 
@@ -239,6 +239,11 @@ export function installCpuController(store: StoreApi<GameState>) {
         const prior = before.find(u => sameTarget(u.target,current.target));
         if (!prior && current.target.kind === "permanent") enqueueGenesis(current.card,current.at,current.owner === "p1" ? 1 : 2,batch,current.region,current.target);
         const unitId = current.target.kind === "permanent" ? current.target.instanceId : null;
+        // Phase Assassin / Varistus the Evictor: entering the void, whether they walked in or the
+        // site beneath them left the realm (so a move is not required, only the region change).
+        if (unitId && current.target.kind === "permanent" && current.region === "void" && prior?.region !== "void" && hasVoidEntryTrigger(current.card.name)) {
+          enqueueTrigger("enterVoid",current.target,current.card,current.at,current.owner === "p1" ? 1 : 2,batch,`cpu_void_${unitId}_${current.at}`);
+        }
         if (unitId && current.target.kind === "permanent" && (!prior || prior.at !== current.at) && (current.card.type || "").toLowerCase() !== "artifact") {
           const item = state.permanents[current.at]?.[current.target.index];
           // Wayfaring Pilgrim: the first entry into each corner (summoned into one counts) offers a draw.
@@ -326,7 +331,7 @@ export function installCpuController(store: StoreApi<GameState>) {
         if (unit.target.kind !== "permanent" || !/\bStealth\b/.test(cardText(unit.card))) continue;
         const item = state.permanents[unit.at][unit.target.index];
         if (item.cpuStealthLost) continue;
-        const revealed = isDisabled(state,unit) || units.some(other => other.card.name === "Scent Hounds" && other.owner !== unit.owner && other.region === unit.region && !isDisabled(state,other) && inRange(unit.at,other.at,"nearby"));
+        const revealed = isDisabled(state,unit) || units.some(other => ["Scent Hounds","Hounds of Ondaros"].includes(other.card.name) && other.owner !== unit.owner && other.region === unit.region && !isDisabled(state,other) && inRange(unit.at,other.at,"nearby"));
         if (!revealed) continue;
         changes[unit.at] ||= [...state.permanents[unit.at]];
         changes[unit.at][unit.target.index] = {...item,cpuStealthLost:true,version:(item.version || 0)+1};

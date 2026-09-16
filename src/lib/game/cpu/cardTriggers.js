@@ -4,15 +4,20 @@ const { optToken, unitToken } = require('./pickTokens');
 
 // Triggered abilities queued by controller.ts as `cardTrigger` events and resolved here. "Adjacent" includes the
 // card's own square and "nearby" all nine squares, both only within the source's region (rulebook).
-const END_TRIGGERS = new Set(['Infernal Legion','Quarrelsome Kobolds']);
-const START_TRIGGERS = new Set(['Guile Sirens','Headless Haunt']);
+const END_TRIGGERS = new Set(['Infernal Legion','Quarrelsome Kobolds','Lord of the Void']);
+const START_TRIGGERS = new Set(['Guile Sirens','Headless Haunt','Hauntless Head']);
 const START_SITE_TRIGGERS = new Set(['Maelström']);
+// "Whenever this enters the void": a Voidwalk minion reaching a siteless location, whether it walked
+// there or the site beneath it left the realm.
+const VOID_ENTRY_TRIGGERS = new Set(['Phase Assassin','Varistus the Evictor']);
 /** @param {string} name */
 function hasEndTrigger(name) { return END_TRIGGERS.has(name); }
 /** @param {string} name */
 function hasStartTrigger(name) { return START_TRIGGERS.has(name); }
 /** @param {string} name */
 function hasStartSiteTrigger(name) { return START_SITE_TRIGGERS.has(name); }
+/** @param {string} name */
+function hasVoidEntryTrigger(name) { return VOID_ENTRY_TRIGGERS.has(name); }
 
 /** The location when it is a corner of the realm, else null. @param {string} at @param {{w: number, h: number}} size */
 function cornerOf(at, size) {
@@ -28,7 +33,7 @@ function cardTriggerChoices(state) {
 
 /** @param {import('./spellTypes').SpellState} state @returns {import('./spellTypes').SpellChoice[]} */
 function choicesFor(state) {
-  const { bodyOfWater, getRangedTargets, hasStealth, isDisabled, isWater, near, occupies, sameTarget, scoreOperations } = require('./spells');
+  const { bodyOfWater, getRangedTargets, hasStealth, isDisabled, isWater, near, occupies, sameTarget, scoreOperations, shareLocation } = require('./spells');
   const { movementSteps } = require('./movement');
   const pending = state.pendingMagic, event = pending?.cpuEvent;
   if (event?.kind !== 'cardTrigger') return [];
@@ -115,6 +120,21 @@ function choicesFor(state) {
     }
     return choices;
   }
+  if (event.trigger === 'enterVoid') {
+    if (name === 'Phase Assassin') {
+      add('stealth','Phase Assassin gains Stealth in the void',[{kind:'grantStealth',target:source.target}]);
+      return choices;
+    }
+    if (name === 'Varistus the Evictor') {
+      // "Kills all enemies there": lethal damage, so their defence and any damage already on them are moot.
+      const victims = units.filter(unit => unit.owner !== seat && unit.region === 'void' && shareLocation(source,unit));
+      add('evict',victims.length ? `Varistus kills ${victims.length === 1 ? victims[0].card.name : `${victims.length} enemies`} in the void at ${source.at}`
+        : `Varistus finds no enemy in the void at ${source.at}`,
+        [{kind:'damageEvent',hits:victims.map(unit => ({target:unit.target,amount:1,lethal:true,sourceName:name}))}]);
+      return choices;
+    }
+    return skip(`${name}: nothing to resolve`);
+  }
 
   if (name === 'Infernal Legion') {
     add('legion','Infernal Legion: deal 3 damage to each other adjacent unit',[...stamp,{kind:'damageEvent',hits:around('adjacent').map(unit => ({target:unit.target,amount:3,sourceName:name}))}]);
@@ -142,11 +162,24 @@ function choicesFor(state) {
     if (!choices.length) add('none','Guile Sirens: no nearby enemy minion to lure',stamp);
     return choices;
   }
-  if (name === 'Headless Haunt') {
-    add('teleport','Headless Haunt teleports to a random site or void',[...stamp,{kind:'teleportRandom',target:source.target}]);
+  if (name === 'Headless Haunt' || name === 'Hauntless Head') {
+    add('teleport',`${name} teleports to a random site or void`,[...stamp,{kind:'teleportRandom',target:source.target}]);
+    return choices;
+  }
+  if (name === 'Lord of the Void') {
+    // "Adjacent" includes its own square; an Avatar standing on a site protects it.
+    const [x,y] = cellOf(source.at);
+    const avatars = new Set(Object.values(state.avatars).map(avatar => avatar?.pos?.join(',')).filter(Boolean));
+    const decline = optToken(source.at,'decline');
+    for (const at of [source.at,`${x+1},${y}`,`${x-1},${y}`,`${x},${y+1}`,`${x},${y-1}`]) {
+      const tile = state.board.sites[at];
+      if (!tile?.card || avatars.has(at)) continue;
+      add(`banish/${at}`,`Lord of the Void banishes ${tile.card.name} at ${at}`,[...stamp,{kind:'banishSite',at}],[at]);
+    }
+    add('decline','Lord of the Void banishes nothing',stamp,[decline],{[decline]:'Skip'});
     return choices;
   }
   return skip(`${name}: nothing to resolve`);
 }
 
-module.exports = { cardTriggerChoices, cornerOf, hasEndTrigger, hasStartTrigger, hasStartSiteTrigger };
+module.exports = { cardTriggerChoices, cornerOf, hasEndTrigger, hasStartTrigger, hasStartSiteTrigger, hasVoidEntryTrigger };

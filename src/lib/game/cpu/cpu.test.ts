@@ -11,7 +11,7 @@ import { changeLife } from "@/lib/game/cpu/life";
 import { reachableCells } from "@/lib/game/cpu/movement";
 import { moveUnit, mergePermanents } from "@/lib/game/cpu/move";
 import { betaPrecons } from "@/lib/game/cpu/precons";
-import { getSpellChoices, getSpellChoice, projectileKey, unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
+import { cardText, getSpellChoices, getSpellChoice, projectileKey, unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
 import { createGameStore } from "@/lib/game/store";
 import type { CardRef, GameState, PermanentItem } from "@/lib/game/store/types";
 import { LocalTransport } from "@/lib/net/localTransport";
@@ -222,6 +222,52 @@ describe("CPU resolution lifecycle", () => {
     expect(__testZoneHelpers.normalizeAvatar({ cpuTurnEffect: null },fallback).cpuTurnEffect).toBeNull();
     expect(__testZoneHelpers.normalizeAvatar({ cpuTurnEffect: { turn: "3:1",power: Infinity,movement: 1 } },fallback).cpuTurnEffect).toBeUndefined();
   });
+  it("reads keywords from a card the bot hydrated as rulesText", () => {
+    // cards.json covers 132 cards and the bot's _hydrateCardRef attaches looked-up text as
+    // card.rulesText, so a Voidwalk minion outside that file (28 of 31 of them) used to come
+    // back with no keywords at all — no Voidwalk, Airborne, Submerge or Movement +N.
+    const hydrated: CardRef = {
+      cardId: 1, name: "Phantom Steed", type: "Minion",
+      instanceId: "ps1", rulesText: "Movement +2, Voidwalk",
+    };
+    expect(cardText(hydrated)).toContain("Voidwalk");
+    // cards.json still wins for the cards it knows.
+    const known: CardRef = { cardId: 2, name: "Spectral Stalker", type: "Minion", instanceId: "ss1" };
+    expect(cardText(known)).toContain("Voidwalk");
+  });
+
+  it("survives a null tile in board.sites during Start phase", () => {
+    const bot = new BotClient({ serverUrl: "http://localhost:3010" });
+    const socket = io("http://localhost:3010", { autoConnect: false });
+    vi.spyOn(socket, "emit").mockReturnValue(socket);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    bot.socket = socket;
+    bot.playerIndex = 0;
+    bot.you = { id: "cpu_A", displayName: "CPU" };
+    bot.currentMatch = { id: "nullsite", status: "in_progress", playerIds: ["cpu_A", "human_1"] };
+    // Transforming a site into a minion (Island Leviathan) or Babel Tower nulls the tile, and
+    // the Start-phase site count read straight through it.
+    bot._game = {
+      phase: "Start",
+      currentPlayer: 1,
+      turn: 1,
+      board: {
+        size: { w: 5, h: 4 },
+        sites: { "2,1": null, "2,3": { owner: 1, card: { name: "Vantage Hills" } } },
+      },
+      permanents: {},
+      zones: { p1: { hand: [], spellbook: [], atlas: [] } },
+      players: { p1: { life: 20, lifeState: "alive" } },
+      avatars: { p1: { at: "2,3" } },
+    };
+    vi.spyOn(bot, "_hasHumanOpponent").mockReturnValue(false);
+    bot._maybeAct();
+    // The crash is swallowed and logged, so a thrown-error assertion would never catch it.
+    expect(warn).not.toHaveBeenCalledWith("[Bot] _maybeAct error:", expect.anything());
+    warn.mockRestore();
+    bot.stop();
+  });
+
   it("resolves its seat from playerIds, and refuses to act when no source names it", () => {
     const bot = new BotClient({ serverUrl: "http://localhost:3010", playerId: "cpu_A" });
     bot.you = { id: "cpu_A", displayName: "CPU" };

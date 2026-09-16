@@ -128,6 +128,7 @@ export type CardRef = {
   instanceId?: string | null;
   // Full metadata for resolvers (populated at deck load time)
   text?: string | null; // full card text
+  rulesText?: string | null; // same text under the key the bot's _hydrateCardRef attaches
   attack?: number | null; // base attack value
   defence?: number | null; // base defence value
   rarity?: string | null; // card rarity (Ordinary, Exceptional, Elite, Unique)
@@ -559,7 +560,7 @@ export type PendingMagic = {
     | { kind: "blazeTrail"; from: string; to: string; region: string; source: import("@/lib/game/cpu/spellTypes").UnitTarget; forced?: boolean; budget?: number }
     | { kind: "genesis"; region: string; source?: import("@/lib/game/cpu/spellTypes").UnitTarget; sourceSite?: { at: string; name: string; instanceId?: string | null } }
     | { kind: "deathrite"; region: string }
-    | { kind: "cardTrigger"; trigger: "start" | "end" | "corner" | "curse" | "kiteStep" | "skirmish"; source: import("@/lib/game/cpu/spellTypes").TriggerSource;
+    | { kind: "cardTrigger"; trigger: "start" | "end" | "corner" | "curse" | "kiteStep" | "skirmish" | "enterVoid"; source: import("@/lib/game/cpu/spellTypes").TriggerSource;
         path?: string[]; corner?: string; victim?: import("@/lib/game/cpu/spellTypes").UnitTarget };
   tile: { x: number; y: number };
   // The spell card placed on board for UX; resolved to cemetery on completion

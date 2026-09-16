@@ -207,3 +207,53 @@ describe("precon Genesis", () => {
     expect(store.getState().zones.p1.spellbook.map(card => card.name)).toEqual(["Bury","Drown","Blaze"]);
   });
 });
+
+describe("Voidwalk Genesis and Deathrite", () => {
+  // Outside cards.json, so their text arrives on `rulesText`, the way the bot hydrates cards.
+  const raw = (name: string, attack: number, defence: number, rulesText: string, id = name): CardRef =>
+    ({cardId:2,name,type:"Minion",attack,defence,instanceId:id,rulesText});
+  const beginRaw = (store: TestStore, source: CardRef, at = "2,3") => {
+    store.setState({pendingMagic:{id:"raw-genesis",tile:{x:2,y:3},spell:{at,index:-1,owner:1,instanceId:"event",card:source},
+      cpuEvent:{kind:"genesis",region:"surface",source:{kind:"permanent",at,index:0,instanceId:source.instanceId}},status:"choosingTarget",createdAt:0}});
+    return getSpellChoices(store.getState(),"p1",source.name);
+  };
+
+  it("Ultimate Horror summons only the other dead Voidwalk minions", () => {
+    const store = setup();
+    const horror = raw("Ultimate Horror",6,6,"Airborne, Voidwalk\n\nGenesis → Summon each other dead Voidwalk minion to a nearby site or void.","horror");
+    const stalker = raw("Spectral Stalker",2,2,"Voidwalk","dead-stalker");
+    const goons = raw("Ogre Goons",3,3,"","dead-goons");
+    store.setState({permanents:{"2,3":[{owner:1,card:horror,instanceId:"horror",tapped:false}]},
+      zones:{...store.getState().zones,p1:{...store.getState().zones.p1,graveyard:[stalker,goons]}}});
+    const choice = beginRaw(store,horror).find(candidate => candidate.key === "genesis/2,3");
+    if (!choice) throw new Error("Missing Ultimate Horror choice");
+    expect(choice.label).toContain("Spectral Stalker");
+    expect(choice.label).not.toContain("Ogre Goons");
+    applySpellChoice(store.setState,store.getState,choice);
+    expect(unitsInRealm(store.getState()).some(found => found.card.name === "Spectral Stalker")).toBe(true);
+    expect(store.getState().zones.p1.graveyard.map(dead => dead.name)).toEqual(["Ogre Goons"]);
+  });
+
+  it("Lacuna Entity drags a weaker minion from an adjacent site to its own location", () => {
+    const store = setup();
+    const entity = raw("Lacuna Entity",4,4,"Submerge, Voidwalk\n\nGenesis → Drag target weaker minion from an adjacent site to here, ignoring regions.","lacuna");
+    store.setState({board:{...store.getState().board,sites:{...store.getState().board.sites,"2,2":{owner:2,card:card("Humble Village","other-village")}}},
+      permanents:{"2,3":[{owner:1,card:entity,instanceId:"lacuna",tapped:false}],"2,2":[unit("Raal Dromedary",2)]}});
+    const choice = beginRaw(store,entity).find(candidate => candidate.key.endsWith("Raal Dromedary"));
+    if (!choice) throw new Error("Missing Lacuna Entity drag");
+    applySpellChoice(store.setState,store.getState,choice);
+    expect(store.getState().permanents["2,3"].some(item => item.card.name === "Raal Dromedary")).toBe(true);
+  });
+
+  it("The Ninth Legion returns itself to hand when it dies", async () => {
+    const store = setup();
+    store.setState({matchId:"ninth-legion",transport:new LocalTransport()});
+    const legion = raw("The Ninth Legion",6,6,"Voidwalk. Must be cast to a corner.\n\nDeathrite → Return to hand.","legion");
+    store.setState({permanents:{"2,3":[{owner:1,card:legion,instanceId:"legion",tapped:false}]}});
+    await settle();
+    store.getState().movePermanentToZone("2,3",0,"graveyard");
+    await settle();
+    expect(store.getState().zones.p1.hand.map(held => held.name)).toContain("The Ninth Legion");
+    expect(store.getState().zones.p1.graveyard.map(dead => dead.name)).not.toContain("The Ninth Legion");
+  });
+});

@@ -4,7 +4,8 @@ const { optToken, unitToken } = require('./pickTokens');
 
 const DEFINITIONS = new Set(['Apprentice Wizard','Grandmaster Wizard','Land Surveyor','Deep-Sea Mermaids','Slumbering Giantess','Wraetannis Titan',
   'Clamor of Harpies','Brobdingnag Bullfrog','Arid Desert','Red Desert','Remote Desert','Shifting Sands','Holy Ground',
-  'Humble Village','Rustic Village','Simple Village','Quagmire','Dark Tower','Gothic Tower','Lone Tower','Observatory','Autumn River','Spring River','Summer River','Undertow']);
+  'Humble Village','Rustic Village','Simple Village','Quagmire','Dark Tower','Gothic Tower','Lone Tower','Observatory','Autumn River','Spring River','Summer River','Undertow',
+  'Ultimate Horror','Lacuna Entity']);
 /** @param {string} name */
 function hasCpuGenesis(name) { return DEFINITIONS.has(name); }
 
@@ -16,7 +17,7 @@ function genesisChoices(state) {
 
 /** @param {import('./spellTypes').SpellState} state @returns {import('./spellTypes').SpellChoice[]} */
 function choicesFor(state) {
-  const { inRange,isWater,bodyOfWater,unitStats,hasStealth,occupies,sameTarget,scoreOperations } = require('./spells');
+  const { cardText,inRange,isWater,bodyOfWater,unitStats,hasStealth,occupies,sameTarget,scoreOperations } = require('./spells');
   const pending = state.pendingMagic;
   if (pending?.cpuEvent?.kind !== 'genesis') return [];
   const {card,owner} = pending.spell, seat = owner === 1 ? 'p1' : 'p2', event = pending.cpuEvent;
@@ -69,11 +70,33 @@ function choicesFor(state) {
       add(`${target.target.kind === 'avatar' ? target.owner : target.target.instanceId}/${to}`,`Move ${target.card.name} to ${to}`,[{kind:'move',target:target.target,to,preserveRegion:true}],[unitToken(target.target),to]);
     }
   }
+  else if (name === 'Lacuna Entity' && source) {
+    // "Ignoring regions": a burrowed, submerged or void minion is dragged up to the Entity's location.
+    for (const target of units.filter(u => u.target.kind === 'permanent' && !sameTarget(u.target,source.target) && u.at !== at &&
+        inRange(at,u.at,'adjacent') && state.board.sites[u.at]?.card && unitStats(state,u).atk<unitStats(state,source).atk &&
+        (u.owner === seat || !hasStealth(state,u)))) {
+      add(target.target.instanceId || `${target.at}:${target.target.index}`,`Drag ${target.card.name} from ${target.at} to ${at}`,
+        [{kind:'move',target:target.target,to:at}],[unitToken(target.target)]);
+    }
+  } else if (name === 'Ultimate Horror' && source) {
+    // "Each other dead Voidwalk minion": they are summoned together, so each nearby location is one choice.
+    const graveyard = state.zones[seat].graveyard;
+    const dead = graveyard.map((card,graveyardIndex) => ({card,graveyardIndex}))
+      .filter(entry => entry.card.type === 'Minion' && entry.card.name !== name && /\bVoidwalk\b/.test(cardText(entry.card)));
+    const [cx,cy] = at.split(',').map(Number), w = state.board.size?.w || 5, h = state.board.size?.h || 4;
+    if (dead.length) for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
+      const x=cx+dx,y=cy+dy,to=`${x},${y}`;
+      if (x<0 || y<0 || x>=w || y>=h) continue;
+      const region = state.board.sites[to]?.card ? 'surface' : 'void';
+      add(to,`Summon ${dead.map(entry => entry.card.name).join(', ')} to the ${region === 'void' ? 'void' : 'site'} at ${to}`,
+        dead.map(entry => ({kind:'raise',seat,to,region,card:entry.card,fromSeat:seat,graveyardIndex:entry.graveyardIndex})),[to]);
+    }
+  }
   if (!choices.length) add('none','No legal targets; finish Genesis',[]);
   return choices;
 }
 // Deathrite: "when this dies, do what is stated", resolved where it died (spell.at, cpuEvent.region) after it left the realm.
-const DEATHRITES = new Set(['Sacred Scarabs']);
+const DEATHRITES = new Set(['Sacred Scarabs','The Ninth Legion']);
 /** @param {string} name */
 function hasCpuDeathrite(name) { return DEATHRITES.has(name); }
 
@@ -85,6 +108,12 @@ function deathriteChoices(state) {
     const pending = state.pendingMagic;
     if (pending?.cpuEvent?.kind !== 'deathrite') return [];
     const {card,owner,at} = pending.spell, seat = owner === 1 ? 'p1' : 'p2', region = pending.cpuEvent.region;
+    if (card.name === 'The Ninth Legion') {
+      // The Deathrite resolves after the card reached its owner's cemetery, so it returns from there.
+      const operations = [{kind:'recoverCard',seat,instanceId:card.instanceId,name:card.name}];
+      return [{key:'deathrite/return',label:`Return ${card.name} to hand`,operations,target:null,caster:{kind:'avatar',seat},
+        score:scoreOperations(state,seat,operations),autoResolve:true}];
+    }
     if (card.name !== 'Sacred Scarabs') return [];
     const operations = [{kind:'damageEvent',hits:realmUnits(state).filter(u => occupies(u,at) && u.region === region).map(u => ({target:u.target,amount:3,sourceName:card.name}))}];
     return [{key:'deathrite/scarabs',label:`Deal 3 damage to each unit at ${at}`,operations,target:null,caster:{kind:'avatar',seat},score:scoreOperations(state,seat,operations),autoResolve:true}];

@@ -3308,7 +3308,8 @@ class BotClient {
         this._startPhaseHandled.add(turnKey);
         const hand = [...(zones.hand || [])];
         const hasSite = hand.some(card => card.type === "Site");
-        const siteCount = Object.values(state.board?.sites || {}).filter(site => site.owner === myNum && site.card).length;
+        // A banished site leaves a null behind in board.sites, so never assume an entry exists.
+        const siteCount = Object.values(state.board?.sites || {}).filter(site => site && site.owner === myNum && site.card).length;
         const source = zones.atlas?.length && (!zones.spellbook?.length || (!hasSite && siteCount < 6)) ? "atlas" : "spellbook";
         const pile = [...(zones[source] || [])];
         const firstTurn = Number(state.turn || 1) === 1;
@@ -3328,7 +3329,8 @@ class BotClient {
           patch.avatars = { [meKey]: { ...state.avatars[meKey], tapped: false } };
           patch.permanents = {};
           for (const [at, units] of Object.entries(state.permanents || {})) {
-            patch.permanents[at] = units.map(unit => unit.owner !== myNum ? unit : {
+            if (!Array.isArray(units)) continue;
+            patch.permanents[at] = units.map(unit => !unit || unit.owner !== myNum ? unit : {
               ...unit, tapped: unit.skipNextUntap ? unit.tapped : false,
               skipNextUntap: false, summonedThisTurn: false,
               tapVersion: (unit.tapVersion || 0)+1, version: (unit.version || 0)+1,

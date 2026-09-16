@@ -38,8 +38,11 @@ const RANGED_ARTIFACTS = { 'Fail-not Bow': 3, 'Peacemaker Arbalest': 1, 'Truesig
 /** @param {string} name */
 function supportsSpell(name) { return SUPPORTED_SPELLS.has(name); }
 
-/** @param {CardRef} card */
-function cardText(card) { return cards[card.name]?.rulesText || card.text || ''; }
+/** cards.json covers 132 cards; the human client fills CardRef.text at deck load, while the bot's
+ * _hydrateCardRef attaches looked-up text as card.rulesText. Read all three or a card outside
+ * cards.json loses every keyword (Voidwalk, Airborne, Submerge, Movement +N) on the bot's side.
+ * @param {CardRef} card */
+function cardText(card) { return cards[card.name]?.rulesText || card.text || card.rulesText || ''; }
 
 /** @param {string} a @param {string} b @param {'nearby' | 'adjacent' | 'two' | 'any'} range */
 function inRange(a, b, range) {
@@ -425,6 +428,10 @@ function computeStats(state, unit) {
   // "Atop a Tower": a burrowed or submerged Lich is not atop its site.
   if (unit.card.name === 'Spire Lich' && unit.region === 'surface' && /Tower/i.test(state.board.sites[unit.at]?.card?.name || '')) bonus += 2;
   if (unit.card.name === 'Anui Undine') bonus += bodyAt(state,unit.at).length;
+  if (unit.card.name === 'Aaj-kegon Ghost Crabs') {
+    const [,row] = cellOf(unit.at), width = state.board.size?.w || 5;
+    for (let x = 0; x < width; x++) if (!state.board.sites[`${x},${row}`]?.card) bonus++;
+  }
   return { atk: Number(data.attack || 0)+bonus, def: Number(data.defence ?? data.attack ?? 0)+bonus };
 }
 
@@ -830,6 +837,9 @@ function scoreOps(state, seat, operations) {
     if (op.kind === 'damageEvent') { score += op.hits.reduce((sum,hit) => sum + damageScore(state,seat,hit.target,hit.amount,hit.element),0); continue; }
     if (op.kind === 'summonTokens') { score += op.ats.length*4; continue; }
     if (op.kind === 'destroySite') { score += state.board.sites[op.at]?.owner === (seat === 'p1' ? 1 : 2) ? -6 : 6; continue; }
+    if (op.kind === 'banishSite') { score += state.board.sites[op.at]?.owner === (seat === 'p1' ? 1 : 2) ? -7 : 7; continue; }
+    if (op.kind === 'grantStealth') { score += 3; continue; }
+    if (op.kind === 'recoverCard') { score += 3; continue; }
     if (op.kind === 'discard') { score -= 2; continue; }
     if (op.kind === 'spend') { score -= op.amount; continue; }
     if (op.kind === 'flood') continue;

@@ -3,7 +3,7 @@ import { abilityChoices } from "@/lib/game/cpu/abilities";
 import cards from "@/lib/game/cpu/cards.json";
 import { movementSteps } from "@/lib/game/cpu/movement";
 import type { SpellChoice } from "@/lib/game/cpu/spellTypes";
-import { getAttackTargets, getRangedTargets, getSpellChoices, isWater, unitsInRealm } from "@/lib/game/cpu/spells";
+import { getAttackTargets, getRangedTargets, getSpellChoices, isWater, unitStats, unitsInRealm } from "@/lib/game/cpu/spells";
 import { rangedAttack, stationaryAttack } from "@/lib/game/cpu/stationaryAttack";
 import { createGameStore } from "@/lib/game/store";
 import type { CardRef, GameState, PermanentItem, SiteTile } from "@/lib/game/store/types";
@@ -243,5 +243,127 @@ describe("Mountain Giant occupies four locations", () => {
     store.getState().autoResolveCombat();
     expect(ids(store.getState().permanents["3,2"])).toEqual([]);
     expect(store.getState().permanents["2,1"][0]).toMatchObject({tapped:true,damage:2});
+  });
+});
+
+describe("Voidwalk cards", () => {
+  // These live outside the 132-card cards.json, so they arrive the way the bot hydrates them:
+  // their printed text on `rulesText` rather than `text`.
+  const voidCard = (name: string, attack: number, defence: number, rulesText: string, id = name): CardRef =>
+    ({cardId:2,name,type:"Minion",attack,defence,instanceId:id,rulesText});
+  const voidUnit = (name: string, owner: 1 | 2, attack: number, defence: number, rulesText: string, id = name): PermanentItem =>
+    ({owner,card:voidCard(name,attack,defence,rulesText,id),instanceId:id,tapped:false});
+  /** Remove tiles so those locations are the void. */
+  const openVoid = (store: Store, ...ats: string[]) => {
+    const sites = {...store.getState().board.sites};
+    for (const at of ats) delete sites[at];
+    store.setState({board:{...store.getState().board,sites}});
+  };
+  const located = (store: Store, id: string) => {
+    const found = unitsInRealm(store.getState()).find(unit => unit.target.kind === "permanent" && unit.target.instanceId === id);
+    if (!found) throw new Error(`missing ${id}`);
+    return found;
+  };
+
+  it("Lord of the Void banishes an adjacent site at end of turn, but never one an Avatar stands on", async () => {
+    const store = setup();
+    store.setState({permanents:{"4,2":[voidUnit("Lord of the Void",1,0,0,
+      "Voidwalk\n\nAt the end of your turn, Lord of the Void may banish an adjacent site, unless there's an Avatar there.","lord")]}});
+    await settle();
+    store.setState({phase:"End"});
+    await settle();
+    const keys = pendingChoices(store).map(choice => choice.key);
+    expect(keys).toContain("trigger/banish/4,1");
+    expect(keys).not.toContain("trigger/banish/4,3"); // the p1 avatar stands there
+    choose(store,"trigger/banish/4,1");
+    expect(store.getState().board.sites["4,1"]).toBeUndefined();
+    expect(store.getState().zones.p2.banished.map(banished => banished.name)).toContain("Cornerstone");
+  });
+
+  it("Phase Assassin gains Stealth when he enters the void", async () => {
+    const store = setup();
+    openVoid(store,"2,2");
+    store.setState({permanents:{"2,3":[voidUnit("Phase Assassin",1,3,3,
+      "Voidwalk\n\nWhenever Phase Assassin enters the void, he gains Stealth.","assassin")]}});
+    await settle();
+    store.setState({permanents:{"2,2":store.getState().permanents["2,3"],"2,3":[]}});
+    await settle();
+    expect(store.getState().permanents["2,2"].some(item => item.card.name === "Stealth" && item.attachedTo?.at === "2,2")).toBe(true);
+  });
+
+  it("Varistus the Evictor kills the enemies in the void he enters", async () => {
+    const store = setup();
+    openVoid(store,"2,2");
+    store.setState({permanents:{
+      "2,3":[voidUnit("Varistus the Evictor",1,2,2,"Voidwalk\n\nWhenever Varistus enters a void location, he kills all enemies there.","varistus")],
+      "2,2":[voidUnit("Spectral Stalker",2,2,2,"Voidwalk","stalker")],
+    }});
+    await settle();
+    store.setState({permanents:{"2,2":[...store.getState().permanents["2,2"],...store.getState().permanents["2,3"]],"2,3":[]}});
+    await settle();
+    expect(ids(store.getState().permanents["2,2"])).toEqual(["varistus"]);
+  });
+
+  it("teleports Hauntless Head at the start of its controller's turn", async () => {
+    const store = setup();
+    store.setState({permanents:{"1,1":[voidUnit("Hauntless Head",2,2,2,
+      "Spellcaster, Voidwalk\n\nAt the start of your turn, Hauntless Head teleports to the top of a random site or void.","head")]}});
+    await settle();
+    vi.spyOn(Math,"random").mockReturnValue(0);
+    store.setState({turn:4,currentPlayer:2,phase:"Start"});
+    await settle();
+    expect(ids(store.getState().permanents["1,1"])).toEqual([]);
+    expect(ids(store.getState().permanents["0,0"])).toContain("head");
+  });
+
+  it("Hounds of Ondaros permanently strip Stealth from nearby enemies", async () => {
+    const store = setup();
+    store.setState({permanents:{"2,2":[unit("Dead of Night Demon",2,"sneak")]}});
+    await settle();
+    expect(store.getState().permanents["2,2"][0].cpuStealthLost).toBeUndefined();
+    store.setState({permanents:{...store.getState().permanents,"2,3":[voidUnit("Hounds of Ondaros",1,4,4,
+      "Airborne, Burrowing, Submerge, Voidwalk\n\nNearby enemies permanently lose Stealth.","hounds")]}});
+    await settle();
+    expect(store.getState().permanents["2,2"][0].cpuStealthLost).toBe(true);
+  });
+
+  it("Aaj-kegon Ghost Crabs gain power for each void in their row", () => {
+    const store = setup();
+    openVoid(store,"0,2","1,2");
+    store.setState({permanents:{"3,2":[voidUnit("Aaj-kegon Ghost Crabs",1,0,0,
+      "Submerge, Voidwalk\n\nHas +1 power for each void in their row.","crabs")]}});
+    expect(unitStats(store.getState(),located(store,"crabs")).atk).toBe(2);
+  });
+
+  it("All-terrain Vestments grant their bearer Voidwalk", () => {
+    const store = setup();
+    openVoid(store,"2,2");
+    const vestments: PermanentItem = {owner:1,instanceId:"vestments",tapped:false,attachedTo:{at:"2,3",index:0},
+      card:{cardId:2,name:"All-terrain Vestments",type:"Artifact",instanceId:"vestments",
+        rulesText:"Bearer has Burrowing, Submerge, and Voidwalk, if it's a minion."}};
+    store.setState({permanents:{"2,3":[unit("Raal Dromedary",1,"walker")]}});
+    expect(movementSteps(store.getState(),"2,3",store.getState().permanents["2,3"][0]).map(step => step.at)).not.toContain("2,2");
+    store.setState({permanents:{"2,3":[unit("Raal Dromedary",1,"walker"),vestments]}});
+    expect(movementSteps(store.getState(),"2,3",store.getState().permanents["2,3"][0]).map(step => step.at)).toContain("2,2");
+  });
+
+  it("Lucid Dreamers grant Voidwalk to a minion sharing their void", () => {
+    const store = setup();
+    openVoid(store,"2,2","2,1");
+    store.setState({permanents:{"2,2":[unit("Raal Dromedary",1,"guest")]}});
+    expect(movementSteps(store.getState(),"2,2",store.getState().permanents["2,2"][0]).map(step => step.at)).not.toContain("2,1");
+    store.setState({permanents:{"2,2":[store.getState().permanents["2,2"][0],voidUnit("Lucid Dreamers",1,2,2,
+      "Voidwalk\n\nYou may cast minions to this void, granting them Voidwalk until they're no longer in the void.","dreamers")]}});
+    expect(movementSteps(store.getState(),"2,2",store.getState().permanents["2,2"][0]).map(step => step.at)).toContain("2,1");
+  });
+
+  it("Vril Revenant pays a mana for +1 power this turn", () => {
+    const store = setup();
+    store.setState({permanents:{"2,2":[voidUnit("Vril Revenant",1,1,1,"Voidwalk\n\n① → Gain +1 power this turn.","vril")]}});
+    const ability = abilityChoices(store.getState(),"p1").find(choice => choice.key.startsWith("vril/"));
+    if (!ability) throw new Error("Missing Vril Revenant ability");
+    store.getState().activateCpuAbility(ability.key);
+    expect(unitStats(store.getState(),located(store,"vril")).atk).toBe(2);
+    expect(store.getState().players.p1.mana).toBe(-1);
   });
 });

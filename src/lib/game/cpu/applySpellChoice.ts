@@ -515,6 +515,41 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
       get().trySendPatch({permanents:{[found.at]:items}});
       continue;
     }
+    if (op.kind === "banishSite") {
+      const state = get(), tile = state.board.sites[op.at];
+      if (!tile?.card || tile.cpuNeutral || tile.card.name === "Bedrock") continue;
+      const seat: PlayerKey = tile.owner === 1 ? "p1" : "p2";
+      const zones = {...state.zones[seat],banished:[...state.zones[seat].banished,tile.card]};
+      const sites = {...state.board.sites};
+      delete sites[op.at];
+      const board = {...state.board,sites};
+      set({board,zones:{...state.zones,[seat]:zones}});
+      // Deleting a tile needs an explicit null: the merge only updates keys the patch carries.
+      get().trySendPatch({board:{...board,sites:{[op.at]:null}} as unknown as GameState["board"],
+        ...createZonesPatchFor(get().zones,seat),__allowZoneSeats:[seat]});
+      continue;
+    }
+    if (op.kind === "grantStealth") {
+      const found = locate(op.target);
+      if (!found) continue;
+      const definition = TOKEN_BY_NAME.stealth;
+      const instanceId = `cpu_stealth_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const token: CardRef = {cardId:newTokenInstanceId(definition),name:definition.name,type:"Token",slug:tokenSlug(definition),instanceId};
+      const items = [...get().permanents[found.at],
+        {card:token,instanceId,owner:found.unit.owner,tapped:false,version:1,attachedTo:{at:found.at,index:found.index}}];
+      set({permanents:{...get().permanents,[found.at]:items}});
+      get().trySendPatch({permanents:{[found.at]:items}});
+      continue;
+    }
+    if (op.kind === "recoverCard") {
+      const zones = get().zones[op.seat];
+      const index = op.instanceId ? zones.graveyard.findIndex(card => card.instanceId === op.instanceId) : zones.graveyard.findIndex(card => card.name === op.name);
+      if (index < 0) continue;
+      const card = zones.graveyard[index];
+      set({zones:{...get().zones,[op.seat]:{...zones,graveyard:zones.graveyard.filter((_,i) => i !== index),hand:[...zones.hand,card]}}});
+      get().trySendPatch({...createZonesPatchFor(get().zones,op.seat),__allowZoneSeats:[op.seat]});
+      continue;
+    }
     if (op.kind === "returnToHand") {
       const found = locate(op.target);
       if (found) get().movePermanentToZone(found.at,found.index,"hand");
