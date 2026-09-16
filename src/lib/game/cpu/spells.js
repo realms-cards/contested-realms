@@ -24,7 +24,7 @@ const SUPPORTED_SPELLS = new Set([
   'Fireball', 'Firebolts', 'Heat Ray', 'Ice Lance',
   'Overpower', 'Mad Dash', 'Font of Life',
   'Cone of Flame', 'Major Explosion', 'Craterize', 'Border Militia', 'Raise Dead', 'Wrath of the Sea',
-  'Chain Lightning', 'Blaze',
+  'Chain Lightning', 'Blaze', 'Howl from Beyond',
 ]);
 const PROJECTILES = new Set(['Fireball', 'Firebolts', 'Heat Ray', 'Ice Lance']);
 const DIRECTIONS = { N: [0,-1], E: [1,0], S: [0,1], W: [-1,0] };
@@ -43,6 +43,18 @@ function supportsSpell(name) { return SUPPORTED_SPELLS.has(name); }
  * cards.json loses every keyword (Voidwalk, Airborne, Submerge, Movement +N) on the bot's side.
  * @param {CardRef} card */
 function cardText(card) { return cards[card.name]?.rulesText || card.text || card.rulesText || ''; }
+
+/** The card's typeline subtypes ("Beast, Spirit"), from cards.json or the card itself. Same three-source
+ * problem as cardText: cards.json covers 132 cards and only the client fills CardRef.subTypes.
+ * @param {CardRef} card */
+function cardSubTypes(card) { return cards[card.name]?.subTypes || card.subTypes || ''; }
+
+/** @param {CardRef} card @param {string} subType */
+function hasSubType(card, subType) { return new RegExp(`\\b${subType}\\b`).test(cardSubTypes(card)); }
+
+/** The Doom of Dilmun: "Can't be banished, destroyed, or modified" — no effect may alter it.
+ * @param {CardRef} card */
+function isProtected(card) { return /Can't be banished, destroyed, or modified/i.test(cardText(card)); }
 
 /** @param {string} a @param {string} b @param {'nearby' | 'adjacent' | 'two' | 'any'} range */
 function inRange(a, b, range) {
@@ -307,6 +319,14 @@ function rawSpellChoices(state, seat, name, selectionKey) {
         if (name === 'Mad Dash') operations.unshift({ kind: 'draw', seat, count: 1 });
           add(targetKey(ally.target), `${ally.card.name}: ${name === 'Overpower' ? '+2 power' : name === 'Blaze' ? 'Movement +2; cannot be intercepted; fire trail' : 'draw a card; Movement +1'} this turn`, ally.target, operations, [unitToken(ally.target)]);
       }
+    } else if (name === 'Howl from Beyond') {
+      // One spell per void in the outer columns; the Voidwalk minions and Monsters among them are
+      // drawn and the rest banished, so only the count of those voids matters.
+      const size = state.board.size || { w: 5, h: 4 };
+      let voids = 0;
+      for (let y = 0; y < size.h; y++) for (const x of new Set([0, size.w-1])) if (!state.board.sites[`${x},${y}`]?.card) voids++;
+      add('howl', `Deal out ${voids} spell${voids === 1 ? '' : 's'} to the outer voids; draw the Voidwalk minions and Monsters, banish the rest`,
+        null, [{ kind: 'howl', seat, count: voids }]);
     } else if (name === 'Font of Life') {
       const operations = units.filter(u => u.owner === seat).map(u => ({ kind: 'mend', target: u.target, amount: bodyAt(state, u.at).length }));
       add('heal-allies', 'Each ally heals for the size of its body of water', null, operations);
@@ -432,6 +452,8 @@ function computeStats(state, unit) {
     const [,row] = cellOf(unit.at), width = state.board.size?.w || 5;
     for (let x = 0; x < width; x++) if (!state.board.sites[`${x},${row}`]?.card) bonus++;
   }
+  // Aethermoeba: "+1 power for each one that is void", over every location it occupies.
+  if (unit.card.name === 'Aethermoeba') for (const cell of unit.cells || [unit.at]) if (!state.board.sites[cell]?.card) bonus++;
   return { atk: Number(data.attack || 0)+bonus, def: Number(data.defence ?? data.attack ?? 0)+bonus };
 }
 
@@ -840,6 +862,10 @@ function scoreOps(state, seat, operations) {
     if (op.kind === 'banishSite') { score += state.board.sites[op.at]?.owner === (seat === 'p1' ? 1 : 2) ? -7 : 7; continue; }
     if (op.kind === 'grantStealth') { score += 3; continue; }
     if (op.kind === 'recoverCard') { score += 3; continue; }
+    if (op.kind === 'howl') { score += op.count*2; continue; }
+    if (op.kind === 'carryUnit') { score += 1; continue; }
+    if (op.kind === 'evadeAttack') { score += 8; continue; }
+    if (op.kind === 'stampDragonFree') { score += 2; continue; }
     if (op.kind === 'discard') { score -= 2; continue; }
     if (op.kind === 'spend') { score -= op.amount; continue; }
     if (op.kind === 'flood') continue;
@@ -920,4 +946,4 @@ function sameTarget(a, b) {
     (a.instanceId && b.instanceId ? a.instanceId === b.instanceId : a.at === b.at && a.index === b.index);
 }
 
-module.exports = { supportsSpell, getSpellChoices, getSpellChoice, projectileKey, directionPick, choiceCard, unitsInRealm, inRange, isWater, bodyOfWater, cardText, sameTarget, unitDefence, unitStats, getAttackTargets, getRangedTargets, near, occupies, shareLocation, scoreOperations,isDisabled,hasStealth,hasAirborne,expandAreaOperation,projectileImpactChoices,projectilePath };
+module.exports = { supportsSpell, getSpellChoices, getSpellChoice, projectileKey, directionPick, choiceCard, unitsInRealm, inRange, isWater, bodyOfWater, cardText, cardSubTypes, hasSubType, isProtected, sameTarget, unitDefence, unitStats, getAttackTargets, getRangedTargets, near, occupies, shareLocation, scoreOperations,isDisabled,hasStealth,hasAirborne,expandAreaOperation,projectileImpactChoices,projectilePath };

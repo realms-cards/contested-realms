@@ -2,7 +2,7 @@ import type { StateCreator } from "zustand";
 import { applyDamageEvent } from "@/lib/game/cpu/damage";
 import { luckyCharmCount } from "@/lib/game/cpu/luckyCharm";
 import type { CpuEffectCompletion, SpellChoice, SpellOperation, UnitTarget } from "@/lib/game/cpu/spellTypes";
-import { cardText, expandAreaOperation, hasStealth, inRange, isDisabled, isWater, near, occupies, projectileImpactChoices, sameTarget, shareLocation, unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
+import { cardSubTypes, cardText, expandAreaOperation, hasStealth, inRange, isDisabled, isProtected, isWater, near, occupies, projectileImpactChoices, sameTarget, shareLocation, unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
 import type { CardRef, GameState, PlayerKey } from "@/lib/game/store/types";
 import { prepareCardForSeat, toTransformedSiteMinionCard } from "@/lib/game/store/utils/cardHelpers";
 import { buildMoveDeltaPatch } from "@/lib/game/store/utils/patchHelpers";
@@ -118,6 +118,7 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
     const found = locate(target);
     const entity = target.kind === "avatar" ? get().avatars[target.seat] : found?.unit;
     if (!entity) return;
+    if (found && isProtected(found.unit.card)) return; // The Doom of Dilmun cannot be modified.
     const turn = `${get().turn}:${get().currentPlayer}`;
     const previous = entity.cpuTurnEffect?.turn === turn ? entity.cpuTurnEffect : null;
     const cpuTurnEffect = { turn, power: power+(previous?.power || 0), movement: movement+(previous?.movement || 0),blaze:blaze || previous?.blaze || false,...(previous?.steps ? {steps:previous.steps} : {}) };
@@ -347,7 +348,7 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
     if (op.kind === "sleep" || op.kind === "swallow") {
       const found = locate(op.target);
       const carrier = op.kind === "swallow" ? locate(op.carrier) : null;
-      if (!found || (op.kind === "swallow" && (!carrier || carrier.at !== found.at))) continue;
+      if (!found || isProtected(found.unit.card) || (op.kind === "swallow" && (!carrier || carrier.at !== found.at))) continue;
       const items = [...get().permanents[found.at]];
       items[found.index] = {...found.unit,version:(found.unit.version || 0)+1,...(carrier ? {
         cpuSwallowedBy:carrier.unit.instanceId || undefined,isCarried:true,attachedTo:{at:carrier.at,index:carrier.index},
@@ -515,6 +516,42 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
       get().trySendPatch({permanents:{[found.at]:items}});
       continue;
     }
+    if (op.kind === "howl") {
+      const zones = get().zones[op.seat];
+      const dealt = zones.spellbook.slice(0,op.count);
+      if (!dealt.length) continue;
+      // Kept: minions with Voidwalk, plus anything with the Monster typeline. The rest are banished.
+      const keep = dealt.filter(card => (card.type === "Minion" && /\bVoidwalk\b/.test(cardText(card))) || /\bMonster\b/.test(cardSubTypes(card)));
+      const banished = dealt.filter(card => !keep.includes(card));
+      set({zones:{...get().zones,[op.seat]:{...zones,spellbook:zones.spellbook.slice(dealt.length),
+        hand:[...zones.hand,...keep],banished:[...zones.banished,...banished]}}});
+      get().trySendPatch({...createZonesPatchFor(get().zones,op.seat),__allowZoneSeats:[op.seat]});
+      continue;
+    }
+    if (op.kind === "carryUnit") {
+      const carrier = locate(op.carrier), found = locate(op.target);
+      if (!carrier || !found || carrier.at !== found.at || isProtected(found.unit.card)) continue;
+      // move.js carries everything attached to the mover, so the rider travels with its carrier.
+      const items = [...get().permanents[found.at]];
+      items[found.index] = {...found.unit,isCarried:true,attachedTo:{at:carrier.at,index:carrier.index},version:(found.unit.version || 0)+1};
+      set({permanents:{...get().permanents,[found.at]:items}});
+      get().trySendPatch({permanents:{[found.at]:items}});
+      continue;
+    }
+    if (op.kind === "stampDragonFree") {
+      const found = locate(op.target);
+      if (!found) continue;
+      const items = [...get().permanents[found.at]];
+      items[found.index] = {...found.unit,cpuDragonFreeTurn:op.turnKey,version:(found.unit.version || 0)+1};
+      set({permanents:{...get().permanents,[found.at]:items}});
+      get().trySendPatch({permanents:{[found.at]:items}});
+      continue;
+    }
+    if (op.kind === "evadeAttack") {
+      applyOperations(set,get,{...choice,operations:[{kind:"move",target:op.target,to:op.to,preserveRegion:true}]},rng);
+      get().cancelCombat();
+      continue;
+    }
     if (op.kind === "banishSite") {
       const state = get(), tile = state.board.sites[op.at];
       if (!tile?.card || tile.cpuNeutral || tile.card.name === "Bedrock") continue;
@@ -531,7 +568,7 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
     }
     if (op.kind === "grantStealth") {
       const found = locate(op.target);
-      if (!found) continue;
+      if (!found || isProtected(found.unit.card)) continue;
       const definition = TOKEN_BY_NAME.stealth;
       const instanceId = `cpu_stealth_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       const token: CardRef = {cardId:newTokenInstanceId(definition),name:definition.name,type:"Token",slug:tokenSlug(definition),instanceId};
@@ -552,7 +589,7 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
     }
     if (op.kind === "returnToHand") {
       const found = locate(op.target);
-      if (found) get().movePermanentToZone(found.at,found.index,"hand");
+      if (found && !isProtected(found.unit.card)) get().movePermanentToZone(found.at,found.index,"hand");
       continue;
     }
     if (op.kind === "buff") { buff(op.target, op.power, op.movement,op.blaze); continue; }
@@ -644,7 +681,7 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
     }
     for (const target of targets) {
       const found = locate(target);
-      if (!found) continue;
+      if (!found || isProtected(found.unit.card)) continue;
       {
         const id = found.unit.instanceId || found.unit.card.instanceId;
         if (!id) continue;

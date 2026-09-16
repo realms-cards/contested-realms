@@ -10,6 +10,11 @@ const START_SITE_TRIGGERS = new Set(['Maelström']);
 // "Whenever this enters the void": a Voidwalk minion reaching a siteless location, whether it walked
 // there or the site beneath it left the realm.
 const VOID_ENTRY_TRIGGERS = new Set(['Phase Assassin','Varistus the Evictor']);
+// "Whenever this enters a site from the void": the crossing the other way.
+const SITE_ENTRY_TRIGGERS = new Set(['Ghost Ship']);
+// "Whenever this is attacked": offered while the attack is still only declared.
+// The card's name uses a straight apostrophe; its own rules text uses a typographic one.
+const ATTACKED_TRIGGERS = new Set(["Wills-o'-the-Wisp"]);
 /** @param {string} name */
 function hasEndTrigger(name) { return END_TRIGGERS.has(name); }
 /** @param {string} name */
@@ -18,6 +23,10 @@ function hasStartTrigger(name) { return START_TRIGGERS.has(name); }
 function hasStartSiteTrigger(name) { return START_SITE_TRIGGERS.has(name); }
 /** @param {string} name */
 function hasVoidEntryTrigger(name) { return VOID_ENTRY_TRIGGERS.has(name); }
+/** @param {string} name */
+function hasSiteEntryTrigger(name) { return SITE_ENTRY_TRIGGERS.has(name); }
+/** @param {string} name */
+function hasAttackedTrigger(name) { return ATTACKED_TRIGGERS.has(name); }
 
 /** The location when it is a corner of the realm, else null. @param {string} at @param {{w: number, h: number}} size */
 function cornerOf(at, size) {
@@ -33,7 +42,7 @@ function cardTriggerChoices(state) {
 
 /** @param {import('./spellTypes').SpellState} state @returns {import('./spellTypes').SpellChoice[]} */
 function choicesFor(state) {
-  const { bodyOfWater, getRangedTargets, hasStealth, isDisabled, isWater, near, occupies, sameTarget, scoreOperations, shareLocation } = require('./spells');
+  const { bodyOfWater, cardSubTypes, getRangedTargets, hasStealth, isDisabled, isWater, near, occupies, sameTarget, scoreOperations, shareLocation } = require('./spells');
   const { movementSteps } = require('./movement');
   const pending = state.pendingMagic, event = pending?.cpuEvent;
   if (event?.kind !== 'cardTrigger') return [];
@@ -120,6 +129,33 @@ function choicesFor(state) {
     }
     return choices;
   }
+  if (event.trigger === 'enterSite') {
+    if (name === 'Ghost Ship') {
+      // "A Spirit from any cemetery": either player's graveyard, summoned to the site just reached.
+      const decline = optToken(source.at,'decline');
+      for (const from of ['p1','p2']) {
+        (state.zones[from]?.graveyard || []).forEach((card,graveyardIndex) => {
+          if (card.type !== 'Minion' || !/\bSpirit\b/.test(cardSubTypes(card))) return;
+          add(`spirit/${from}/${graveyardIndex}`,`Ghost Ship summons ${card.name} from ${from === seat ? 'your' : "the opponent's"} cemetery to ${source.at}`,
+            [{kind:'raise',seat,to:source.at,region:'surface',card,fromSeat:from,graveyardIndex}],[source.at]);
+        });
+      }
+      add('decline','Ghost Ship summons nothing',[],[decline],{[decline]:'Skip'});
+      return choices;
+    }
+    return skip(`${name}: nothing to resolve`);
+  }
+  if (event.trigger === 'attacked') {
+    // "Teleport to another nearby location or void to evade": any of the nine squares but its own.
+    const decline = optToken(source.at,'decline'), [ax,ay] = cellOf(source.at), size = state.board.size || {w:5,h:4};
+    for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
+      const x = ax+dx, y = ay+dy, to = `${x},${y}`;
+      if ((!dx && !dy) || x<0 || y<0 || x>=size.w || y>=size.h) continue;
+      add(`evade/${to}`,`${name} teleports to ${to}, evading the attack`,[{kind:'evadeAttack',target:source.target,to}],[to]);
+    }
+    add('stand',`${name} stands its ground`,[],[decline],{[decline]:'Stay'});
+    return choices;
+  }
   if (event.trigger === 'enterVoid') {
     if (name === 'Phase Assassin') {
       add('stealth','Phase Assassin gains Stealth in the void',[{kind:'grantStealth',target:source.target}]);
@@ -182,4 +218,4 @@ function choicesFor(state) {
   return skip(`${name}: nothing to resolve`);
 }
 
-module.exports = { cardTriggerChoices, cornerOf, hasEndTrigger, hasStartTrigger, hasStartSiteTrigger, hasVoidEntryTrigger };
+module.exports = { cardTriggerChoices, cornerOf, hasAttackedTrigger, hasEndTrigger, hasSiteEntryTrigger, hasStartTrigger, hasStartSiteTrigger, hasVoidEntryTrigger };

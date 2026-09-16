@@ -588,6 +588,45 @@ export function validateAction(
       void perPatch;
     }
 
+    // Printed cast restrictions. The client has no placement validation, so like Cornerstone's
+    // corner rule above this is the only enforcement, and it covers both seats.
+    if (
+      (action as AnyRecord).permanents &&
+      typeof (action as AnyRecord).permanents === "object" &&
+      meNum
+    ) {
+      const perPatch = (action as AnyRecord).permanents as Record<string, unknown[]>;
+      const { isNew } = markAndCountNewPlacements(game, action, meNum);
+      const boardSize = (game.board as AnyRecord | undefined)?.size as AnyRecord | undefined;
+      const boardW = getBoardWidth(game);
+      const boardH = Number(boardSize?.h) || 4;
+      const sites =
+        game.board && typeof (game.board as AnyRecord).sites === "object"
+          ? ((game.board as AnyRecord).sites as Record<string, AnyRecord>)
+          : {};
+      for (const key of Object.keys(perPatch)) {
+        const arr = Array.isArray(perPatch[key]) ? perPatch[key] : [];
+        const pos = parseCellKey(key);
+        if (!pos) continue;
+        const outer = pos.x === 0 || pos.x === boardW - 1;
+        const corner = outer && (pos.y === 0 || pos.y === boardH - 1);
+        for (const raw of arr) {
+          const p = (raw || {}) as AnyRecord;
+          if (!isNew.has(p)) continue;
+          const name = String(((p.card || {}) as AnyRecord).name || "");
+          if (name === "Forsaken" && !outer) {
+            return { ok: false, error: "Forsaken must be cast to an outer column" };
+          }
+          if (name === "The Ninth Legion" && !corner) {
+            return { ok: false, error: "The Ninth Legion must be cast to a corner" };
+          }
+          if (name === "Dormant Monstrosity" && (!corner || !!sites[key]?.card)) {
+            return { ok: false, error: "Dormant Monstrosity must be cast to a corner void" };
+          }
+        }
+      }
+    }
+
     return { ok: true };
   } catch {
     return { ok: true };

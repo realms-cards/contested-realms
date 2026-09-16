@@ -100,6 +100,61 @@ function getCostForCard(card: AnyRecord | null | undefined): number {
   return 0;
 }
 
+function getSubTypesForCard(card: AnyRecord | null | undefined): string {
+  const inline = card && typeof card.subTypes === "string" ? card.subTypes : "";
+  if (inline) return inline;
+  const nm = card && card.name ? String(card.name) : null;
+  const found = nm ? getCardByName(nm) : null;
+  return found && typeof found.subTypes === "string" ? found.subTypes : "";
+}
+
+/**
+ * Cost changes printed on the card itself, applied before any avatar discount.
+ * - Caelestis: "The next Dragon you cast to this location costs (0) this turn" — it stamps its own
+ *   permanent with the turn key when its ability is activated (cpuDragonFreeTurn).
+ * - Dormant Monstrosity: "costing (2) less for each unit in an adjacent square."
+ */
+function getCardSpecificManaCost(
+  game: AnyRecord,
+  seat: SeatKey,
+  card: AnyRecord,
+  cellKey: string,
+  baseCost: number,
+): number {
+  let cost = baseCost;
+  if (cost <= 0) return cost;
+  const permanents = (game.permanents as Record<string, unknown[]>) || {};
+  const owner = seat === "p1" ? 1 : 2;
+  if (/\bDragon\b/.test(getSubTypesForCard(card))) {
+    const turnKey = `${game.turn}:${game.currentPlayer}`;
+    const here = Array.isArray(permanents[cellKey]) ? permanents[cellKey] : [];
+    const free = here.some((raw) => {
+      const item = (raw || {}) as AnyRecord;
+      const itemCard = (item.card || {}) as AnyRecord;
+      return (
+        String(itemCard.name || "") === "Caelestis" &&
+        Number(item.owner) === owner &&
+        item.cpuDragonFreeTurn === turnKey
+      );
+    });
+    if (free) return 0;
+  }
+  if (String(card.name || "") === "Dormant Monstrosity") {
+    const [cx, cy] = cellKey.split(",").map(Number);
+    let adjacent = 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const arr = permanents[`${cx + dx},${cy + dy}`];
+      if (!Array.isArray(arr)) continue;
+      adjacent += arr.filter((raw) => {
+        const item = (raw || {}) as AnyRecord;
+        return !!item.card && !item.attachedTo;
+      }).length;
+    }
+    cost = Math.max(0, cost - 2 * adjacent);
+  }
+  return cost;
+}
+
 // Validates and books the mana cost of newly played permanents, and taps the
 // avatar when a site is played. Mana rules live in rules-resources.ts.
 export function ensureCosts(
@@ -156,7 +211,7 @@ export function ensureCosts(
             meKey,
             card,
             cellKey,
-            getCostForCard(card),
+            getCardSpecificManaCost(game, meKey, card, cellKey, getCostForCard(card)),
             used,
           );
           if (adjusted.harbingerPortalDiscountApplied) used.harbinger = true;

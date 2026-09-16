@@ -77,6 +77,19 @@ function choicesFor(state, seat) {
         {kind:'spend',seat,amount:1},{kind:'buff',target:source.target,power:1,movement:0},
       ]);
     }
+    // "May carry an allied minion": move.js takes everything attached along with the carrier.
+    if (/May carry an allied minion/.test(cardText(source.card)) && source.target.kind === 'permanent') {
+      for (const ally of units.filter(u => u.owner === seat && u.target.kind === 'permanent' && occupies(u,source.at) &&
+          u.region === source.region && !sameTarget(u.target,source.target) && !state.permanents[u.at]?.[u.target.index]?.isCarried)) {
+        add(source,`carry/${id}/${ally.target.instanceId || ally.target.index}`,`${source.card.name} carries ${ally.card.name}`,
+          [{kind:'carryUnit',carrier:source.target,target:ally.target}],[unitToken(ally.target)]);
+      }
+    }
+    if (source.card.name === 'Caelestis' && canTap(source)) {
+      add(source,`caelestis/${id}`,'Caelestis: tap so your next Dragon cast here costs (0) this turn',[
+        {kind:'tapUnits',targets:[source.target]},{kind:'stampDragonFree',target:source.target,turnKey},
+      ]);
+    }
     if (source.card.name === 'Waveshaper' && canTap(source)) {
       const water = bodyOfWater(state,source.at);
       for (const [at,tile] of Object.entries(state.board.sites)) {

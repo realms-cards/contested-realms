@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { abilityChoices } from "@/lib/game/cpu/abilities";
+import { applySpellChoice } from "@/lib/game/cpu/applySpellChoice";
 import cards from "@/lib/game/cpu/cards.json";
 import { movementSteps } from "@/lib/game/cpu/movement";
 import type { SpellChoice } from "@/lib/game/cpu/spellTypes";
@@ -8,6 +9,7 @@ import { rangedAttack, stationaryAttack } from "@/lib/game/cpu/stationaryAttack"
 import { createGameStore } from "@/lib/game/store";
 import type { CardRef, GameState, PermanentItem, SiteTile } from "@/lib/game/store/types";
 import { LocalTransport } from "@/lib/net/localTransport";
+import { ensureCosts } from "../../../../server/modules/rules-costs";
 import { validateAction } from "../../../../server/modules/rules-validation";
 
 type Name = keyof typeof cards;
@@ -355,6 +357,131 @@ describe("Voidwalk cards", () => {
     store.setState({permanents:{"2,2":[store.getState().permanents["2,2"][0],voidUnit("Lucid Dreamers",1,2,2,
       "Voidwalk\n\nYou may cast minions to this void, granting them Voidwalk until they're no longer in the void.","dreamers")]}});
     expect(movementSteps(store.getState(),"2,2",store.getState().permanents["2,2"][0]).map(step => step.at)).toContain("2,1");
+  });
+
+  it("Ghost Ship summons a Spirit out of either cemetery when it leaves the void", async () => {
+    const store = setup();
+    openVoid(store,"2,2");
+    const ship = voidUnit("Ghost Ship",1,5,5,
+      "Voidwalk\n\nWhenever Ghost Ship enters a site from the void, you may summon a Spirit from any cemetery to its location.","ship");
+    // "Any cemetery": the Spirit here is in the OPPONENT's graveyard.
+    const spirit: CardRef = {cardId:2,name:"Lord of the Void",type:"Minion",attack:0,defence:0,
+      instanceId:"dead-lord",subTypes:"Spirit",rulesText:"Voidwalk"};
+    store.setState({permanents:{"2,2":[ship]},
+      zones:{...store.getState().zones,p2:{...store.getState().zones.p2,graveyard:[spirit]}}});
+    await settle();
+    store.setState({permanents:{"2,3":[ship],"2,2":[]}});
+    await settle();
+    expect(pendingChoices(store).map(choice => choice.key)).toContain("trigger/spirit/p2/0");
+    choose(store,"trigger/spirit/p2/0");
+    expect(store.getState().permanents["2,3"].some(item => item.card.name === "Lord of the Void")).toBe(true);
+    expect(store.getState().zones.p2.graveyard).toHaveLength(0);
+  });
+
+  it("Wills-o'-the-Wisp teleports out of a declared attack", async () => {
+    const store = setup();
+    store.setState({permanents:{
+      "2,1":[unit("Raal Dromedary",2,"attacker")],
+      "2,2":[voidUnit("Wills-o'-the-Wisp",1,1,1,
+        "Voidwalk\n\nWhenever Wills-o'-the-Wisp are attacked, they may teleport to another nearby location or void to evade the attack.","wisp")],
+    }});
+    await settle();
+    store.getState().declareAttack({x:2,y:2},{at:"2,1",index:0,owner:2},{kind:"permanent",at:"2,2",index:0});
+    await settle();
+    expect(store.getState().pendingMagic?.cpuEvent).toMatchObject({kind:"cardTrigger",trigger:"attacked"});
+    choose(store,"trigger/evade/1,2");
+    expect(ids(store.getState().permanents["1,2"])).toContain("wisp");
+    expect(store.getState().pendingCombat).toBeNull();
+  });
+
+  it("Phantom Steed carries an allied minion", () => {
+    const store = setup();
+    store.setState({permanents:{"2,2":[
+      voidUnit("Phantom Steed",1,2,2,"Movement +2, Voidwalk\n\nMay carry an allied minion.","steed"),
+      unit("Raal Dromedary",1,"rider"),
+    ]}});
+    const ability = abilityChoices(store.getState(),"p1").find(choice => choice.key.startsWith("carry/"));
+    if (!ability) throw new Error("Missing Phantom Steed carry");
+    store.getState().activateCpuAbility(ability.key);
+    expect(store.getState().permanents["2,2"][1]).toMatchObject({isCarried:true,attachedTo:{at:"2,2",index:0}});
+  });
+
+  it("The Doom of Dilmun cannot be modified", () => {
+    const store = setup();
+    store.setState({permanents:{"2,2":[voidUnit("The Doom of Dilmun",2,6,6,
+      "Burrowing, Submerge, Voidwalk\n\nCan't be banished, destroyed, or modified.","doom")]}});
+    const target = {kind:"permanent" as const,at:"2,2",index:0};
+    const cast = (key: string, operations: SpellChoice["operations"]) =>
+      applySpellChoice(store.setState,store.getState,{key,label:key,caster:{kind:"avatar",seat:"p1"},target:null,score:0,operations});
+    cast("buff",[{kind:"buff",target,power:2,movement:0}]);
+    expect(store.getState().permanents["2,2"][0].cpuTurnEffect ?? null).toBeNull();
+    cast("bury",[{kind:"subsurface",targets:[target],state:"burrowed"}]);
+    expect(ids(store.getState().permanents["2,2"])).toEqual(["doom"]);
+  });
+
+  it("Aethermoeba grows its footprint, gains power per void, and expands from any part of itself", async () => {
+    const store = setup();
+    openVoid(store,"1,2","0,2");
+    store.setState({permanents:{"1,2":[voidUnit("Aethermoeba",1,0,0,
+      "Voidwalk\n\nMoves by expanding from any part of itself. It occupies all locations it has ever occupied, and has +1 power for each one that is void.","moeba")]}});
+    await settle();
+    expect(store.getState().permanents["1,2"][0].cpuOccupied).toEqual(["1,2"]);
+    store.setState({permanents:{"2,2":store.getState().permanents["1,2"],"1,2":[]}});
+    await settle();
+    const moeba = store.getState().permanents["2,2"][0];
+    expect(moeba.cpuOccupied).toEqual(["1,2","2,2"]);
+    expect(located(store,"moeba").cells).toEqual(["1,2","2,2"]);
+    expect(unitStats(store.getState(),located(store,"moeba")).atk).toBe(1); // only 1,2 is void
+    // It may keep expanding from the location it came from, not just where it now stands.
+    expect(movementSteps(store.getState(),"2,2",moeba).map(step => step.at)).toContain("0,2");
+  });
+
+  it("Howl from Beyond keeps Voidwalk minions and Monsters and banishes the rest", () => {
+    const store = setup();
+    openVoid(store,"0,0","0,1","4,0"); // three voids in the outer columns
+    const stalker: CardRef = {cardId:2,name:"Spectral Stalker",type:"Minion",instanceId:"s1",rulesText:"Voidwalk"};
+    const minotaur: CardRef = {cardId:2,name:"Maze Minotaur",type:"Minion",instanceId:"m1",subTypes:"Monster",rulesText:""};
+    store.setState({zones:{...store.getState().zones,
+      p1:{...store.getState().zones.p1,spellbook:[stalker,minotaur,card("Blaze","doomed")]}}});
+    const choice = getSpellChoices(store.getState(),"p1","Howl from Beyond").find(candidate => candidate.key.endsWith("/howl"));
+    if (!choice) throw new Error("Missing Howl from Beyond");
+    applySpellChoice(store.setState,store.getState,choice);
+    expect(store.getState().zones.p1.hand.map(held => held.name)).toEqual(["Spectral Stalker","Maze Minotaur"]);
+    expect(store.getState().zones.p1.banished.map(gone => gone.name)).toEqual(["Blaze"]);
+    expect(store.getState().zones.p1.spellbook).toHaveLength(0);
+  });
+
+  it("enforces the printed cast restrictions", () => {
+    const game = {currentPlayer:1,turn:3,board:{size:{w:5,h:4},sites:{"2,3":{owner:1,card:{name:"Humble Village"}}}},
+      permanents:{},avatars:{p1:{pos:[2,3]}}};
+    const context = {match:{playerIds:["human","cpu_bot"]}};
+    // Inline empty thresholds so only the placement rule can reject these.
+    const play = (at: string, name: string) => validateAction(game,
+      {permanents:{[at]:[{owner:1,card:{name,thresholds:{}}}]}} as Parameters<typeof validateAction>[1],"human",context);
+    expect(play("0,1","Forsaken").ok).toBe(true);
+    expect(play("2,1","Forsaken").error).toBe("Forsaken must be cast to an outer column");
+    expect(play("0,0","The Ninth Legion").ok).toBe(true);
+    expect(play("0,1","The Ninth Legion").error).toBe("The Ninth Legion must be cast to a corner");
+    expect(play("4,3","Dormant Monstrosity").ok).toBe(true); // a corner with no site is a corner void
+    expect(play("0,1","Dormant Monstrosity").error).toBe("Dormant Monstrosity must be cast to a corner void");
+  });
+
+  it("prices Caelestis's free Dragon and Dormant Monstrosity's crowd discount on the server", () => {
+    const sites = Object.fromEntries(Array.from({length:8},(_,i) => [`${i%4},${i<4 ? 2 : 3}`,{owner:1,card:{name:"Cornerstone"}}]));
+    const context = {match:{playerIds:["human","cpu_bot"]}};
+    const price = (game: Record<string, unknown>, at: string, card: Record<string, unknown>) =>
+      ensureCosts(game,{permanents:{[at]:[{owner:1,card}]}} as Parameters<typeof ensureCosts>[1],"human",context);
+    const dragon = {name:"Caelestis",cost:7,type:"Minion",subTypes:"Dragon, Spirit",thresholds:{}};
+    const stamped = {turn:3,currentPlayer:1,board:{size:{w:5,h:4},sites},players:{p1:{mana:0},p2:{mana:0}},avatars:{},
+      permanents:{"0,2":[{owner:1,cpuDragonFreeTurn:"3:1",card:{name:"Caelestis"}}]}};
+    // Free at Caelestis's own location, full price anywhere else.
+    expect(price(stamped,"0,2",dragon).autoPatch).toBeUndefined();
+    expect((price(stamped,"1,2",dragon).autoPatch as {players?:{p1?:{mana?:number}}})?.players?.p1?.mana).toBe(-7);
+    // Dormant Monstrosity: (2) less for each unit in an adjacent square.
+    const crowded = {turn:3,currentPlayer:1,board:{size:{w:5,h:4},sites},players:{p1:{mana:0},p2:{mana:0}},avatars:{},
+      permanents:{"0,3":[{owner:1,card:{name:"Raal Dromedary"}}]}};
+    const monstrosity = {name:"Dormant Monstrosity",cost:7,type:"Minion",thresholds:{}};
+    expect((price(crowded,"0,2",monstrosity).autoPatch as {players?:{p1?:{mana?:number}}})?.players?.p1?.mana).toBe(-5);
   });
 
   it("Vril Revenant pays a mana for +1 power this turn", () => {

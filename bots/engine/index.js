@@ -812,6 +812,21 @@ function findBestUnitPlacementCell(state, seat, card) {
       }
     }
 
+    // Printed cast restrictions (the server enforces these; do not propose an illegal cell).
+    const restricted = card && card.name;
+    const boardW = (state && state.board && state.board.size && state.board.size.w) || 5;
+    const boardH = (state && state.board && state.board.size && state.board.size.h) || 4;
+    const isOuter = (p) => !!p && (p.x === 0 || p.x === boardW - 1);
+    const isCorner = (p) => isOuter(p) && (p.y === 0 || p.y === boardH - 1);
+    if (restricted === "Dormant Monstrosity") {
+      // A corner VOID, which the owned-site loop below can never offer.
+      for (const [cx, cy] of [[0, 0], [boardW - 1, 0], [0, boardH - 1], [boardW - 1, boardH - 1]]) {
+        const corner = `${cx},${cy}`;
+        if (!sites[corner] || !sites[corner].card) return corner;
+      }
+      return null;
+    }
+
     const candidates = [];
     for (const key of Object.keys(sites)) {
       const t = sites[key];
@@ -822,6 +837,8 @@ function findBestUnitPlacementCell(state, seat, card) {
         (p) => p && Number(p.owner) === myNum
       ).length;
       const pos = parseCellKey(key);
+      if (restricted === "Forsaken" && !isOuter(pos)) continue;
+      if (restricted === "The Ninth Legion" && !isCorner(pos)) continue;
       const distToEnemy = pos
         ? Math.min(...enemyPositions.map(ep => manhattan([pos.x, pos.y], ep)))
         : 999;

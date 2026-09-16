@@ -1,6 +1,6 @@
 import type { StoreApi } from "zustand";
 import { applySpellChoice } from "@/lib/game/cpu/applySpellChoice";
-import { cornerOf, hasEndTrigger, hasStartSiteTrigger, hasStartTrigger, hasVoidEntryTrigger } from "@/lib/game/cpu/cardTriggers";
+import { cornerOf, hasAttackedTrigger, hasEndTrigger, hasSiteEntryTrigger, hasStartSiteTrigger, hasStartTrigger, hasVoidEntryTrigger } from "@/lib/game/cpu/cardTriggers";
 import cpuCardData from "@/lib/game/cpu/cards.json";
 import { hasCpuDeathrite, hasCpuGenesis } from "@/lib/game/cpu/genesis";
 import { movementAllowance, movementRoutes } from "@/lib/game/cpu/movement";
@@ -17,7 +17,7 @@ export const CPU_DEFENDER_TIMEOUT_MS = 20000;
 
 type CardTriggerEvent = Extract<NonNullable<PendingMagic["cpuEvent"]>, {kind: "cardTrigger"}>;
 const TRIGGER_BADGES: Record<CardTriggerEvent["trigger"], string> = {
-  start:"start of turn",end:"end of turn",corner:"corner reached",curse:"Mariner's Curse",kiteStep:"step after shooting",skirmish:"ranged strike on the move",enterVoid:"entered the void",
+  start:"start of turn",end:"end of turn",corner:"corner reached",curse:"Mariner's Curse",kiteStep:"step after shooting",skirmish:"ranged strike on the move",enterVoid:"entered the void",enterSite:"left the void",attacked:"attacked",
 };
 const CARD_SUBTYPES = cpuCardData as unknown as Record<string, {subTypes?: string}>;
 
@@ -62,7 +62,12 @@ export function installCpuController(store: StoreApi<GameState>) {
   const drain = () => {
     scheduled = false;
     const state = store.getState();
-    if (state.pendingMagic || state.pendingCombat || state.matchEnded) return;
+    // A declared attack normally blocks the queue, but "whenever this is attacked" (Wills-o'-the-Wisp)
+    // has to resolve inside that window. Only an attacked trigger at the head of the queue may pass,
+    // so no other effect slips in mid-combat.
+    const head = queue[0]?.cpuEvent;
+    const attackedFirst = head?.kind === "cardTrigger" && head.trigger === "attacked";
+    if (state.pendingMagic || state.matchEnded || (state.pendingCombat && !attackedFirst)) return;
     const frames = state.cpuEffectContinuations || [];
     const frame = frames[frames.length-1];
     if (frame && queue.length<=frame.waitingFor) {
@@ -244,6 +249,10 @@ export function installCpuController(store: StoreApi<GameState>) {
         if (unitId && current.target.kind === "permanent" && current.region === "void" && prior?.region !== "void" && hasVoidEntryTrigger(current.card.name)) {
           enqueueTrigger("enterVoid",current.target,current.card,current.at,current.owner === "p1" ? 1 : 2,batch,`cpu_void_${unitId}_${current.at}`);
         }
+        // Ghost Ship: the opposite crossing, out of the void onto a site.
+        if (unitId && current.target.kind === "permanent" && current.region === "surface" && prior?.region === "void" && hasSiteEntryTrigger(current.card.name)) {
+          enqueueTrigger("enterSite",current.target,current.card,current.at,current.owner === "p1" ? 1 : 2,batch,`cpu_shore_${unitId}_${current.at}`);
+        }
         if (unitId && current.target.kind === "permanent" && (!prior || prior.at !== current.at) && (current.card.type || "").toLowerCase() !== "artifact") {
           const item = state.permanents[current.at]?.[current.target.index];
           // Wayfaring Pilgrim: the first entry into each corner (summoned into one counts) offers a draw.
@@ -339,6 +348,32 @@ export function installCpuController(store: StoreApi<GameState>) {
       if (Object.keys(changes).length) {
         store.setState({permanents:{...store.getState().permanents,...changes}});
         store.getState().trySendPatch({permanents:changes});
+      }
+    }
+    // Aethermoeba "occupies all locations it has ever occupied": each new one is recorded as it
+    // arrives, so the footprint grows whichever path moved it (bot, CPU rules or a human drag).
+    if (!restored && state.permanents !== previous.permanents) {
+      const permanents = store.getState().permanents, grown: GameState["permanents"] = {};
+      for (const [at,items] of Object.entries(permanents)) items.forEach((item,index) => {
+        if (item.card.name !== "Aethermoeba" || (item.cpuOccupied || []).includes(at)) return;
+        grown[at] ||= [...permanents[at]];
+        grown[at][index] = {...item,cpuOccupied:[...(item.cpuOccupied || []),at],version:(item.version || 0)+1};
+      });
+      if (Object.keys(grown).length) {
+        store.setState({permanents:{...store.getState().permanents,...grown}});
+        store.getState().trySendPatch({permanents:grown});
+      }
+    }
+    // Wills-o'-the-Wisp: "whenever they are attacked" — offered the moment the attack is declared.
+    if (state.pendingCombat && state.pendingCombat.status === "declared" && state.pendingCombat !== previous.pendingCombat) {
+      const aim = state.pendingCombat.target;
+      if (aim && aim.kind === "permanent" && typeof aim.index === "number") {
+        const victim = state.permanents[aim.at]?.[aim.index];
+        const victimId = victim && (victim.instanceId || victim.card.instanceId);
+        if (victim && victimId && hasAttackedTrigger(victim.card.name)) {
+          enqueueTrigger("attacked",{kind:"permanent",at:aim.at,index:aim.index,instanceId:victimId},victim.card,aim.at,victim.owner,batch,
+            `cpu_attacked_${victimId}_${state.pendingCombat.id}`);
+        }
       }
     }
     // King of the Realm: "You control all Mortals." Control returns to each Mortal's owner once no King rules;

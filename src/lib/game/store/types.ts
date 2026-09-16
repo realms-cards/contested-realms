@@ -167,6 +167,10 @@ export type EntityBase<TCard> = {
   cpuCornersVisited?: string[];
   /** CPU rules: the owner a Mortal returns to when King of the Realm stops controlling it. */
   cpuNativeOwner?: 1 | 2 | null;
+  /** CPU rules: every location this unit has ever occupied (Aethermoeba grows instead of moving). */
+  cpuOccupied?: string[] | null;
+  /** CPU rules: turn key on which Caelestis made the next Dragon cast to its location free. */
+  cpuDragonFreeTurn?: string | null;
 };
 
 // Champion reference for Dragonlord avatar
@@ -560,7 +564,7 @@ export type PendingMagic = {
     | { kind: "blazeTrail"; from: string; to: string; region: string; source: import("@/lib/game/cpu/spellTypes").UnitTarget; forced?: boolean; budget?: number }
     | { kind: "genesis"; region: string; source?: import("@/lib/game/cpu/spellTypes").UnitTarget; sourceSite?: { at: string; name: string; instanceId?: string | null } }
     | { kind: "deathrite"; region: string }
-    | { kind: "cardTrigger"; trigger: "start" | "end" | "corner" | "curse" | "kiteStep" | "skirmish" | "enterVoid"; source: import("@/lib/game/cpu/spellTypes").TriggerSource;
+    | { kind: "cardTrigger"; trigger: "start" | "end" | "corner" | "curse" | "kiteStep" | "skirmish" | "enterVoid" | "enterSite" | "attacked"; source: import("@/lib/game/cpu/spellTypes").TriggerSource;
         path?: string[]; corner?: string; victim?: import("@/lib/game/cpu/spellTypes").UnitTarget };
   tile: { x: number; y: number };
   // The spell card placed on board for UX; resolved to cemetery on completion

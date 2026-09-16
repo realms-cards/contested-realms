@@ -1116,6 +1116,14 @@ class BotClient {
         if (rt) card.rulesText = rt;
       }
     } catch {}
+    // Attach the typeline subtypes: the shared rules read Spirit/Monster/Dragon/Mortal from these,
+    // and cards.json only covers 132 cards.
+    try {
+      if (card.name && !card.subTypes) {
+        const sub = this._getSubTypesForCard(card);
+        if (sub) card.subTypes = sub;
+      }
+    } catch {}
     // Attach cardId and variantId from DB so server accepts zone writes
     try {
       if (card.name && (card.cardId === undefined || card.cardId === null)) {
@@ -1202,6 +1210,22 @@ class BotClient {
           defence: Number(found.guardian.defence) || 0,
         };
       }
+    } catch {}
+    return null;
+  }
+
+  /**
+   * Get the typeline subtypes for a card from cards_raw.json. Unlike rulesText these sit at the
+   * top level of the record, not under `guardian`.
+   */
+  _getSubTypesForCard(card) {
+    try {
+      const db = _loadCardsDb();
+      const nm = card && card.name ? String(card.name).toLowerCase() : null;
+      if (!nm) return null;
+      const found = db.find((c) => String(c?.name || "").toLowerCase() === nm);
+      const sub = found && found.subTypes;
+      return typeof sub === "string" && sub ? sub : null;
     } catch {}
     return null;
   }

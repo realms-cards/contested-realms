@@ -36,7 +36,11 @@ function stepsFrom(state,from,unit,origin) {
   const voidwalk = printed || vested || site?.name === 'Planar Gate' ||
     (!site && (unit.cpuPlanarVoidwalk || here.some(item => item.card?.name === 'Lucid Dreamers') ||
       state.board.sites[origin]?.card?.name === 'Planar Gate'));
-  const [x,y] = from.split(',').map(Number), result = [];
+  // Aethermoeba "moves by expanding from any part of itself": each recorded location is an origin.
+  const origins = unit.card.name === 'Aethermoeba' && Array.isArray(unit.cpuOccupied) && unit.cpuOccupied.length ? unit.cpuOccupied : [from];
+  const result = [], reached = new Set(origins);
+  for (const origin of origins) {
+  const [x,y] = origin.split(',').map(Number);
   for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1],...(airborne ? [[1,1],[1,-1],[-1,1],[-1,-1]] : [])]) {
     if (/only move themselves forward/.test(text) && (dx !== 0 || dy !== (unit.owner === 1 ? -1 : 1))) continue;
     if (/only move themselves sideways/.test(text) && dy !== 0) continue;
@@ -55,7 +59,10 @@ function stepsFrom(state,from,unit,origin) {
     if (layer === 'surface' && !airborne && unit.card.type !== 'Avatar' && destination?.name === 'Mountain Pass' &&
         state.permanents[at]?.some(p => p.instanceId !== unit.instanceId && (p.card.type === 'Minion' || p.card.name === 'Foot Soldier') &&
           (state.permanentPositions[p.instanceId || p.card.instanceId]?.state || 'surface') === 'surface')) continue;
+    if (reached.has(at)) continue;
+    reached.add(at);
     result.push({at,cost:airborne && site?.name === 'Updraft Ridge' ? 0 : 1});
+  }
   }
   return result;
 }

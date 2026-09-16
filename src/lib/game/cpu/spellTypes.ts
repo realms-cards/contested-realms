@@ -71,7 +71,15 @@ export type SpellOperation =
   /** Phase Assassin: granted Stealth is modelled as an attached Stealth token, as computeStealth reads it. */
   | { kind: "grantStealth"; target: UnitTarget }
   /** The Ninth Legion: take a card back out of a cemetery (a Deathrite resolves after its card died). */
-  | { kind: "recoverCard"; seat: PlayerKey; instanceId?: string | null; name: string };
+  | { kind: "recoverCard"; seat: PlayerKey; instanceId?: string | null; name: string }
+  /** Howl from Beyond: deal out `count` top spells, keeping Voidwalk minions and Monsters. */
+  | { kind: "howl"; seat: PlayerKey; count: number }
+  /** Phantom Steed: carry an allied minion, which then travels with its carrier (see move.js). */
+  | { kind: "carryUnit"; carrier: UnitTarget; target: UnitTarget }
+  /** Wills-o'-the-Wisp: teleport out of a declared attack, calling the attack off. */
+  | { kind: "evadeAttack"; target: UnitTarget; to: string }
+  /** Caelestis: the next Dragon cast to its location costs (0) for the rest of this turn. */
+  | { kind: "stampDragonFree"; target: UnitTarget; turnKey: string };
 
 export interface DamageHit {
   target: UnitTarget;

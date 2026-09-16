@@ -105,7 +105,9 @@ function buildUnits(state) {
       const type = item.card?.type || cards[item.card?.name]?.type;
       if (type !== 'Minion' && !(type === 'Token' && ['Foot Soldier','Skeleton','Frog','Bruin','Tawny'].includes(item.card.name)) && !/Automaton/i.test(cards[item.card?.name]?.subTypes || '')) return;
       const position = state.permanentPositions?.[item.instanceId || item.card?.instanceId];
-      const cells = OVERSIZED.has(item.card?.name) ? occupiedCells(item.card.name, at, state.board.size) : null;
+      // Aethermoeba records every location it has ever occupied; oversized units use a fixed 2x2.
+      const grown = Array.isArray(item.cpuOccupied) && item.cpuOccupied.length > 1 ? item.cpuOccupied : null;
+      const cells = grown || (OVERSIZED.has(item.card?.name) ? occupiedCells(item.card.name, at, state.board.size) : null);
       const region = position?.state === 'burrowed' ? 'underground'
         : position?.state === 'submerged' ? 'underwater'
         : (cells ? cells.some(cell => state.board.sites[cell]?.card) : state.board.sites[at]?.card) ? 'surface' : 'void';
