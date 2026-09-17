@@ -2,14 +2,16 @@ import type { StoreApi } from "zustand";
 import { applySpellChoice } from "@/lib/game/cpu/applySpellChoice";
 import { cornerOf, hasAttackedTrigger, hasEndTrigger, hasSiteEntryTrigger, hasStartSiteTrigger, hasStartTrigger, hasVoidEntryTrigger } from "@/lib/game/cpu/cardTriggers";
 import cpuCardData from "@/lib/game/cpu/cards.json";
+import { loseStealth } from "@/lib/game/cpu/damage";
 import { hasCpuDeathrite, hasCpuGenesis } from "@/lib/game/cpu/genesis";
 import { movementAllowance, movementRoutes } from "@/lib/game/cpu/movement";
 import { useCpuReveals } from "@/lib/game/cpu/revealQueue";
 import { CPU_TRIGGERS_IN_ORDER, type TriggerSource, type UnitTarget } from "@/lib/game/cpu/spellTypes";
-import { cardText, getSpellChoices, inRange, isDisabled, isWater, sameTarget, unitsInRealm } from "@/lib/game/cpu/spells";
+import { getSpellChoices, hasPrintedStealth, inRange, isDisabled, isWater, sameTarget, unitsInRealm } from "@/lib/game/cpu/spells";
 import { treasures } from "@/lib/game/cpu/treasure";
 import type { CardRef, GameState, PendingMagic, PlayerKey } from "@/lib/game/store/types";
 import { getCellNumber } from "@/lib/game/store/utils/boardHelpers";
+import { stealthTokenFor } from "@/lib/game/tokens";
 import type { CustomMessage } from "@/lib/net/transport";
 
 /** How long the human client waits for the CPU to declare defenders before the attack goes ahead unblocked (the bot's own worst case is about 17 s). */
@@ -20,6 +22,20 @@ const TRIGGER_BADGES: Record<CardTriggerEvent["trigger"], string> = {
   start:"start of turn",end:"end of turn",corner:"corner reached",curse:"Mariner's Curse",kiteStep:"step after shooting",skirmish:"ranged strike on the move",enterVoid:"entered the void",enterSite:"left the void",attacked:"attacked",
 };
 const CARD_SUBTYPES = cpuCardData as unknown as Record<string, {subTypes?: string}>;
+
+const permanentIds = (permanents: GameState["permanents"]) =>
+  new Set(Object.values(permanents).flatMap(items => (items || []).flatMap(item => item.instanceId || item.card.instanceId || [])));
+
+/** Instance ids of the permanents that carry an attached Stealth token. */
+function stealthTokenHosts(permanents: GameState["permanents"]) {
+  const ids = new Set<string>();
+  for (const [at,items] of Object.entries(permanents)) for (const item of items || []) {
+    if (item.card?.name !== "Stealth" || item.attachedTo?.at !== at) continue;
+    const host = items[item.attachedTo.index], id = host?.instanceId || host?.card.instanceId;
+    if (id) ids.add(id);
+  }
+  return ids;
+}
 
 /** The human client adjudicates CPU matches; tabletop stores are untouched. */
 export function installCpuController(store: StoreApi<GameState>) {
@@ -225,7 +241,7 @@ export function installCpuController(store: StoreApi<GameState>) {
         enqueueTrigger("start",{kind:"permanent",at,index,instanceId:unitId},item.card,at,item.owner,batch,`cpu_start_${endKey}_${unitId}`);
       });
       for (const [at,tile] of Object.entries(state.board.sites)) {
-        if (!tile.card || tile.owner !== state.currentPlayer || !hasStartSiteTrigger(tile.card.name) || tile.cpuTriggerStamps?.start === endKey) continue;
+        if (!tile?.card || tile.owner !== state.currentPlayer || !hasStartSiteTrigger(tile.card.name) || tile.cpuTriggerStamps?.start === endKey) continue;
         enqueueTrigger("start",{kind:"site",at,instanceId:tile.card.instanceId},tile.card,at,tile.owner,batch,`cpu_start_${endKey}_${tile.card.instanceId || at}`);
       }
     }
@@ -308,9 +324,9 @@ export function installCpuController(store: StoreApi<GameState>) {
       const fills: PendingMagic[] = [];
       for (const [at,tile] of Object.entries(state.board.sites)) {
         const oldCard = previous.board.sites[at]?.card;
-        if (!tile.card || (oldCard && oldCard.name === tile.card.name && oldCard.instanceId === tile.card.instanceId)) continue;
+        if (!tile?.card || (oldCard && oldCard.name === tile.card.name && oldCard.instanceId === tile.card.instanceId)) continue;
         // Moving or transforming an existing site is not entering the realm.
-        if (tile.card.instanceId && Object.values(previous.board.sites).some(old => old.card?.instanceId === tile.card?.instanceId)) continue;
+        if (tile.card.instanceId && Object.values(previous.board.sites).some(old => old?.card?.instanceId === tile.card?.instanceId)) continue;
         enqueueGenesis(tile.card,at,tile.owner,batch);
         const seat = tile.owner === 1 ? "p1" : "p2";
         const avatar = state.avatars[seat];
@@ -335,20 +351,31 @@ export function installCpuController(store: StoreApi<GameState>) {
       for (const pending of state.cpuEffectRequests || []) enqueue(pending,batch);
     }
     if (state.permanents !== previous.permanents) {
-      const units = unitsNow(), changes: GameState["permanents"] = {};
+      // Stealth is tracked with a token. A printed-Stealth minion that entered without one (a bot play, a summoning
+      // effect) gets it, a token removed by hand ends printed Stealth, and a revealed unit loses Stealth and its token.
+      // A restored snapshot has no previous board to compare, so only reveals are checked then.
+      const units = unitsNow(), hasToken = stealthTokenHosts(state.permanents);
+      const hadToken = restored ? null : stealthTokenHosts(previous.permanents);
+      const arrivals: GameState["permanents"] = {}, lost: UnitTarget[] = [];
+      let present: Set<string> | undefined;
       for (const unit of units) {
-        if (unit.target.kind !== "permanent" || !/\bStealth\b/.test(cardText(unit.card))) continue;
-        const item = state.permanents[unit.at][unit.target.index];
-        if (item.cpuStealthLost) continue;
+        if (unit.target.kind !== "permanent") continue;
+        const item = state.permanents[unit.at][unit.target.index], id = unit.target.instanceId;
+        const token = !!id && hasToken.has(id), printed = !item.cpuStealthLost && hasPrintedStealth(unit.card);
+        if (!token && !printed) continue;
         const revealed = isDisabled(state,unit) || units.some(other => ["Scent Hounds","Hounds of Ondaros"].includes(other.card.name) && other.owner !== unit.owner && other.region === unit.region && !isDisabled(state,other) && inRange(unit.at,other.at,"nearby"));
-        if (!revealed) continue;
-        changes[unit.at] ||= [...state.permanents[unit.at]];
-        changes[unit.at][unit.target.index] = {...item,cpuStealthLost:true,version:(item.version || 0)+1};
+        if (revealed || (!token && id && hadToken?.has(id))) lost.push(unit.target);
+        else if (!token && id && hadToken && !item.faceDown && !(present ||= permanentIds(previous.permanents)).has(id)) {
+          const items = arrivals[unit.at] ||= [...store.getState().permanents[unit.at]];
+          const index = items.findIndex(entry => (entry.instanceId || entry.card.instanceId) === id);
+          if (index >= 0) items.push(stealthTokenFor(unit.at,index,item.owner));
+        }
       }
-      if (Object.keys(changes).length) {
-        store.setState({permanents:{...store.getState().permanents,...changes}});
-        store.getState().trySendPatch({permanents:changes});
+      if (Object.keys(arrivals).length) {
+        store.setState({permanents:{...store.getState().permanents,...arrivals}});
+        store.getState().trySendPatch({permanents:arrivals});
       }
+      for (const target of lost) loseStealth(store.setState,store.getState,target);
     }
     // Aethermoeba "occupies all locations it has ever occupied": each new one is recorded as it
     // arrives, so the footprint grows whichever path moved it (bot, CPU rules or a human drag).

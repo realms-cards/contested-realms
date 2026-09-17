@@ -265,9 +265,31 @@ function stealthOf(state,unit) {
 /** @param {SpellState} state @param {LocatedUnit} unit @returns {boolean} */
 function computeStealth(state,unit) {
   if (disabledOf(state,unit)) return false;
-  const item = state.permanents[unit.at]?.[unit.target.index];
-  if (item?.cpuStealthLost) return false;
-  return /\bStealth\b/.test(cardText(unit.card)) || !!state.permanents[unit.at]?.some(p => p.card.name === 'Stealth' && p.attachedTo?.index === unit.target.index && p.attachedTo.at === unit.at);
+  // "Stealth is tracked with a stealth token": a token always counts (Fade grants one after a loss). Printed Stealth
+  // counts on its own only until lost, for a unit that entered without its token (bot self-play, older games).
+  if (stealthTokenIndex(state.permanents,unit.at,unit.target.index) >= 0) return true;
+  return !state.permanents[unit.at]?.[unit.target.index]?.cpuStealthLost && hasPrintedStealth(unit.card);
+}
+
+/** Minions printing Stealth on their keyword line in data/cards_raw.json; covers hand cards that carry no rules text. */
+const PRINTED_STEALTH = new Set(['Asmodeus','Band of Thieves','Dead of Night Demon','Draco Corvus','Far East Assassin',
+  'Frozen Horror','Gossamer Ghost','Jack the Ripper','Kingswood Poachers','Midnight Rogue','Morgana le Fay','Moss Troll',
+  'Questing Beast','Sir Agravaine','Sneak Thief','Winter Nymph']);
+
+/** Stealth as a keyword, not a card that only names it (Scent Hounds, Phase Assassin, Sly Fox).
+ * @param {CardRef | null | undefined} card @returns {boolean} */
+function hasPrintedStealth(card) {
+  if (!card) return false;
+  if (PRINTED_STEALTH.has(card.name)) return true;
+  // The cheap test first: this runs for every unit in engine searches.
+  const text = cardText(card);
+  return /\bStealth\b/.test(text) && keywordValue(text,'Stealth') > 0;
+}
+
+/** Index of the Stealth token attached to the permanent at `at`/`index`, else -1.
+ * @param {Record<string, import('../store/types').PermanentItem[]>} permanents @param {string} at @param {number} index @returns {number} */
+function stealthTokenIndex(permanents,at,index) {
+  return (permanents?.[at] || []).findIndex(p => p.card?.name === 'Stealth' && p.attachedTo?.at === at && p.attachedTo.index === index);
 }
 
 /** @param {SpellState} state @param {PlayerKey} seat @param {string} name @param {string} [selectionKey] @returns {SpellChoice[]} */
@@ -914,7 +936,7 @@ function scoreOps(state, seat, operations) {
     if (op.kind === 'retriggerGenesis') { score += op.ats.length; continue; }
     if (op.kind === 'reorder') {
       const top = state.zones[seat].spellbook;
-      const useful = card => card ? 10-Math.abs(Number(card.cost || 0)-Object.values(state.board.sites).filter(s => s.owner === (seat === 'p1' ? 1 : 2) && !s.cpuNeutral).length) : 0;
+      const useful = card => card ? 10-Math.abs(Number(card.cost || 0)-Object.values(state.board.sites).filter(s => s && s.owner === (seat === 'p1' ? 1 : 2) && !s.cpuNeutral).length) : 0;
       score += op.bottom ? useful(top[1])-useful(top[0]) : op.order.reduce((sum,index,position) => sum+useful(top[index])/(position+1),0);
       continue;
     }
@@ -1008,4 +1030,4 @@ function sameTarget(a, b) {
     (a.instanceId && b.instanceId ? a.instanceId === b.instanceId : a.at === b.at && a.index === b.index);
 }
 
-module.exports = { supportsSpell, getSpellChoices, getSpellChoice, projectileKey, directionPick, choiceCard, unitsInRealm, inRange, isWater, bodyOfWater, cardText, cardSubTypes, hasSubType, isProtected, hasKeyword, summonLayerOptions, thresholdTotal, sameTarget, unitDefence, unitStats, getAttackTargets, getRangedTargets, near, occupies, shareLocation, scoreOperations,isDisabled,hasStealth,hasAirborne,expandAreaOperation,projectileImpactChoices,projectilePath };
+module.exports = { supportsSpell, getSpellChoices, getSpellChoice, projectileKey, directionPick, choiceCard, unitsInRealm, inRange, isWater, bodyOfWater, cardText, cardSubTypes, hasSubType, isProtected, hasKeyword, summonLayerOptions, thresholdTotal, sameTarget, unitDefence, unitStats, getAttackTargets, getRangedTargets, near, occupies, shareLocation, scoreOperations,isDisabled,hasStealth,hasPrintedStealth,stealthTokenIndex,hasAirborne,expandAreaOperation,projectileImpactChoices,projectilePath };

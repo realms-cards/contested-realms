@@ -30,6 +30,7 @@ import {
 import AttachmentTargetSelectionDialog, {
   type AttachmentTarget,
 } from "@/lib/game/components/AttachmentTargetSelectionDialog";
+import { isWater } from "@/lib/game/cpu/spells";
 import {
   rangedAttack,
   stationaryAttack,
@@ -139,10 +140,20 @@ function buildForcePositionActions(
   const type = String(cardType ?? "").toLowerCase();
   const isForceable = type.includes("minion") || type.includes("artifact");
   if (!isForceable) return [];
-  const currentPos = useGameStore.getState().permanentPositions[permanentId];
-  const currentState = currentPos?.state ?? "surface";
+  const state = useGameStore.getState();
+  const currentState = state.permanentPositions[permanentId]?.state ?? "surface";
+  // Burrow and Submerge are one mechanic split by site type, so a force offers only what this site
+  // allows: underground on land, underwater on water (flooded land counts), neither in the void.
+  const fallbackAt = /^perm:(-?\d+,-?\d+):\d+$/.exec(permanentId)?.[1];
+  const at =
+    fallbackAt ??
+    Object.entries(state.permanents).find(([, items]) =>
+      (items || []).some((item) => (item?.instanceId ?? item?.card?.instanceId) === permanentId),
+    )?.[0];
+  const onSite = !!at && !!state.board.sites[at]?.card;
+  const water = onSite && !!at && isWater(state, at);
   const out: ContextMenuAction[] = [];
-  if (currentState !== "burrowed") {
+  if (currentState !== "burrowed" && onSite && !water) {
     out.push({
       actionId: "force_burrow",
       displayText: "Force Burrow",
@@ -150,10 +161,10 @@ function buildForcePositionActions(
       isEnabled: true,
       targetPermanentId: permanentId,
       newPositionState: "burrowed",
-      description: "Force burrow (no Burrowing keyword required)",
+      description: "Force burrow under this land site (no Burrowing keyword required)",
     });
   }
-  if (currentState !== "submerged") {
+  if (currentState !== "submerged" && onSite && water) {
     out.push({
       actionId: "force_submerge",
       displayText: "Force Submerge",

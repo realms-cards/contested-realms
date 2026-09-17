@@ -1,10 +1,12 @@
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { abilityChoices, tappedAbilitySources } from "@/lib/game/cpu/abilities";
 import { applySpellChoice } from "@/lib/game/cpu/applySpellChoice";
 import cards from "@/lib/game/cpu/cards.json";
+import { loseStealth } from "@/lib/game/cpu/damage";
 import { movementSteps } from "@/lib/game/cpu/movement";
 import type { SpellChoice } from "@/lib/game/cpu/spellTypes";
-import { getAttackTargets, getRangedTargets, getSpellChoices, isWater, unitStats, unitsInRealm } from "@/lib/game/cpu/spells";
+import { getAttackTargets, getRangedTargets, getSpellChoices, hasPrintedStealth, hasStealth, isWater, unitStats, unitsInRealm } from "@/lib/game/cpu/spells";
 import { rangedAttack, stationaryAttack } from "@/lib/game/cpu/stationaryAttack";
 import { createGameStore } from "@/lib/game/store";
 import type { CardRef, GameState, PermanentItem, SiteTile } from "@/lib/game/store/types";
@@ -603,5 +605,167 @@ describe("Voidwalk cards", () => {
     store.getState().activateCpuAbility(ability.key);
     expect(unitStats(store.getState(),located(store,"vril")).atk).toBe(2);
     expect(store.getState().players.p1.mana).toBe(-1);
+  });
+});
+
+describe("Stealth tokens", () => {
+  const tokenOf = (store: Store, at: string, host: string) => {
+    const items = store.getState().permanents[at] || [], index = items.findIndex(item => item.instanceId === host);
+    return items.find(item => item.card.name === "Stealth" && item.attachedTo?.at === at && item.attachedTo.index === index);
+  };
+  const realmUnit = (store: Store, id: string) => {
+    const found = unitsInRealm(store.getState()).find(unit => unit.target.kind === "permanent" && unit.target.instanceId === id);
+    if (!found) throw new Error(`No unit ${id}`);
+    return found;
+  };
+  const textCard = (name: string, rulesText: string, id: string): PermanentItem =>
+    ({owner:2,card:{cardId:1,name,type:"Minion",text:rulesText,attack:1,defence:1,instanceId:id},instanceId:id,tapped:false});
+
+  it("counts only keyword-line Stealth, and the name list matches the card data", () => {
+    const raw: {name: string; guardian?: {rulesText?: string}}[] = JSON.parse(readFileSync("data/cards_raw.json","utf8"));
+    const byText = raw.filter(entry => hasPrintedStealth({cardId:1,name:"",type:"Minion",text:entry.guardian?.rulesText ?? ""})).map(entry => entry.name).sort();
+    const byName = raw.filter(entry => hasPrintedStealth({cardId:1,name:entry.name,type:"Minion"})).map(entry => entry.name).sort();
+    expect(byName).toEqual(byText);
+    expect(byText).toHaveLength(16);
+    // Cards that only name Stealth never have it.
+    const store = setup();
+    store.setState({permanents:{
+      "0,0":[unit("Scent Hounds",2,"scent")],
+      "4,1":[textCard("Hounds of Ondaros","Airborne, Burrowing, Submerge, Voidwalk\n\nNearby enemies permanently lose Stealth.","ondaros")],
+      "2,0":[textCard("Phase Assassin","Voidwalk\n\nWhenever Phase Assassin enters the void, he gains Stealth.","assassin")],
+    }});
+    for (const id of ["scent","ondaros","assassin"]) expect(hasStealth(store.getState(),realmUnit(store,id))).toBe(false);
+  });
+
+  it("a human summon enters with its token in a CPU match and on the tabletop, and the server accepts it", () => {
+    const cpu = setup(), tabletop = createGameStore();
+    tabletop.setState({actorKey:"p1",phase:"Main",currentPlayer:1,turn:3,board:cpu.getState().board,
+      avatars:cpu.getState().avatars} as Partial<GameState>);
+    for (const store of [cpu,tabletop]) {
+      const rogue = card("Midnight Rogue","rogue"), goons = card("Raal Dromedary","plain");
+      const patches: Parameters<GameState["trySendPatch"]>[0][] = [];
+      const send = store.getState().trySendPatch;
+      store.setState({trySendPatch:patch => { patches.push(patch); return send(patch); },
+        players:{...store.getState().players,p1:{...store.getState().players.p1,mana:10}},
+        zones:{...store.getState().zones,p1:{...store.getState().zones.p1,hand:[rogue,goons]}},selectedCard:{who:"p1",index:0,card:rogue}});
+      store.getState().playSelectedTo(2,3);
+      const token = tokenOf(store,"2,3","rogue");
+      expect(token).toMatchObject({owner:1,card:{name:"Stealth",type:"Token",slug:"token:Stealth"}});
+      expect(hasStealth(store.getState(),realmUnit(store,"rogue"))).toBe(true);
+      // The minion's own patch carries the token, as a delta beside it.
+      expect(patches.find(patch => patch.permanents?.["2,3"])?.permanents?.["2,3"].map(item => item.instanceId)).toEqual(["rogue",token?.instanceId]);
+      // A minion without Stealth enters bare.
+      store.setState({selectedCard:{who:"p1",index:0,card:goons}});
+      store.getState().playSelectedTo(1,3);
+      expect(store.getState().permanents["1,3"].map(item => item.card.name)).toEqual(["Raal Dromedary"]);
+    }
+    // The token alone costs nothing and needs no threshold, so the server lets it through.
+    const host = {owner:1,card:{name:"Midnight Rogue",type:"Minion",cost:3,thresholds:{air:1}},instanceId:"rogue"};
+    const game = {turn:3,currentPlayer:1,phase:"Main",board:cpu.getState().board,avatars:{},players:{p1:{mana:0},p2:{mana:0}},permanents:{"2,3":[host]}};
+    const patch = {permanents:{"2,3":[host,tokenOf(cpu,"2,3","rogue")]}} as unknown as Parameters<typeof validateAction>[1];
+    const context = {match:{playerIds:["human","cpu_bot"]}};
+    expect(validateAction(game,patch,"human",context)).toEqual({ok:true});
+    expect(ensureCosts(game,patch,"human",context)).toEqual({ok:true});
+  });
+
+  it("a face-down summon keeps its Stealth hidden", () => {
+    const store = setup();
+    const rogue = card("Midnight Rogue","rogue");
+    store.setState({dragFaceDown:true,players:{...store.getState().players,p1:{...store.getState().players.p1,mana:10}},
+      zones:{...store.getState().zones,p1:{...store.getState().zones.p1,hand:[rogue]}},selectedCard:{who:"p1",index:0,card:rogue}});
+    store.getState().playSelectedTo(2,3);
+    expect(store.getState().permanents["2,3"].map(item => item.card.name)).toEqual(["Midnight Rogue"]);
+  });
+
+  it("gives a bot-summoned Stealth minion its token, but not a restored or already-revealed one", async () => {
+    const store = setup();
+    await settle();
+    store.setState({permanents:{"2,1":[unit("Dead of Night Demon",2,"demon")]}});
+    await settle();
+    expect(tokenOf(store,"2,1","demon")).toMatchObject({owner:2});
+    expect(store.getState().permanents["2,1"]).toHaveLength(2);
+    // Another board change never adds a second token.
+    store.setState({permanents:{...store.getState().permanents,"0,0":[unit("Raal Dromedary",2,"other")]}});
+    await settle();
+    expect(store.getState().permanents["2,1"]).toHaveLength(2);
+    // A reconnect snapshot has no previous board to compare, and a unit that lost Stealth stays without.
+    store.setState({cpuSnapshotRevision:1,permanents:{"3,1":[unit("Dead of Night Demon",2,"restored")]}});
+    await settle();
+    store.setState({permanents:{...store.getState().permanents,"1,1":[{...unit("Dead of Night Demon",2,"revealed"),cpuStealthLost:true}]}});
+    await settle();
+    expect(store.getState().permanents["3,1"]).toHaveLength(1);
+    expect(store.getState().permanents["1,1"]).toHaveLength(1);
+  });
+
+  it("interacting ends Stealth: the attacker's token is banished and printed Stealth stays lost", async () => {
+    const store = setup();
+    await settle();
+    store.setState({permanents:{"2,1":[unit("Dead of Night Demon",1,"demon")]}});
+    await settle();
+    expect(tokenOf(store,"2,1","demon")).toBeDefined();
+    store.setState({pendingCombat:{id:"stealth-attack",tile:{x:2,y:1},attacker:{at:"2,1",index:0,owner:1,instanceId:"demon"},
+      target:{kind:"site",at:"2,1",index:null},defenderSeat:"p2",defenders:[],status:"committed",createdAt:0}});
+    store.getState().autoResolveCombat();
+    await settle();
+    expect(store.getState().players.p2.life).toBe(18);
+    expect(store.getState().permanents["2,1"].map(item => item.instanceId)).toEqual(["demon"]);
+    expect(store.getState().permanents["2,1"][0].cpuStealthLost).toBe(true);
+    expect(hasStealth(store.getState(),realmUnit(store,"demon"))).toBe(false);
+  });
+
+  it("a Ranged strike from Stealth banishes the shooter's token", async () => {
+    const store = setup();
+    await settle();
+    store.setState({permanents:{"2,2":[unit("Midnight Rogue",1,"rogue")],"2,1":[unit("Raal Dromedary",2,"target")]}});
+    await settle();
+    applySpellChoice(store.setState,store.getState,{key:"shot",label:"shot",caster:{kind:"avatar",seat:"p1"},target:null,score:0,
+      operations:[{kind:"strikeTarget",source:{kind:"permanent",at:"2,2",index:0,instanceId:"rogue"},target:{kind:"permanent",at:"2,1",index:0,instanceId:"target"},ranged:true}]});
+    await settle();
+    expect(tokenOf(store,"2,2","rogue")).toBeUndefined();
+    expect(hasStealth(store.getState(),realmUnit(store,"rogue"))).toBe(false);
+  });
+
+  it("removing the token by hand ends printed Stealth, and a new Stealth token restores it", async () => {
+    const store = setup();
+    await settle();
+    store.setState({permanents:{"2,2":[unit("Dead of Night Demon",1,"demon")]}});
+    await settle();
+    store.getState().movePermanentToZone("2,2",1,"banished");
+    await settle();
+    expect(store.getState().permanents["2,2"].map(item => item.instanceId)).toEqual(["demon"]);
+    expect(store.getState().permanents["2,2"][0].cpuStealthLost).toBe(true);
+    expect(hasStealth(store.getState(),realmUnit(store,"demon"))).toBe(false);
+    // Fade and the like grant Stealth again through a token.
+    applySpellChoice(store.setState,store.getState,{key:"fade",label:"fade",caster:{kind:"avatar",seat:"p1"},target:null,score:0,
+      operations:[{kind:"grantStealth",target:{kind:"permanent",at:"2,2",index:0,instanceId:"demon"}}]});
+    await settle();
+    expect(tokenOf(store,"2,2","demon")).toBeDefined();
+    expect(hasStealth(store.getState(),realmUnit(store,"demon"))).toBe(true);
+  });
+
+  it("Scent Hounds reveal a Stealth minion and banish its token", async () => {
+    const store = setup();
+    await settle();
+    store.setState({permanents:{"2,2":[unit("Dead of Night Demon",1,"demon")]}});
+    await settle();
+    store.setState({permanents:{...store.getState().permanents,"2,1":[unit("Scent Hounds",2,"hounds")]}});
+    await settle();
+    expect(store.getState().permanents["2,2"].map(item => item.instanceId)).toEqual(["demon"]);
+    expect(store.getState().permanents["2,2"][0].cpuStealthLost).toBe(true);
+  });
+
+  it("hands an Infiltrate token to its own resolver instead of banishing it", async () => {
+    const store = setup();
+    await settle();
+    store.setState({permanents:{"2,2":[unit("Dead of Night Demon",1,"demon")]}});
+    await settle();
+    const token = tokenOf(store,"2,2","demon");
+    const handleInfiltrateStealthRemoved = vi.fn();
+    store.setState({handleInfiltrateStealthRemoved,activeInfiltrations:[{id:"inf",casterSeat:"p1",originalOwner:2,originalOwnerSeat:"p2",controllerOwner:1,
+      target:{at:"2,2",instanceId:"demon",cardName:"Dead of Night Demon"},stealthToken:{at:"2,2",instanceId:token?.instanceId ?? ""},
+      spell:{at:"2,2",instanceId:null,cardName:"Infiltrate"},createdAt:0}]});
+    loseStealth(store.setState,store.getState,{kind:"permanent",at:"2,2",index:0,instanceId:"demon"});
+    expect(handleInfiltrateStealthRemoved).toHaveBeenCalledWith(token?.instanceId);
+    expect(tokenOf(store,"2,2","demon")).toBeDefined();
   });
 });

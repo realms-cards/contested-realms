@@ -1394,7 +1394,8 @@ function generateMoveCandidates(state, seat, limit = Infinity) {
       if (!hasEnemyAt(state, seat, k)) return false;
       const arr = (state && state.permanents && state.permanents[k]) || [];
       const oppNum = seatNum(otherSeat(seat));
-      const enemies = arr.filter(p => p && Number(p.owner) === oppNum);
+      // Attached items (a Stealth token, a carried artifact) are not attack targets of their own.
+      const enemies = arr.filter(p => p && Number(p.owner) === oppNum && !p.attachedTo);
       // If there are enemy units and ALL have stealth, can't attack this cell
       if (enemies.length > 0 && enemies.every(p => getCardKeywords(p && p.card).has("stealth"))) {
         return false;

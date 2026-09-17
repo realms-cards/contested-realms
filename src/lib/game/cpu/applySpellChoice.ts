@@ -1,14 +1,14 @@
 import type { StateCreator } from "zustand";
-import { applyDamageEvent } from "@/lib/game/cpu/damage";
+import { applyDamageEvent, loseStealth } from "@/lib/game/cpu/damage";
 import { luckyCharmCount } from "@/lib/game/cpu/luckyCharm";
 import type { CpuEffectCompletion, SpellChoice, SpellOperation, UnitTarget } from "@/lib/game/cpu/spellTypes";
-import { cardSubTypes, cardText, expandAreaOperation, hasKeyword, hasStealth, inRange, isDisabled, isProtected, isWater, near, occupies, projectileImpactChoices, sameTarget, shareLocation, unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
+import { cardSubTypes, cardText, expandAreaOperation, hasKeyword, hasStealth, inRange, isDisabled, isProtected, isWater, near, occupies, projectileImpactChoices, sameTarget, shareLocation, stealthTokenIndex, unitsInRealm, unitStats } from "@/lib/game/cpu/spells";
 import type { CardRef, GameState, PlayerKey } from "@/lib/game/store/types";
 import { prepareCardForSeat, toTransformedSiteMinionCard } from "@/lib/game/store/utils/cardHelpers";
 import { buildMoveDeltaPatch } from "@/lib/game/store/utils/patchHelpers";
 import { movePermanentCore } from "@/lib/game/store/utils/permanentHelpers";
 import { createZonesPatchFor } from "@/lib/game/store/utils/zoneHelpers";
-import { newTokenInstanceId, TOKEN_BY_NAME, tokenSlug } from "@/lib/game/tokens";
+import { newTokenInstanceId, stealthTokenFor, TOKEN_BY_NAME, tokenSlug } from "@/lib/game/tokens";
 
 type StoreSet = Parameters<StateCreator<GameState>>[0];
 type StoreGet = Parameters<StateCreator<GameState>>[1];
@@ -440,13 +440,8 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
       if (!op.ranged) continue;
       const shooter = unitsInRealm(get()).find(unit => sameTarget(unit.target,op.source)), found = locate(op.source);
       if (!shooter || !found) continue;
-      if (hasStealth(get(),shooter)) {
-        // A strike interacts with the realm, which ends Stealth.
-        const items = [...get().permanents[found.at]];
-        items[found.index] = {...found.unit,cpuStealthLost:true,version:(found.unit.version || 0)+1};
-        set({permanents:{...get().permanents,[found.at]:items}});
-        get().trySendPatch({permanents:{[found.at]:items}});
-      }
+      // A strike interacts with the realm, which ends Stealth.
+      if (hasStealth(get(),shooter)) loseStealth(set,get,op.source);
       if (found.unit.card.name === "Kite Archer") {
         const id = `cpu_kite_${Date.now()}_${Math.random().toString(36).slice(2)}`, [x,y] = found.at.split(",").map(Number);
         set({cpuEffectRequests:[{id,tile:{x,y},spell:{at:found.at,index:-1,owner:found.unit.owner,card:found.unit.card},
@@ -572,12 +567,8 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
     }
     if (op.kind === "grantStealth") {
       const found = locate(op.target);
-      if (!found || isProtected(found.unit.card)) continue;
-      const definition = TOKEN_BY_NAME.stealth;
-      const instanceId = `cpu_stealth_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      const token: CardRef = {cardId:newTokenInstanceId(definition),name:definition.name,type:"Token",slug:tokenSlug(definition),instanceId};
-      const items = [...get().permanents[found.at],
-        {card:token,instanceId,owner:found.unit.owner,tapped:false,version:1,attachedTo:{at:found.at,index:found.index}}];
+      if (!found || isProtected(found.unit.card) || stealthTokenIndex(get().permanents,found.at,found.index) >= 0) continue;
+      const items = [...get().permanents[found.at],stealthTokenFor(found.at,found.index,found.unit.owner)];
       set({permanents:{...get().permanents,[found.at]:items}});
       get().trySendPatch({permanents:{[found.at]:items}});
       continue;

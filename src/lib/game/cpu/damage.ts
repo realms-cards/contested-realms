@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
 import { evaluateDamage } from "@/lib/game/cpu/damageRules";
 import type { DamageHit, LocatedUnit, SpellState, UnitTarget } from "@/lib/game/cpu/spellTypes";
-import { isDisabled, sameTarget, unitStats, unitsInRealm } from "@/lib/game/cpu/spells";
+import { isDisabled, sameTarget, stealthTokenIndex, unitStats, unitsInRealm } from "@/lib/game/cpu/spells";
 import type { GameState, PermanentItem } from "@/lib/game/store/types";
 
 type StoreSet = Parameters<StateCreator<GameState>>[0];
@@ -18,6 +18,36 @@ export function damageOutcome(state: SpellState, unit: LocatedUnit, hits: Damage
 
 export function locateUnit(state: SpellState, target: UnitTarget) {
   return unitsInRealm(state).find(unit => sameTarget(unit.target, target));
+}
+
+/**
+ * Stealth "is tracked with a stealth token, and it's lost after the minion interacts with the realm": mark the loss
+ * (printed Stealth stays lost) and banish the token. An Infiltrate token goes through its own resolver, which also hands
+ * control of the minion back.
+ */
+export function loseStealth(set: StoreSet, get: StoreGet, target: UnitTarget) {
+  const unit = locateUnit(get(), target);
+  if (unit?.target.kind !== "permanent") return;
+  const { at } = unit, id = unit.target.instanceId;
+  const items = [...get().permanents[at]], item = items[unit.target.index];
+  if (!item.cpuStealthLost) {
+    items[unit.target.index] = { ...item, cpuStealthLost: true, version: (item.version || 0)+1 };
+    set({ permanents: { ...get().permanents, [at]: items } });
+    get().trySendPatch({ permanents: { [at]: items } });
+  }
+  // Banishing re-indexes the cell, so the host is found again before each token.
+  for (let guard = items.length; guard > 0; guard--) {
+    const cell = get().permanents[at] || [];
+    const host = id ? cell.findIndex(entry => (entry.instanceId || entry.card.instanceId) === id) : unit.target.index;
+    const token = host < 0 ? -1 : stealthTokenIndex(get().permanents, at, host);
+    if (token < 0) return;
+    const tokenId = cell[token].instanceId || cell[token].card.instanceId;
+    if (tokenId && get().activeInfiltrations?.some(entry => entry.stealthToken?.instanceId === tokenId)) {
+      get().handleInfiltrateStealthRemoved(tokenId);
+      return;
+    }
+    get().movePermanentToZone(at, token, "banished");
+  }
 }
 
 export function applyDamageEvent(set: StoreSet, get: StoreGet, hits: DamageHit[]) {

@@ -78,11 +78,16 @@ export const createSummonLayerSlice: StateCreator<GameState, [], [], SummonLayer
       return;
     }
     const { position, ability } = subsurfaceRecords(pending.permanentId, layer, found.abilities);
-    const permanentPositions = { ...get().permanentPositions, [pending.permanentId]: position };
-    const permanentAbilities = { ...get().permanentAbilities, [pending.permanentId]: ability };
-    set({ permanentPositions, permanentAbilities });
-    // Same full-map shape playSelectedTo sends for a subsurface cast.
-    get().trySendPatch({ permanentPositions, permanentAbilities } as ServerPatchT);
+    set({
+      permanentPositions: { ...get().permanentPositions, [pending.permanentId]: position },
+      permanentAbilities: { ...get().permanentAbilities, [pending.permanentId]: ability },
+    });
+    // Only the changed entries: a full-map patch would overwrite the other seat's concurrent
+    // position changes (the rule updatePermanentState documents, per CLAUDE.md patch safety).
+    get().trySendPatch({
+      permanentPositions: { [pending.permanentId]: position },
+      permanentAbilities: { [pending.permanentId]: ability },
+    } as ServerPatchT);
     get().log(`${pending.cardName} ${layer === "submerged" ? "submerges" : "burrows"} as it is summoned.`);
   },
 

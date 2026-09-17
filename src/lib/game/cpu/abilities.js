@@ -27,7 +27,8 @@ function choicesFor(state, seat) {
   const canTap = u => !entity(u).tapped && !entity(u).summonedThisTurn && !isDisabled(state,u);
   const add = (source,key,label,operations,picks,pickLabels) => choices.push({source,key,label,operations,caster:source.target,target:null,score:scoreOperations(state,seat,operations),...(picks ? {picks} : {}),...(pickLabels ? {pickLabels} : {})});
   const owner = seat === 'p1' ? 1 : 2;
-  const sites = Object.entries(state.board.sites).filter(([,tile]) => tile.card && !tile.cpuNeutral);
+  // A site that leaves the board is patched to null, not deleted, so any tile may be null.
+  const sites = Object.entries(state.board.sites).filter(([,tile]) => tile?.card && !tile.cpuNeutral);
   const threshold = element => sites.filter(([,tile]) => tile.owner === owner).reduce((sum,[,tile]) => sum+Number(tile.card.thresholds?.[element] || 0),0);
   const fire = threshold('fire'), turnKey = `${state.turn}:${state.currentPlayer}`;
   const mana = sites.filter(([,tile]) => tile.owner === owner).length+(state.players[seat]?.mana || 0);
@@ -93,7 +94,7 @@ function choicesFor(state, seat) {
     if (source.card.name === 'Waveshaper' && canTap(source)) {
       const water = bodyOfWater(state,source.at);
       for (const [at,tile] of Object.entries(state.board.sites)) {
-        if (!tile.card || !water.some(cell => inRange(cell,at,'nearby'))) continue;
+        if (!tile?.card || !water.some(cell => inRange(cell,at,'nearby'))) continue;
         add(source,`waveshaper/${id}/${at}`,`Waveshaper: flood ${at}; tap minions without Submerge and skip their next untap`,[
           {kind:'tapUnits',targets:[source.target]}, {kind:'waveshaperFlood',seat,at}, {kind:'stunAt',at},
         ],[at]);
@@ -120,7 +121,7 @@ function choicesFor(state, seat) {
     });
     if (source.card.name === 'Geomancer' && canTap(source) && state.zones[seat].atlas.length) {
       for (const [at,tile] of Object.entries(state.board.sites)) {
-        if (tile.card?.name !== 'Rubble' || at === source.at || !inRange(source.at,at,'adjacent')) continue;
+        if (tile?.card?.name !== 'Rubble' || at === source.at || !inRange(source.at,at,'adjacent')) continue;
         add(source,`geomancer/${id}/${at}`,`Geomancer: replace Rubble at ${at} with the top site of your atlas`,[
           {kind:'tapUnits',targets:[source.target]},{kind:'replaceRubble',seat,at},
         ],[at]);

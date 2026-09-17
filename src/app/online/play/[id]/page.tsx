@@ -46,6 +46,7 @@ import ContextMenu from "@/components/game/ContextMenu";
 import CorpseExplosionOverlay from "@/components/game/CorpseExplosionOverlay";
 import CpuAbilityButtons from "@/components/game/CpuAbilityButtons";
 import CpuBoardReady from "@/components/game/CpuBoardReady";
+import CpuStuckBypass from "@/components/game/CpuStuckBypass";
 import CrossroadsOverlay from "@/components/game/CrossroadsOverlay";
 import DemonicContractOverlay from "@/components/game/DemonicContractOverlay";
 import DholChantsOverlay from "@/components/game/DholChantsOverlay";
@@ -3662,6 +3663,7 @@ export default function OnlineMatchPage() {
             <div className="absolute bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-[max(0.75rem,env(safe-area-inset-right))] z-20 flex flex-wrap justify-end items-end gap-2 max-w-[60vw]">
               {!isSpectatorView && <AttackHereButton />}
               {!isSpectatorView && opponentPlayerId?.startsWith("cpu_") && <CpuAbilityButtons />}
+              {!isSpectatorView && opponentPlayerId?.startsWith("cpu_") && <CpuStuckBypass />}
               {!isSpectatorView && !matchEnded && !tournamentId && opponentPlayerId?.startsWith("cpu_") && match?.matchType === "constructed" && <GoldfishTestControls
                 paused={pausedGoldfishMatchId === matchId}
                 onPauseChange={paused => setPausedGoldfishMatchId(paused ? matchId : null)}

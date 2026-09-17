@@ -1,3 +1,5 @@
+import type { CellKey, PermanentItem } from "@/lib/game/store/types";
+
 export type TokenSize = "small" | "normal";
 
 export type TokenDef = {
@@ -122,4 +124,24 @@ const MINION_TOKEN_NAMES = new Set(
 export function isMinionToken(tokenName: string | undefined | null): boolean {
   if (!tokenName) return false;
   return MINION_TOKEN_NAMES.has(tokenName.toLowerCase());
+}
+
+/**
+ * A Stealth token attached to the permanent at `at`/`index` ("Stealth is tracked with a stealth
+ * token"). A minion with printed Stealth enters with one; breaking Stealth banishes it.
+ */
+export function stealthTokenFor(at: CellKey, index: number, owner: 1 | 2): PermanentItem {
+  const def = TOKEN_BY_NAME.stealth;
+  const instanceId = `stealth_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  return {
+    owner,
+    card: { cardId: newTokenInstanceId(def), variantId: null, name: def.name, type: "Token", slug: tokenSlug(def), thresholds: null, instanceId },
+    offset: null,
+    tilt: 0,
+    tapVersion: 0,
+    tapped: false,
+    version: 0,
+    instanceId,
+    attachedTo: { at, index },
+  };
 }

@@ -170,6 +170,18 @@ export function SiteCard({
 
   function handleBeginSiteDrag(e: ThreeEvent<PointerEvent>) {
     if (!canDragSite) return;
+    // Burrowed and submerged units render beneath this site, so the site would win every press on
+    // the tile and they could never be dragged. When one of them can be moved by this player, let
+    // the press fall through to it instead of starting a site drag. Read at press time, so sites
+    // do not subscribe to every permanent.
+    const store = useGameStore.getState();
+    const mine = actorKey === "p1" ? 1 : actorKey === "p2" ? 2 : null;
+    const movableBelow = (store.permanents[tileKey] || []).some((item) => {
+      const id = item?.instanceId ?? item?.card?.instanceId;
+      const layer = id ? store.permanentPositions[id]?.state : undefined;
+      return (layer === "burrowed" || layer === "submerged") && (mine === null || item.owner === mine);
+    });
+    if (movableBelow) return;
     e.stopPropagation();
     const pe = e.nativeEvent as PointerEvent | undefined;
     if (pe && pe.button !== 0) return;

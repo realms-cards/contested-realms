@@ -1,5 +1,6 @@
 import type { StateCreator } from "zustand";
 import { getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
+import { isWater } from "@/lib/game/cpu/spells";
 import {
   isMonumentByName,
   isAutomatonByName,
@@ -42,6 +43,25 @@ import {
   removeCardInstanceFromAllZones,
   createEmptyPlayerZones,
 } from "../utils/zoneHelpers";
+
+/**
+ * Why a burrowed or submerged unit may not move to `toKey`, or null when the move keeps its region.
+ * Burrowing and Submerge are one mechanic split by site type: underwater stays on water sites
+ * (flooded land counts), underground stays on land. Crossing between them changes the unit's type,
+ * so it is refused — previously the layer was kept verbatim, leaving a "submerged" unit on dry land.
+ */
+function subsurfaceMoveBlock(state: GameState, unit: PermanentItem, fromKey: CellKey, toKey: CellKey): string | null {
+  if (fromKey === toKey) return null;
+  const id = unit.instanceId ?? unit.card?.instanceId ?? null;
+  const layer = id ? state.permanentPositions[id]?.state : undefined;
+  if (layer !== "burrowed" && layer !== "submerged") return null;
+  const name = unit.card?.name ?? "That unit";
+  if (!state.board.sites[toKey]?.card) return `${name} can't leave the subsurface into the void. Surface it first.`;
+  const toWater = isWater(state, toKey);
+  if (layer === "submerged" && !toWater) return `${name} is underwater and can only move to water sites. Surface it first.`;
+  if (layer === "burrowed" && toWater) return `${name} is underground and can only move to land sites. Surface it first.`;
+  return null;
+}
 
 export type PermanentMovementSlice = Pick<
   GameState,
@@ -109,6 +129,11 @@ export const createPermanentMovementSlice: StateCreator<
         if (state.actorKey !== ownerSeat && !isActingPlayer) {
           return state;
         }
+      }
+      const layerBlock = subsurfaceMoveBlock(state, exists, fromKey, toKey);
+      if (layerBlock) {
+        get().log(layerBlock);
+        return state;
       }
       console.log(
         "[moveSelectedPermanentTo] Moving",
@@ -272,6 +297,11 @@ export const createPermanentMovementSlice: StateCreator<
         if (state.actorKey !== ownerSeat && !isActingPlayer) {
           return state;
         }
+      }
+      const offsetLayerBlock = subsurfaceMoveBlock(state, exists, fromKey, toKey);
+      if (offsetLayerBlock) {
+        get().log(offsetLayerBlock);
+        return state;
       }
       const { per, movedName, removed, added, updated, newIndex } =
         movePermanentCore(state.permanents, fromKey, sel.index, toKey, offset);

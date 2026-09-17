@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { summonLayerOptions, unitsInRealm } from "@/lib/game/cpu/spells";
 import type { GameState, ServerPatchT } from "./types";
 import type { ContextMenuAction, PermanentPosition } from "../types";
 import { createDefaultPlayerPositions } from "./utils/positionHelpers";
@@ -41,8 +42,13 @@ export const createPositionSlice: StateCreator<
 
   updatePermanentState: (permanentId, newState) =>
     set((state) => {
-      const currentPos = state.permanentPositions[permanentId];
-      if (!currentPos) return state;
+      // A unit never given a position entry is simply on the surface. Returning early here made a
+      // menu action silently do nothing whenever the name-based registry had not seen the card.
+      const currentPos: PermanentPosition = state.permanentPositions[permanentId] ?? {
+        permanentId,
+        state: "surface",
+        position: { x: 0, y: 0, z: 0 },
+      };
       let newY = currentPos.position.y;
       switch (newState) {
         case "surface":
@@ -137,33 +143,45 @@ export const createPositionSlice: StateCreator<
 
   getAvailableActions: (permanentId) => {
     const state = get();
-    const currentPos = state.permanentPositions[permanentId];
     const ability = state.permanentAbilities[permanentId];
-    if (!currentPos || !ability) return [];
     const actions: ContextMenuAction[] = [];
-    const currentState = currentPos.state;
-    if (currentState === "surface" && ability.canBurrow) {
-      actions.push({
-        actionId: "burrow",
-        displayText: "Burrow",
-        icon: "arrow-down",
-        isEnabled: true,
-        targetPermanentId: permanentId,
-        newPositionState: "burrowed",
-        description: "Move this permanent under the current site",
-      });
-    }
-    if (currentState === "surface" && ability.canSubmerge) {
-      const isAtWaterSite = true;
-      actions.push({
-        actionId: "submerge",
-        displayText: "Submerge",
-        icon: "waves",
-        isEnabled: isAtWaterSite,
-        targetPermanentId: permanentId,
-        newPositionState: "submerged",
-        description: "Submerge this permanent underwater (water sites only)",
-      });
+    const currentState = state.permanentPositions[permanentId]?.state ?? "surface";
+    if (currentState === "surface") {
+      // Burrowing and Submerge are one mechanic and the SITE decides which applies: water sites
+      // (flooded land included) submerge, land burrows. The rules layer counts printed and granted
+      // keywords, so it decides for a unit on the board; the name-based registry only fills in for
+      // units it cannot locate.
+      const unit = unitsInRealm(state).find(
+        (candidate) => candidate.target.kind === "permanent" && candidate.target.instanceId === permanentId,
+      );
+      const layers = unit
+        ? summonLayerOptions(state, unit)
+        : [
+            ...(ability?.canBurrow ? (["burrowed"] as const) : []),
+            ...(ability?.canSubmerge ? (["submerged"] as const) : []),
+          ];
+      if (layers.includes("burrowed")) {
+        actions.push({
+          actionId: "burrow",
+          displayText: "Burrow",
+          icon: "arrow-down",
+          isEnabled: true,
+          targetPermanentId: permanentId,
+          newPositionState: "burrowed",
+          description: "Move this permanent under the current land site",
+        });
+      }
+      if (layers.includes("submerged")) {
+        actions.push({
+          actionId: "submerge",
+          displayText: "Submerge",
+          icon: "waves",
+          isEnabled: true,
+          targetPermanentId: permanentId,
+          newPositionState: "submerged",
+          description: "Submerge this permanent under the current water site",
+        });
+      }
     }
     if (currentState === "burrowed") {
       actions.push({

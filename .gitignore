@@ -80,3 +80,11 @@ prisma/*.db-journal
 /..bfg-report
 /design-handoff
 design_handoff
+design_handoff/_ds/realms-cards-design-system-8e22ce3a-8f0e-4f43-961f-0788cb2f7662/_ds_bundle.js
+design_handoff/_ds/realms-cards-design-system-8e22ce3a-8f0e-4f43-961f-0788cb2f7662/colors_and_type.css
+design_handoff/_ds/realms-cards-design-system-8e22ce3a-8f0e-4f43-961f-0788cb2f7662/fonts/fantaisie_artistique.ttf
+design_handoff/assets/realms.cards.svg
+design_handoff/assets/skull.txt
+design_handoff/Lobby.dc.html
+design_handoff/README.md
+design_handoff/support.js

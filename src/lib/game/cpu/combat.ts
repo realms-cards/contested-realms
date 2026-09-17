@@ -1,5 +1,5 @@
 import type { StateCreator } from "zustand";
-import { applyDamageEvent, locateUnit } from "@/lib/game/cpu/damage";
+import { applyDamageEvent, locateUnit, loseStealth } from "@/lib/game/cpu/damage";
 import type { DamageHit, LocatedUnit, UnitTarget } from "@/lib/game/cpu/spellTypes";
 import { cardText, isDisabled, sameTarget, shareLocation, unitStats } from "@/lib/game/cpu/spells";
 import type { GameState, PlayerKey } from "@/lib/game/store/types";
@@ -109,12 +109,7 @@ export function resolveCpuCombat(set: StoreSet, get: StoreGet) {
   }
   for (const unit of struck) {
     const survivor = locateUnit(get(),unit.target);
-    if (survivor?.target.kind === "permanent") {
-      const items = [...get().permanents[survivor.at]], index = survivor.target.index;
-      items[index] = {...items[index],cpuStealthLost:true,version:(items[index].version || 0)+1};
-      set({permanents:{...get().permanents,[survivor.at]:items}});
-      get().trySendPatch({permanents:{[survivor.at]:items}});
-    }
+    if (survivor?.target.kind === "permanent") loseStealth(set,get,survivor.target);
     for (const token of attachments(unit).filter(item => item.card.name === "Lance")) {
       for (const [at,items] of Object.entries(get().permanents)) {
         const index = items.findIndex(item => item.instanceId === token.instanceId);

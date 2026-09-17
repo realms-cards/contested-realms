@@ -2,6 +2,7 @@ import type { StateCreator } from "zustand";
 import { isAnimist, isGeomancer } from "@/lib/game/avatarAbilities";
 import { recordAirCast } from "@/lib/game/cpu/castHistory";
 import { hasCpuGenesis } from "@/lib/game/cpu/genesis";
+import { hasPrintedStealth } from "@/lib/game/cpu/spells";
 import {
   BEACON_GENESIS_SITES,
   BREAK_WARDS_GENESIS_SITES,
@@ -10,7 +11,7 @@ import {
   GENESIS_MANA_SITES,
   TOWER_GENESIS_SITES,
 } from "@/lib/game/mana-providers";
-import { TOKEN_BY_NAME } from "@/lib/game/tokens";
+import { stealthTokenFor, TOKEN_BY_NAME } from "@/lib/game/tokens";
 import { isApexOfBabel, isBaseOfBabel } from "../babelTowerState";
 import { isGardenOfEden } from "../gardenOfEdenState";
 import { ensureFloodedTokenAtSite } from "../realmFloodState";
@@ -955,12 +956,20 @@ export const createPlayActionsSlice: StateCreator<
         },
       } as GameState["zones"];
       const newest = arr[arr.length - 1];
+      // A minion with printed Stealth enters with its Stealth token ("Stealth is tracked with a
+      // stealth token"). Appended after arr, so arr.length - 1 below still addresses the minion.
+      const stealthToken =
+        newest && type.includes("minion") && !isFaceDown && hasPrintedStealth(card)
+          ? stealthTokenFor(key, arr.length - 1, newest.owner)
+          : null;
+      if (stealthToken) per[key] = [...arr, stealthToken];
       const deltaPatch = newest
         ? createPermanentDeltaPatch([
             {
               at: key,
               entry: { ...(newest as PermanentItem) },
             },
+            ...(stealthToken ? [{ at: key, entry: stealthToken }] : []),
           ])
         : null;
       const fallbackPatch = deltaPatch ? null : createPermanentsPatch(per, key);
@@ -980,12 +989,11 @@ export const createPlayActionsSlice: StateCreator<
         combined.templarDiscountUsed = templarDiscountUsedNext;
       // Include subsurface position/ability in patch for opponent sync
       if (subsurfacePosition && subsurfaceAbility) {
+        // Delta only: the full map would overwrite concurrent position changes.
         combined.permanentPositions = {
-          ...state.permanentPositions,
           [permanentInstanceId]: subsurfacePosition,
         };
         combined.permanentAbilities = {
-          ...state.permanentAbilities,
           [permanentInstanceId]: subsurfaceAbility,
         };
       }
@@ -2202,12 +2210,19 @@ export const createPlayActionsSlice: StateCreator<
             } as GameState["zones"])
           : null;
       const newest = arr[arr.length - 1];
+      // Printed Stealth enters with its token, as in playSelectedTo.
+      const stealthToken =
+        newest && type.includes("minion") && !isFaceDown && hasPrintedStealth(card)
+          ? stealthTokenFor(key, arr.length - 1, newest.owner)
+          : null;
+      if (stealthToken) per[key] = [...arr, stealthToken];
       const deltaPatch = newest
         ? createPermanentDeltaPatch([
             {
               at: key,
               entry: { ...(newest as PermanentItem) },
             },
+            ...(stealthToken ? [{ at: key, entry: stealthToken }] : []),
           ])
         : null;
       const fallbackPatch = deltaPatch ? null : createPermanentsPatch(per, key);
@@ -2219,12 +2234,11 @@ export const createPlayActionsSlice: StateCreator<
       if (zonePatch?.zones) combined.zones = zonePatch.zones;
       // Include subsurface position/ability in patch for opponent sync
       if (pileSubsurfacePosition && pileSubsurfaceAbility) {
+        // Delta only: the full map would overwrite concurrent position changes.
         combined.permanentPositions = {
-          ...state.permanentPositions,
           [pilePermInstanceId]: pileSubsurfacePosition,
         };
         combined.permanentAbilities = {
-          ...state.permanentAbilities,
           [pilePermInstanceId]: pileSubsurfaceAbility,
         };
       }
