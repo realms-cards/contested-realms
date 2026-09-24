@@ -5,6 +5,9 @@ Dockerfile.*
 .dockerignore
 .git
 .gitignore
+.env
+.env.*
+backups
 .next
 coverage
 dist

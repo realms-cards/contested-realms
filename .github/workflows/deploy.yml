@@ -2,160 +2,147 @@ name: Deploy to Production
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  workflow_dispatch:
+
+# Serialize builds and deployment so an older run cannot replace a newer release.
+concurrency:
+  group: production-allinone
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
-  deploy:
-    name: Deploy to DigitalOcean
+  images:
+    name: Build ${{ matrix.image }} image
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment:
-      name: Production
+    timeout-minutes: 45
+    environment: Production
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: server
+            context: .
+            dockerfile: Dockerfile.server
+          - image: frontend
+            context: .
+            dockerfile: Dockerfile.frontend
+          - image: discord-bot
+            context: ./discord-bot
+            dockerfile: discord-bot/Dockerfile
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set image prefix
+        id: image
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      # Keep the droplet's existing env file as the source of build-time values.
+      # It stays outside the build context and is passed only as a BuildKit secret.
+      - name: Read frontend build environment from droplet
+        if: matrix.image == 'frontend'
+        env:
+          DO_HOST: ${{ secrets.DO_PROD_HOST }}
+          DO_USER: ${{ secrets.DO_PROD_USER }}
+          DO_SSH_KEY: ${{ secrets.DO_PROD_SSH_KEY }}
+          APP_DIR: ${{ secrets.DO_PROD_APP_DIR }}
+        run: |
+          set -euo pipefail
+          : "${DO_HOST:?Missing DO_PROD_HOST}" "${DO_USER:?Missing DO_PROD_USER}"
+          : "${DO_SSH_KEY:?Missing DO_PROD_SSH_KEY}" "${APP_DIR:?Missing DO_PROD_APP_DIR}"
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DO_SSH_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+          ssh-keyscan -H "$DO_HOST" >> ~/.ssh/known_hosts
+          printf -v remote_command 'cat -- %q' "$APP_DIR/.env.frontend"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$DO_USER@$DO_HOST" "$remote_command" > "$RUNNER_TEMP/frontend.env"
+          test -s "$RUNNER_TEMP/frontend.env"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.image.outputs.prefix }}-${{ matrix.image }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          # Secret contents do not invalidate Docker's cache. Rebuild Next.js
+          # on every run so edits to .env.frontend take effect, even on a rerun.
+          no-cache-filters: ${{ matrix.image == 'frontend' && 'frontend-build' || '' }}
+          secret-files: ${{ matrix.image == 'frontend' && format('frontend_env={0}/frontend.env', runner.temp) || '' }}
+
+      - name: Remove temporary frontend credentials
+        if: always() && matrix.image == 'frontend'
+        run: rm -f "$RUNNER_TEMP/frontend.env" ~/.ssh/id_rsa
+
+  deploy:
+    name: Start all-in-one stack on DigitalOcean
+    needs: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: Production
+    permissions:
+      contents: read
+      packages: read
     env:
       DO_HOST: ${{ secrets.DO_PROD_HOST }}
       DO_USER: ${{ secrets.DO_PROD_USER }}
       DO_SSH_KEY: ${{ secrets.DO_PROD_SSH_KEY }}
       APP_DIR: ${{ secrets.DO_PROD_APP_DIR }}
-      BRANCH: main
-      # Optional: set an environment variable WS_HEALTH_URL at the environment/repo level to override
+      REGISTRY_USER: ${{ github.actor }}
+      REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
       WS_HEALTH_URL: ${{ vars.WS_HEALTH_URL }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Validate secrets
-        run: |
-          if [ -z "$DO_HOST" ] || [ -z "$DO_USER" ] || [ -z "$DO_SSH_KEY" ] || [ -z "$APP_DIR" ]; then
-            echo "DigitalOcean secrets are not fully configured (need DO_PROD_HOST, DO_PROD_USER, DO_PROD_SSH_KEY, DO_PROD_APP_DIR)."
-            exit 1
-          fi
-
       - name: Configure SSH
         run: |
+          set -euo pipefail
+          : "${DO_HOST:?Missing DO_PROD_HOST}" "${DO_USER:?Missing DO_PROD_USER}"
+          : "${DO_SSH_KEY:?Missing DO_PROD_SSH_KEY}" "${APP_DIR:?Missing DO_PROD_APP_DIR}"
+          umask 077
           mkdir -p ~/.ssh
-          echo "$DO_SSH_KEY" | tr -d '\r' > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          printf '%s\n' "$DO_SSH_KEY" | tr -d '\r' > ~/.ssh/id_rsa
           ssh-keyscan -H "$DO_HOST" >> ~/.ssh/known_hosts
 
-      - name: Validate connection details
-        run: |
-          echo "Target host: $DO_HOST"
-          echo "SSH user: $DO_USER"
-          ssh -o StrictHostKeyChecking=yes "$DO_USER@$DO_HOST" "echo 'Connection successful'; docker --version; (docker compose version || docker-compose --version) 2>/dev/null || echo 'Docker Compose not found'" || echo "Connection attempt failed"
-
-      - name: Deploy to Droplet (git pull, compose build, migrate, start)
+      - name: Pull images and start stack
         run: |
           set -euo pipefail
-          echo "Starting deploy to $DO_HOST in $APP_DIR (branch: ${BRANCH:-main})"
-          ssh -o StrictHostKeyChecking=yes "$DO_USER@$DO_HOST" APP_DIR="$APP_DIR" BRANCH="${BRANCH:-main}" WS_HEALTH_URL="${WS_HEALTH_URL:-}" bash -s <<'EOF'
-          set -euo pipefail
+          # Send values on SSH stdin, with shell quoting, instead of exposing
+          # the registry token in the remote command's process arguments.
+          {
+            printf 'export APP_DIR=%q\n' "$APP_DIR"
+            printf 'export IMAGE_PREFIX=%q\n' "ghcr.io/${GITHUB_REPOSITORY,,}"
+            printf 'export IMAGE_TAG=%q\n' "$GITHUB_SHA"
+            printf 'export REGISTRY_USER=%q\n' "$REGISTRY_USER"
+            printf 'export REGISTRY_PASSWORD=%q\n' "$REGISTRY_PASSWORD"
+            printf 'export WS_HEALTH_URL=%q\n' "$WS_HEALTH_URL"
+            cat scripts/deploy-allinone.sh
+          } | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$DO_USER@$DO_HOST" bash -s
 
-          echo "Deploying to $APP_DIR on branch $BRANCH"
-
-          # Detect Docker Compose
-          if docker compose version >/dev/null 2>&1; then
-            COMPOSE="docker compose"
-          elif command -v docker-compose >/dev/null 2>&1; then
-            COMPOSE="docker-compose"
-          else
-            echo "Docker Compose is not installed on the server."
-            exit 1
-          fi
-
-          # Ensure app directory exists and is a git repo
-          if [ ! -d "$APP_DIR/.git" ]; then
-            echo "App directory $APP_DIR missing or not a git repo."
-            exit 1
-          fi
-
-          cd "$APP_DIR"
-
-          # Ensure env is present for prod compose
-          if [ ! -f ".env.production" ]; then
-            echo ".env.production is missing in $APP_DIR"
-            exit 1
-          fi
-
-          # Pull latest code
-          git fetch origin "$BRANCH" --prune
-          git checkout -f "$BRANCH"
-          git reset --hard "origin/$BRANCH"
-
-          # Minimize downtime: keep services running during build; we'll roll servers individually below
-
-          # Build images with latest base layers
-          $COMPOSE -f docker-compose.prod.single.yml build --pull
-
-          # Run database migrations (one-off job) and wait for completion
-          $COMPOSE -f docker-compose.prod.single.yml up -d migrate
-          MIG_EXIT=$(docker wait sorcery-migrate || echo 1)
-          # Always show migrate logs
-          $COMPOSE -f docker-compose.prod.single.yml logs --no-color migrate || true
-          if [ "${MIG_EXIT}" != "0" ]; then
-            echo "Prisma migrations failed with exit code ${MIG_EXIT}"
-            exit ${MIG_EXIT}
-          fi
-
-          # Helper: wait for a container to be healthy (requires healthcheck)
-          wait_healthy() {
-            local name="$1"
-            echo "Waiting for $name to become healthy..."
-            for i in $(seq 1 60); do
-              status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$name" 2>/dev/null || echo "missing")
-              if [ "$status" = "healthy" ]; then
-                echo "$name is healthy"
-                return 0
-              fi
-              sleep 2
-            done
-            echo "Timeout waiting for $name to become healthy (last status: $status)"
-            docker logs --tail 100 "$name" || true
-            return 1
-          }
-
-          # Ensure infra services exist and are running without forcing a restart
-          if ! docker inspect sorcery-redis >/dev/null 2>&1 || [ "$(docker inspect -f '{{.State.Running}}' sorcery-redis 2>/dev/null || echo false)" != "true" ]; then
-            $COMPOSE -f docker-compose.prod.single.yml up -d redis
-          fi
-          if ! docker inspect sorcery-caddy >/dev/null 2>&1 || [ "$(docker inspect -f '{{.State.Running}}' sorcery-caddy 2>/dev/null || echo false)" != "true" ]; then
-            $COMPOSE -f docker-compose.prod.single.yml up -d caddy
-          fi
-
-          # One-time: ensure Caddy has persistent volumes mounted for /data and /config (to persist ACME certs/account)
-          # If the mounts are missing (older container), force-recreate Caddy to pick up new volume mappings.
-          if docker inspect sorcery-caddy >/dev/null 2>&1; then
-            HAS_DATA=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/data" }}yes{{ end }}{{ end }}' sorcery-caddy | grep -q yes && echo yes || echo no)
-            HAS_CONFIG=$(docker inspect -f '{{ range .Mounts }}{{ if eq .Destination "/config" }}yes{{ end }}{{ end }}' sorcery-caddy | grep -q yes && echo yes || echo no)
-            if [ "$HAS_DATA" != "yes" ] || [ "$HAS_CONFIG" != "yes" ]; then
-              echo "Recreating Caddy to attach persistent volumes (/data, /config)"
-              $COMPOSE -f docker-compose.prod.single.yml up -d --no-deps --force-recreate caddy
-            fi
-          fi
-
-          # Rolling restart servers to avoid downtime (do not restart caddy)
-          $COMPOSE -f docker-compose.prod.single.yml up -d --no-deps --force-recreate server1
-          wait_healthy sorcery-server-1
-          # $COMPOSE -f docker-compose.prod.single.yml up -d --no-deps --force-recreate server2
-          # wait_healthy sorcery-server-2
-
-          # Deploy Discord bot (single instance)
-          $COMPOSE -f docker-compose.prod.single.yml up -d --no-deps --force-recreate discord-bot
-          echo "Discord bot deployed"
-
-          # Basic health check
-          sleep 5 || true
-          if [ -n "${WS_HEALTH_URL:-}" ]; then
-            curl -fsS "$WS_HEALTH_URL" || true
-          else
-            curl -fsS https://ws.realms.cards/healthz || curl -fsS http://localhost:3010/healthz || true
-          fi
-
-          # Cleanup migrate container to allow re-run on next deploy
-          $COMPOSE -f docker-compose.prod.single.yml rm -f migrate || true
-
-          # Prune unused Docker images to prevent disk from filling up
-          echo "Pruning unused Docker images..."
-          docker image prune -af --filter "until=24h" || true
-
-          echo "Deployment complete."
-          EOF
+      - name: Remove temporary SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_rsa

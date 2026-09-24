@@ -8,9 +8,12 @@
 #                    the local "postgres" service, plus POSTGRES_* below)
 #   .env.frontend    Next.js-only env (NEXT_PUBLIC_*, DISCORD_*, WEB_AUTHN_*,
 #                    ...), e.g. from `vercel env pull .env.frontend --environment=production`.
-#                    Also mounted into the frontend build so NEXT_PUBLIC_* get inlined.
+#                    Read over SSH by GitHub Actions for the frontend image build.
 #
-# Usage: docker compose -f docker-compose.prod.allinone.yml up -d --build
+# Images are built by .github/workflows/deploy.yml, never on this host.
+# .env.images contains IMAGE_PREFIX (ghcr.io/owner/repo) and IMAGE_TAG (commit SHA).
+# Usage: docker compose --env-file .env.images -f docker-compose.prod.allinone.yml pull
+#        docker compose --env-file .env.images -f docker-compose.prod.allinone.yml up -d --no-build
 #
 # Keep running it from the same directory (same compose project) so the default
 # network keeps its name — the events calendar container joins it as "calendar".
@@ -86,9 +89,7 @@ services:
 
   # One-off migration runner against the local Postgres
   migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile.server
+    image: ${IMAGE_PREFIX:?Set IMAGE_PREFIX in .env.images}-server:${IMAGE_TAG:?Set IMAGE_TAG in .env.images}
     container_name: sorcery-migrate
     restart: "no"
     env_file:
@@ -130,9 +131,7 @@ services:
 
   # Single Socket.IO server instance
   server1:
-    build:
-      context: .
-      dockerfile: Dockerfile.server
+    image: ${IMAGE_PREFIX:?Set IMAGE_PREFIX in .env.images}-server:${IMAGE_TAG:?Set IMAGE_TAG in .env.images}
     container_name: sorcery-server-1
     restart: unless-stopped
     env_file:
@@ -165,11 +164,7 @@ services:
 
   # Next.js frontend (replaces Vercel)
   frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-      secrets:
-        - frontend_env
+    image: ${IMAGE_PREFIX:?Set IMAGE_PREFIX in .env.images}-frontend:${IMAGE_TAG:?Set IMAGE_TAG in .env.images}
     container_name: sorcery-frontend
     restart: unless-stopped
     env_file:
@@ -236,9 +231,7 @@ services:
   # Discord Bot - SINGLE INSTANCE ONLY
   # Uses Redis leader lock to ensure only one bot connects to Discord
   discord-bot:
-    build:
-      context: ./discord-bot
-      dockerfile: Dockerfile
+    image: ${IMAGE_PREFIX:?Set IMAGE_PREFIX in .env.images}-discord-bot:${IMAGE_TAG:?Set IMAGE_TAG in .env.images}
     container_name: sorcery-discord-bot
     restart: unless-stopped
     deploy:
@@ -326,10 +319,6 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
-
-secrets:
-  frontend_env:
-    file: .env.frontend
 
 volumes:
   pgdata_prod: # not "pgdata": the dev compose files use that name with postgres:16

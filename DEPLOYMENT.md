@@ -1,5 +1,64 @@
 # Production Deployment Guide
 
+## Current deployment: all-in-one droplet
+
+Production uses `docker-compose.prod.allinone.yml`: local Postgres, Redis,
+WebSocket server, Next.js, Discord bot, Caddy, TURN and scheduled jobs.
+GitHub Actions builds the three application images on separate Linux amd64
+runners and publishes them to GHCR with the full commit SHA as the tag.
+The droplet only pulls and runs images.
+
+The **Production** GitHub environment must contain the existing deployment secrets:
+
+- `DO_PROD_HOST`: the all-in-one droplet's SSH host.
+- `DO_PROD_USER`: an SSH user with Docker access and write access to the checkout.
+- `DO_PROD_SSH_KEY`: that user's SSH private key.
+- `DO_PROD_APP_DIR`: the existing absolute checkout directory. Keep this unchanged
+  to preserve Compose's volume and network names, including the calendar network.
+
+The checkout must have `.env.production` and `.env.frontend`. Actions reads
+`.env.frontend` over SSH and supplies it to the Next.js build as a BuildKit secret;
+it is not committed or copied into the image. `NEXT_PUBLIC_*` values are embedded
+in the browser build. Editing them requires another workflow run. The frontend
+build stage bypasses cache on reruns to pick up env changes.
+
+Push to `main`, or run **Deploy to Production** manually on `main`. The workflow
+uses its own `GITHUB_TOKEN` to publish and pull images; no separate registry token
+is required. Repository/organization policy must allow Actions to write packages.
+If both repository mirrors have Actions enabled, configure production deployment
+credentials only in the repository that should deploy.
+
+After all images build successfully, the workflow checks out the matching commit
+on the droplet, pulls images, starts Postgres and Redis, runs `prisma migrate deploy`
+(a no-op for an already migrated database), and waits for the application health
+checks before starting dependent services. It reloads Caddy's routing config.
+It leaves existing data volumes in place and refuses to discard local tracked
+changes. A failed migration stops deployment before application containers change.
+The single server/frontend instances may briefly interrupt connections on restart.
+
+Requirements: Docker Compose v2 with `up --wait` support, an amd64 droplet, SSH
+access from GitHub-hosted runners, and Git access from the droplet to its origin.
+Set the optional GitHub variable `WS_HEALTH_URL` to enable an external WebSocket
+HTTP health check in addition to the required container health checks.
+
+The workflow writes the image selection to `.env.images` in the checkout. After
+deployment, inspect or restart the same release from that directory:
+
+```bash
+docker compose --env-file .env.images -f docker-compose.prod.allinone.yml ps
+docker compose --env-file .env.images -f docker-compose.prod.allinone.yml logs --tail 100 frontend server1
+docker compose --env-file .env.images -f docker-compose.prod.allinone.yml up -d --no-build
+```
+
+Registry credentials are temporary and removed after deployment. For a manual
+pull of private images, first log in to GHCR with a token granting `read:packages`.
+Do not use `down -v`: it would remove the local database and other persisted data.
+
+## Legacy split deployment
+
+The instructions below describe the previous Vercel/separate-server deployment.
+Use the all-in-one workflow above for current production.
+
 ## Prerequisites
 
 1. **Generate Redis Password**
