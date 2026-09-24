@@ -12,7 +12,7 @@
 #
 # Usage: docker compose -f docker-compose.prod.allinone.yml up -d --build
 #
-# Keep running it from this directory (project "sorcery-client") so the default
+# Keep running it from the same directory (same compose project) so the default
 # network keeps its name — the events calendar container joins it as "calendar".
 
 services:
@@ -41,7 +41,7 @@ services:
       timeout: 3s
       retries: 20
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata_prod:/var/lib/postgresql/data
     shm_size: 256mb
     logging:
       driver: json-file
@@ -332,7 +332,7 @@ secrets:
     file: .env.frontend
 
 volumes:
-  pgdata:
+  pgdata_prod: # not "pgdata": the dev compose files use that name with postgres:16
   redisdata:
   caddy_data:
   caddy_config:
