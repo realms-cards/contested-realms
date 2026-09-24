@@ -1,0 +1,338 @@
+# docker-compose.prod.allinone.yml
+# Everything on one droplet: Postgres + Redis + Socket.IO server + Next.js
+# frontend + Discord bot + TURN + Caddy. Based on docker-compose.prod.single.yml;
+# replaces Managed Postgres and Vercel.
+#
+# Env files:
+#   .env.production  shared server env (DATABASE_URL/DIRECT_URL now point at
+#                    the local "postgres" service, plus POSTGRES_* below)
+#   .env.frontend    Next.js-only env (NEXT_PUBLIC_*, DISCORD_*, WEB_AUTHN_*,
+#                    ...), e.g. from `vercel env pull .env.frontend --environment=production`.
+#                    Also mounted into the frontend build so NEXT_PUBLIC_* get inlined.
+#
+# Usage: docker compose -f docker-compose.prod.allinone.yml up -d --build
+#
+# Keep running it from this directory (project "sorcery-client") so the default
+# network keeps its name — the events calendar container joins it as "calendar".
+
+services:
+  # Self-hosted Postgres (replaces Managed Postgres)
+  postgres:
+    image: postgres:17-alpine
+    container_name: sorcery-postgres
+    restart: unless-stopped
+    env_file:
+      - .env.production # POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=768MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - max_connections=100
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    shm_size: 256mb
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Nightly pg_dump, 14 days kept in ./backups. Copy offsite separately.
+  db-backup:
+    image: postgres:17-alpine
+    container_name: sorcery-db-backup
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      PGHOST: postgres
+      BACKUP_KEEP_DAYS: 14
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        while true; do
+          f="/backups/sorcery-$$(date +%Y%m%d-%H%M).dump";
+          if PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Fc -f "$$f.tmp"; then
+            mv "$$f.tmp" "$$f"; echo "[backup] wrote $$f";
+          else
+            rm -f "$$f.tmp"; echo "[backup] pg_dump failed";
+          fi;
+          find /backups -name 'sorcery-*.dump' -mtime +$$BACKUP_KEEP_DAYS -delete;
+          sleep 86400;
+        done
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # One-off migration runner against the local Postgres
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: sorcery-migrate
+    restart: "no"
+    env_file:
+      - .env.production
+    command: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Self-hosted Redis for Socket.IO adapter and shared state.
+  # Internal only now — nothing outside the droplet needs it.
+  redis:
+    image: redis:7-alpine
+    container_name: sorcery-redis
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    command: >
+      sh -c "redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "sh", "-c", 'redis-cli -a "$$REDIS_PASSWORD" ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redisdata:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Single Socket.IO server instance
+  server1:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: sorcery-server-1
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      INSTANCE_ID: server1
+      PORT: 3010
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    expose:
+      - "3010"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e ''http=require("http");http.get("http://127.0.0.1:3010/healthz",res=>{process.exit(res.statusCode===200?0:1)}).on("error",()=>process.exit(1))''',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Next.js frontend (replaces Vercel)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      secrets:
+        - frontend_env
+    container_name: sorcery-frontend
+    restart: unless-stopped
+    env_file:
+      - .env.production
+      - .env.frontend # wins on duplicate keys
+    environment:
+      # Talk to the socket server over the internal network
+      SOCKET_SERVER_URL: http://server1:3010
+    # src/lib/redis.ts only reads REDIS_URL, so embed the password here
+    # instead of relying on compose interpolation of .env.production.
+    command:
+      - /bin/sh
+      - -c
+      - 'export REDIS_URL="redis://:$${REDIS_PASSWORD}@redis:6379"; exec node server.js'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --spider http://127.0.0.1:3000/api/health || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Daily price cache refresh (was a Vercel Cron in vercel.json)
+  price-refresh:
+    image: alpine:3.20
+    container_name: sorcery-price-refresh
+    restart: unless-stopped
+    env_file:
+      - .env.frontend # CRON_SECRET, if set
+    depends_on:
+      frontend:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        sleep 120;
+        while true; do
+          wget -q -O - --post-data='' --header="Authorization: Bearer $${CRON_SECRET}"
+            http://frontend:3000/api/pricing/refresh || echo "[price-refresh] failed";
+          echo; sleep 86400;
+        done
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # Discord Bot - SINGLE INSTANCE ONLY
+  # Uses Redis leader lock to ensure only one bot connects to Discord
+  discord-bot:
+    build:
+      context: ./discord-bot
+      dockerfile: Dockerfile
+    container_name: sorcery-discord-bot
+    restart: unless-stopped
+    deploy:
+      replicas: 1 # MUST be 1 - do not scale, Discord only allows one bot connection
+    env_file:
+      - .env.production
+    environment:
+      # Bot API routes live on Next.js, now reachable internally
+      REALMS_API_URL: http://frontend:3000
+      REALMS_PUBLIC_URL: https://realms.cards
+    depends_on:
+      redis:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  turn:
+    image: instrumentisto/coturn:latest
+    container_name: sorcery-turn
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "5349:5349/tcp"
+      - "49160-49200:49160-49200/udp"
+    volumes:
+      - caddy_data:/data:ro
+      - caddy_config:/config:ro
+    depends_on:
+      - caddy
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - >-
+        REALM="$${TURN_REALM:-turn.realms.cards}";
+        USERNAME="$${TURN_USERNAME:-turnuser}";
+        PASSWORD="$${TURN_PASSWORD:-turnpass}";
+        CERT_FILE=$(find /data/caddy/certificates -type f -name "$${REALM}.crt" | head -n1);
+        KEY_FILE=$(find /data/caddy/certificates -type f -name "$${REALM}.key" | head -n1);
+        set -- $(hostname -i); PRIV_IP=$1;
+        if [ -n "$${PUBLIC_IP}" ]; then EXT="--external-ip=$${PUBLIC_IP}/$${PRIV_IP}"; else EXT=""; fi;
+        if [ -z "$${CERT_FILE}" ] || [ -z "$${KEY_FILE}" ]; then
+          echo "[turn] TLS cert not found, starting without TLS (3478 only)";
+          exec turnserver --listening-port=3478 --fingerprint --lt-cred-mech --user="$${USERNAME}:$${PASSWORD}" --realm="$${REALM}" --min-port=49160 --max-port=49200 --no-tls --no-dtls --no-cli --log-file=stdout --verbose $${EXT};
+        else
+          echo "[turn] Using TLS certificate at $${CERT_FILE}";
+          exec turnserver --listening-port=3478 --tls-listening-port=5349 --fingerprint --lt-cred-mech --user="$${USERNAME}:$${PASSWORD}" --realm="$${REALM}" --min-port=49160 --max-port=49200 --cert="$${CERT_FILE}" --pkey="$${KEY_FILE}" --no-cli --log-file=stdout --verbose $${EXT};
+        fi
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Public entrypoint: TLS + reverse-proxy to frontend and socket server
+  caddy:
+    image: caddy:2-alpine
+    container_name: sorcery-caddy
+    user: root
+    restart: unless-stopped
+    environment:
+      # Space-separated CIDRs or IPs allowed to access /metrics and /metrics.json
+      METRICS_IP_ALLOWLIST: ${METRICS_IP_ALLOWLIST:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.prod.allinone:/etc/caddy/Caddyfile:ro
+      - /var/log/caddy:/var/log/caddy
+      # Persist Caddy certificates and account data
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - server1
+      - frontend
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+secrets:
+  frontend_env:
+    file: .env.frontend
+
+volumes:
+  pgdata:
+  redisdata:
+  caddy_data:
+  caddy_config:

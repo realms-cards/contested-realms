@@ -88,3 +88,6 @@ design_handoff/assets/skull.txt
 design_handoff/Lobby.dc.html
 design_handoff/README.md
 design_handoff/support.js
+
+# Local pg_dump output from docker-compose.prod.allinone.yml
+/backups

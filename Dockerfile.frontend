@@ -22,18 +22,12 @@ RUN npx prisma generate
 # Copy source files
 COPY . .
 
-# Build arguments for environment variables needed at build time
-ARG NEXT_PUBLIC_SOCKET_URL
-ARG NEXT_PUBLIC_BASE_URL
-ARG NEXTAUTH_URL
-
-ENV NEXT_PUBLIC_SOCKET_URL=${NEXT_PUBLIC_SOCKET_URL}
-ENV NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
-ENV NEXTAUTH_URL=${NEXTAUTH_URL}
-
-# Build Next.js in standalone mode
+# Build Next.js in standalone mode. NEXT_PUBLIC_* values are inlined at build
+# time, so the frontend env file is mounted as .env.production for this step
+# only (build secret "frontend_env") and never lands in an image layer.
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+RUN --mount=type=secret,id=frontend_env,target=/app/.env.production \
+    NODE_OPTIONS=--max-old-space-size=3072 npm run build
 
 # Production stage: Minimal runtime image
 FROM node:22-alpine AS runner

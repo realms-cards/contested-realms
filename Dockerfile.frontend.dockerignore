@@ -1,0 +1,43 @@
+# Used instead of .dockerignore when building Dockerfile.frontend (BuildKit).
+# The root .dockerignore strips src/ and public/ for the server image.
+node_modules
+npm-debug.log
+.git
+.next
+coverage
+dist
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Secrets never go into the build context; NEXT_PUBLIC_* come in via the
+# frontend_env build secret.
+.env
+.env.*
+backups
+
+# Card art is served from cdn.realms.cards, not the frontend image
+cardart
+data-ktx2
+data-ktx2-bak
+data-webp
+data/gothic
+data/arthurian_legends
+data/alpha
+data/beta
+data/promo
+data/dragonlord
+data/tokens
+data/scanner-training
+data/scanner-feedback
+*.pdf
+
+# Misc
+logs
+exports
+memory
+specs
+docs
+examples
+templates
+openspec
+discord-bot
