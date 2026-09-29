@@ -1083,12 +1083,14 @@ export default function TournamentDetailsPage() {
     matchId: string,
     mode: "invalid" | "bye",
     winnerId?: string,
+    winnerName?: string,
   ) => {
     if (!tournament || !isCreator) return;
+    const winnerLabel = winnerName || "this player";
     const confirmMessage =
       mode === "bye"
-        ? "Award a bye for this match?"
-        : "Mark this match as invalid?";
+        ? `Award the win to ${winnerLabel}? They get the win and 3 points; their opponent gets a loss.`
+        : "Mark this match as invalid? Neither player gets points.";
     if (!window.confirm(confirmMessage)) return;
     setInvalidatingMatchId(matchId);
     setError(null);
@@ -1108,7 +1110,9 @@ export default function TournamentDetailsPage() {
       if (!res.ok) throw new Error(data?.error || "Failed to invalidate match");
       try {
         const msg =
-          mode === "bye" ? "Bye awarded for match" : "Match marked invalid";
+          mode === "bye"
+            ? `Win awarded to ${winnerLabel}`
+            : "Match marked invalid";
         localStorage.setItem("app:toast", msg);
         window.dispatchEvent(
           new CustomEvent("app:toast", { detail: { message: msg } }),

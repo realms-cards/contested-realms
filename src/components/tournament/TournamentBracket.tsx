@@ -50,6 +50,7 @@ interface TournamentBracketProps {
     matchId: string,
     action: "invalid" | "bye",
     winnerId?: string,
+    winnerName?: string,
   ) => void;
 }
 
@@ -120,6 +121,7 @@ interface BracketMatchProps {
     matchId: string,
     action: "invalid" | "bye",
     winnerId?: string,
+    winnerName?: string,
   ) => void;
 }
 
@@ -225,7 +227,12 @@ function BracketMatch({
                     variant="outline"
                     size="sm"
                     onClick={() =>
-                      onInvalidateMatch(match.id, "bye", player1.id)
+                      onInvalidateMatch(
+                        match.id,
+                        "bye",
+                        player1.id,
+                        player1.name,
+                      )
                     }
                   >
                     Win: P1
@@ -234,7 +241,12 @@ function BracketMatch({
                     variant="outline"
                     size="sm"
                     onClick={() =>
-                      onInvalidateMatch(match.id, "bye", player2.id)
+                      onInvalidateMatch(
+                        match.id,
+                        "bye",
+                        player2.id,
+                        player2.name,
+                      )
                     }
                   >
                     Win: P2
