@@ -63,13 +63,14 @@ export default function EngineNarration() {
   if (!game || game.phase === "over" || (!lines.length && !botThinking) || revealUp) return null;
 
   return (
-    // Left edge, where CpuPlayReveal puts the computer's card: the two read as one place for
-    // "what the computer is doing". The old top-[4.5rem] strip sat underneath the prompt
-    // banner (top-14, ~70px tall, opaque) which hid the newest line outright.
-    <div className="pointer-events-none fixed left-4 top-1/2 z-[150] flex max-w-[min(22rem,32vw)] -translate-y-1/2 flex-col items-start gap-1">
+    // Centre of the screen, which is also the centre of the board (the camera targets
+    // (0,0,0)): the player is already looking here, so what the computer is doing does not
+    // have to be hunted for at an edge. The old top strip sat underneath the prompt banner
+    // (top-14, ~70px tall, opaque), which hid the newest line outright.
+    <div className="pointer-events-none fixed inset-x-0 top-1/2 z-[150] flex -translate-y-1/2 flex-col items-center gap-1 px-4">
       {botThinking && !lines.length && (
-        <div className="flex items-center gap-2 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.9)] px-3 py-1.5 font-rc-sans text-sm text-rc-fg-muted shadow-rc-panel">
-          <Icon icon="game-icons:hourglass" className="h-3.5 w-3.5 animate-pulse" style={{ color: PLAYER_COLORS.p2 }} aria-hidden />
+        <div className="flex items-center gap-2.5 rounded-full border border-rc-line/22 bg-[rgba(7,10,20,0.92)] px-4 py-2 font-rc-sans text-[15px] text-rc-fg shadow-rc-panel">
+          <Icon icon="game-icons:hourglass" className="h-4 w-4 animate-pulse" style={{ color: PLAYER_COLORS.p2 }} aria-hidden />
           The computer is thinking…
         </div>
       )}
@@ -78,7 +79,7 @@ export default function EngineNarration() {
           key={line.seq}
           role={index === 0 ? "status" : undefined}
           aria-live={index === 0 ? "polite" : undefined}
-          className="flex max-w-[min(92vw,620px)] items-center gap-2 rounded-full border bg-[rgba(7,10,20,0.92)] px-3.5 py-1.5 font-rc-sans text-sm shadow-rc-panel transition-opacity"
+          className="flex max-w-[min(92vw,620px)] items-center gap-2 rounded-full border bg-[rgba(7,10,20,0.92)] px-3.5 py-1.5 text-center font-rc-sans text-sm shadow-rc-panel transition-opacity"
           style={{
             borderColor: `${PLAYER_COLORS.p2}${index === 0 ? "66" : "22"}`,
             opacity: index === 0 ? 1 : index === 1 ? 0.58 : 0.32,

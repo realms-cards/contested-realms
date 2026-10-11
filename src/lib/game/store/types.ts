@@ -542,6 +542,12 @@ export type PermanentItem = EntityBase<CardRef> & {
   isCarried?: boolean; // This unit is being carried by a carry-keyword minion
   enteredOnTurn?: number; // Turn number when this permanent entered the realm (for Savior ward ability)
   skipNextUntap?: boolean; // When true, this permanent skips its next untap step (Waveshaper). Cleared on that skipped untap.
+  /** Drawn dimmed: present as a hint, not as something you can act on here (a unit on the
+   *  other layer, shown tucked under its site while you look at the surface). */
+  faded?: boolean;
+  /** Per-card size multiplier, so a crowded tile can shrink its cards to fit side by side
+   *  instead of stacking them on top of each other. 1 (or absent) is full size. */
+  scale?: number;
 };
 
 export type Permanents = Record<CellKey, PermanentItem[]>;

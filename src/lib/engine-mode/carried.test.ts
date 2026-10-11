@@ -56,7 +56,7 @@ describe("carried artifacts are clickable through their bearer", () => {
 
   it("leaves a loose artifact on its own square", () => {
     const { game } = withCarried(true);
-    game.artifacts["a1"] = { ...game.artifacts["a1"], carriedBy: undefined };
+    game.artifacts["a1"] = { ...game.artifacts["a1"], carriedBy: null };
     expect(tokenForEngineId(game, "a1")).toBe("unit:perm:a1");
   });
 });

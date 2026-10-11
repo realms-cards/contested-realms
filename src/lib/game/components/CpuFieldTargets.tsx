@@ -41,11 +41,13 @@ const PIP_SHAPE = new Float32Array([0,PIP,0.0015, PIP,0,0.0015, 0,-PIP,0.0015, -
 // (as the previous flat planes did).
 const LIFT = 0.3;
 /**
- * The VISUALS sit just above the board instead, level with the grid. Drawing them at LIFT
- * too made them miss their own cell by several pixels: with the camera tilted, anything
- * raised off the board parallaxes away from the grid line it is meant to trace. They still
- * paint over cards because they are depthTest:false with a high renderOrder, not because
- * they are physically above them.
+ * The VISUALS sit just above the board, level with the grid. Drawing them at LIFT too made
+ * them miss their own cell by several pixels: with the camera tilted, anything raised off the
+ * board parallaxes away from the grid line it is meant to trace.
+ *
+ * They are depth-TESTED on purpose: a tile highlight belongs to the table, so a card standing
+ * on that tile occludes it. Painting them through the cards (depthTest:false) read as the
+ * outline being drawn on top of the artwork rather than under it.
  */
 const VISUAL_LIFT = 0.002;
 /** Local +z inside the flattened group is world +y, so this raises the click plane back up. */
@@ -117,7 +119,7 @@ function TargetMeshes({offsetX,offsetY,tones,arrows,labels,zRange}: {offsetX:num
       <mesh raycast={noRaycast} renderOrder={1100}>
         <planeGeometry args={[TILE_SIZE,TILE_SIZE]} />
         {/* Remounted when the pulse stops, so no tile keeps a mid-pulse opacity. */}
-        <meshBasicMaterial key={pulsing ? "pulse" : "still"} ref={fill(tile)} color={color} transparent opacity={TILE_LEVELS[tone].opacity} depthWrite={false} depthTest={false} side={THREE.DoubleSide} />
+        <meshBasicMaterial key={pulsing ? "pulse" : "still"} ref={fill(tile)} color={color} transparent opacity={TILE_LEVELS[tone].opacity} depthWrite={false} side={THREE.DoubleSide} />
       </mesh>
       {/* a chosen target or an ability source keeps the quiet full box; a tile awaiting a
           click wears the sigil: corner brackets plus a breathing centre pip */}
@@ -125,20 +127,20 @@ function TargetMeshes({offsetX,offsetY,tones,arrows,labels,zRange}: {offsetX:num
         {/* keep the full box so a clickable tile is never less prominent than a lit one… */}
         <lineLoop raycast={noRaycast} renderOrder={1101}>
           <bufferGeometry><bufferAttribute attach="attributes-position" args={[OUTLINE,3]} /></bufferGeometry>
-          <lineBasicMaterial color={color} transparent opacity={0.45} depthTest={false} />
+          <lineBasicMaterial color={color} transparent opacity={0.45} />
         </lineLoop>
         {/* …and add the target-lock brackets and centre pip on top of it */}
         <lineSegments raycast={noRaycast} renderOrder={1101}>
           <bufferGeometry><bufferAttribute attach="attributes-position" args={[BRACKETS,3]} /></bufferGeometry>
-          <lineBasicMaterial color={color} transparent opacity={0.95} depthTest={false} />
+          <lineBasicMaterial color={color} transparent opacity={0.95} />
         </lineSegments>
         <lineLoop raycast={noRaycast} renderOrder={1101}>
           <bufferGeometry><bufferAttribute attach="attributes-position" args={[PIP_SHAPE,3]} /></bufferGeometry>
-          <lineBasicMaterial key={pulsing ? "pulse" : "still"} ref={fill(`${tile}:pip`)} color={color} transparent opacity={0.85} depthTest={false} />
+          <lineBasicMaterial key={pulsing ? "pulse" : "still"} ref={fill(`${tile}:pip`)} color={color} transparent opacity={0.85} />
         </lineLoop>
       </> : <lineLoop raycast={noRaycast} renderOrder={1101}>
         <bufferGeometry><bufferAttribute attach="attributes-position" args={[OUTLINE,3]} /></bufferGeometry>
-        <lineBasicMaterial color={color} transparent opacity={0.9} depthTest={false} />
+        <lineBasicMaterial color={color} transparent opacity={0.9} />
       </lineLoop>}
       {pulses(tone) && <mesh name={`cpu-pick:${tile}`} position={[0,0,CLICK_PLANE_Z]} onPointerDown={stop} onPointerUp={stop} onClick={event => pick(event,tile)}>
         <planeGeometry args={[TILE_SIZE,TILE_SIZE]} />
@@ -150,11 +152,11 @@ function TargetMeshes({offsetX,offsetY,tones,arrows,labels,zRange}: {offsetX:num
     return <group key={token} position={[offsetX+(x*TILE_SIZE)+dx*ARROW_REACH,VISUAL_LIFT+0.001,offsetY+(y*TILE_SIZE)+dy*ARROW_REACH]} rotation={[-Math.PI/2,0,ARROW_TURN[dir]]}>
       <mesh raycast={noRaycast} renderOrder={1102}>
         <shapeGeometry args={[ARROW_SHAPE]} />
-        <meshBasicMaterial key={pulsing ? "pulse" : "still"} ref={fill(token)} color={color} transparent opacity={ARROW_LEVELS[tone].opacity} depthWrite={false} depthTest={false} side={THREE.DoubleSide} />
+        <meshBasicMaterial key={pulsing ? "pulse" : "still"} ref={fill(token)} color={color} transparent opacity={ARROW_LEVELS[tone].opacity} depthWrite={false} side={THREE.DoubleSide} />
       </mesh>
       <lineLoop raycast={noRaycast} renderOrder={1103}>
         <bufferGeometry><bufferAttribute attach="attributes-position" args={[ARROW_OUTLINE,3]} /></bufferGeometry>
-        <lineBasicMaterial color={color} transparent opacity={0.95} depthTest={false} />
+        <lineBasicMaterial color={color} transparent opacity={0.95} />
       </lineLoop>
       {clickable && <mesh name={`cpu-pick:${token}`} position={[0,0,CLICK_PLANE_Z]} onPointerDown={stop} onPointerUp={stop} onClick={event => pick(event,token)}
         onPointerOver={event => { event.stopPropagation(); setHovered(token); }} onPointerOut={() => { if (useCpuBoardPicker.getState().hovered === token) setHovered(null); }}>

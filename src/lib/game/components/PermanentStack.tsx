@@ -857,7 +857,11 @@ export function PermanentStack({
             <group ref={animEntry?.refCb}>
             <group
               visible={!isLocalDragGhost}
-              scale={tokenSiteReplace ? [1, 1, 1] : [cardScale, 1, cardScale]}
+              scale={
+                tokenSiteReplace
+                  ? [1, 1, 1]
+                  : [cardScale * (p.scale ?? 1), 1, cardScale * (p.scale ?? 1)]
+              }
               userData={{ cardInstance: permId }}
               onPointerDown={(e) => {
                 if (!isPrimaryCardHit(e)) {
@@ -1756,10 +1760,13 @@ export function PermanentStack({
                     }
                   />
                 ) : (
+                  // `faded` cards are a hint of what sits on the OTHER layer, tucked under the
+                  // site: visible, dimmed, and not something you can act on from here.
                   <CardPlane
                     slug={p.faceDown ? "" : p.card?.slug || ""}
                     width={CARD_SHORT}
                     height={CARD_LONG}
+                    opacity={p.faded ? 0.42 : 1}
                     rotationZ={rotZ}
                     renderOrder={
                       isDraggingPermanent || isSel || isLastTouched

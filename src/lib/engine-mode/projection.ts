@@ -1,5 +1,5 @@
 import { getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
-import { TILE_SIZE } from "@/lib/game/constants";
+import { CARD_LONG, CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
 import type {
   AvatarState,
   BoardState,
@@ -49,6 +49,7 @@ export type ProjectedState = Pick<
   | "winner"
   | "portalState"
   | "events"
+  | "permanentPositions"
 >;
 
 /**
@@ -260,6 +261,34 @@ function tokenCard(name: string, instanceId: string, owner: PlayerKey): CardRef 
   };
 }
 
+/**
+ * Lay a tile's cards out side by side instead of in a pile.
+ *
+ * Everything on a square used to render at the same x/z, separated only by a vertical lift,
+ * so a tile with a minion, an artifact and a subsurface hint showed one card with slivers
+ * behind it. Cards are CARD_SHORT x CARD_LONG = 0.39 x 0.55 of a tile, so two fit across
+ * comfortably and anything more has to shrink. Attached items (status tokens, carried
+ * artifacts) are excluded: the board draws those on their host, not as tile occupants.
+ */
+function spreadOnTile(items: PermanentItem[]): void {
+  const loose = items.filter((item) => !item.attachedTo);
+  if (loose.length < 2) return;
+  const cols = loose.length <= 2 ? loose.length : loose.length <= 6 ? 3 : 4;
+  const rows = Math.ceil(loose.length / cols);
+  // leave a small margin so a card never bleeds over the grid line
+  const room = TILE_SIZE * 0.94;
+  const scale = Math.min(1, room / (cols * CARD_SHORT), room / (rows * CARD_LONG));
+  const stepX = CARD_SHORT * scale * 1.04;
+  const stepZ = CARD_LONG * scale * 1.04;
+  loose.forEach((item, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    // centre the block on the tile; the board still nudges it toward its owner afterwards
+    item.offset = [(col - (cols - 1) / 2) * stepX, (row - (rows - 1) / 2) * stepZ];
+    item.scale = scale;
+  });
+}
+
 function cardOf(view: PlayerView, instanceId: string, owner: PlayerKey): CardRef {
   const inst = view.cards[instanceId];
   if (!inst) return hiddenCard(instanceId, owner, "Unknown");
@@ -355,6 +384,8 @@ export function projectView(view: PlayerView, layer: BoardLayer = "surface", por
   const board: BoardState = { size: { w: 5, h: 4 }, sites };
 
   const permanents: Permanents = {};
+  /** Drives the shared board's burrowed/submerged placement (it tucks these under the site). */
+  const permanentPositions: StoreState["permanentPositions"] = {};
   const unitSlot = new Map<string, { at: string; index: number }>();
   const avatars: Record<PlayerKey, AvatarState> = {
     p1: { card: null, pos: null, tapped: false, offset: null },
@@ -374,8 +405,12 @@ export function projectView(view: PlayerView, layer: BoardLayer = "surface", por
       unitSlot.set(unit.id, { at: `${p.x},${p.y}`, index: -1 });
       continue;
     }
-    // Avatars always show (they anchor the HUD); minions only on the layer being viewed.
-    if (layerOf(unit.region) !== layer) continue;
+    // Avatars always show (they anchor the HUD). A minion on the OTHER layer still appears
+    // while we are looking at the surface — tucked under the site, the way the regular modes
+    // draw a burrowed or submerged unit — so the board hints at what is lurking rather than
+    // hiding it behind a badge. Looking subsurface stays a clean view of that layer alone.
+    const below = layerOf(unit.region) !== layer;
+    if (below && layer !== "surface") continue;
     const at = engineCellKey(unit.x, unit.y);
     const index = pushTo(permanents, at, {
       card: cardOf(view, unit.cardId, owner),
@@ -387,7 +422,17 @@ export function projectView(view: PlayerView, layer: BoardLayer = "surface", por
       isCarried: Boolean(unit.carriedBy),
       enteredOnTurn: unit.enteredTurn,
       summonedThisTurn: unit.enteredTurn === view.turn,
+      // a hint, not a target: the layer overlay is still how you go down to act on it
+      faded: below || undefined,
     });
+    if (below) {
+      permanentPositions[unit.id] = {
+        permanentId: unit.id,
+        state: unit.region === "underwater" ? "submerged" : "burrowed",
+        position: { x: 0, y: 0, z: 0 },
+      };
+      continue; // it is not on this layer: nothing may attach to it or target it here
+    }
     unitSlot.set(unit.id, { at, index });
   }
 
@@ -469,6 +514,10 @@ export function projectView(view: PlayerView, layer: BoardLayer = "surface", por
     if (theft?.cardId && thief) sealed.set(theft.cardId, thief.name);
   }
 
+  // every occupant of a square is known by now (units, artifacts, auras, status tokens and
+  // the other layer's hints), so give each tile a side-by-side layout
+  for (const items of Object.values(permanents)) spreadOnTile(items);
+
   const zones = {} as Record<PlayerKey, Zones>;
   for (const p of players) {
     const key = seatKey(p.id);
@@ -523,6 +572,7 @@ export function projectView(view: PlayerView, layer: BoardLayer = "surface", por
     // The engine runs the draw (drawDeck prompt); keep our draw-phase helpers quiet.
     hasDrawnThisTurn: true,
     portalState: portalStateFor(view, portalsRevealed),
+    permanentPositions,
     matchEnded: view.phase === "over",
     winner: view.phase === "over" && view.winner !== null ? seatKey(view.winner) : null,
     events: engineEvents(view),

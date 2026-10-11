@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { withSfxSource } from "@/lib/audio/gameSfx";
 import type { SfxSource } from "@/lib/audio/gameSfx";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
-import { cpuRevealsPending, useCpuReveals } from "@/lib/game/cpu/revealQueue";
+import { CPU_SPELL_REVEAL_READ_MS, cpuRevealsPending, useCpuReveals } from "@/lib/game/cpu/revealQueue";
 import { useGameStore } from "@/lib/game/store";
 import type { GameState } from "@/lib/game/store/types";
 import {
@@ -29,7 +29,6 @@ import {
   damageSnapshot,
   harbingerTiles,
   hiddenLayerCounts,
-  layerOf,
   projectView,
   sitesLostSince,
 } from "./projection";
@@ -148,6 +147,8 @@ let lastRevealSeq = 0;
 let lastDamage: DamageSnapshot | null = null;
 /** Damage with no engine reveal behind it (plain combat) still needs a unique, falling key. */
 let standaloneRevealSeq = 0;
+/** A deferred board reveal (see `showReveal`), cancelled if another lands first. */
+let revealTimer: ReturnType<typeof setTimeout> | null = null;
 let matchCounter = 0;
 
 export const useEngineSession = create<EngineSession>((set, get) => {
@@ -174,19 +175,43 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         name: "",
         element: "none",
       };
-      set({
-        reveal: {
+      showReveal(
+        {
           ...base,
           hits,
           sites: [...new Set([...base.sites, ...razed])],
           name: base.name || (razed.length ? (razed.length > 1 ? `${razed.length} sites destroyed` : "Site destroyed") : ""),
         },
-      });
+        source,
+      );
     }
     const projection = projectView(view, layer, get().portalsRevealed);
     lastProjection = projection;
     // the sound director diffs store updates; tag who caused this one (cosmetic ones stay silent)
     withSfxSource(source, () => useGameStore.setState(projection));
+  }
+
+  /**
+   * Put a board reveal on screen — but not on top of the computer's own card.
+   *
+   * The card panel and the effect used to fire in the same tick: `publish()` shows the card
+   * the computer just cast, then `committed()` immediately projects, and the damage numbers
+   * played out while the player was still reading the card. By the time you looked at the
+   * board the effect had finished. For the computer's actions the effect now waits until its
+   * card has been up long enough to read, so a spell reads as: here is the card, here is what
+   * it did. Our own actions stay immediate — we know what we just played.
+   */
+  function showReveal(reveal: BoardReveal, source: SfxSource) {
+    if (revealTimer) clearTimeout(revealTimer);
+    revealTimer = null;
+    if (source !== "remote" || !cpuRevealsPending()) {
+      set({ reveal });
+      return;
+    }
+    revealTimer = setTimeout(() => {
+      revealTimer = null;
+      set({ reveal });
+    }, CPU_SPELL_REVEAL_READ_MS);
   }
 
   /**
@@ -489,15 +514,12 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       persist();
     },
 
-    revealTokens: (tokens) => {
-      const { game, layer } = get();
-      if (!game) return;
-      const layers = tokens
-        .filter((t) => t.startsWith("unit:perm:"))
-        .map((t) => game.units[t.slice("unit:perm:".length)])
-        .filter((u) => u && !u.isAvatar)
-        .map((u) => layerOf(u.region));
-      if (layers.length && layers.every((l) => l !== layer)) get().setLayer(layers[0]);
+    revealTokens: () => {
+      // Deliberately does nothing now. This used to yank the board down to the subsurface
+      // whenever every pickable unit happened to be below, which moved the view out from
+      // under the player mid-decision. Those units are drawn under their sites on the surface
+      // view (see `faded` in projection.ts) and are clickable there, so there is nothing to
+      // reveal: changing layers stays something the player asks for, with V or the rail.
     },
 
     resume: (saved) => {
@@ -627,6 +649,9 @@ export const useEngineSession = create<EngineSession>((set, get) => {
 
     stop: () => {
       cancelBot();
+      // a deferred effect must not fire into a torn-down match
+      if (revealTimer) clearTimeout(revealTimer);
+      revealTimer = null;
       unsubscribeStore?.();
       unsubscribeStore = null;
       lastProjection = null;

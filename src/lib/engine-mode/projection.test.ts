@@ -17,7 +17,7 @@ import {
   projectView,
 } from "./projection";
 import { getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
-import { TILE_SIZE } from "@/lib/game/constants";
+import { CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
 
 const CELL = /^[0-4],[0-3]$/;
 
@@ -72,11 +72,23 @@ function playOut(seed: number, maxActions: number) {
         const avatar = projected.avatars[unit.owner === 0 ? "p1" : "p2"];
         expect(avatar.pos && `${avatar.pos[0]},${avatar.pos[1]}`).toBe(engineCellKey(unit.x, unit.y));
       } else {
-        // each minion shows on its own layer only, and the other layer's badge counts it
+        // Each minion is solid on its own layer. A SUBSURFACE minion also appears on the
+        // surface view as a dimmed hint tucked under the site; a surface minion never leaks
+        // down into the subsurface view, which stays a clean view of that layer alone.
         const key = engineCellKey(unit.x, unit.y);
-        const [own, other] = layerOf(unit.region) === "surface" ? [projected, below] : [below, projected];
-        expect(own.permanents[key]?.some((p) => p.instanceId === unit.id)).toBe(true);
-        expect(other.permanents[key]?.some((p) => p.instanceId === unit.id) ?? false).toBe(false);
+        const onSurface = layerOf(unit.region) === "surface";
+        const [own, other] = onSurface ? [projected, below] : [below, projected];
+        const mine = own.permanents[key]?.find((p) => p.instanceId === unit.id);
+        expect(Boolean(mine)).toBe(true);
+        expect(mine?.faded).toBeUndefined();
+        const echo = other.permanents[key]?.find((p) => p.instanceId === unit.id);
+        if (onSurface) {
+          expect(echo).toBeUndefined();
+        } else {
+          // the hint: present, dimmed, and placed under the site by the shared board
+          expect(echo?.faded).toBe(true);
+          expect(projected.permanentPositions[unit.id]?.state).toMatch(/burrowed|submerged/);
+        }
         if (!unit.carriedBy) {
           const counts = hiddenLayerCounts(view, layerOf(unit.region) === "surface" ? "subsurface" : "surface")[key];
           expect(counts && counts.surface + counts.underground + counts.underwater).toBeGreaterThan(0);
@@ -311,5 +323,92 @@ describe("token cards", () => {
     const again = projectView(viewFor(game, 0)).zones.p1.graveyard.filter((c) => c.name === "Skeleton");
     expect(again.map((c) => c.cardId)).toEqual(withTokens.map((c) => c.cardId));
     expect(first.graveyard.filter((c) => c.name === "Skeleton")).toHaveLength(0);
+  });
+});
+
+describe("subsurface hint", () => {
+  /** Put one unit underground and one underwater, both under a site, and look at the surface. */
+  const withHidden = () => {
+    const deck = toEngineDeck(enginePrecons[0]);
+    const game = createGame([deck, deck], ["You", "Computer"], 17, 0 as PlayerId);
+    const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === 0)!;
+    game.units["uDig"] = { ...avatar, id: "uDig", isAvatar: false, name: "Digger", region: "underground" };
+    game.units["uSwim"] = { ...avatar, id: "uSwim", isAvatar: false, name: "Swimmer", region: "underwater" };
+    return game;
+  };
+
+  it("shows other-layer units under the site, dimmed, while viewing the surface", () => {
+    const projected = projectView(viewFor(withHidden(), 0), "surface");
+    const all = Object.values(projected.permanents).flat();
+    const dig = all.find((p) => p.instanceId === "uDig");
+    const swim = all.find((p) => p.instanceId === "uSwim");
+
+    expect(dig?.faded).toBe(true);
+    expect(swim?.faded).toBe(true);
+    // the shared board tucks these under the site via permanentPositions
+    expect(projected.permanentPositions["uDig"]?.state).toBe("burrowed");
+    expect(projected.permanentPositions["uSwim"]?.state).toBe("submerged");
+  });
+
+  it("leaves surface units solid and unpositioned", () => {
+    const game = withHidden();
+    const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === 0)!;
+    game.units["uTop"] = { ...avatar, id: "uTop", isAvatar: false, name: "Walker", region: "surface" };
+    const projected = projectView(viewFor(game, 0), "surface");
+    const top = Object.values(projected.permanents).flat().find((p) => p.instanceId === "uTop");
+    expect(top?.faded).toBeUndefined();
+    expect(projected.permanentPositions["uTop"]).toBeUndefined();
+  });
+
+  it("keeps the subsurface view a clean view of that layer alone", () => {
+    const projected = projectView(viewFor(withHidden(), 0), "subsurface");
+    const ids = Object.values(projected.permanents).flat().map((p) => p.instanceId);
+    expect(ids).toContain("uDig");
+    expect(ids).toContain("uSwim");
+    // no surface minions leaking upward into the hint slot
+    expect(Object.values(projected.permanentPositions)).toHaveLength(0);
+  });
+});
+
+describe("tile layout", () => {
+  const crowd = (n: number) => {
+    const deck = toEngineDeck(enginePrecons[0]);
+    const game = createGame([deck, deck], ["You", "Computer"], 23, 0 as PlayerId);
+    const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === 0)!;
+    for (let i = 0; i < n; i++) {
+      game.units[`uX${i}`] = { ...avatar, id: `uX${i}`, isAvatar: false, name: `Crowd ${i}`, region: "surface" };
+    }
+    return projectView(viewFor(game, 0), "surface");
+  };
+
+  it("leaves a lone card centred and full size", () => {
+    const at = Object.values(crowd(1).permanents).find((items) => items.some((p) => p.instanceId === "uX0"))!;
+    const only = at.filter((p) => !p.attachedTo);
+    if (only.length === 1) {
+      expect(only[0].offset).toBeNull();
+      expect(only[0].scale).toBeUndefined();
+    }
+  });
+
+  it("gives every card on a crowded tile its own spot", () => {
+    const projected = crowd(5);
+    const items = Object.values(projected.permanents)
+      .flat()
+      .filter((p) => p.instanceId?.startsWith("uX") && !p.attachedTo);
+    expect(items.length).toBeGreaterThanOrEqual(5);
+    const spots = new Set(items.map((p) => `${p.offset?.[0]?.toFixed(3)},${p.offset?.[1]?.toFixed(3)}`));
+    // no two cards share a position any more
+    expect(spots.size).toBe(items.length);
+  });
+
+  it("shrinks the cards so the row still fits inside the tile", () => {
+    const items = Object.values(crowd(5).permanents)
+      .flat()
+      .filter((p) => p.instanceId?.startsWith("uX") && !p.attachedTo);
+    const scale = items[0].scale ?? 1;
+    expect(scale).toBeLessThan(1);
+    expect(scale).toBeGreaterThan(0.3);
+    const widest = Math.max(...items.map((p) => Math.abs(p.offset?.[0] ?? 0)));
+    expect(widest + (CARD_SHORT * scale) / 2).toBeLessThanOrEqual(TILE_SIZE / 2);
   });
 });
