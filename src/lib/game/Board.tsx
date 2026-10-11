@@ -185,6 +185,7 @@ export default function Board({
     resolvedStoreApi(selector);
   const { settings: graphicsSettings } = useGraphicsSettings();
   const isSpectator = interactionMode === "spectator";
+  const gesturesLocked = useScopedStore((s) => s.boardGesturesLocked);
   const _controlScheme = useScopedStore((s) => s.controlScheme);
   const boardState = useScopedStore((s) => s.board);
   const fallbackBoard = useMemo(() => createInitialBoard(), []);
@@ -1382,6 +1383,7 @@ export default function Board({
     selectedCard: selected,
     mouseInHandZone,
     isSpectator,
+    gesturesLocked,
     actorKey,
     currentPlayer,
     setAttackChoice,

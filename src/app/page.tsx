@@ -10,7 +10,7 @@ import OtherRealms from "@/components/ui/OtherRealms";
 import { Badge } from "@/components/ui/badge";
 import PanelTile from "@/components/ui/panel-tile";
 import { RcButton } from "@/components/ui/rc-button";
-import { FEATURE_CPU_BOTS, FEATURE_VS_CPU_PRECONS } from "@/lib/config/features";
+import { FEATURE_CPU_BOTS, FEATURE_ENGINE_MODE, FEATURE_VS_CPU_PRECONS } from "@/lib/config/features";
 import { fetchPatrons, isPatron } from "@/lib/patrons";
 
 export default function Home() {
@@ -145,7 +145,7 @@ export default function Home() {
         {/* Every row is an auto-fit grid: tiles share the row evenly and a
             lone tile (e.g. a feature flag is off) grows to the full width,
             so no row ever ends in a gap. */}
-        {session && (FEATURE_CPU_BOTS || FEATURE_VS_CPU_PRECONS) && (
+        {session && (FEATURE_CPU_BOTS || FEATURE_VS_CPU_PRECONS || FEATURE_ENGINE_MODE) && (
           <div className="mx-auto grid max-w-4xl grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-3 md:gap-4">
             {FEATURE_CPU_BOTS && (
               <PanelTile
@@ -186,6 +186,15 @@ export default function Home() {
                   {!userIsPatron && (
                     <span className={tileNote}>patrons only</span>
                   )}
+                </div>
+              </PanelTile>
+            )}
+            {FEATURE_ENGINE_MODE && (
+              <PanelTile href="/play/engine" className="w-full">
+                <div className="flex flex-col items-center justify-center py-3 md:py-4">
+                  <span className="rc-eyebrow mb-1.5">experimental</span>
+                  <h4 className={subTitle}>Rules Engine vs CPU</h4>
+                  <span className={tileNote}>every card enforced</span>
                 </div>
               </PanelTile>
             )}

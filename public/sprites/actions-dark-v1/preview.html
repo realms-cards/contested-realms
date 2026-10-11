@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sorcery · Action sprites</title>
+<style>
+@font-face{font-family:Fantaisie;src:url('../../fantaisie_artistiqu.ttf')}
+*{box-sizing:border-box}body{margin:0;background:#101316;color:#ddd5c1;font:15px system-ui;padding:36px;max-width:1200px;margin:auto}h1{font-family:Fantaisie,serif;font-size:42px;font-weight:400;margin:0 0 10px}p{color:#a8aaab;line-height:1.6}header{margin-bottom:28px}.controls{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:24px 0}button,input{accent-color:#60b4a9}button{background:#272b2e;color:#e4d2a8;border:1px solid #63533b;padding:10px 18px;cursor:pointer;border-radius:4px}#grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.card{border:1px solid #303637;background:#171c20;padding:20px 16px;border-radius:6px;min-height:205px}.art{width:96px;height:96px;position:relative;margin:0 auto 16px}.sprite{width:100%;height:100%;image-rendering:pixelated}.badge{position:absolute;right:0;bottom:0;min-width:27px;padding:3px 6px;border:1px solid #ac925e;background:#151b1e;border-radius:4px;text-align:center;font-weight:600;color:#f0dfb8}.label{text-align:center;color:#e6d4aa;font-size:17px}.hint{text-align:center;color:#919b9e;font-size:12px;margin-top:6px}.error{color:#f7b7a3}
+</style>
+<header><h1>Actions of the Realm</h1><p>Dark fantasy pixel sprites · 64 × 64 pixels · six frames per state<br>All twelve actions, including Subsurface, Concede confirmation, and muted Music.</p></header>
+<div class="controls"><button id="play" type="button">Pause animations</button><label>Display size <select id="size"><option value="64">64 px</option><option value="96" selected>96 px</option><option value="128">128 px</option></select></label><label>Live count <input id="count" type="number" min="0" max="999" value="3" style="width:65px"></label><button id="replay" type="button">Replay</button><a href="manifest.json" style="color:#a9ccc5">Frame metadata</a></div>
+<main id="grid" aria-label="Animated sprite examples"></main>
+<script>
+(async()=>{
+  const manifest=await fetch('manifest.json').then(r=>{if(!r.ok)throw new Error('Unable to load manifest');return r.json()});
+  const atlas=new Image();atlas.src='atlas.png';await atlas.decode();
+  const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+  let playing=!reducedMotion.matches,start=performance.now();
+  const entries=[];
+  const grid=document.querySelector('#grid');
+  for(const [id,state] of Object.entries(manifest.states)){
+    const card=document.createElement('article');card.className='card';
+    const art=document.createElement('div');art.className='art';
+    const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64;canvas.className='sprite';canvas.setAttribute('role','img');canvas.setAttribute('aria-label',state.label);
+    art.append(canvas);
+    if(state.badge){const badge=document.createElement('span');badge.className='badge';badge.textContent='3';art.append(badge)}
+    const label=document.createElement('div');label.className='label';label.textContent=state.label;
+    const hint=document.createElement('div');hint.className='hint';hint.textContent=state.when;
+    card.append(art,label,hint);grid.append(card);
+    const context=canvas.getContext('2d');context.imageSmoothingEnabled=false;
+    entries.push({state,context,lastFrame:-1});
+  }
+  function paint(time){
+    for(const entry of entries){
+      const {state,context}=entry;
+      const tick=Math.floor((time-start)/state.frameDurationMs);
+      const frame=playing?(state.loop?tick%6:tick<6?tick:state.idleFrame):state.idleFrame;
+      if(frame!==entry.lastFrame){const rect=state.frames[frame];context.clearRect(0,0,64,64);context.drawImage(atlas,rect.x,rect.y,64,64,0,0,64,64);entry.lastFrame=frame}
+    }
+    requestAnimationFrame(paint);
+  }
+  const play=document.querySelector('#play');
+  function updateLabel(){play.textContent=playing?'Pause animations':'Play animations'}
+  play.onclick=()=>{playing=!playing;start=performance.now();updateLabel()};updateLabel();
+  reducedMotion.addEventListener('change',event=>{playing=!event.matches;start=performance.now();updateLabel()});
+  document.querySelector('#replay').onclick=()=>{playing=true;start=performance.now();updateLabel()};
+  document.querySelector('#size').onchange=event=>{document.querySelectorAll('.art').forEach(art=>{art.style.width=event.target.value+'px';art.style.height=event.target.value+'px'})};
+  document.querySelector('#count').oninput=event=>{document.querySelectorAll('.badge').forEach(badge=>badge.textContent=String(Math.max(0,Math.min(999,Number(event.target.value)||0))))};
+  requestAnimationFrame(paint);
+})().catch(error=>{document.querySelector('#grid').textContent=error.message;document.querySelector('#grid').classList.add('error')});
+</script>
+</html>

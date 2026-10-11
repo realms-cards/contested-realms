@@ -1,0 +1,666 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import CpuCardPick from "@/components/game/CpuCardPick";
+import { RcButton } from "@/components/ui/rc-button";
+import { tokenForEngineId } from "@/lib/engine-mode/actionPaths";
+import { cardRefFor } from "@/lib/engine-mode/cardIndex";
+import {
+  BOARD_DIRECTION,
+  boardArrowForStep,
+  engineCellKey,
+  type EngineDirection,
+  engineToBoard,
+  localizeEngineText,
+} from "@/lib/engine-mode/coords";
+import { HUMAN_SEAT, useEngineSession } from "@/lib/engine-mode/session";
+import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
+import type { ArrowDirection } from "@/lib/game/cpu/fieldTargets";
+import { dirToken, handToken, pileToken } from "@/lib/game/cpu/pickTokens";
+import type { Action, GameState as EngineState, Prompt } from "@sorcery/shared";
+import { actingSeatFor, allCards } from "@sorcery/shared";
+import { botAction } from "@untested-realm/bot/bot";
+import EnginePortalScreen from "./EnginePortalScreen";
+import { Compass, directionKey, PromptBanner, PromptDialog } from "./EnginePromptShell";
+
+/** Prompt data shapes, per PromptKind (see the engine's pushPrompt callers). */
+interface PromptData {
+  options?: string[];
+  ids?: string[];
+  candidates?: string[];
+  count?: number;
+  upTo?: boolean;
+  power?: number;
+  strikerId?: string;
+  squares?: { x: number; y: number }[];
+  cards?: string[];
+  pick?: number;
+  skipLabel?: string;
+  names?: string[];
+  /** a card the prompt shows the player (chooseOption) */
+  reveal?: string;
+  /**
+   * Direction prompts only. The engine attaches these to ANY all-cardinal chooseOption
+   * (effects.ts `ask`, "GENERALIZED direction-picker preview") precisely so the client can
+   * draw the lanes on the board: `from` is the origin square and `dirs` each direction's
+   * reachable squares, origin first, stopping at the void or a projectile-blocking site.
+   */
+  from?: { x: number; y: number };
+  dirs?: Partial<Record<EngineDirection, { x: number; y: number }[]>>;
+}
+
+/** One direction the player can send the effect, resolved into board space. */
+interface Lane {
+  /** the engine's own option string — what we must answer with */
+  option: string;
+  dir: EngineDirection;
+  arrow: ArrowDirection;
+  token: string;
+  /** squares the effect would cover, origin excluded, in board cell keys */
+  path: string[];
+}
+
+/**
+ * Turn a direction prompt into board lanes, or null when the engine gave us no origin
+ * (it only attaches `from`/`dirs` when every option is a bare n/s/e/w, so Windblast's
+ * "north/south/east/west" wording and the 'hold fire' sets fall back to the compass).
+ */
+function lanesFor(data: PromptData, options: string[]): { origin: string; lanes: Lane[] } | null {
+  const from = data.from;
+  if (!from || typeof from.x !== "number") return null;
+  const origin = engineCellKey(from.x, from.y);
+  const lanes: Lane[] = [];
+  for (const option of options) {
+    const dir = directionKey(option) as EngineDirection | null;
+    if (!dir) continue;
+    const squares = data.dirs?.[dir] ?? [];
+    // Prefer the arrow the lane actually walks: it survives any rotation mistake. A lane the
+    // engine cut short (blocked, or the origin itself is void) has no second square, so fall
+    // back to the rotation table; an edge-wrapped lane jumps, so only a unit step counts.
+    const head = squares[1] ? engineToBoard(squares[1].x, squares[1].y) : null;
+    const base = engineToBoard(from.x, from.y);
+    const stepped = head ? boardArrowForStep(head.x - base.x, head.y - base.y) : null;
+    const arrow = stepped ?? BOARD_DIRECTION[dir];
+    lanes.push({
+      option,
+      dir,
+      arrow,
+      token: dirToken(origin, arrow),
+      path: squares.slice(1).map((sq) => engineCellKey(sq.x, sq.y)),
+    });
+  }
+  return lanes.length ? { origin, lanes } : null;
+}
+
+/**
+ * A projectile's direction, asked on the board instead of in a popup: four arrows around the
+ * source square, and hovering one lights the squares that direction would actually reach.
+ * Non-direction options in the same prompt ("hold fire", "stay") stay as buttons in the banner,
+ * which is also the only way to decline.
+ */
+function DirectionPick({
+  prompt,
+  options,
+  board,
+  onSend,
+}: {
+  prompt: Prompt;
+  options: string[];
+  board: { origin: string; lanes: Lane[] };
+  onSend: (choice: unknown) => void;
+}) {
+  const hovered = useCpuBoardPicker((picker) => picker.hovered);
+  const byToken = useMemo(() => new Map(board.lanes.map((lane) => [lane.token, lane])), [board.lanes]);
+  const onPick = useMemo(
+    () => (token: string) => {
+      const lane = board.lanes.find((candidate) => candidate.token === token);
+      if (lane) onSend(lane.option);
+    },
+    [board.lanes, onSend],
+  );
+  // the hovered lane lights up; nothing hovered keeps the board quiet rather than lighting all four
+  const preview = hovered ? (byToken.get(hovered)?.path ?? []) : [];
+  const labels = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const lane of board.lanes) {
+      out[lane.token] = lane.path.length
+        ? `${lane.path.length} ${lane.path.length === 1 ? "square" : "squares"}`
+        : "blocked";
+    }
+    return out;
+  }, [board.lanes]);
+  useBoardPick(
+    `engine-prompt:${prompt.id}:${hovered ?? ""}`,
+    board.lanes.map((lane) => lane.token),
+    [board.origin, ...preview],
+    onPick,
+    labels,
+  );
+  // anything the engine offered that is not a direction is a way out — keep it in the banner
+  const extras = options.filter((option) => !directionKey(option));
+  const hoveredLane = hovered ? byToken.get(hovered) : undefined;
+  return (
+    <PromptBanner
+      title={prompt.title}
+      hint={
+        hoveredLane
+          ? hoveredLane.path.length
+            ? `Reaches ${hoveredLane.path.length} ${hoveredLane.path.length === 1 ? "square" : "squares"}.`
+            : "That way is blocked."
+          : "Click an arrow on the board to aim."
+      }
+      counter={`tile ${tileNumberOf(board.origin)}`}
+    >
+      {extras.map((option) => (
+        <RcButton key={option} variant="outline" size="sm" onClick={() => onSend(option)}>
+          {localizeEngineText(option)}
+        </RcButton>
+      ))}
+    </PromptBanner>
+  );
+}
+
+/** Our 1–20 tile number for a board cell key. */
+function tileNumberOf(cellKey: string): number {
+  const [x, y] = cellKey.split(",").map(Number);
+  return y * 5 + x + 1;
+}
+
+/** The engine's prompts and the mulligan, answered on the board where possible. */
+export default function EnginePromptPanel() {
+  const game = useEngineSession((s) => s.game);
+  const rev = useEngineSession((s) => s.rev);
+  const portalsRevealed = useEngineSession((s) => s.portalsRevealed);
+  if (!game) return null;
+  // pre-game, in our usual order: Harbinger portal rolls, then the mulligan
+  if (game.phase === "mulligan" && !portalsRevealed) return <EnginePortalScreen />;
+  // NOT keyed on rev: the computer mulligans during this same phase, and a remount would
+  // throw away the cards the player has already marked.
+  if (game.phase === "mulligan" && !game.players[HUMAN_SEAT].keptHand) return <Mulligan game={game} />;
+  const prompt = game.prompts[0];
+  if (!prompt || actingSeatFor(game, prompt.player) !== HUMAN_SEAT) return null;
+  return <PromptView key={`${prompt.id}:${rev}`} game={game} prompt={prompt} />;
+}
+
+/** Make `tokens` clickable on the board for this prompt; returns the clicked token stream. */
+function useBoardPick(
+  request: string,
+  tokens: string[],
+  glow: string[],
+  onPick: (token: string) => void,
+  labels?: Record<string, string>,
+) {
+  const tokenKey = tokens.join("|");
+  const glowKey = glow.join("|");
+  const labelKey = labels ? Object.entries(labels).map(([k, v]) => `${k}=${v}`).join("|") : "";
+  useEffect(() => {
+    const picker = useCpuBoardPicker.getState();
+    useEngineSession.getState().revealTokens(tokens);
+    picker.configure(request, tokens);
+    picker.setGlow(request, glow);
+    if (labels) picker.setLabels(request, labels);
+    // configure/setGlow/setLabels read the arrays once; the keys capture their contents
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request, tokenKey, glowKey, labelKey]);
+  useEffect(
+    () =>
+      useCpuBoardPicker.subscribe((state, prev) => {
+        if (state.request !== request || !state.selected || state.selected === prev.selected) return;
+        const token = state.selected;
+        useCpuBoardPicker.getState().configure(`${request}:ack:${token}`, []);
+        onPick(token);
+      }),
+    [request, onPick],
+  );
+  useEffect(() => () => useCpuBoardPicker.getState().clear(request), [request]);
+}
+
+function answer(promptId: string, choice: unknown): Action {
+  return { t: "prompt", promptId, choice };
+}
+
+const MULLIGAN_MAX = 3;
+
+/**
+ * The opening hand IS the picker: click cards in your hand to mark them for the bottom,
+ * click again to unmark. The banner only counts and commits — one selection surface, not two.
+ */
+function Mulligan({ game }: { game: EngineState }) {
+  const dispatch = useEngineSession((s) => s.dispatch);
+  const [back, setBack] = useState<string[]>([]);
+  const hand = game.players[HUMAN_SEAT].hand;
+  const toggle = useMemo(
+    () => (id: string) =>
+      setBack((cur) => (cur.includes(id) ? cur.filter((c) => c !== id) : cur.length < MULLIGAN_MAX ? [...cur, id] : cur)),
+    [],
+  );
+  const onBoardPick = useMemo(() => (token: string) => toggle(token.slice("hand:p1:".length)), [toggle]);
+  // every card stays clickable; the marked ones also glow green, so one click marks and
+  // the next unmarks — the hand is the only selection surface.
+  useBoardPick(
+    `engine-mulligan:${back.join(",")}`,
+    hand.map((id) => handToken("p1", id)),
+    back.map((id) => handToken("p1", id)),
+    onBoardPick,
+  );
+  const marked = back.map((id) => game.cards[id]?.name).filter(Boolean);
+  return (
+    <PromptBanner
+      title="Your opening hand"
+      hint={
+        back.length
+          ? `Putting back: ${marked.join(", ")}. Click a card again to keep it.`
+          : `Click up to ${MULLIGAN_MAX} cards in your hand to put them on the bottom and draw replacements.`
+      }
+      counter={`${back.length}/${MULLIGAN_MAX}`}
+    >
+      {back.length > 0 && (
+        <RcButton variant="outline" size="sm" onClick={() => dispatch({ t: "mulligan", back })}>
+          Mulligan {back.length}
+        </RcButton>
+      )}
+      <RcButton size="sm" onClick={() => dispatch({ t: "keepHand" })}>
+        Keep hand
+      </RcButton>
+    </PromptBanner>
+  );
+}
+
+function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Prompt }) {
+  const dispatch = useEngineSession((s) => s.dispatch);
+  // titles come from the engine and may name squares in engine space — show our tile numbers
+  const prompt = { ...rawPrompt, title: localizeEngineText(rawPrompt.title ?? "") };
+  const data = (prompt.data ?? {}) as PromptData;
+  const send = (choice: unknown) => dispatch(answer(prompt.id, choice));
+  const auto = () => dispatch(botAction(game, HUMAN_SEAT));
+  const autoButton = (
+    <RcButton variant="ghost" size="xs" onClick={auto} title="Let the engine answer this for you">
+      Auto
+    </RcButton>
+  );
+
+  switch (prompt.kind) {
+    case "drawDeck":
+      return (
+        <SinglePick
+          request={`engine-prompt:${prompt.id}`}
+          title={prompt.title || "Draw from your spellbook or atlas"}
+          tokens={[pileToken("p1", "spellbook"), pileToken("p1", "atlas")]}
+          onPick={(token) => send(token.endsWith("atlas") ? "atlas" : "spellbook")}
+        >
+          <RcButton variant="outline" size="xs" onClick={() => send("spellbook")}>
+            Spellbook
+          </RcButton>
+          <RcButton variant="outline" size="xs" onClick={() => send("atlas")}>
+            Atlas
+          </RcButton>
+        </SinglePick>
+      );
+    case "firstSite": {
+      const ids = data.ids ?? [];
+      return (
+        <SinglePick
+          request={`engine-prompt:${prompt.id}`}
+          title={prompt.title || "Choose your first site"}
+          tokens={ids.map((id) => handToken("p1", id))}
+          onPick={(token) => send(token.slice("hand:p1:".length))}
+        >
+          {autoButton}
+        </SinglePick>
+      );
+    }
+    case "intercept": {
+      const ids = data.candidates ?? [];
+      return (
+        <SinglePick
+          request={`engine-prompt:${prompt.id}`}
+          title={prompt.title || "Intercept with a unit?"}
+          tokens={ids.map((id) => tokenForEngineId(game, id))}
+          onPick={(token) => send(ids.find((id) => tokenForEngineId(game, id) === token) ?? null)}
+        >
+          <RcButton variant="outline" size="xs" onClick={() => send(null)}>
+            Don&apos;t intercept
+          </RcButton>
+        </SinglePick>
+      );
+    }
+    case "chooseSquare": {
+      const squares = data.squares ?? [];
+      return (
+        <SinglePick
+          request={`engine-prompt:${prompt.id}`}
+          title={prompt.title || "Choose a square"}
+          tokens={squares.map((sq) => engineCellKey(sq.x, sq.y))}
+          onPick={(token) => send(squares.find((sq) => engineCellKey(sq.x, sq.y) === token) ?? null)}
+        >
+          {autoButton}
+        </SinglePick>
+      );
+    }
+    case "defend":
+    case "chooseTargets": {
+      const ids = data.candidates ?? [];
+      const max = prompt.kind === "defend" ? ids.length : (data.count ?? 1);
+      const min = prompt.kind === "defend" || data.upTo ? 0 : max;
+      return (
+        <MultiPick
+          request={`engine-prompt:${prompt.id}`}
+          title={prompt.title}
+          ids={ids}
+          tokenOf={(id) => tokenForEngineId(game, id)}
+          min={min}
+          max={max}
+          confirmLabel={(n) => (prompt.kind === "defend" ? (n ? `Defend with ${n}` : "No defenders") : "Confirm")}
+          onConfirm={send}
+        >
+          {autoButton}
+        </MultiPick>
+      );
+    }
+    case "stayInFight":
+    case "yesNo":
+      return (
+        <PromptDialog title={prompt.title} hint="This decision is yours.">
+          <div className="flex justify-center gap-3 pt-2">
+            <RcButton variant="outline" size="lg" onClick={() => send(false)}>
+              No
+            </RcButton>
+            <RcButton size="lg" onClick={() => send(true)}>
+              Yes
+            </RcButton>
+          </div>
+        </PromptDialog>
+      );
+    case "chooseOption":
+      // a revealed card (Second Seer's top card, Lookout…) is shown, not just named
+      if (data.reveal)
+        return (
+          <PromptDialog title={prompt.title} hint="Revealed to you.">
+            <CpuCardPick title={data.reveal} items={[{ id: "reveal", card: cardRefFor(data.reveal) }]} onPick={() => undefined}>
+              <div className="mt-3 flex justify-center gap-2">
+                {(data.options ?? []).map((option) => (
+                  <RcButton key={option} variant="outline" size="sm" onClick={() => send(option)}>
+                    {localizeEngineText(option)}
+                  </RcButton>
+                ))}
+              </div>
+            </CpuCardPick>
+          </PromptDialog>
+        );
+      {
+        const options = data.options ?? [];
+        const dirs = options.map((option) => ({ key: directionKey(option), label: option }));
+        // A direction belongs on the board, aimed from the source square — not in a popup.
+        const board = dirs.filter((d) => d.key).length >= 3 ? lanesFor(data, options) : null;
+        if (board) return <DirectionPick prompt={prompt} options={options} board={board} onSend={send} />;
+        // no origin from the engine (Windblast's worded options, 'hold fire' sets): compass
+        if (options.length >= 3 && dirs.every((d) => d.key)) {
+          return (
+            <PromptDialog title={prompt.title} hint="Choose a direction.">
+              <Compass
+                options={dirs.map((d) => ({ key: BOARD_DIRECTION[d.key as EngineDirection], label: d.label }))}
+                onPick={send}
+              />
+            </PromptDialog>
+          );
+        }
+        return (
+          <PromptDialog title={prompt.title}>
+            <div className="flex flex-wrap justify-center gap-2 pt-1">
+              {options.map((option) => (
+                // display localized, but answer with the engine's own option string
+                <RcButton key={option} variant="outline" size="sm" onClick={() => send(option)}>
+                  {localizeEngineText(option)}
+                </RcButton>
+              ))}
+            </div>
+          </PromptDialog>
+        );
+      }
+    case "allocateDamage":
+      return <AllocateDamage game={game} prompt={prompt} data={data} onSend={send} />;
+    case "chooseCards":
+      return <ChooseCards prompt={prompt} data={data} onSend={send} auto={autoButton} />;
+    case "orderCards":
+      return <OrderCards prompt={prompt} data={data} onSend={send} />;
+    case "nameCard":
+      return <NameCard prompt={prompt} data={data} onSend={send} />;
+    default:
+      return (
+        <PromptDialog title={prompt.title} hint="This step has no board picture yet.">
+          <div className="flex justify-center pt-1">
+            <RcButton size="sm" onClick={auto}>
+              Let the engine choose
+            </RcButton>
+          </div>
+        </PromptDialog>
+      );
+  }
+}
+
+function SinglePick({
+  request,
+  title,
+  tokens,
+  onPick,
+  children,
+}: {
+  request: string;
+  title: string;
+  tokens: string[];
+  onPick: (token: string) => void;
+  children?: React.ReactNode;
+}) {
+  useBoardPick(request, tokens, [], onPick);
+  return (
+    <PromptBanner title={title} hint="Click the highlighted card, unit or tile on the board.">
+      {children}
+    </PromptBanner>
+  );
+}
+
+function MultiPick({
+  request,
+  title,
+  ids,
+  tokenOf,
+  min,
+  max,
+  confirmLabel,
+  onConfirm,
+  children,
+}: {
+  request: string;
+  title: string;
+  ids: string[];
+  tokenOf: (id: string) => string;
+  min: number;
+  max: number;
+  confirmLabel: (n: number) => string;
+  onConfirm: (ids: string[]) => void;
+  children?: React.ReactNode;
+}) {
+  const [chosen, setChosen] = useState<string[]>([]);
+  const toggle = useMemo(
+    () => (token: string) => {
+      const id = ids.find((candidate) => tokenOf(candidate) === token);
+      if (!id) return;
+      setChosen((cur) => (cur.includes(id) ? cur.filter((c) => c !== id) : cur.length < max ? [...cur, id] : cur));
+    },
+    [ids, tokenOf, max],
+  );
+  useBoardPick(`${request}:${chosen.join(",")}`, ids.map(tokenOf), chosen.map(tokenOf), toggle);
+  const ready = chosen.length >= min && chosen.length <= max;
+  return (
+    <PromptBanner
+      title={title}
+      hint="Click the highlighted units on the board; click one again to unpick it."
+      counter={`${chosen.length}/${max}`}
+    >
+      {children}
+      <RcButton size="sm" disabled={!ready} onClick={() => onConfirm(chosen)}>
+        {confirmLabel(chosen.length)}
+      </RcButton>
+    </PromptBanner>
+  );
+}
+
+function AllocateDamage({
+  game,
+  prompt,
+  data,
+  onSend,
+}: {
+  game: EngineState;
+  prompt: Prompt;
+  data: PromptData;
+  onSend: (choice: unknown) => void;
+}) {
+  const ids = data.candidates ?? [];
+  const power = data.power ?? 0;
+  const [split, setSplit] = useState<Record<string, number>>(() => (ids[0] ? { [ids[0]]: power } : {}));
+  const used = Object.values(split).reduce((a, b) => a + b, 0);
+  const bump = (id: string, delta: number) =>
+    setSplit((cur) => {
+      const next = Math.max(0, (cur[id] ?? 0) + delta);
+      if (delta > 0 && used >= power) return cur;
+      return { ...cur, [id]: next };
+    });
+  useBoardPick(`engine-prompt:${prompt.id}:glow`, [], ids.map((id) => tokenForEngineId(game, id)), () => undefined);
+  return (
+    <PromptDialog title={prompt.title} hint={`Split ${power} damage among the enemy.`}>
+      <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+      {ids.map((id) => (
+        <span key={id} className="flex items-center gap-1 rounded-rc-md border border-rc-line/12 bg-black/30 px-2 py-0.5">
+          <span className="font-rc-display text-rc-accent-link">{game.units[id]?.name ?? id}</span>
+          <RcButton variant="quiet" size="icon-xs" aria-label="Less damage" onClick={() => bump(id, -1)}>
+            −
+          </RcButton>
+          <span className="w-5 text-center font-rc-mono tabular-nums text-rc-danger">{split[id] ?? 0}</span>
+          <RcButton variant="quiet" size="icon-xs" aria-label="More damage" onClick={() => bump(id, 1)}>
+            +
+          </RcButton>
+        </span>
+      ))}
+      </div>
+      <div className="mt-4 flex justify-center">
+        <RcButton size="sm" disabled={used !== power} onClick={() => onSend({ strikerId: data.strikerId, allocation: split })}>
+          Strike ({used}/{power})
+        </RcButton>
+      </div>
+    </PromptDialog>
+  );
+}
+
+function ChooseCards({
+  prompt,
+  data,
+  onSend,
+  auto,
+}: {
+  prompt: Prompt;
+  data: PromptData;
+  onSend: (choice: unknown) => void;
+  auto: React.ReactNode;
+}) {
+  const cards = data.cards ?? [];
+  const pick = data.pick ?? 1;
+  const [chosen, setChosen] = useState<number[]>([]);
+  const items = cards.map((name, i) => ({
+    id: String(i),
+    card: cardRefFor(name),
+    badge: chosen.includes(i) ? `Chosen ${chosen.indexOf(i) + 1}` : undefined,
+  }));
+  const toggle = (id: string) => {
+    const i = Number(id);
+    setChosen((cur) => (cur.includes(i) ? cur.filter((c) => c !== i) : cur.length < pick ? [...cur, i] : cur));
+  };
+  const ready = data.upTo ? chosen.length <= pick : chosen.length === Math.min(pick, cards.length);
+  const need = Math.min(pick, cards.length);
+  return (
+    <PromptDialog
+      title={prompt.title}
+      hint={data.upTo ? `Choose up to ${need} — or skip.` : `Choose ${need}.`}
+      wide
+    >
+      <CpuCardPick
+        title={`${chosen.length}/${need} chosen`}
+        items={items}
+        selected={null}
+        selectedIds={chosen.map(String)}
+        onPick={toggle}
+      >
+        <div className="mt-3 flex justify-center gap-2">
+          {auto}
+          {data.upTo && (
+            <RcButton variant="outline" size="sm" onClick={() => onSend([])}>
+              {data.skipLabel ?? "Skip"}
+            </RcButton>
+          )}
+          <RcButton size="sm" disabled={!ready} onClick={() => onSend(chosen)}>
+            Confirm
+          </RcButton>
+        </div>
+      </CpuCardPick>
+    </PromptDialog>
+  );
+}
+
+function OrderCards({ prompt, data, onSend }: { prompt: Prompt; data: PromptData; onSend: (choice: unknown) => void }) {
+  const cards = data.cards ?? [];
+  const [order, setOrder] = useState<number[]>(() => cards.map((_, i) => i));
+  const [held, setHeld] = useState<number | null>(null);
+  // Click a card, then click where it should go: the two swap places.
+  const onPick = (id: string) => {
+    const pos = Number(id);
+    if (held === null) return setHeld(pos);
+    setOrder((cur) => {
+      const next = [...cur];
+      [next[held], next[pos]] = [next[pos], next[held]];
+      return next;
+    });
+    setHeld(null);
+  };
+  const items = order.map((cardIndex, pos) => ({ id: String(pos), card: cardRefFor(cards[cardIndex]), badge: `${pos + 1}` }));
+  return (
+    <PromptDialog title={prompt.title} hint="Click two cards to swap them. The first is resolved or placed first." wide>
+      <CpuCardPick title="Order" items={items} selected={held === null ? null : String(held)} onPick={onPick}>
+        <div className="mt-3 flex justify-center">
+          <RcButton size="sm" onClick={() => onSend(order)}>
+            Confirm order
+          </RcButton>
+        </div>
+      </CpuCardPick>
+    </PromptDialog>
+  );
+}
+
+function NameCard({ prompt, data, onSend }: { prompt: Prompt; data: PromptData; onSend: (choice: unknown) => void }) {
+  const names = useMemo(() => data.names ?? allCards.filter((c) => !c.token).map((c) => c.name), [data.names]);
+  const [value, setValue] = useState("");
+  const valid = names.includes(value);
+  return (
+    <PromptDialog title={prompt.title} hint="Type a card name.">
+      <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+      <input
+        list="engine-card-names"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="Card name"
+        className="h-9 w-64 rounded-rc-md border border-rc-line/22 bg-black/40 px-3 text-sm text-rc-fg"
+      />
+      <datalist id="engine-card-names">
+        {names.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
+      <RcButton variant="outline" size="sm" onClick={() => onSend("")}>
+        Cancel
+      </RcButton>
+      <RcButton size="sm" disabled={!valid} onClick={() => onSend(value)}>
+        Name it
+      </RcButton>
+      </div>
+    </PromptDialog>
+  );
+}

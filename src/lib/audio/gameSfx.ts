@@ -31,8 +31,9 @@ import type {
 
 // ─── Source tagging ──────────────────────────────────────────────────────
 
-/** Where a state change came from: this client, a server patch, or undo. */
-export type SfxSource = "local" | "remote" | "undo";
+/** Where a state change came from: this client, a server patch, undo — or a cosmetic
+ *  re-projection ("silent": engine-mode layer switches rewrite the board without any game event). */
+export type SfxSource = "local" | "remote" | "undo" | "silent";
 
 let activeSource: SfxSource = "local";
 
@@ -521,6 +522,7 @@ const KILL_MERGE_MS = 700;
 export function installGameSfx(store: SfxStore): () => void {
   let lastKillAt = 0;
   return store.subscribe((next, prev) => {
+    if (activeSource === "silent") return;
     if (activeSource === "undo") {
       if (RELEVANT_KEYS.some((key) => prev[key] !== next[key])) {
         soundManager.play("returnToHand");

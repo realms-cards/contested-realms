@@ -57,6 +57,8 @@ type TileDropHandlerOptions = {
   selectedCard: GameState["selectedCard"];
   mouseInHandZone: boolean;
   isSpectator: boolean;
+  /** A rules-enforced mode owns the board: refuse drops/plays the engine would not honour. */
+  gesturesLocked?: boolean;
   actorKey: PlayerKey | null;
   currentPlayer: 1 | 2;
   setAttackChoice: GameState["setAttackChoice"];
@@ -106,6 +108,7 @@ export function useTileDropHandler({
   selectedCard,
   mouseInHandZone: _mouseInHandZone,
   isSpectator,
+  gesturesLocked = false,
   actorKey,
   currentPlayer,
   setAttackChoice,
@@ -185,7 +188,7 @@ export function useTileDropHandler({
       // normally: trackpad secondary clicks turned plays face down by accident. Hold F instead.
       const isRightClick = e.button === 2;
       if (e.button !== 0 && e.button !== 2) return;
-      if (isSpectator) return;
+      if (isSpectator || gesturesLocked) return;
       e.stopPropagation();
       // Prevent context menu for right-click drops
       if (isRightClick && e.nativeEvent) {
@@ -757,6 +760,7 @@ export function useTileDropHandler({
       interactionGuides,
       metaByCardId,
       isSpectator,
+      gesturesLocked,
       isAttachableToken,
       isCarryableArtifact,
       draggingSite,

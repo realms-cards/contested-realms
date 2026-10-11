@@ -413,6 +413,7 @@ export function PermanentStack({
 
   // CPU board picks on this tile's cards: subscribes to their tones only, so other stacks stay put.
   const unitTokens = tileUnitTokens(tileKey, items, magicContext.avatars);
+  const gesturesLocked = useGameStore((s) => s.boardGesturesLocked);
   const unitPicks = useUnitPicks(unitTokens);
   const pickLayout = unitPickLayout(unitTokens, unitPicks);
 
@@ -863,6 +864,11 @@ export function PermanentStack({
                   return;
                 }
                 if (isSpectator) {
+                  e.stopPropagation();
+                  return;
+                }
+                // a rules-enforced mode owns the board: no free dragging (picking still works)
+                if (gesturesLocked) {
                   e.stopPropagation();
                   return;
                 }

@@ -1957,6 +1957,13 @@ export type GameState = {
       | null;
   };
   setTutorialActionGate: (gate: GameState["tutorialActionGate"]) => void;
+  /**
+   * Rules-enforced modes (engine mode) own the board: free-form gestures — dragging cards,
+   * tapping, drawing from a pile, the board hotkeys — would desync from the authoritative
+   * state, so they are refused at the gesture itself. Picking (the board picker) still works.
+   */
+  boardGesturesLocked: boolean;
+  setBoardGesturesLocked: (locked: boolean) => void;
   // Card meta cache (subset) used to detect base power and rarity
   metaByCardId: Record<
     number,

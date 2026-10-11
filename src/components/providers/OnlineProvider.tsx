@@ -116,8 +116,9 @@ export default function OnlineProvider({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  // Skip applying server patches on hotseat page to avoid overwriting local state
-  const isHotseatPage = pathname === "/play";
+  // Pages that own the game store locally: a server patch must not overwrite them.
+  // (/play is hotseat; /play/engine is the rules-engine match, whose engine is authoritative.)
+  const isHotseatPage = pathname === "/play" || pathname === "/play/engine";
   const { startLoading: startGlobalLoading, stopLoading: stopGlobalLoading } =
     useLoadingContext();
   const { data: session, status: sessionStatus } = useSession();
@@ -938,7 +939,7 @@ export default function OnlineProvider({
       if (!detail) return;
 
       // In hotseat mode, only show toasts for the current player
-      const isHotseat = window.location.pathname === "/play";
+      const isHotseat = window.location.pathname === "/play" || window.location.pathname === "/play/engine";
       if (isHotseat) {
         const currentSeat =
           useGameStore.getState().currentPlayer === 1 ? "p1" : "p2";

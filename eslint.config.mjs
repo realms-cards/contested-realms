@@ -19,6 +19,7 @@ const eslintConfig = [
       "build/**",
       "dist/**", // Ignore compiled server code (uses CommonJS)
       "bots/**", // Ignore bot engine (uses CommonJS)
+      "vendor/**", // Pristine upstream copies (scripts/vendor-untested-realm.sh)
       "next-env.d.ts",
       "scripts/**",
       "public/ktx2/**", // Ignore third-party transcoder files

@@ -258,6 +258,7 @@ export function AvatarCard({
     ? tileUnitTokens(pickTileKey, permanents[pickTileKey] || [], magicContext.avatars)
     : [];
   const unitPicks = useUnitPicks(pickTokens);
+  const gesturesLocked = useGameStore((state) => state.boardGesturesLocked);
   if (!avatar.pos) return null;
   const pickToken = avatarUnitToken(seat);
   const unitPick = isSpectator ? null : (unitPicks.get(pickToken) ?? null);
@@ -483,6 +484,11 @@ export function AvatarCard({
 
   function handlePointerDown(e: ThreeEvent<PointerEvent>) {
     if (isSpectator) {
+      e.stopPropagation();
+      return;
+    }
+    // a rules-enforced mode owns the board: no free dragging (picking still works)
+    if (gesturesLocked) {
       e.stopPropagation();
       return;
     }

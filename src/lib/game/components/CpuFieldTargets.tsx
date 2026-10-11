@@ -2,7 +2,7 @@
 
 import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
-import { type RefObject, type SyntheticEvent, useMemo, useRef, useState } from "react";
+import { type RefObject, type SyntheticEvent, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useShallow } from "zustand/react/shallow";
 import { RcButton } from "@/components/ui/rc-button";
@@ -19,10 +19,37 @@ const COLORS: Record<FieldTone, string> = {candidate:"#f59e0b",selected:"#22c55e
 const TILE_LEVELS: Record<FieldTone, Level> = {candidate:{opacity:0.07,pulse:0.04},selected:{opacity:0.16,pulse:0.05},target:{opacity:0.1,pulse:0.03},source:{opacity:0.08,pulse:0.03}};
 // Arrows are small, so their fill carries the signal.
 const ARROW_LEVELS: Record<FieldTone, Level> = {candidate:{opacity:0.5,pulse:0.18},selected:{opacity:0.85,pulse:0.1},target:{opacity:0.7,pulse:0},source:{opacity:0.5,pulse:0}};
-const HALF = TILE_SIZE/2-0.01;
+// Exactly the cell boundary: the playmat's grid line is centred on it, so the outline lands
+// ON the line rather than a hair inside it. Any inset here reads as a visible misalignment.
+const HALF = TILE_SIZE/2;
 const OUTLINE = new Float32Array([-HALF,HALF,0.001,HALF,HALF,0.001,HALF,-HALF,0.001,-HALF,-HALF,0.001]);
-// Above stacked cards, so a clickable tile wins the raycast (as the previous flat planes did).
+// A target-lock sigil instead of a plain box: four corner brackets, so the tile reads as
+// "aimed at" rather than merely shaded, and the card art in the middle stays unobscured.
+const BRACKET_ARM = TILE_SIZE*0.26;
+const BRACKETS = new Float32Array([-1,-1,1,-1,1,1,-1,1].reduce<number[]>((out,_,index,signs) => {
+  if (index % 2) return out;
+  const sx = signs[index], sy = signs[index+1];
+  const corner: [number, number] = [sx*HALF,sy*HALF];
+  out.push(...corner,0.001, sx*(HALF-BRACKET_ARM),sy*HALF,0.001);
+  out.push(...corner,0.001, sx*HALF,sy*(HALF-BRACKET_ARM),0.001);
+  return out;
+},[]));
+// A small diamond at the centre that breathes with the pulse — the "drop it here" beacon.
+const PIP = TILE_SIZE*0.085;
+const PIP_SHAPE = new Float32Array([0,PIP,0.0015, PIP,0,0.0015, 0,-PIP,0.0015, -PIP,0,0.0015]);
+// The invisible click plane sits above stacked cards, so a clickable tile wins the raycast
+// (as the previous flat planes did).
 const LIFT = 0.3;
+/**
+ * The VISUALS sit just above the board instead, level with the grid. Drawing them at LIFT
+ * too made them miss their own cell by several pixels: with the camera tilted, anything
+ * raised off the board parallaxes away from the grid line it is meant to trace. They still
+ * paint over cards because they are depthTest:false with a high renderOrder, not because
+ * they are physically above them.
+ */
+const VISUAL_LIFT = 0.002;
+/** Local +z inside the flattened group is world +y, so this raises the click plane back up. */
+const CLICK_PLANE_Z = LIFT - VISUAL_LIFT;
 const HTML_Z: [number, number] = [20,0]; // under the DOM HUD (z-100) and resolver overlays (z-200)
 
 // An arrow pointing along +Y in its own plane; the group turns it to face N/E/S/W on the board.
@@ -51,9 +78,10 @@ const pulses = (tone: FieldTone) => tone === "candidate" || tone === "selected";
 
 export default function CpuFieldTargets({offsetX,offsetY}: {offsetX:number;offsetY:number}) {
   const cpu = useGameStore(state => state.opponentPlayerId?.startsWith("cpu_") === true);
-  const {tiles,selected,glow,sources,labels} = useCpuBoardPicker(useShallow(picker => ({tiles:picker.tiles,selected:picker.selected,glow:picker.glow,sources:picker.sources,labels:picker.labels})));
+  const {request,tiles,selected,glow,sources,labels} = useCpuBoardPicker(useShallow(picker => ({request:picker.request,tiles:picker.tiles,selected:picker.selected,glow:picker.glow,sources:picker.sources,labels:picker.labels})));
   const targets = useMemo(() => fieldTargets({tiles,selected,glow,sources,labels}),[tiles,selected,glow,sources,labels]);
-  if (!cpu) return null;
+  // Rules Engine matches (src/lib/engine-mode) drive the same picker; their requests start with "engine".
+  if (!cpu && !request.startsWith("engine")) return null;
   return <>
     {(targets.tiles.size > 0 || targets.arrows.length > 0) && <TargetMeshes offsetX={offsetX} offsetY={offsetY} tones={targets.tiles} arrows={targets.arrows} labels={labels} />}
     {targets.rows.length > 0 && <OptionRows offsetX={offsetX} offsetY={offsetY} rows={targets.rows} />}
@@ -62,33 +90,57 @@ export default function CpuFieldTargets({offsetX,offsetY}: {offsetX:number;offse
 
 function TargetMeshes({offsetX,offsetY,tones,arrows,labels}: {offsetX:number;offsetY:number;tones:Map<string, FieldTone>;arrows:ArrowTarget[];labels:Readonly<Record<string, string>>}) {
   const fills = useRef(new Map<string, THREE.MeshBasicMaterial>());
-  const [hovered,setHovered] = useState<string | null>(null);
+  // Hover lives in the picker store, not locally: a caller can then preview what the hovered
+  // token would do (the engine's direction prompt lights that direction's whole lane).
+  const hovered = useCpuBoardPicker(picker => picker.hovered);
+  const setHovered = useCpuBoardPicker.getState().setHovered;
   // Only targets awaiting a click pulse; chosen targets and idle ability sources stay static, so an idle board renders nothing.
   const levels = new Map<string, Level>();
-  for (const [tile,tone] of tones) if (pulses(tone)) levels.set(tile,TILE_LEVELS[tone]);
+  for (const [tile,tone] of tones) if (pulses(tone)) {
+    levels.set(tile,TILE_LEVELS[tone]);
+    // the centre pip swings wider than the tile wash, so the beacon reads from across the board
+    levels.set(`${tile}:pip`,{opacity:0.55,pulse:0.4});
+  }
   for (const arrow of arrows) if (pulses(arrow.tone)) levels.set(arrow.token,ARROW_LEVELS[arrow.tone]);
   const pulsing = levels.size > 0;
   const fill = (token: string) => (material: THREE.MeshBasicMaterial | null) => { if (material) fills.current.set(token,material); else fills.current.delete(token); };
   return <group>{pulsing && <Pulse fills={fills} levels={levels} />}{[...tones].map(([tile,tone]) => {
     const [x,y] = cell(tile), color = COLORS[tone];
-    return <group key={tile} position={[offsetX+x*TILE_SIZE,LIFT,offsetY+y*TILE_SIZE]} rotation-x={-Math.PI/2}>
+    return <group key={tile} position={[offsetX+x*TILE_SIZE,VISUAL_LIFT,offsetY+y*TILE_SIZE]} rotation-x={-Math.PI/2}>
       <mesh raycast={noRaycast} renderOrder={1100}>
-        <planeGeometry args={[TILE_SIZE-0.02,TILE_SIZE-0.02]} />
+        <planeGeometry args={[TILE_SIZE,TILE_SIZE]} />
         {/* Remounted when the pulse stops, so no tile keeps a mid-pulse opacity. */}
         <meshBasicMaterial key={pulsing ? "pulse" : "still"} ref={fill(tile)} color={color} transparent opacity={TILE_LEVELS[tone].opacity} depthWrite={false} depthTest={false} side={THREE.DoubleSide} />
       </mesh>
-      <lineLoop raycast={noRaycast} renderOrder={1101}>
+      {/* a chosen target or an ability source keeps the quiet full box; a tile awaiting a
+          click wears the sigil: corner brackets plus a breathing centre pip */}
+      {pulses(tone) ? <>
+        {/* keep the full box so a clickable tile is never less prominent than a lit one… */}
+        <lineLoop raycast={noRaycast} renderOrder={1101}>
+          <bufferGeometry><bufferAttribute attach="attributes-position" args={[OUTLINE,3]} /></bufferGeometry>
+          <lineBasicMaterial color={color} transparent opacity={0.45} depthTest={false} />
+        </lineLoop>
+        {/* …and add the target-lock brackets and centre pip on top of it */}
+        <lineSegments raycast={noRaycast} renderOrder={1101}>
+          <bufferGeometry><bufferAttribute attach="attributes-position" args={[BRACKETS,3]} /></bufferGeometry>
+          <lineBasicMaterial color={color} transparent opacity={0.95} depthTest={false} />
+        </lineSegments>
+        <lineLoop raycast={noRaycast} renderOrder={1101}>
+          <bufferGeometry><bufferAttribute attach="attributes-position" args={[PIP_SHAPE,3]} /></bufferGeometry>
+          <lineBasicMaterial key={pulsing ? "pulse" : "still"} ref={fill(`${tile}:pip`)} color={color} transparent opacity={0.85} depthTest={false} />
+        </lineLoop>
+      </> : <lineLoop raycast={noRaycast} renderOrder={1101}>
         <bufferGeometry><bufferAttribute attach="attributes-position" args={[OUTLINE,3]} /></bufferGeometry>
         <lineBasicMaterial color={color} transparent opacity={0.9} depthTest={false} />
-      </lineLoop>
-      {pulses(tone) && <mesh name={`cpu-pick:${tile}`} onPointerDown={stop} onPointerUp={stop} onClick={event => pick(event,tile)}>
-        <planeGeometry args={[TILE_SIZE-0.02,TILE_SIZE-0.02]} />
+      </lineLoop>}
+      {pulses(tone) && <mesh name={`cpu-pick:${tile}`} position={[0,0,CLICK_PLANE_Z]} onPointerDown={stop} onPointerUp={stop} onClick={event => pick(event,tile)}>
+        <planeGeometry args={[TILE_SIZE,TILE_SIZE]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
       </mesh>}
     </group>;
   })}{arrows.map(({token,at,dir,tone,clickable}) => {
     const [x,y] = cell(at), [dx,dy] = ARROW_STEPS[dir], color = COLORS[tone], label = labels[token];
-    return <group key={token} position={[offsetX+(x*TILE_SIZE)+dx*ARROW_REACH,LIFT+0.01,offsetY+(y*TILE_SIZE)+dy*ARROW_REACH]} rotation={[-Math.PI/2,0,ARROW_TURN[dir]]}>
+    return <group key={token} position={[offsetX+(x*TILE_SIZE)+dx*ARROW_REACH,VISUAL_LIFT+0.001,offsetY+(y*TILE_SIZE)+dy*ARROW_REACH]} rotation={[-Math.PI/2,0,ARROW_TURN[dir]]}>
       <mesh raycast={noRaycast} renderOrder={1102}>
         <shapeGeometry args={[ARROW_SHAPE]} />
         <meshBasicMaterial key={pulsing ? "pulse" : "still"} ref={fill(token)} color={color} transparent opacity={ARROW_LEVELS[tone].opacity} depthWrite={false} depthTest={false} side={THREE.DoubleSide} />
@@ -97,8 +149,8 @@ function TargetMeshes({offsetX,offsetY,tones,arrows,labels}: {offsetX:number;off
         <bufferGeometry><bufferAttribute attach="attributes-position" args={[ARROW_OUTLINE,3]} /></bufferGeometry>
         <lineBasicMaterial color={color} transparent opacity={0.95} depthTest={false} />
       </lineLoop>
-      {clickable && <mesh name={`cpu-pick:${token}`} onPointerDown={stop} onPointerUp={stop} onClick={event => pick(event,token)}
-        onPointerOver={event => { event.stopPropagation(); setHovered(token); }} onPointerOut={() => setHovered(current => current === token ? null : current)}>
+      {clickable && <mesh name={`cpu-pick:${token}`} position={[0,0,CLICK_PLANE_Z]} onPointerDown={stop} onPointerUp={stop} onClick={event => pick(event,token)}
+        onPointerOver={event => { event.stopPropagation(); setHovered(token); }} onPointerOut={() => { if (useCpuBoardPicker.getState().hovered === token) setHovered(null); }}>
         <planeGeometry args={ARROW_HIT} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
       </mesh>}

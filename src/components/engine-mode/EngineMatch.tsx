@@ -1,0 +1,290 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import CardPreview from "@/components/game/CardPreview";
+import CpuPlayReveal from "@/components/game/CpuPlayReveal";
+import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
+import AppShell from "@/components/ui/AppShell";
+import { PageHeader } from "@/components/ui/page-header";
+import { RcButton } from "@/components/ui/rc-button";
+import { GameSoundEffects } from "@/lib/audio/gameSfx";
+import { enginePrecons, loadEngineDeck } from "@/lib/engine-mode/decks";
+import { loadEngineGame } from "@/lib/engine-mode/persistence";
+import type { SavedEngineGame } from "@/lib/engine-mode/persistence";
+import { useEngineSession } from "@/lib/engine-mode/session";
+import type { BotLevel } from "@/lib/engine-mode/session";
+import { createCardPreviewData } from "@/lib/game/card-preview.types";
+import { useGameStore } from "@/lib/game/store";
+import EngineActionRail from "./EngineActionRail";
+import EngineContextMenu from "./EngineContextMenu";
+import EngineDeckPicker, { choiceToSource, RANDOM_PRECON, useDeckLists } from "./EngineDeckPicker";
+import EngineHud from "./EngineHud";
+import EngineNarration from "./EngineNarration";
+import EnginePromptPanel from "./EnginePromptPanel";
+import EngineResourcePanels from "./EngineResourcePanels";
+import { useEngineInteraction } from "./useEngineInteraction";
+
+/** Dynamic import keeps Three.js / R3F out of the server bundle. */
+const EngineBoard3D = dynamic(() => import("./EngineBoard3D"), { ssr: false });
+
+interface Setup {
+  mine: string;
+  mineLink: string;
+  theirs: string;
+  theirsLink: string;
+  level: BotLevel;
+  /** optional rule: the second player scries 1 before turn 1 */
+  secondSeer: boolean;
+}
+
+const SETUP_KEY = "realms:engineSetup";
+const DEFAULT_SETUP: Setup = {
+  mine: `builtin:${enginePrecons[0].id}`,
+  mineLink: "",
+  theirs: RANDOM_PRECON,
+  theirsLink: "",
+  level: "quick",
+  secondSeer: false,
+};
+
+/** The last setup is a per-viewer convenience; any storage failure just means defaults. */
+function readSetup(): Setup {
+  try {
+    const raw = localStorage.getItem(SETUP_KEY);
+    return raw ? { ...DEFAULT_SETUP, ...(JSON.parse(raw) as Partial<Setup>) } : DEFAULT_SETUP;
+  } catch {
+    return DEFAULT_SETUP;
+  }
+}
+
+export default function EngineMatch() {
+  const router = useRouter();
+  const game = useEngineSession((s) => s.game);
+  const start = useEngineSession((s) => s.start);
+  const stop = useEngineSession((s) => s.stop);
+  const resume = useEngineSession((s) => s.resume);
+  const discardSaved = useEngineSession((s) => s.discardSaved);
+  const lists = useDeckLists();
+  const [setup, setSetup] = useState<Setup>(DEFAULT_SETUP);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  /** undefined while we look, null when there is nothing to resume */
+  const [saved, setSaved] = useState<SavedEngineGame | null | undefined>(undefined);
+
+  useEffect(() => setSetup(readSetup()), []);
+  // offer the match the player was in before the reload (storage is synchronous)
+  useEffect(() => setSaved(loadEngineGame()), []);
+
+  // Loading decks is async; if the player leaves while it is in flight, start() must not
+  // run afterwards — it would lock the board and install the projection for a dead page.
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+      stop();
+    };
+  }, [stop]);
+
+  const update = (patch: Partial<Setup>) =>
+    setSetup((s) => {
+      const next = { ...s, ...patch };
+      try {
+        localStorage.setItem(SETUP_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+  const begin = async (s: Setup) => {
+    const mine = choiceToSource(s.mine, s.mineLink, lists);
+    const theirs = choiceToSource(s.theirs, s.theirsLink, lists);
+    if (!mine || !theirs) {
+      setError("Paste a deck link first.");
+      return;
+    }
+    setStarting(true);
+    setError(null);
+    try {
+      const [a, b] = await Promise.all([loadEngineDeck(mine), loadEngineDeck(theirs)]);
+      if (!aliveRef.current) return;
+      if (!a.ok) return setError(`Your deck: ${a.error}`);
+      if (!b.ok) return setError(`Opponent's deck: ${b.error}`);
+      await start(a.deck, b.deck, s.level, { secondSeer: s.secondSeer });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not start the game.");
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  if (game)
+    return (
+      <EngineGame
+        onRestart={() => {
+          // back to the setup screen first, so a deck-loading failure is actually visible
+          stop();
+          void begin(setup);
+        }}
+        onExit={() => {
+          // leaving keeps the match: the resume prompt offers it back next time
+          stop();
+          router.push("/");
+        }}
+      />
+    );
+
+  if (saved === undefined) {
+    return (
+      <AppShell width="narrow">
+        <PageHeader eyebrow="experimental" title="Rules Engine vs CPU" />
+        <section className="rc-panel px-[18px] py-3.5">
+          <div className="rc-hint animate-pulse">Looking for a game in progress…</div>
+        </section>
+      </AppShell>
+    );
+  }
+
+  if (saved) {
+    const { summary } = saved;
+    return (
+      <AppShell width="narrow">
+        <PageHeader eyebrow="experimental" title="Rules Engine vs CPU" />
+        <section className="rc-panel space-y-4 px-[18px] py-3.5">
+          <div>
+            <div className="font-rc-display text-[26px] leading-none text-rc-fg-strong">
+              {summary.over ? "Your last game is finished" : "You have a game in progress"}
+            </div>
+            <div className="rc-hint mt-2">
+              {summary.you} vs {summary.opponent} — turn {summary.turn}
+              {summary.over ? ", already decided" : ""}.
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <RcButton
+              onClick={() => {
+                resume(saved);
+                setSaved(null);
+              }}
+            >
+              {summary.over ? "See the result" : "Resume game"}
+            </RcButton>
+            <RcButton
+              variant="outline"
+              onClick={() => {
+                discardSaved();
+                setSaved(null);
+              }}
+            >
+              New game
+            </RcButton>
+          </div>
+        </section>
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell width="narrow">
+      <PageHeader
+        eyebrow="experimental"
+        title="Rules Engine vs CPU"
+        description="Every card is resolved by a full rules engine, and the computer plans its turns with a look-ahead search. Only legal plays are offered: click a highlighted card or unit, then where it should go."
+      />
+      <section className="rc-panel space-y-5 px-[18px] py-3.5">
+        <div className="rc-alert" data-tone="info">
+          Powered by the open-source Untested Realm engine by Roberto Fratello. All 1,108 cards are scripted, so any
+          deck works.
+        </div>
+        <EngineDeckPicker
+          label="Your deck"
+          lists={lists}
+          value={setup.mine}
+          link={setup.mineLink}
+          allowRandom={false}
+          onChange={(mine) => update({ mine })}
+          onLinkChange={(mineLink) => update({ mineLink })}
+        />
+        <EngineDeckPicker
+          label="Opponent's deck"
+          lists={lists}
+          value={setup.theirs}
+          link={setup.theirsLink}
+          allowRandom
+          onChange={(theirs) => update({ theirs })}
+          onLinkChange={(theirsLink) => update({ theirsLink })}
+        />
+        <div>
+          <div className="rc-field-label mb-2">Computer</div>
+          <div className="flex gap-2">
+            {(["quick", "thinking"] as const).map((level) => (
+              <RcButton
+                key={level}
+                variant="quiet"
+                size="sm"
+                tone="info"
+                aria-pressed={setup.level === level}
+                onClick={() => update({ level })}
+              >
+                {level === "quick" ? "Quick" : "Thinks longer"}
+              </RcButton>
+            ))}
+          </div>
+        </div>
+        <label className="rc-check flex text-[13px]">
+          <input type="checkbox" checked={setup.secondSeer} onChange={(e) => update({ secondSeer: e.target.checked })} />
+          Enable Second Seer (2nd player scries 1)
+        </label>
+        {error && (
+          <div className="rc-alert" data-tone="danger" role="alert">
+            {error}
+          </div>
+        )}
+        <RcButton size="lg" disabled={starting} onClick={() => begin(setup)}>
+          {starting ? "Shuffling…" : "Start game"}
+        </RcButton>
+      </section>
+    </AppShell>
+  );
+}
+
+function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () => void }) {
+  const interaction = useEngineInteraction();
+  const previewCard = useGameStore((s) => s.previewCard);
+  const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
+  return (
+    <div className="fixed inset-0 overflow-hidden bg-[#0b0b0c]">
+      <EngineBoard3D />
+      <GameSoundEffects store={useGameStore} />
+      {/* the engine owns life totals — the familiar counters, read-only */}
+      <OnlineLifeCounters
+        dragFromHand={false}
+        myPlayerKey="p1"
+        playerNames={{ p1: "You", p2: "Computer" }}
+        readOnly
+        spectating={false}
+        showYouLabels
+      />
+      {/* The right edge is one column: mana/thresholds on top, the action rail under it. */}
+      <div className="pointer-events-none fixed right-3 top-1/2 z-[150] flex max-h-[94vh] -translate-y-1/2 flex-col items-end gap-3">
+        <EngineResourcePanels />
+        <EngineActionRail interaction={interaction} onExit={onExit} />
+      </div>
+      {cardPreviewsEnabled && previewCard && (
+        <CardPreview
+          card={createCardPreviewData({ slug: previewCard.slug, name: previewCard.name, type: previewCard.type })}
+          anchor="top-right"
+        />
+      )}
+      <div className="pointer-events-none fixed inset-x-0 top-16 z-[200] flex justify-center px-4">
+        <EnginePromptPanel />
+      </div>
+      {/* the computer's turn, narrated: a line per action and the card it played */}
+      <EngineNarration />
+      <CpuPlayReveal />
+      <EngineContextMenu />
+      <EngineHud interaction={interaction} onRestart={onRestart} onExit={onExit} />
+    </div>
+  );
+}

@@ -19,6 +19,7 @@ import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
 import CardBorder from "@/lib/game/components/CardBorder";
 import CardGlow from "@/lib/game/components/CardGlow";
+import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
 import MaterialCardBack from "@/lib/game/components/MaterialCardBack";
 import ResolverOutline from "@/lib/game/components/ResolverOutline";
@@ -78,6 +79,14 @@ export interface Hand3DProps {
   placement?: "overlayBottom" | "edgeTop" | "edgeBottom";
   // When true, render cards flat on the board (used for commentator mode)
   flatCards?: boolean;
+  /**
+   * Steady hand: it still slides down out of the way so the board stays clear, but it moves
+   * ONLY when the player brings the pointer to it — a draw never bobs it, and an open hand
+   * pick never pins it up. Rules-enforced modes (engine mode) use this, where the hand is a
+   * pick surface for the whole turn and would otherwise sit over the home row permanently.
+   * Touch devices keep the default behaviour, since there is no hover to raise it with.
+   */
+  steadyReveal?: boolean;
   // Enhanced preview functions (optional for compatibility)
   showCardPreview?: (card: CardPreviewData) => void;
   hideCardPreview?: () => void;
@@ -92,6 +101,7 @@ export default function Hand3D({
   viewerPlayerNumber = null,
   placement,
   flatCards = false,
+  steadyReveal = false,
   showCardPreview,
   hideCardPreview: _hideCardPreview,
   hideCardPreviewImmediate,
@@ -140,6 +150,7 @@ export default function Hand3D({
   // click picks the card instead of dragging, playing or opening a menu.
   const actorKey = useGameStore((s) => s.actorKey);
   const handPickSelector = useMemo(() => selectHandPick(owner), [owner]);
+  const gesturesLocked = useGameStore((s) => s.boardGesturesLocked);
   const handPickSlice = useCpuBoardPicker(useShallow(handPickSelector));
   const handPick = useMemo(
     () =>
@@ -534,11 +545,16 @@ export default function Hand3D({
     const frameNow = performance.now();
     const drawRevealActive =
       !showCardBacks && frameNow < drawRevealUntilRef.current;
+    const steadyHover = steadyReveal && !isCoarsePointer;
     const targetShownCheck = isEdgePlacementCheck
       ? 1
-      : handPick.active || overCardsArea || mouseInZone || drawRevealActive
-        ? 1
-        : 0;
+      : steadyHover
+        ? overCardsArea || mouseInZone
+          ? 1
+          : 0
+        : handPick.active || overCardsArea || mouseInZone || drawRevealActive
+          ? 1
+          : 0;
     // Hand is always fully spread (handSpreadLerp is pinned to 1 below), so the
     // spread target is constant. Keeping this in sync prevents spreadDelta from
     // being a permanent 1, which would mark the hand "never stable" and drive a
@@ -612,7 +628,10 @@ export default function Hand3D({
     // Reveal logic: edge hands always visible; overlay hands show on interaction
     // handVisibilityMode: null = default, "hidden" = force hide, "visible" = force show
     let targetShown: number;
-    if (!showCardBacks && handPick.active) {
+    if (steadyReveal && !isCoarsePointer && !showCardBacks && !isEdgePlacement) {
+      // pointer only: no pick, draw or drag moves it, so it never covers the board unasked
+      targetShown = overCardsArea || mouseInZone ? 1 : 0;
+    } else if (!showCardBacks && handPick.active) {
       // A hand card must be picked: keep the hand raised (also over mobile prompts).
       targetShown = 1;
     } else if (!showCardBacks && castPlacementMode) {
@@ -645,6 +664,7 @@ export default function Hand3D({
     // In XR, the hand stays visible at the board edge during drag
     if (
       !isXRPresenting &&
+      !steadyReveal &&
       !showCardBacks &&
       dragFromHand &&
       selected &&
@@ -659,6 +679,7 @@ export default function Hand3D({
     // Hide hand completely during any other board drag (desktop/mobile only)
     if (
       !isXRPresenting &&
+      !steadyReveal &&
       !showCardBacks &&
       (boardDragActive || draggingSite)
     ) {
@@ -1565,14 +1586,19 @@ export default function Hand3D({
         // Touch-selected card gets a border outline on mobile
         const isTouchSelected =
           isCoarsePointer && touchSelectedIndex === originalIndex;
-        const pickTone = showCardBacks
-          ? null
-          : handCardTone(handPick, c.instanceId);
+        const rawTone = showCardBacks ? null : handCardTone(handPick, c.instanceId);
+        // A card that is BOTH clickable and already chosen (a mulligan mark, say) reads as
+        // chosen — green — while staying clickable, so the same click takes the mark off again.
+        const chosenAndClickable =
+          rawTone === "candidate" && !!c.instanceId && handPick.glow.has(c.instanceId);
+        const pickTone = chosenAndClickable ? "target" : rawTone;
         const pickToken =
-          c.instanceId && (pickTone === "candidate" || pickTone === "selected")
+          c.instanceId && (pickTone === "candidate" || pickTone === "selected" || chosenAndClickable)
             ? handToken(owner, c.instanceId)
             : null;
-        const pickDimmed = handPick.active && !pickToken;
+        // Cards are never faded — a translucent card is hard to read, and the ring already
+        // marks what can be played. (Kept as a flag for the resolver-outline guard below.)
+        const pickDimmed = handPick.active && !pickTone;
         return (
           <group
             key={`${c.cardId}-${owner}-${i}`}
@@ -1591,20 +1617,21 @@ export default function Hand3D({
                 renderOrder={renderOrder + 10000 - 3}
               />
             )}
-            {/* CPU-match pick outline (amber candidate, green chosen, cyan source).
-                CardBorder lies flat; the group undoes that tilt for the upright hand card. */}
+            {/* Pick outline (amber candidate, green chosen, cyan source): the same thin
+                ring + glow the board cards wear (CardOutline), upright for the hand. */}
             {pickTone ? (
-              <group rotation-x={Math.PI / 2}>
-                <CardBorder
-                  width={CARD_SHORT}
-                  height={CARD_LONG}
-                  rotationZ={cardRotationZ}
-                  elevation={0.03}
-                  color={PICK_TONE_COLORS[pickTone]}
-                  thickness={pickTone === "selected" ? 0.08 : 0.06}
-                  renderOrder={renderOrder + 10000 + 1}
-                />
-              </group>
+              <CardOutline
+                width={CARD_SHORT}
+                height={CARD_LONG}
+                rotationZ={cardRotationZ}
+                elevation={0.03}
+                color={PICK_TONE_COLORS[pickTone]}
+                opacity={pickTone === "selected" ? 1 : 0.9}
+                // half a step above its own card, below the next card in the fan (one step up)
+                renderOrder={renderOrder + 10000 + 0.5}
+                depthTest={false}
+                flat={false}
+              />
             ) : null}
             {/* Remote highlight glow */}
             {remoteHighlightColor ? (
@@ -1717,6 +1744,11 @@ export default function Hand3D({
                     e.stopPropagation();
                     return;
                   }
+                  // a rules-enforced mode owns the board: never begin a drag the engine would refuse
+                  if (gesturesLocked) {
+                    e.stopPropagation();
+                    return;
+                  }
                   if (isDragging) return; // don't start another drag
 
                   // XR mode: select card on pinch but defer dragFromHand to pointerUp
@@ -1770,7 +1802,7 @@ export default function Hand3D({
                 }}
                 onPointerMove={(e) => {
                   // Start drag only after a tiny hold and some pointer travel
-                  if (handPick.active || isHandDrag || isPileDrag) return;
+                  if (handPick.active || gesturesLocked || isHandDrag || isPileDrag) return;
                   const s = handDragStart.current;
                   if (!s || s.index !== originalIndex) return;
                   const held = Date.now() - s.time;
@@ -1909,9 +1941,7 @@ export default function Hand3D({
                       ? 0.6
                       : showCardBacks
                         ? 1
-                        : pickDimmed
-                          ? 0.35 // not a candidate of the current hand pick
-                          : 0.9999
+                        : 0.9999
                   } // Opponent: solid; Own: slightly < 1 for renderOrder
                   textureUrl={
                     showCardBacks

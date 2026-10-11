@@ -163,6 +163,11 @@ export const useCpuReveals = create<RevealState>()((set, get) => {
   };
 });
 
+// Dev handle for driving/inspecting reveals from the console or a headless check.
+if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+  (window as unknown as Record<string, unknown>).__cpuReveals = useCpuReveals;
+}
+
 /** True while a CPU reveal is up or waiting: the CPU must not start a new action. */
 export const cpuRevealsPending = () => useCpuReveals.getState().queue.length > 0;
 

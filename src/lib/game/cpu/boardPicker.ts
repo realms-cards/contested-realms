@@ -6,16 +6,26 @@ import { create } from "zustand";
  * `sources` (casters, ability sources) only light up; `labels` gives the text of tokens drawn as buttons (e.g. "opt:2,1:decline" → "Decline"). */
 export const useCpuBoardPicker = create<{
   request: string; tiles: string[]; selected: string | null; glow: string[]; sources: string[]; labels: Record<string, string>;
+  /** The token the pointer is over, published so a caller can preview what picking it would do
+   *  (the direction prompt lights the lane the projectile would travel). */
+  hovered: string | null;
   configure: (request: string, tiles: string[]) => void;
   setGlow: (request: string, tiles: string[], sources?: string[]) => void;
   setLabels: (request: string, labels: Record<string, string>) => void;
+  setHovered: (token: string | null) => void;
   select: (tile: string) => void;
   clear: (request: string) => void;
 }>((set) => ({
-  request:"",tiles:[],selected:null,glow:[],sources:[],labels:{},
-  configure:(request,tiles) => set(state => state.request === request ? {tiles,selected:state.selected && tiles.includes(state.selected) ? state.selected : null} : {request,tiles,selected:null,glow:[],sources:[],labels:{}}),
-  setGlow:(request,glow,sources = []) => set(state => state.request === request ? {glow,sources} : {request,tiles:[],selected:null,glow,sources,labels:{}}),
-  setLabels:(request,labels) => set(state => state.request === request ? {labels} : {request,tiles:[],selected:null,glow:[],sources:[],labels}),
+  request:"",tiles:[],selected:null,glow:[],sources:[],labels:{},hovered:null,
+  configure:(request,tiles) => set(state => state.request === request ? {tiles,selected:state.selected && tiles.includes(state.selected) ? state.selected : null} : {request,tiles,selected:null,glow:[],sources:[],labels:{},hovered:null}),
+  setGlow:(request,glow,sources = []) => set(state => state.request === request ? {glow,sources} : {request,tiles:[],selected:null,glow,sources,labels:{},hovered:null}),
+  setLabels:(request,labels) => set(state => state.request === request ? {labels} : {request,tiles:[],selected:null,glow:[],sources:[],labels,hovered:null}),
+  setHovered:hovered => set(state => state.hovered === hovered ? state : {hovered}),
   select:tile => set(state => state.tiles.includes(tile) ? {selected:tile} : state),
-  clear:request => set(state => state.request === request ? {request:"",tiles:[],selected:null,glow:[],sources:[],labels:{}} : state),
+  clear:request => set(state => state.request === request ? {request:"",tiles:[],selected:null,glow:[],sources:[],labels:{},hovered:null} : state),
 }));
+
+// Dev handle so headless checks can click picker tokens (the canvas can't be DOM-clicked).
+if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+  (window as unknown as Record<string, unknown>).__cpuBoardPicker = useCpuBoardPicker;
+}

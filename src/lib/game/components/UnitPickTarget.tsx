@@ -69,7 +69,8 @@ export function UnitPickCapture({token,state,width,height,rotationZ,elevation = 
   if (!state) return null;
   const color = UNIT_PICK_COLORS[state];
   return <>
-    <CardOutline width={width} height={height} rotationZ={rotationZ} elevation={elevation} color={color} renderOrder={1700} opacity={0.95} />
+    {/* depthTest off: in a stack the neighbours overlap the card — the pick ring must stay whole */}
+    <CardOutline width={width} height={height} rotationZ={rotationZ} elevation={elevation} color={color} renderOrder={1700} opacity={0.95} depthTest={false} />
     {state === "candidate" && <PulsingFill width={width} height={height} rotationZ={rotationZ} elevation={elevation} color={color} />}
     {isPickable(state) && <mesh name={`unit-pick:${token}`} rotation-x={-Math.PI/2} rotation-z={rotationZ} position={[0,elevation+0.001,0]}
       raycast={priorityRaycast} onPointerDown={stop} onPointerUp={stop} onDoubleClick={stop}
