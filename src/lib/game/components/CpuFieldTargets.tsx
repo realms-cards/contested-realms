@@ -50,7 +50,13 @@ const LIFT = 0.3;
 const VISUAL_LIFT = 0.002;
 /** Local +z inside the flattened group is world +y, so this raises the click plane back up. */
 const CLICK_PLANE_Z = LIFT - VISUAL_LIFT;
-const HTML_Z: [number, number] = [20,0]; // under the DOM HUD (z-100) and resolver overlays (z-200)
+/** CPU matches: must stay UNDER the board-covering overlays that start at z-40/z-50
+ *  (DefensePanel, ElementChoiceOverlay, RevealOverlay, PlacementDialog, HandPeekDialog…). */
+const HTML_Z: [number, number] = [20,0];
+/** Rules-Engine matches have no such low overlays (their lowest is CpuPlayReveal at z-95), and
+ *  these buttons ARE the interaction — they must sit above the passive HUD readouts at z-150,
+ *  but below the prompt shell at z-200 which can legitimately supersede them. */
+const HTML_Z_ENGINE: [number, number] = [158,0];
 
 // An arrow pointing along +Y in its own plane; the group turns it to face N/E/S/W on the board.
 const ARROW_LENGTH = TILE_SIZE*0.3, ARROW_HEAD = TILE_SIZE*0.15, ARROW_SHAFT = TILE_SIZE*0.06, ARROW_HEAD_LENGTH = TILE_SIZE*0.14;
@@ -82,13 +88,14 @@ export default function CpuFieldTargets({offsetX,offsetY}: {offsetX:number;offse
   const targets = useMemo(() => fieldTargets({tiles,selected,glow,sources,labels}),[tiles,selected,glow,sources,labels]);
   // Rules Engine matches (src/lib/engine-mode) drive the same picker; their requests start with "engine".
   if (!cpu && !request.startsWith("engine")) return null;
+  const zRange = request.startsWith("engine") ? HTML_Z_ENGINE : HTML_Z;
   return <>
-    {(targets.tiles.size > 0 || targets.arrows.length > 0) && <TargetMeshes offsetX={offsetX} offsetY={offsetY} tones={targets.tiles} arrows={targets.arrows} labels={labels} />}
-    {targets.rows.length > 0 && <OptionRows offsetX={offsetX} offsetY={offsetY} rows={targets.rows} />}
+    {(targets.tiles.size > 0 || targets.arrows.length > 0) && <TargetMeshes offsetX={offsetX} offsetY={offsetY} tones={targets.tiles} arrows={targets.arrows} labels={labels} zRange={zRange} />}
+    {targets.rows.length > 0 && <OptionRows offsetX={offsetX} offsetY={offsetY} rows={targets.rows} zRange={zRange} />}
   </>;
 }
 
-function TargetMeshes({offsetX,offsetY,tones,arrows,labels}: {offsetX:number;offsetY:number;tones:Map<string, FieldTone>;arrows:ArrowTarget[];labels:Readonly<Record<string, string>>}) {
+function TargetMeshes({offsetX,offsetY,tones,arrows,labels,zRange}: {offsetX:number;offsetY:number;tones:Map<string, FieldTone>;arrows:ArrowTarget[];labels:Readonly<Record<string, string>>;zRange:[number, number]}) {
   const fills = useRef(new Map<string, THREE.MeshBasicMaterial>());
   // Hover lives in the picker store, not locally: a caller can then preview what the hovered
   // token would do (the engine's direction prompt lights that direction's whole lane).
@@ -154,7 +161,7 @@ function TargetMeshes({offsetX,offsetY,tones,arrows,labels}: {offsetX:number;off
         <planeGeometry args={ARROW_HIT} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
       </mesh>}
-      {hovered === token && label && <Html center zIndexRange={HTML_Z} style={{pointerEvents:"none"}}>
+      {hovered === token && label && <Html center zIndexRange={zRange} style={{pointerEvents:"none"}}>
         <div role="tooltip" className="rc-toast whitespace-nowrap px-2 py-1 font-rc-sans text-xs text-rc-fg">{label}</div>
       </Html>}
     </group>;
@@ -162,10 +169,10 @@ function TargetMeshes({offsetX,offsetY,tones,arrows,labels}: {offsetX:number;off
 }
 
 /** Real buttons anchored above a tile, one row per tile, only while the picker offers `opt:` choices. */
-function OptionRows({offsetX,offsetY,rows}: {offsetX:number;offsetY:number;rows:OptionRow[]}) {
+function OptionRows({offsetX,offsetY,rows,zRange}: {offsetX:number;offsetY:number;rows:OptionRow[];zRange:[number, number]}) {
   return <>{rows.map(({at,options}) => {
     const [x,y] = cell(at);
-    return <Html key={at} center zIndexRange={HTML_Z} position={[offsetX+x*TILE_SIZE,LIFT+0.4,offsetY+y*TILE_SIZE]}>
+    return <Html key={at} center zIndexRange={zRange} position={[offsetX+x*TILE_SIZE,LIFT+0.4,offsetY+y*TILE_SIZE]}>
       <div role="group" aria-label="Choices" data-cpu-options={at} onPointerDown={stopDom} onPointerUp={stopDom} onClick={stopDom} onContextMenu={stopDom}
         className="pointer-events-auto flex w-max max-w-[min(22rem,80vw)] flex-wrap items-center justify-center gap-1.5 rounded-rc-md border border-rc-line/22 bg-[rgba(7,10,20,0.85)] p-1 shadow-rc-panel">
         {options.map(option => <RcButton key={option.token} size="xs" variant={option.variant === "commit" ? "default" : option.variant} tone="success"

@@ -5,7 +5,15 @@ import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import { cpuRevealsPending, useCpuReveals } from "@/lib/game/cpu/revealQueue";
 import { useGameStore } from "@/lib/game/store";
 import type { GameState } from "@/lib/game/store/types";
-import { applyAction, createGame, evaluate, viewFor } from "@sorcery/shared";
+import {
+  actingSeatFor,
+  applyAchievements,
+  applyAction,
+  BY_ID as ACHIEVEMENTS_BY_ID,
+  createGame,
+  evaluate,
+  viewFor,
+} from "@sorcery/shared";
 import type { Action, ActionResult, DeckList, GameState as EngineState, PlayerId } from "@sorcery/shared";
 import { botActionKey, botNeedsToAct } from "@untested-realm/bot/bot";
 import type { BotReply, BotRequest } from "@untested-realm/bot/bot.worker";
@@ -15,11 +23,41 @@ import type { LegalReply, LegalRequest } from "./engine-legal.worker";
 import { narrate } from "./narration";
 import { clearEngineGame, saveEngineGame } from "./persistence";
 import type { SavedEngineGame } from "./persistence";
-import { boardReveal, harbingerTiles, hiddenLayerCounts, layerOf, projectView } from "./projection";
-import type { BoardLayer, BoardReveal, HiddenCounts, ProjectedState } from "./projection";
+import {
+  boardReveal,
+  damageSince,
+  damageSnapshot,
+  harbingerTiles,
+  hiddenLayerCounts,
+  layerOf,
+  projectView,
+  sitesLostSince,
+} from "./projection";
+import type { BoardLayer, BoardReveal, DamageSnapshot, HiddenCounts, ProjectedState } from "./projection";
 
 export const HUMAN_SEAT: PlayerId = 0;
 export const BOT_SEAT: PlayerId = 1;
+
+/**
+ * Courtesan Thaïs hands you the *opponent's* turn to play.
+ *
+ * The engine models it with `flow.thaisActive`: the active player stays seat 1, but
+ * `actingSeatFor` redirects the decisions to seat 0 (game.ts), and `applyAction` remaps what
+ * seat 0 sends onto seat 1. Neither of our two "whose turn is it" tests saw that — we gated
+ * the legal-move worker on `activePlayer === HUMAN_SEAT`, so the human got nothing to click,
+ * and `botNeedsToAct(BOT_SEAT)` is false because the decisions are not the bot's to make.
+ * The match simply stopped.
+ */
+export function humanDecisionSeat(game: EngineState): PlayerId | null {
+  if (actingSeatFor(game, game.activePlayer) === HUMAN_SEAT) return game.activePlayer;
+  return null;
+}
+
+/** True while the human is playing the opponent's turn for them. */
+export function isPiloting(game: EngineState): boolean {
+  const seat = humanDecisionSeat(game);
+  return seat !== null && seat !== HUMAN_SEAT;
+}
 const UNDO_LIMIT = 80;
 /**
  * How fast the computer plays. Our CPU matches use the same policy (bots/action-pacing.js):
@@ -61,6 +99,8 @@ interface EngineSession {
   reveal: BoardReveal | null;
   /** the human's legal main-phase actions for the current `rev` (null while computing / not our turn) */
   legal: Action[] | null;
+  /** Whose turn the human is deciding: our own seat, the opponent's while piloting, or null. */
+  decisionSeat: PlayerId | null;
   lastError: string | null;
   canUndo: boolean;
   start: (human: DeckList, bot: DeckList, botLevel: BotLevel, opts?: { secondSeer?: boolean }) => Promise<void>;
@@ -93,27 +133,55 @@ let lastProjection: ProjectedState | null = null;
 let unsubscribeStore: (() => void) | null = null;
 let toastedLogLength = 0;
 /** The shared store's transport/seat, borrowed for the match and put back on stop(). */
-let borrowed: { transport: GameState["transport"]; actorKey: GameState["actorKey"] } | null = null;
+let borrowed: {
+  transport: GameState["transport"];
+  actorKey: GameState["actorKey"];
+  resolversDisabled: GameState["resolversDisabled"];
+} | null = null;
 /** earliest timestamp the computer may take its next action */
 let nextBotAt = 0;
 let lastBotTurn = -1;
 let narrationSeq = 0;
 /** Highest engine reveal `seq` already shown; a reveal is replayed only when it advances. */
 let lastRevealSeq = 0;
+/** Per-unit damage at the last projection, for the "any damage dealt" diff. */
+let lastDamage: DamageSnapshot | null = null;
+/** Damage with no engine reveal behind it (plain combat) still needs a unique, falling key. */
+let standaloneRevealSeq = 0;
 let matchCounter = 0;
 
 export const useEngineSession = create<EngineSession>((set, get) => {
   function project(game: EngineState, source: SfxSource = "silent") {
-    const view = viewFor(game, HUMAN_SEAT);
+    // While piloting, the engine intends the pilot to see the hand they are playing.
+    const view = viewFor(game, HUMAN_SEAT, isPiloting(game) ? { revealAll: true } : undefined);
     const { layer } = get();
     set({ hidden: hiddenLayerCounts(view, layer) });
-    // The engine wrote an event animation for whatever just resolved — ours or the computer's,
-    // spell, ability or trigger. Only a bumped `seq` is new; a cosmetic re-project must not
-    // replay the last one.
-    const reveal = boardReveal(view, lastRevealSeq);
-    if (reveal) {
-      lastRevealSeq = reveal.seq;
-      set({ reveal });
+    // What just resolved, drawn on the board: the engine's own caption/caster/affected squares
+    // (only when its `seq` advances, so a cosmetic re-project never replays it), plus damage
+    // numbers diffed off the units themselves so EVERY source lands — combat, spells,
+    // abilities and triggers alike.
+    const hits = damageSince(lastDamage, view);
+    const razed = sitesLostSince(lastDamage, view);
+    lastDamage = damageSnapshot(view);
+    const event = boardReveal(view, lastRevealSeq);
+    if (event) lastRevealSeq = event.seq;
+    if (event || hits.length || razed.length) {
+      const base = event ?? {
+        // plain combat raises no engine reveal; give it a falling key of its own
+        seq: --standaloneRevealSeq,
+        sites: [] as string[],
+        caster: null,
+        name: "",
+        element: "none",
+      };
+      set({
+        reveal: {
+          ...base,
+          hits,
+          sites: [...new Set([...base.sites, ...razed])],
+          name: base.name || (razed.length ? (razed.length > 1 ? `${razed.length} sites destroyed` : "Site destroyed") : ""),
+        },
+      });
     }
     const projection = projectView(view, layer, get().portalsRevealed);
     lastProjection = projection;
@@ -159,8 +227,12 @@ export const useEngineSession = create<EngineSession>((set, get) => {
   function takeOverBoard() {
     useGameStore.getState().resetGameState();
     const shared = useGameStore.getState();
-    borrowed ??= { transport: shared.transport, actorKey: shared.actorKey };
-    useGameStore.setState({ transport: null, actorKey: null, boardGesturesLocked: true });
+    borrowed ??= { transport: shared.transport, actorKey: shared.actorKey, resolversDisabled: shared.resolversDisabled };
+    // `resolversDisabled` is literally true here: the vendored engine resolves every card, so
+    // none of OUR card resolvers run. Leaving it false made Hand3D/PermanentStack paint the
+    // purple "this card is automated" outline (hasCustomResolver) over cards whose automation
+    // belongs to a different engine entirely — a promise engine mode cannot keep.
+    useGameStore.setState({ transport: null, actorKey: null, boardGesturesLocked: true, resolversDisabled: true });
   }
 
   /** If anything else writes the projected slice (a stray drag, a hotkey), put the engine's picture back. */
@@ -185,7 +257,13 @@ export const useEngineSession = create<EngineSession>((set, get) => {
   }
 
   function committed(game: EngineState, source: SfxSource, error: string | null = null) {
-    set((s) => ({ rev: s.rev + 1, lastError: error, canUndo: history.length > 0, legal: null }));
+    set((s) => ({
+      rev: s.rev + 1,
+      lastError: error,
+      canUndo: history.length > 0,
+      legal: null,
+      decisionSeat: humanDecisionSeat(game),
+    }));
     persist();
     project(game, source);
     if (source === "remote") toastNewBotLines(game);
@@ -197,8 +275,9 @@ export const useEngineSession = create<EngineSession>((set, get) => {
   /** Main-phase choices come from the engine's move generator; prompts and the mulligan have their own UI. */
   function requestLegal(game: EngineState) {
     const id = ++legalRequestId;
-    const humanActs = game.phase === "main" && game.prompts.length === 0 && game.activePlayer === HUMAN_SEAT;
-    if (!humanActs) return;
+    // Ask for the seat whose decisions are OURS, which under Courtesan Thaïs is the opponent's.
+    const seat = humanDecisionSeat(game);
+    if (seat === null || game.phase !== "main" || game.prompts.length) return;
     legalWorker ??= new Worker(new URL("./engine-legal.worker.ts", import.meta.url), { type: "module" });
     legalWorker.onerror = () => set({ legal: [], lastError: "Could not work out the legal moves." });
     legalWorker.onmessage = (e: MessageEvent<LegalReply>) => {
@@ -206,7 +285,18 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       if (e.data.error) set({ lastError: e.data.error });
       set({ legal: e.data.actions });
     };
-    const request: LegalRequest = { id, state: JSON.stringify(game), seat: HUMAN_SEAT };
+    // The generator refuses to enumerate moves for a seat that is being piloted, so strip the
+    // marker from the COPY we send it. Measured: with `thaisActive` set the generator returns
+    // 0 actions for that seat; without it, the actions it returns are all accepted by the real
+    // state when the human dispatches them (applyAction does the seat remap itself).
+    let payload = game;
+    if (seat !== HUMAN_SEAT) {
+      const clone = JSON.parse(JSON.stringify(game)) as EngineState;
+      const flow: { thaisActive?: PlayerId } | undefined = clone.flow;
+      if (flow) delete flow.thaisActive;
+      payload = clone;
+    }
+    const request: LegalRequest = { id, state: JSON.stringify(payload), seat };
     legalWorker.postMessage(request);
   }
 
@@ -275,6 +365,31 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     };
     set({ botThinking: true });
     worker.postMessage(request);
+  }
+
+  /**
+   * Secret achievements. Upstream deliberately keeps this OUT of applyAction — the search bot
+   * applies thousands of hypothetical actions and must never pay the cost nor mint phantom
+   * unlocks — and expects "the three REAL apply sites" to call it. We are one of them, and
+   * never did, so engine mode minted none at all (achievements.ts:1-10).
+   */
+  function awardAchievements(before: EngineState, after: EngineState, actor: PlayerId, action: Action) {
+    let fresh: { id: string; seat: PlayerId }[] = [];
+    try {
+      fresh = applyAchievements(before, after, actor, action);
+    } catch {
+      return; // cosmetic: never let detection break a match
+    }
+    for (const unlock of fresh) {
+      if (unlock.seat !== HUMAN_SEAT) continue; // the computer's unlocks are not news
+      const name = ACHIEVEMENTS_BY_ID[unlock.id]?.name;
+      if (!name) continue;
+      try {
+        window.dispatchEvent(new CustomEvent("app:toast", { detail: { message: `Achievement: ${name}` } }));
+      } catch {
+        // toasts are decoration
+      }
+    }
   }
 
   /** Show what the computer just did, and give its result room to be read. */
@@ -351,6 +466,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     matchId: "",
     narration: null,
     reveal: null,
+    decisionSeat: null,
     legal: null,
     lastError: null,
     canUndo: false,
@@ -416,6 +532,9 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         lastError: null,
       });
       watchProjection();
+      // a rebuilt or rewound board is not 'damage since last time': start the diff afresh
+      lastDamage = null;
+      lastRevealSeq = 0;
       // the log is history now: replay none of it as toasts
       toastedLogLength = game.log.length;
       try {
@@ -456,6 +575,9 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       const hasPortents = Object.keys(harbingerTiles(viewFor(game, HUMAN_SEAT))).length > 0;
       set({ game, matchId: `m${++matchCounter}`, botLevel, lastError: null, portalsRevealed: !hasPortents });
       watchProjection();
+      // a rebuilt or rewound board is not 'damage since last time': start the diff afresh
+      lastDamage = null;
+      lastRevealSeq = 0;
       toastedLogLength = game.log.length;
       committed(game, "silent");
     },
@@ -481,6 +603,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         set({ lastError: result.error ?? "That action isn't legal." });
         return result;
       }
+      awardAchievements(JSON.parse(snapshot) as EngineState, game, HUMAN_SEAT, action);
       history.push(snapshot);
       if (history.length > UNDO_LIMIT) history.shift();
       // our own move clears the computer's last line and its board glow
@@ -496,7 +619,9 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       if (!snapshot) return;
       cancelBot();
       const game = JSON.parse(snapshot) as EngineState;
-      set({ game });
+      // rewinding lowers damage counters; that is not healing to animate
+      lastDamage = null;
+      set({ game, reveal: null });
       committed(game, "undo");
     },
 

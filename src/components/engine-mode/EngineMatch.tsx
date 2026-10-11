@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import CardPreview from "@/components/game/CardPreview";
 import CpuPlayReveal from "@/components/game/CpuPlayReveal";
+import MusicGameSync from "@/components/game/MusicGameSync";
+import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import AppShell from "@/components/ui/AppShell";
 import { PageHeader } from "@/components/ui/page-header";
@@ -266,10 +268,14 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
         spectating={false}
         showYouLabels
       />
-      {/* The right edge is one column: mana/thresholds on top, the action rail under it. */}
-      <div className="pointer-events-none fixed right-3 top-1/2 z-[150] flex max-h-[94vh] -translate-y-1/2 flex-col items-end gap-3">
+      {/* The wrapper is sized by the mana/threshold panels ALONE and centred exactly as they
+          were before the rail existed; the rail hangs off its bottom edge with `top-full`, so
+          adding or removing a rail button can never shift the readout. */}
+      <div className="pointer-events-none fixed right-3 top-1/2 z-[150] -translate-y-1/2">
         <EngineResourcePanels />
-        <EngineActionRail interaction={interaction} onExit={onExit} />
+        <div className="absolute right-0 top-full mt-3">
+          <EngineActionRail interaction={interaction} onExit={onExit} />
+        </div>
       </div>
       {cardPreviewsEnabled && previewCard && (
         <CardPreview
@@ -282,7 +288,27 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
       </div>
       {/* the computer's turn, narrated: a line per action and the card it played */}
       <EngineNarration />
+      {/* The same console the online and replay views use, in the same bottom-left spot, fed
+          from the engine's own log (projection: `events`). Chat and Leave are hidden: there is
+          nobody to chat to, and Leave lives in the action rail. */}
+      <div className="pointer-events-none fixed inset-0 z-[140]">
+        <OnlineConsole
+          dragFromHand={false}
+          chatLog={[]}
+          chatInput=""
+          setChatInput={() => undefined}
+          onSendChat={() => undefined}
+          onLeaveMatch={onExit}
+          connected
+          hideChat
+          hideLeaveButton
+          playerNames={{ p1: "You", p2: "Computer" }}
+        />
+      </div>
+
       <CpuPlayReveal />
+      {/* Mood-matched music, same as /play and /online/play. The rail owns play/pause. */}
+      <MusicGameSync myPlayerKey="p1" />
       <EngineContextMenu />
       <EngineHud interaction={interaction} onRestart={onRestart} onExit={onExit} />
     </div>

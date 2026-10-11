@@ -19,6 +19,8 @@ export interface EngineInteraction {
   endTurn: Action | null;
   /** cards castable from the cemetery right now (driven by the HUD's cemetery panel) */
   cemetery: { token: string; cardId: string; name: string }[];
+  /** the opponent's hand, while we are playing their turn for them (Courtesan Thaïs) */
+  pilotHand: { token: string; cardId: string; name: string }[];
   /** start a path from a non-board token (a cemetery card) */
   begin: (token: string) => void;
   cancel: () => void;
@@ -34,16 +36,17 @@ export function useEngineInteraction(): EngineInteraction {
   const game = useEngineSession((s) => s.game);
   const rev = useEngineSession((s) => s.rev);
   const legal = useEngineSession((s) => s.legal);
+  const decisionSeat = useEngineSession((s) => s.decisionSeat);
   const dispatch = useEngineSession((s) => s.dispatch);
   const [clicked, setClicked] = useState<string[]>([]);
 
   useEffect(() => setClicked([]), [rev]);
 
   const { paths, labels } = useMemo(
-    () => (game && legal ? actionPaths(game, legal) : { paths: [], labels: {} }),
+    () => (game && legal ? actionPaths(game, legal, decisionSeat ?? 0) : { paths: [], labels: {} }),
     // the engine mutates `game` in place; `rev` marks each new state
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [game, legal, rev],
+    [game, legal, rev, decisionSeat],
   );
   const narrowed = useMemo(() => narrow(paths, clicked), [paths, clicked]);
   const cemetery = useMemo(() => {
@@ -53,6 +56,24 @@ export function useEngineInteraction(): EngineInteraction {
       const first = path.steps[0];
       if (!first?.startsWith("cem:")) continue;
       const cardId = first.slice(4);
+      if (!seen.has(cardId)) seen.set(cardId, { token: first, cardId, name: game.cards[cardId]?.name ?? "Card" });
+    }
+    return [...seen.values()];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paths, game, rev]);
+  /**
+   * The hand we are playing when it is not our own (Courtesan Thaïs).
+   *
+   * Hand3D only draws seat p1's cards, so a path that starts `hand:p2:<id>` has no renderer
+   * and could never be clicked. Surfaced as a panel instead, exactly like the cemetery.
+   */
+  const pilotHand = useMemo(() => {
+    if (!game) return [];
+    const seen = new Map<string, { token: string; cardId: string; name: string }>();
+    for (const path of paths) {
+      const first = path.steps[0];
+      if (!first?.startsWith("hand:p2:")) continue;
+      const cardId = first.slice("hand:p2:".length);
       if (!seen.has(cardId)) seen.set(cardId, { token: first, cardId, name: game.cards[cardId]?.name ?? "Card" });
     }
     return [...seen.values()];
@@ -120,6 +141,7 @@ export function useEngineInteraction(): EngineInteraction {
     confirmable: narrowed.next.length > 0 ? narrowed.done : null,
     endTurn: legal?.find((a) => a.t === "endTurn") ?? null,
     cemetery,
+    pilotHand,
     begin: (token) => setClicked([token]),
     cancel: () => setClicked([]),
     confirm: () => {

@@ -1,6 +1,6 @@
 import { dirToken, handToken, optToken, pileToken, unitToken } from "@/lib/game/cpu/pickTokens";
 import { getScript, grantedAbilities } from "@sorcery/shared";
-import type { Action, GameState as EngineState } from "@sorcery/shared";
+import type { Action, GameState as EngineState, PlayerId } from "@sorcery/shared";
 import { engineCellKey } from "./coords";
 
 /**
@@ -20,7 +20,9 @@ export const cemToken = (cardId: string): string => `cem:${cardId}`;
 const DIR: Record<string, string> = { n: "N", s: "S", e: "W", w: "E" };
 
 /** The board token that stands for an engine object id. */
-export function tokenForEngineId(game: EngineState, id: string): string {
+/** `seat` is whose cards these are — normally the human, but the opponent's while a
+ *  Courtesan Thaïs turn is being piloted. Optional so every existing caller is unaffected. */
+export function tokenForEngineId(game: EngineState, id: string, seat: PlayerId = 0): string {
   if (id.startsWith("sq:")) {
     const [x, y] = id.slice(3).split(",").map(Number);
     return engineCellKey(x, y);
@@ -29,8 +31,23 @@ export function tokenForEngineId(game: EngineState, id: string): string {
   if (unit) return unit.isAvatar ? unitToken({ kind: "avatar", seat: unit.owner === 0 ? "p1" : "p2" }) : `unit:perm:${id}`;
   const site = game.sites[id];
   if (site) return engineCellKey(site.x, site.y);
-  if (game.artifacts[id] || game.auras[id]) return `unit:perm:${id}`;
-  if (game.cards[id]) return handToken("p1", id);
+  const artifact = game.artifacts[id];
+  if (artifact) {
+    // A CARRIED artifact is drawn as a small attachment on its bearer and is skipped by
+    // PermanentStack's main loop (`if (p.attachedTo) return null`), so it never gets a pick
+    // token of its own — `unit:perm:<artifactId>` would be unclickable and the Toolbox could
+    // never be activated. Anchor it on the bearer instead; the ability's own option button
+    // then names which carried thing is being used.
+    const bearer = artifact.carriedBy ? game.units[artifact.carriedBy] : undefined;
+    if (bearer) {
+      return bearer.isAvatar
+        ? unitToken({ kind: "avatar", seat: bearer.owner === 0 ? "p1" : "p2" })
+        : `unit:perm:${bearer.id}`;
+    }
+    return `unit:perm:${id}`;
+  }
+  if (game.auras[id]) return `unit:perm:${id}`;
+  if (game.cards[id]) return handToken(seat === 0 ? "p1" : "p2", id);
   return `unknown:${id}`;
 }
 
@@ -56,6 +73,14 @@ const REGION_LABEL: Record<string, string> = {
 };
 
 /** Ability label for a source; falls back to the key. */
+/** The ability's label, prefixed with the carried artifact's name when it is not the bearer's own. */
+function activateLabel(game: EngineState, sourceId: string, key: string): string {
+  const label = abilityLabel(game, sourceId, key);
+  const artifact = game.artifacts[sourceId];
+  if (!artifact?.carriedBy) return label;
+  return label.toLowerCase().includes(artifact.name.toLowerCase()) ? label : `${artifact.name}: ${label}`;
+}
+
 function abilityLabel(game: EngineState, sourceId: string, key: string): string {
   const name = game.units[sourceId]?.name ?? game.sites[sourceId]?.name ?? game.artifacts[sourceId]?.name;
   const own = name ? getScript(name)?.abilities?.find((a) => a.key === key) : undefined;
@@ -65,7 +90,12 @@ function abilityLabel(game: EngineState, sourceId: string, key: string): string 
   return granted?.label ?? key;
 }
 
-export function actionPaths(game: EngineState, actions: Action[]): { paths: ActionPath[]; labels: Record<string, string> } {
+export function actionPaths(
+  game: EngineState,
+  actions: Action[],
+  seat: PlayerId = 0,
+): { paths: ActionPath[]; labels: Record<string, string> } {
+  const key = seat === 0 ? "p1" : "p2";
   const labels: Record<string, string> = {};
   const paths: ActionPath[] = [];
   const opt = (tile: string, id: string, label: string) => {
@@ -77,14 +107,14 @@ export function actionPaths(game: EngineState, actions: Action[]): { paths: Acti
   for (const action of actions) {
     switch (action.t) {
       case "avatarSite": {
-        if (action.mode === "draw") paths.push({ action, steps: [pileToken("p1", "atlas")] });
-        else paths.push({ action, steps: [handToken("p1", action.cardId), engineCellKey(action.x, action.y)] });
+        if (action.mode === "draw") paths.push({ action, steps: [pileToken(key, "atlas")] });
+        else paths.push({ action, steps: [handToken(key, action.cardId), engineCellKey(action.x, action.y)] });
         break;
       }
       case "castSpell": {
         // card (from hand, or the cemetery panel), then its caster (skipped when only the avatar)
-        const fromCemetery = game.players[0].cemetery.includes(action.cardId);
-        const steps = [fromCemetery ? cemToken(action.cardId) : handToken("p1", action.cardId), tokenForEngineId(game, action.casterId)];
+        const fromCemetery = game.players[seat].cemetery.includes(action.cardId);
+        const steps = [fromCemetery ? cemToken(action.cardId) : handToken(key, action.cardId), tokenForEngineId(game, action.casterId, seat)];
         if (action.at) {
           const tile = engineCellKey(action.at.x, action.at.y);
           const region = action.at.region ?? "surface";
@@ -129,7 +159,13 @@ export function actionPaths(game: EngineState, actions: Action[]): { paths: Acti
           paths.push({ action, steps: [source, dirToken(tile, DIR[direction] ?? direction)] });
           break;
         }
-        const steps = [source, opt(tile, `ability-${action.ability}`, abilityLabel(game, action.sourceId, action.ability))];
+        // Keyed on the SOURCE as well as the ability: a bearer can carry several artifacts,
+        // and two of them may use the same ability key. The label names the carried thing so
+        // the player can tell which one the button fires.
+        const steps = [
+          source,
+          opt(tile, `ability-${action.sourceId}-${action.ability}`, activateLabel(game, action.sourceId, action.ability)),
+        ];
         for (const target of action.targets ?? []) {
           const token = tokenForEngineId(game, target);
           steps.push(token);

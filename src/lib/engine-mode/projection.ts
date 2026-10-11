@@ -12,11 +12,12 @@ import type {
   SiteTile,
   Zones,
 } from "@/lib/game/store/types";
+import { MAX_EVENTS } from "@/lib/game/store/types";
 import { computeAvailableMana } from "@/lib/game/store/utils/resourceHelpers";
 import { TOKEN_BY_NAME, tokenCardId, tokenSlug } from "@/lib/game/tokens";
 import type { PlayerId, PlayerView, Region } from "@sorcery/shared";
 import { cardRefFor } from "./cardIndex";
-import { engineCellKey, engineToBoard } from "./coords";
+import { engineCellKey, engineToBoard, localizeEngineText } from "./coords";
 
 /** The fields of PlayerView.players[i] we read (the engine types the array loosely). */
 interface ViewPlayer {
@@ -47,6 +48,7 @@ export type ProjectedState = Pick<
   | "matchEnded"
   | "winner"
   | "portalState"
+  | "events"
 >;
 
 /**
@@ -88,6 +90,64 @@ export interface BoardReveal {
   element: string;
 }
 
+/**
+ * Per-unit damage/life, kept between projections so we can float a number for ANY damage.
+ *
+ * `flow.areaReveal` only carries squares that a grid spell or projectile recorded; combat goes
+ * to `flow.battleReveal`, which has names and amounts but no coordinates, and some effects
+ * damage a unit without touching either. Diffing the units themselves is the one channel that
+ * sees all of it, and it reads the same numbers the board already shows.
+ */
+export interface DamageSnapshot {
+  units: Record<string, { damage: number; life: number; x: number; y: number }>;
+  /** squares whose site was still standing, so we can spot one being reduced to rubble */
+  standing: Record<string, true>;
+}
+
+export function damageSnapshot(view: PlayerView): DamageSnapshot {
+  const units: DamageSnapshot["units"] = {};
+  for (const unit of Object.values(view.units)) {
+    units[unit.id] = { damage: unit.damage ?? 0, life: unit.life ?? 0, x: unit.x, y: unit.y };
+  }
+  const standing: Record<string, true> = {};
+  for (const site of Object.values(view.sites ?? {})) {
+    if (!site.isRubble) standing[engineCellKey(site.x, site.y)] = true;
+  }
+  return { units, standing };
+}
+
+/**
+ * Squares whose site was just destroyed. A site has no damage counter — attacking one razes
+ * it to rubble outright — so there is never a number to float for it; without this, a site
+ * attack was the one action that produced no feedback at all.
+ */
+export function sitesLostSince(prev: DamageSnapshot | null, view: PlayerView): string[] {
+  if (!prev) return [];
+  const now = damageSnapshot(view).standing;
+  return Object.keys(prev.standing).filter((at) => !now[at]);
+}
+
+/**
+ * Damage landed since `prev`, per board cell. A minion's `damage` counter going up and an
+ * avatar's `life` coming down are both damage; healing, undo and a unit simply moving are not.
+ */
+export function damageSince(prev: DamageSnapshot | null, view: PlayerView): { at: string; dmg: number }[] {
+  if (!prev) return [];
+  const totals = new Map<string, number>();
+  for (const unit of Object.values(view.units)) {
+    const before = prev.units[unit.id];
+    if (!before) continue; // only arrived this step: nothing to compare against
+    // avatars track life, everything else tracks a damage counter
+    const dealt = unit.isAvatar
+      ? before.life - (unit.life ?? 0)
+      : (unit.damage ?? 0) - before.damage;
+    if (dealt <= 0) continue;
+    const at = engineCellKey(unit.x, unit.y);
+    totals.set(at, (totals.get(at) ?? 0) + dealt);
+  }
+  return [...totals].map(([at, dmg]) => ({ at, dmg }));
+}
+
 /** The `flow.areaReveal` shape; the engine types `flow` as `any`. */
 interface RawAreaReveal {
   seq?: number;
@@ -107,22 +167,18 @@ export function boardReveal(view: PlayerView, sinceSeq: number): BoardReveal | n
   const raw = flow?.areaReveal;
   const seq = raw?.seq ?? 0;
   if (!raw || seq <= sinceSeq) return null;
-  const totals = new Map<string, number>();
-  for (const cell of raw.cells ?? []) {
-    if (!cell || typeof cell.dmg !== "number" || cell.dmg <= 0) continue;
-    const at = engineCellKey(cell.x, cell.y);
-    totals.set(at, (totals.get(at) ?? 0) + cell.dmg);
-  }
-  const hits = [...totals].map(([at, dmg]) => ({ at, dmg }));
-  const damaged = new Set(totals.keys());
-  // a square that took damage already says so with its number; don't also glow it
+  // Damage numbers come from the unit diff (damageSince), never from areaReveal.cells — the
+  // same hit appears in both, and the diff is the one that also sees combat. What areaReveal
+  // uniquely gives us is the caption, the caster, and the squares an effect TOUCHED without
+  // damaging (buffs, summons, taps), which no diff of damage counters can tell us.
+  const damaged = new Set((raw.cells ?? []).filter((c) => c && c.dmg > 0).map((c) => engineCellKey(c.x, c.y)));
   const sites = [...new Set((raw.redSites ?? []).map((s) => engineCellKey(s.x, s.y)))].filter((at) => !damaged.has(at));
   const source = raw.casterId ? (view.units[raw.casterId] ?? view.sites?.[raw.casterId]) : null;
   const caster =
     source && typeof source.x === "number" && typeof source.y === "number" ? engineCellKey(source.x, source.y) : null;
-  // nothing to draw: an empty reveal must not blank a still-running animation
-  if (!hits.length && !sites.length && !caster) return null;
-  return { seq, hits, sites, caster, name: raw.name ?? "", element: raw.element ?? "none" };
+  const name = raw.name ?? "";
+  if (!sites.length && !caster && !name) return null;
+  return { seq, hits: [], sites, caster, name, element: raw.element ?? "none" };
 }
 
 export function hiddenLayerCounts(view: PlayerView, layer: BoardLayer): Record<string, HiddenCounts> {
@@ -170,11 +226,38 @@ const PHASES: Record<PlayerView["phase"], Phase> = {
   over: "End",
 };
 
+/**
+ * A numeric cardId that is unique per token INSTANCE and stable across re-projections.
+ *
+ * `tokenCardId(def)` alone is per-TYPE, so every Skeleton on the board shared one id — and
+ * that id is "used for React keys and physics IDs" (tokens.ts), so same-type tokens collided
+ * and fought over their textures. `newTokenInstanceId` is unique but salts with `Date.now()`,
+ * which would change on every projection and remount each token card continuously. Folding
+ * the engine's own stable instance id into the type hash gives us both.
+ */
+function tokenInstanceCardId(def: Parameters<typeof tokenCardId>[0], instanceId: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < instanceId.length; i++) {
+    hash ^= instanceId.charCodeAt(i);
+    hash = (hash * 0x01000193) >>> 0;
+  }
+  // keep it negative, like every other token id, so it can never collide with a real cardId
+  return -(((Math.abs(tokenCardId(def)) * 31 + (hash % 100000)) >>> 0) % 0x7ffffff) - 1;
+}
+
 /** One of our token cards (Frog, Lance, Stealth, Ward, Rubble…), drawn the way the board draws tokens. */
 function tokenCard(name: string, instanceId: string, owner: PlayerKey): CardRef | null {
   const def = TOKEN_BY_NAME[name.toLowerCase()];
   if (!def) return null;
-  return { cardId: tokenCardId(def), name: def.name, type: "Token", subTypes: def.subTypes ?? null, slug: tokenSlug(def), instanceId, owner };
+  return {
+    cardId: tokenInstanceCardId(def, instanceId),
+    name: def.name,
+    type: "Token",
+    subTypes: def.subTypes ?? null,
+    slug: tokenSlug(def),
+    instanceId,
+    owner,
+  };
 }
 
 function cardOf(view: PlayerView, instanceId: string, owner: PlayerKey): CardRef {
@@ -369,13 +452,39 @@ export function projectView(view: PlayerView, layer: BoardLayer = "surface", por
     });
   }
 
+  const flow = (
+    view as unknown as {
+      flow?: {
+        lockedCards?: { cardId: string; casterName?: string }[];
+        stolen?: { cardId: string; unitId: string }[];
+      };
+    }
+  ).flow;
+  const locks = new Map<string, string>();
+  for (const lock of flow?.lockedCards ?? []) if (lock?.cardId) locks.set(lock.cardId, lock.casterName || "its caster");
+  // A stolen card is sealed only while the thief is still in the realm (casting.ts:358).
+  const sealed = new Map<string, string>();
+  for (const theft of flow?.stolen ?? []) {
+    const thief = theft?.unitId ? view.units[theft.unitId] : null;
+    if (theft?.cardId && thief) sealed.set(theft.cardId, thief.name);
+  }
+
   const zones = {} as Record<PlayerKey, Zones>;
   for (const p of players) {
     const key = seatKey(p.id);
     zones[key] = {
-      hand: p.hand.map((id, i) =>
-        id === "hidden" ? hiddenCard(`${key}-hand-${i}`, key, "Unknown") : cardOf(view, id, key),
-      ),
+      hand: p.hand.map((id, i) => {
+        if (id === "hidden") return hiddenCard(`${key}-hand-${i}`, key, "Unknown");
+        const card = cardOf(view, id, key);
+        // Morgana le Fay / the Omphaloi / Archangel Gabriel bond a drawn spell to one caster.
+        // The engine keeps the card in the normal hand and records the bond in
+        // flow.lockedCards, enforcing it in casting.ts — but a card you cannot cast has to SAY
+        // so, or the hand just looks like it has an uncastable card in it.
+        const lock = locks.get(id);
+        const seal = sealed.get(id);
+        if (!lock && !seal) return card;
+        return { ...card, ...(lock ? { lockedTo: lock } : {}), ...(seal ? { sealedBy: seal } : {}) };
+      }),
       spellbook: pile(p.spellbookCount, key, "spellbook"),
       atlas: pile(p.atlasCount, key, "atlas"),
       graveyard: p.cemetery.map((id) => cardOf(view, id, key)),
@@ -416,5 +525,25 @@ export function projectView(view: PlayerView, layer: BoardLayer = "surface", por
     portalState: portalStateFor(view, portalsRevealed),
     matchEnded: view.phase === "over",
     winner: view.phase === "over" && view.winner !== null ? seatKey(view.winner) : null,
+    events: engineEvents(view),
   };
+}
+
+/**
+ * The engine's log as the shared console's event feed, so engine mode uses the same console,
+ * in the same place, as the online and replay views instead of a panel of its own.
+ * Squares are rewritten to our tile numbers on the way through.
+ */
+function engineEvents(view: PlayerView): StoreState["events"] {
+  const log = view.log.slice(-MAX_EVENTS);
+  // The engine's log is an ordered array with no ids of its own; index it from the end so a
+  // given line keeps its id as the log grows and the console does not re-key every entry.
+  const base = Math.max(0, view.log.length - log.length);
+  return log.map((entry, i) => ({
+    id: base + i,
+    ts: 0,
+    text: localizeEngineText(entry.msg),
+    turn: entry.turn,
+    player: entry.player === null || entry.player === undefined ? undefined : entry.player === 0 ? 1 : 2,
+  }));
 }

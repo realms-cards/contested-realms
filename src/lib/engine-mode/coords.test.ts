@@ -4,6 +4,7 @@ import {
   boardArrowForStep,
   ENGINE_DIRECTIONS,
   ENGINE_STEPS,
+  engineCellKey,
   engineToBoard,
   engineTileNumber,
   localizeEngineText,
@@ -63,5 +64,29 @@ describe("engine coordinate localization", () => {
     expect(localizeEngineText("You banishes it.")).toBe("You banish it.");
     // a line about someone else keeps its own grammar
     expect(localizeEngineText("Rimland Nomads attacks Harbinger!")).toBe("Rimland Nomads attacks Harbinger!");
+  });
+});
+
+describe("square-naming engine options", () => {
+  // Mirrors squareOptionsFor in EnginePromptPanel: the engine's squareLabel(x,y) is a 0-based
+  // letter and a 1-based number, which is the form Chaos Twister's landing roll uses.
+  const parse = (option: string): string | null => {
+    const match = /\b([a-e])([1-4])\b/.exec(option);
+    if (!match) return null;
+    const x = match[1].charCodeAt(0) - 97;
+    const y = Number(match[2]) - 1;
+    return engineCellKey(x, y);
+  };
+
+  it("reads a landing square out of the engine's wording", () => {
+    // engine a1 is x=0,y=0, which our 180° rotation puts at board (4,3) = tile 20
+    expect(parse("lands at a1")).toBe(engineCellKey(0, 0));
+    expect(parse("lands at e4")).toBe(engineCellKey(4, 3));
+    expect(parse("lands at c2")).toBe(engineCellKey(2, 1));
+  });
+
+  it("leaves options that name no square alone", () => {
+    expect(parse("flies off the board")).toBeNull();
+    expect(parse("hold fire")).toBeNull();
   });
 });

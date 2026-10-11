@@ -20,6 +20,7 @@ import {
   DynamicHud3D as Hud3D,
   DynamicPiles3D as Piles3D,
 } from "@/components/game/dynamic-3d";
+import { useEngineSession } from "@/lib/engine-mode/session";
 import { computeTopdownFitDistance } from "@/lib/game/cameraFit";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { MAT_PIXEL_W, MAT_PIXEL_H, BASE_TILE_SIZE, MAT_RATIO, TILE_SIZE } from "@/lib/game/constants";
@@ -28,8 +29,62 @@ import { useGameStore } from "@/lib/game/store";
 import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { useViewportSize } from "@/lib/hooks/useTouchDevice";
 import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
+import EngineDamageMarks from "./EngineDamageMarks";
 import EngineEventReveal from "./EngineEventReveal";
 import EngineLayerOverlay from "./EngineLayerOverlay";
+
+/**
+ * Lighting per board layer. The subsurface view is literally below the waterline, so it gets
+ * a cold, green-blue key as if the light were filtering down through water, a lifted ambient
+ * (water scatters light rather than letting it fall off), and exponential fog so the far edge
+ * of the realm dissolves instead of ending crisply.
+ *
+ * All static values: switching layers is one React render, so the demand frameloop draws a
+ * single frame and then goes idle again — no animation budget spent on the mood.
+ */
+interface BoardLight {
+  background: string;
+  ambient: number;
+  ambientColor: string;
+  key: number;
+  keyColor: string;
+  fill: number;
+  fillColor: string;
+  rim: number;
+  rimColor: string;
+  /** fogExp2 density; 0 disables fog entirely */
+  fog: number;
+  fog1: string;
+}
+
+const LAYER_LIGHT: Record<"surface" | "subsurface", BoardLight> = {
+  surface: {
+    background: "#0b0b0c",
+    ambient: 0.5,
+    ambientColor: "#ffffff",
+    key: 1.6,
+    keyColor: "#ffffff",
+    fill: 0.3,
+    fillColor: "#b4c5e4",
+    rim: 0.2,
+    rimColor: "#e8d5c4",
+    fog: 0,
+    fog1: "#000000",
+  },
+  subsurface: {
+    background: "#05202c",
+    ambient: 0.72,
+    ambientColor: "#5fd2e0",
+    key: 1.0,
+    keyColor: "#8ef0ff",
+    fill: 0.42,
+    fillColor: "#1d7fa8",
+    rim: 0.3,
+    rimColor: "#0f5f7a",
+    fog: 0.028,
+    fog1: "#06293a",
+  },
+};
 
 /**
  * What the engine HUD really covers, so the opening camera can frame the grid as large as
@@ -44,6 +99,8 @@ const BASELINE_TILT = 0.14;
 
 export default function EngineBoard3D() {
   const boardSize = useGameStore((s) => s.board.size);
+  const layer = useEngineSession((s) => s.layer);
+  const light = LAYER_LIGHT[layer === "subsurface" ? "subsurface" : "surface"];
   const viewport = useViewportSize();
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
 
@@ -121,11 +178,14 @@ export default function EngineBoard3D() {
       gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false }}
       style={{ position: "absolute", inset: 0 }}
     >
-      <color attach="background" args={["#0b0b0c"]} />
-      <ambientLight intensity={0.5} />
+      <color attach="background" args={[light.background]} />
+      {/* Underwater, the whole realm sits in suspended water: haze swallows the far edge. */}
+      {light.fog > 0 && <fogExp2 attach="fog" args={[light.fog1, light.fog]} />}
+      <ambientLight intensity={light.ambient} color={light.ambientColor} />
       <directionalLight
         position={[5, 12, 5]}
-        intensity={1.6}
+        intensity={light.key}
+        color={light.keyColor}
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
@@ -136,8 +196,8 @@ export default function EngineBoard3D() {
         shadow-camera-bottom={-15}
         shadow-bias={-0.0005}
       />
-      <directionalLight position={[-8, 6, -3]} intensity={0.3} color="#b4c5e4" />
-      <directionalLight position={[0, 3, -10]} intensity={0.2} color="#e8d5c4" />
+      <directionalLight position={[-8, 6, -3]} intensity={light.fill} color={light.fillColor} />
+      <directionalLight position={[0, 3, -10]} intensity={light.rim} color={light.rimColor} />
 
       {/* Catch scene suspensions (lazy board chunks, textures) inside the canvas: R3F otherwise
           re-throws them into the DOM tree, which unmounts and remounts the Canvas, and its
@@ -163,6 +223,7 @@ export default function EngineBoard3D() {
           suspending on a card texture would otherwise unmount it mid-animation and kill the
           damage numbers it is in the middle of floating. */}
       <EngineEventReveal />
+      <EngineDamageMarks />
 
       <OrbitControls
         ref={controlsRef}

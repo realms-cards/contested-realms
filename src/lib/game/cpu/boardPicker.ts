@@ -14,6 +14,9 @@ export const useCpuBoardPicker = create<{
   setLabels: (request: string, labels: Record<string, string>) => void;
   setHovered: (token: string | null) => void;
   select: (tile: string) => void;
+  /** Drop the current selection but keep the armed tokens, glow and labels, so a caller can
+   *  accept a click — or refuse it — and leave exactly the same choices live. */
+  deselect: (request: string) => void;
   clear: (request: string) => void;
 }>((set) => ({
   request:"",tiles:[],selected:null,glow:[],sources:[],labels:{},hovered:null,
@@ -22,6 +25,7 @@ export const useCpuBoardPicker = create<{
   setLabels:(request,labels) => set(state => state.request === request ? {labels} : {request,tiles:[],selected:null,glow:[],sources:[],labels,hovered:null}),
   setHovered:hovered => set(state => state.hovered === hovered ? state : {hovered}),
   select:tile => set(state => state.tiles.includes(tile) ? {selected:tile} : state),
+  deselect:request => set(state => state.request === request ? {selected:null} : state),
   clear:request => set(state => state.request === request ? {request:"",tiles:[],selected:null,glow:[],sources:[],labels:{},hovered:null} : state),
 }));
 

@@ -18,13 +18,13 @@ import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import type { ArrowDirection } from "@/lib/game/cpu/fieldTargets";
 import { dirToken, handToken, pileToken } from "@/lib/game/cpu/pickTokens";
 import type { Action, GameState as EngineState, Prompt } from "@sorcery/shared";
-import { actingSeatFor, allCards } from "@sorcery/shared";
+import { actingSeatFor, allCards, GRID_H, GRID_W } from "@sorcery/shared";
 import { botAction } from "@untested-realm/bot/bot";
 import EnginePortalScreen from "./EnginePortalScreen";
 import { Compass, directionKey, PromptBanner, PromptDialog } from "./EnginePromptShell";
 
 /** Prompt data shapes, per PromptKind (see the engine's pushPrompt callers). */
-interface PromptData {
+export interface PromptData {
   options?: string[];
   ids?: string[];
   candidates?: string[];
@@ -39,6 +39,10 @@ interface PromptData {
   names?: string[];
   /** a card the prompt shows the player (chooseOption) */
   reveal?: string;
+  /** what the candidates are: "unit" | "site" | "artifact" — names them in the hint */
+  kind?: string;
+  /** nameCard: the list is the player's collection, so say so */
+  fromCollection?: boolean;
   /**
    * Direction prompts only. The engine attaches these to ANY all-cardinal chooseOption
    * (effects.ts `ask`, "GENERALIZED direction-picker preview") precisely so the client can
@@ -90,6 +94,68 @@ function lanesFor(data: PromptData, options: string[]): { origin: string; lanes:
     });
   }
   return lanes.length ? { origin, lanes } : null;
+}
+
+/** An engine option that names a board square, e.g. Chaos Twister's "lands at b3". */
+interface SquareOption {
+  option: string;
+  at: string;
+}
+
+/**
+ * Square-naming options, resolved to board cells.
+ *
+ * The engine writes squares with `squareLabel(x, y)` → "b3" (0-based letter, 1-based number).
+ * Chaos Twister's determiner prompt is the worst case: twenty-one options, "lands at a1"
+ * through "lands at e4" plus "flies off the board", which we were rendering as a wall of
+ * text buttons. Anything that names squares belongs on the board instead.
+ */
+function squareOptionsFor(options: string[]): SquareOption[] {
+  const out: SquareOption[] = [];
+  for (const option of options) {
+    const match = /\b([a-e])([1-4])\b/.exec(option);
+    if (!match) continue;
+    const x = match[1].charCodeAt(0) - 97;
+    const y = Number(match[2]) - 1;
+    if (x < 0 || x >= GRID_W || y < 0 || y >= GRID_H) continue;
+    out.push({ option, at: engineCellKey(x, y) });
+  }
+  return out;
+}
+
+/**
+ * A choice between squares, answered by clicking the board. Options the engine offered that
+ * name no square (Chaos Twister's "flies off the board") stay as buttons in the banner.
+ */
+function SquarePick({
+  prompt,
+  options,
+  squares,
+  onSend,
+}: {
+  prompt: Prompt;
+  options: string[];
+  squares: SquareOption[];
+  onSend: (choice: unknown) => void;
+}) {
+  const onPick = useMemo(
+    () => (token: string) => {
+      const hit = squares.find((candidate) => candidate.at === token);
+      if (hit) onSend(hit.option);
+    },
+    [squares, onSend],
+  );
+  useBoardPick(`engine-prompt:${prompt.id}`, squares.map((sq) => sq.at), [], onPick);
+  const extras = options.filter((option) => !squares.some((sq) => sq.option === option));
+  return (
+    <PromptBanner title={prompt.title} hint="Click the square on the board." counter={`${squares.length} squares`}>
+      {extras.map((option) => (
+        <RcButton key={option} variant="outline" size="sm" onClick={() => onSend(option)}>
+          {localizeEngineText(option)}
+        </RcButton>
+      ))}
+    </PromptBanner>
+  );
 }
 
 /**
@@ -167,18 +233,45 @@ function tileNumberOf(cellKey: string): number {
 }
 
 /** The engine's prompts and the mulligan, answered on the board where possible. */
+/**
+ * Which pre-game surface to show, and in what order.
+ *
+ * A prompt OUTRANKS the mulligan banner. The engine refuses every action while a prompt is
+ * open — `game.ts` answers "Waiting for …" until the queue drains — and avatar `onSetup`
+ * hooks run inside `createGame` (setup.ts:117-119). The Dragonlord pushes a `nameCard` there,
+ * so showing the mulligan first left the player holding two buttons the engine would never
+ * accept, with no way to reach the prompt. The computer cannot break the tie either: the
+ * prompt belongs to seat 0, so `botNeedsToAct` is false for it. That stranded the match.
+ */
+export function preGameSurface(
+  game: EngineState,
+  portalsRevealed: boolean,
+): "portal" | "prompt" | "mulligan" | "none" {
+  const prompt = game.prompts[0];
+  const mine = !!prompt && actingSeatFor(game, prompt.player) === HUMAN_SEAT;
+  if (game.phase === "mulligan" && !portalsRevealed) return "portal";
+  if (mine) return "prompt";
+  if (game.phase === "mulligan" && !game.players[HUMAN_SEAT].keptHand) return "mulligan";
+  return prompt ? "none" : "none";
+}
+
 export default function EnginePromptPanel() {
   const game = useEngineSession((s) => s.game);
   const rev = useEngineSession((s) => s.rev);
   const portalsRevealed = useEngineSession((s) => s.portalsRevealed);
   if (!game) return null;
-  // pre-game, in our usual order: Harbinger portal rolls, then the mulligan
-  if (game.phase === "mulligan" && !portalsRevealed) return <EnginePortalScreen />;
-  // NOT keyed on rev: the computer mulligans during this same phase, and a remount would
-  // throw away the cards the player has already marked.
-  if (game.phase === "mulligan" && !game.players[HUMAN_SEAT].keptHand) return <Mulligan game={game} />;
   const prompt = game.prompts[0];
-  if (!prompt || actingSeatFor(game, prompt.player) !== HUMAN_SEAT) return null;
+  switch (preGameSurface(game, portalsRevealed)) {
+    case "portal":
+      return <EnginePortalScreen />;
+    case "mulligan":
+      // NOT keyed on rev: the computer mulligans during this same phase, and a remount would
+      // throw away the cards the player has already marked.
+      return <Mulligan game={game} />;
+    case "none":
+      return null;
+  }
+  if (!prompt) return null;
   return <PromptView key={`${prompt.id}:${rev}`} game={game} prompt={prompt} />;
 }
 
@@ -207,7 +300,15 @@ function useBoardPick(
       useCpuBoardPicker.subscribe((state, prev) => {
         if (state.request !== request || !state.selected || state.selected === prev.selected) return;
         const token = state.selected;
-        useCpuBoardPicker.getState().configure(`${request}:ack:${token}`, []);
+        // Only drop the selection — do NOT reconfigure under a throwaway request.
+        //
+        // That is what killed the board on a REFUSED pick: the ack-configure hard-reset the
+        // store to an empty token list, and re-arming depended on the effect re-running. But
+        // the effect's `request` is derived from the caller's state, and a refused pick (the
+        // mulligan's 4th card, a chooseTargets past `count`) returns the identical array, so
+        // React bails out of the render, the deps never change, and nothing ever reconfigures.
+        // The board was left permanently unclickable.
+        useCpuBoardPicker.getState().deselect(request);
         onPick(token);
       }),
     [request, onPick],
@@ -351,6 +452,10 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
           min={min}
           max={max}
           confirmLabel={(n) => (prompt.kind === "defend" ? (n ? `Defend with ${n}` : "No defenders") : "Confirm")}
+          // `defend` already says "No defenders" on its own button; an optional chooseTargets
+          // had nothing but an unlabelled Confirm at zero picks.
+          declineLabel={prompt.kind === "chooseTargets" && data.upTo ? (data.skipLabel ?? "None") : null}
+          kind={data.kind}
           onConfirm={send}
         >
           {autoButton}
@@ -393,6 +498,9 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
         // A direction belongs on the board, aimed from the source square — not in a popup.
         const board = dirs.filter((d) => d.key).length >= 3 ? lanesFor(data, options) : null;
         if (board) return <DirectionPick prompt={prompt} options={options} board={board} onSend={send} />;
+        // options that name squares (Chaos Twister's landing roll) are picked on the board
+        const squares = squareOptionsFor(options);
+        if (squares.length >= 2) return <SquarePick prompt={prompt} options={options} squares={squares} onSend={send} />;
         // no origin from the engine (Windblast's worded options, 'hold fire' sets): compass
         if (options.length >= 3 && dirs.every((d) => d.key)) {
           return (
@@ -424,7 +532,7 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
     case "orderCards":
       return <OrderCards prompt={prompt} data={data} onSend={send} />;
     case "nameCard":
-      return <NameCard prompt={prompt} data={data} onSend={send} />;
+      return <NameCard prompt={prompt} data={data} onSend={send} auto={autoButton} />;
     default:
       return (
         <PromptDialog title={prompt.title} hint="This step has no board picture yet.">
@@ -467,6 +575,8 @@ function MultiPick({
   min,
   max,
   confirmLabel,
+  declineLabel,
+  kind,
   onConfirm,
   children,
 }: {
@@ -477,6 +587,10 @@ function MultiPick({
   min: number;
   max: number;
   confirmLabel: (n: number) => string;
+  /** When set, an explicit "none" button that answers with an empty pick. */
+  declineLabel?: string | null;
+  /** the engine's `data.kind`, so the hint names what is being clicked */
+  kind?: string;
   onConfirm: (ids: string[]) => void;
   children?: React.ReactNode;
 }) {
@@ -492,17 +606,31 @@ function MultiPick({
   useBoardPick(`${request}:${chosen.join(",")}`, ids.map(tokenOf), chosen.map(tokenOf), toggle);
   const ready = chosen.length >= min && chosen.length <= max;
   return (
-    <PromptBanner
-      title={title}
-      hint="Click the highlighted units on the board; click one again to unpick it."
-      counter={`${chosen.length}/${max}`}
-    >
+    <PromptBanner title={title} hint={pickHint(kind, !!declineLabel)} counter={`${chosen.length}/${max}`}>
       {children}
-      <RcButton size="sm" disabled={!ready} onClick={() => onConfirm(chosen)}>
+      {/* An optional pick's decline gets a NAME. `min` is already 0 for these, so pressing
+          Confirm at zero always worked — it just looked like the thing you do when you have
+          not finished choosing. combat:retarget's own title promises "(or none)". */}
+      {declineLabel && (
+        <RcButton variant="outline" size="sm" onClick={() => onConfirm([])}>
+          {declineLabel}
+        </RcButton>
+      )}
+      {/* With upTo and count > 1, 1 and 2 picks are legal partial answers: only zero moves to
+          the outline button, so `ready` must stay as it is. */}
+      <RcButton size="sm" disabled={!ready || (!!declineLabel && chosen.length === 0)} onClick={() => onConfirm(chosen)}>
         {confirmLabel(chosen.length)}
       </RcButton>
     </PromptBanner>
   );
+}
+
+/** What the player is clicking: the engine tells us with `data.kind`. */
+function pickHint(kind: string | undefined, declinable: boolean): string {
+  const what = kind === "site" ? "sites" : kind === "artifact" ? "artifacts" : "units";
+  return declinable
+    ? `Click the highlighted ${what} on the board, or decline.`
+    : `Click the highlighted ${what} on the board; click one again to unpick it.`;
 }
 
 function AllocateDamage({
@@ -635,32 +763,107 @@ function OrderCards({ prompt, data, onSend }: { prompt: Prompt; data: PromptData
   );
 }
 
-function NameCard({ prompt, data, onSend }: { prompt: Prompt; data: PromptData; onSend: (choice: unknown) => void }) {
-  const names = useMemo(() => data.names ?? allCards.filter((c) => !c.token).map((c) => c.name), [data.names]);
+/**
+ * Which kind of nameCard prompt this is.
+ *
+ * Decided on the PRESENCE of `names`, not its truthiness: an empty list is still a
+ * constrained prompt, and treating it as free-form would reopen the hole this closes the
+ * next time the vendor changes. Twelve ask sites — ten carry `names`, only Feast for Crows
+ * and Hyter Sprites are genuinely free-form.
+ */
+export function nameCardMode(data: PromptData): "list" | "free" {
+  return "names" in data && Array.isArray(data.names) ? "list" : "free";
+}
+
+/**
+ * Name a card.
+ *
+ * The vendor's own comments ask for "a clickable card grid … not a free-text field"
+ * (legion-of-gall.ts, dragonlord.ts), and our house rule says the same. Two modes:
+ *
+ *  - a list the engine supplied: a grid, and NO cancel. This is the Legion of Gall fix —
+ *    its cont re-asks with `taken` unchanged on any non-string, so the old Cancel (which
+ *    sent "") looped the prompt forever. Four other sites pass the answer straight to
+ *    `getCard`, which THROWS on "". Auto is therefore the only exit, and it is always
+ *    present: the bot handles nameCard and picks from the list.
+ *  - genuinely free-form: a searchable field plus a real "Name nothing".
+ */
+function NameCard({
+  prompt,
+  data,
+  onSend,
+  auto,
+}: {
+  prompt: Prompt;
+  data: PromptData;
+  onSend: (choice: unknown) => void;
+  auto: React.ReactNode;
+}) {
+  const mode = nameCardMode(data);
   const [value, setValue] = useState("");
-  const valid = names.includes(value);
+  // a name can repeat at count > 1; the grid keys by index, so dedupe first
+  const offered = useMemo(() => [...new Set(data.names ?? [])], [data.names]);
+  const every = useMemo(() => allCards.filter((c) => !c.token).map((c) => c.name), []);
+  const search = value.trim().toLowerCase();
+  const matches = useMemo(
+    () => (search ? every.filter((name) => name.toLowerCase().includes(search)).slice(0, 24) : []),
+    [every, search],
+  );
+  const where = data.fromCollection ? "from your collection" : null;
+
+  if (mode === "list") {
+    return (
+      <PromptDialog title={prompt.title} hint={where ? `Choose a card ${where}.` : "Choose a card."} wide>
+        {offered.length === 0 ? (
+          <div className="py-4 text-center text-sm text-rc-fg-muted">
+            There is nothing to choose from — let the engine settle it.
+            <div className="mt-3 flex justify-center">{auto}</div>
+          </div>
+        ) : (
+          <CpuCardPick
+            title={where ? `Your collection (${offered.length})` : `${offered.length} to choose from`}
+            items={offered.map((name, i) => ({ id: String(i), card: cardRefFor(name) }))}
+            onPick={(id) => onSend(offered[Number(id)])}
+          >
+            {/* No cancel here on purpose: an empty answer either loops this prompt forever
+                (Legion of Gall) or throws inside getCard. Auto is the way out. */}
+            <div className="mt-3 flex justify-center">{auto}</div>
+          </CpuCardPick>
+        )}
+      </PromptDialog>
+    );
+  }
+
   return (
-    <PromptDialog title={prompt.title} hint="Type a card name.">
-      <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-      <input
-        list="engine-card-names"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="Card name"
-        className="h-9 w-64 rounded-rc-md border border-rc-line/22 bg-black/40 px-3 text-sm text-rc-fg"
-      />
-      <datalist id="engine-card-names">
-        {names.map((name) => (
-          <option key={name} value={name} />
-        ))}
-      </datalist>
-      <RcButton variant="outline" size="sm" onClick={() => onSend("")}>
-        Cancel
-      </RcButton>
-      <RcButton size="sm" disabled={!valid} onClick={() => onSend(value)}>
-        Name it
-      </RcButton>
+    <PromptDialog title={prompt.title} hint="Search for a card by name." wide>
+      <div className="flex flex-col items-center gap-3 pt-1">
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Card name"
+          autoFocus
+          className="h-9 w-72 rounded-rc-md border border-rc-line/22 bg-black/40 px-3 text-sm text-rc-fg"
+        />
+        {matches.length > 0 && (
+          <CpuCardPick
+            title={`${matches.length} match${matches.length === 1 ? "" : "es"}`}
+            items={matches.map((name, i) => ({ id: String(i), card: cardRefFor(name) }))}
+            onPick={(id) => onSend(matches[Number(id)])}
+          />
+        )}
+        <div className="flex justify-center gap-2">
+          {auto}
+          {/* Free-form sites guard with `typeof name !== "string" || !name` and simply return,
+              so declining here is safe and says what it does. */}
+          {/* `null`, not `""`: an empty string passes the `typeof name !== "string"` guards and
+              reaches `getCard("")`, which throws (db.ts:88-92). `null` fails those guards first
+              and every free-form continuation simply returns. */}
+          <RcButton variant="outline" size="sm" onClick={() => onSend(null)}>
+            Name nothing
+          </RcButton>
+        </div>
       </div>
     </PromptDialog>
   );
 }
+

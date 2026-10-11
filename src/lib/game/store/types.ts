@@ -132,6 +132,18 @@ export type CardRef = {
   attack?: number | null; // base attack value
   defence?: number | null; // base defence value
   rarity?: string | null; // card rarity (Ordinary, Exceptional, Elite, Unique)
+  /**
+   * This card may only be cast by the named permanent (Morgana le Fay's own three spells, an
+   * Omphalos's drawn spell, a card Archangel Gabriel bonded). The card sits in the ordinary
+   * hand — the restriction is the whole point, so it has to be visible on the card.
+   */
+  lockedTo?: string | null;
+  /**
+   * This card is sealed while the named thief lives (Pith Imp). It stays in your hand and
+   * cannot be cast — upstream's view.ts says such a card "still SHOWs in the owner's hand
+   * (as sealed/locked)", so it must look different from a card you can actually play.
+   */
+  sealedBy?: string | null;
 };
 
 export type Zones = {

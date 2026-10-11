@@ -14,8 +14,9 @@ const ELEMENTS = [
 ];
 
 /**
- * Mana and threshold readout for engine matches. Laid out by the right-edge column in
- * EngineMatch, which stacks the action rail underneath it.
+ * Mana and threshold readout for engine matches, in the regular panels' spot (right middle).
+ * It defines the right-edge anchor: the action rail hangs off its bottom edge, so this block
+ * must keep its own vertical centring and never be shifted by what sits under it.
  * The numbers come straight from the rules engine — `affinity()` is the same function casting
  * checks use, and mana is the engine's own pool — so what you see is exactly what you can pay.
  */

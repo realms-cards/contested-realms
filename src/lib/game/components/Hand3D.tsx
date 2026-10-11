@@ -1662,6 +1662,34 @@ export default function Hand3D({
                   flat={flatCards}
                 />
               )}
+            {/* Bonded to one caster: Morgana le Fay's own three spells, an Omphalos's drawn
+                spell, a card Archangel Gabriel handed over. The engine keeps these in the
+                ordinary hand and refuses the cast from anyone else (casting.ts lockedCards),
+                so the card has to show that it is not freely castable. */}
+            {!showCardBacks && c.sealedBy && (
+              <ResolverOutline
+                width={CARD_SHORT}
+                height={CARD_LONG}
+                rotationZ={cardRotationZ}
+                elevation={-0.01}
+                renderOrder={renderOrder + 10000 - 5}
+                color="#f0514f"
+                opacity={0.9}
+                flat={flatCards}
+              />
+            )}
+            {!showCardBacks && c.lockedTo && (
+              <ResolverOutline
+                width={CARD_SHORT}
+                height={CARD_LONG}
+                rotationZ={cardRotationZ}
+                elevation={-0.01}
+                renderOrder={renderOrder + 10000 - 5}
+                color="#67e8f9"
+                opacity={0.9}
+                flat={flatCards}
+              />
+            )}
             {/* Invisible larger interaction box to ensure cards are always clickable */}
             {/* Disable during drag to prevent blocking board placement */}
             {!showCardBacks && !isDraggedCard && !isDragging && (

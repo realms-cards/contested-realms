@@ -8,10 +8,10 @@ import { useEffect, useRef, useState } from "react";
  * Presentation only: it takes a state id and plays frames. It never reads or mutates game
  * state — the rail decides which id to show and when to replay.
  *
- * Frames are driven by a timer rather than a CSS `steps()` animation so a one-shot can stop
- * on its own idle frame and a loop can be started and stopped from props, with nothing
- * animating while the board is idle (the pack's own guidance: do not run every animation
- * continuously). `prefers-reduced-motion` pins every state to its idle frame.
+ * Frames are driven by a timer rather than a CSS `steps()` animation so a sequence can stop
+ * on its own idle frame. Every state is a one-shot — see the effect below for why the pack's
+ * `loop: true` states are played once here too. `prefers-reduced-motion` pins every state to
+ * its idle frame.
  */
 
 export type ActionSpriteId =
@@ -74,15 +74,12 @@ function prefersReducedMotion(): boolean {
 export default function ActionSprite({
   id,
   size = 32,
-  /** Change this value to replay a one-shot (hover, activation, a state transition). */
+  /** Change this value to replay the sprite (hover, activation, a state transition). */
   playKey,
-  /** Run a looping state; ignored by one-shot states. */
-  looping = false,
 }: {
   id: ActionSpriteId;
   size?: number;
   playKey?: string | number;
-  looping?: boolean;
 }) {
   const state = ACTION_SPRITES[id];
   const [frame, setFrame] = useState(state.idleFrame);
@@ -98,34 +95,30 @@ export default function ActionSprite({
       setFrame(sprite.idleFrame);
       return;
     }
-    // don't fire every one-shot once on mount: the rail would flicker on first paint
-    if (!sprite.loop && firstPlay.current) {
+    // Nothing on this rail ever animates continuously, including the states the art pack
+    // marks `loop: true` (music, cemetery, concede-armed). A button that keeps moving while
+    // you are reading the board is a distraction, not information — every state plays its
+    // six frames once on hover or on a real state change, then holds its idle frame.
+    if (playKey === undefined) return;
+    if (firstPlay.current) {
       firstPlay.current = false;
-      if (playKey === undefined) return;
-    }
-    if (sprite.loop && !looping) {
       setFrame(sprite.idleFrame);
       return;
     }
-    if (!sprite.loop && playKey === undefined) return;
 
     let step = 0;
     setFrame(0);
     const timer = setInterval(() => {
       step += 1;
       if (step >= SPRITE_COLUMNS) {
-        if (sprite.loop) {
-          step = 0;
-        } else {
-          clearInterval(timer);
-          setFrame(sprite.idleFrame);
-          return;
-        }
+        clearInterval(timer);
+        setFrame(sprite.idleFrame);
+        return;
       }
       setFrame(step);
     }, sprite.frameDurationMs);
     return () => clearInterval(timer);
-  }, [id, playKey, looping]);
+  }, [id, playKey]);
 
   return (
     <span

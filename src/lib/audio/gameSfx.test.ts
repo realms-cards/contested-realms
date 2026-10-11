@@ -246,6 +246,16 @@ describe("diffGameSfx", () => {
     expect(ids(diffGameSfx(prev, next, "local"))).toEqual(["cardShuffle"]);
   });
 
+  it("stays silent for the deck shuffle before the match starts", () => {
+    const a = card("A", "a");
+    const b = card("B", "b");
+    const prev = { ...baseState(), phase: "Setup" as const };
+    prev.zones = { ...prev.zones, p1: { ...emptyZones(), spellbook: [a, b] } };
+    const next = { ...prev, zones: { ...prev.zones, p1: { ...emptyZones(), spellbook: [b, a] } } };
+
+    expect(ids(diffGameSfx(prev, next, "local"))).toEqual([]);
+  });
+
   it("stays silent for loads and resets that move a whole deck at once", () => {
     const prev = baseState();
     const deck = Array.from({ length: 30 }, (_, i) => card(`Card ${i}`, `d${i}`));
