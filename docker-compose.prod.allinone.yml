@@ -228,6 +228,35 @@ services:
         max-size: "5m"
         max-file: "2"
 
+  # Weekly top-8 refresh (the vercel.json cron never runs here — this deployment is the
+  # droplet, not Vercel, which is why the price job above was moved into a sidecar too).
+  # The endpoint asks Summit whether a NEW event has been collected and does nothing if not,
+  # so a loop that is a little coarser than "Monday 07:00" costs nothing.
+  top-decks-refresh:
+    image: alpine:3.20
+    container_name: sorcery-top-decks-refresh
+    restart: unless-stopped
+    env_file:
+      - .env.frontend # CRON_SECRET and SORCERERS_SUMMIT_API_KEY
+    depends_on:
+      frontend:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        sleep 180;
+        while true; do
+          wget -q -O - --post-data='' --header="Authorization: Bearer $${CRON_SECRET}"
+            http://frontend:3000/api/summit/top-decks || echo "[top-decks-refresh] failed";
+          echo; sleep 604800;
+        done
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
   # Discord Bot - SINGLE INSTANCE ONLY
   # Uses Redis leader lock to ensure only one bot connects to Discord
   discord-bot:
