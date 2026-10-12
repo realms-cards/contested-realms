@@ -1,0 +1,291 @@
+import { dirToken, handToken, optToken, pileToken, unitToken } from "@/lib/game/cpu/pickTokens";
+import { getCard, getScript, grantedAbilities } from "@sorcery/shared";
+import type { Action, GameState as EngineState, PlayerId } from "@sorcery/shared";
+import { engineCellKey } from "./coords";
+
+/**
+ * Turns each legal engine action into the sequence of board clicks that picks it:
+ * a source (hand card, unit, site), then squares / targets / a labelled option.
+ * The UI narrows the legal list by prefix, so it can only ever offer legal moves.
+ */
+export interface ActionPath {
+  action: Action;
+  steps: string[];
+}
+
+/** First click of a cast from the cemetery: driven by the HUD's cemetery panel, not a board token. */
+export const cemToken = (cardId: string): string => `cem:${cardId}`;
+
+/** Engine compass → our board compass under the 180° rotation (engine 'n' is y+1, our board's up). */
+const DIR: Record<string, string> = { n: "N", s: "S", e: "W", w: "E" };
+
+/** The board token that stands for an engine object id. */
+/** `seat` is whose cards these are — normally the human, but the opponent's while a
+ *  Courtesan Thaïs turn is being piloted. Optional so every existing caller is unaffected. */
+export function tokenForEngineId(game: EngineState, id: string, seat: PlayerId = 0): string {
+  if (id.startsWith("sq:")) {
+    const [x, y] = id.slice(3).split(",").map(Number);
+    return engineCellKey(x, y);
+  }
+  const unit = game.units[id];
+  if (unit) return unit.isAvatar ? unitToken({ kind: "avatar", seat: unit.owner === 0 ? "p1" : "p2" }) : `unit:perm:${id}`;
+  const site = game.sites[id];
+  if (site) return engineCellKey(site.x, site.y);
+  const artifact = game.artifacts[id];
+  if (artifact) {
+    // A CARRIED artifact is drawn as a small attachment on its bearer and is skipped by
+    // PermanentStack's main loop (`if (p.attachedTo) return null`), so it never gets a pick
+    // token of its own — `unit:perm:<artifactId>` would be unclickable and the Toolbox could
+    // never be activated. Anchor it on the bearer instead; the ability's own option button
+    // then names which carried thing is being used.
+    const bearer = artifact.carriedBy ? game.units[artifact.carriedBy] : undefined;
+    if (bearer) {
+      return bearer.isAvatar
+        ? unitToken({ kind: "avatar", seat: bearer.owner === 0 ? "p1" : "p2" })
+        : `unit:perm:${bearer.id}`;
+    }
+    return `unit:perm:${id}`;
+  }
+  if (game.auras[id]) return `unit:perm:${id}`;
+  if (game.cards[id]) return handToken(seat === 0 ? "p1" : "p2", id);
+  return `unknown:${id}`;
+}
+
+/** The tile a board object sits on, for anchoring option buttons. */
+function tileOf(game: EngineState, id: string): string {
+  const unit = game.units[id];
+  if (unit) return engineCellKey(unit.x, unit.y);
+  const site = game.sites[id];
+  if (site) return engineCellKey(site.x, site.y);
+  const artifact = game.artifacts[id];
+  if (artifact) {
+    const carrier = artifact.carriedBy ? game.units[artifact.carriedBy] : undefined;
+    return carrier ? engineCellKey(carrier.x, carrier.y) : engineCellKey(artifact.x, artifact.y);
+  }
+  return "2,2";
+}
+
+const REGION_LABEL: Record<string, string> = {
+  surface: "On the surface",
+  underground: "Burrowed",
+  underwater: "Submerged",
+  void: "In the void",
+};
+
+/** Ability label for a source; falls back to the key. */
+/** The ability's label, prefixed with the carried artifact's name when it is not the bearer's own. */
+function activateLabel(game: EngineState, sourceId: string, key: string): string {
+  const label = abilityLabel(game, sourceId, key);
+  const artifact = game.artifacts[sourceId];
+  if (!artifact?.carriedBy) return label;
+  return label.toLowerCase().includes(artifact.name.toLowerCase()) ? label : `${artifact.name}: ${label}`;
+}
+
+function abilityLabel(game: EngineState, sourceId: string, key: string): string {
+  const name = game.units[sourceId]?.name ?? game.sites[sourceId]?.name ?? game.artifacts[sourceId]?.name;
+  const own = name ? getScript(name)?.abilities?.find((a) => a.key === key) : undefined;
+  if (own) return own.label;
+  const unit = game.units[sourceId];
+  const granted = unit ? grantedAbilities(game, unit).find((a) => a.key === key) : undefined;
+  return granted?.label ?? key;
+}
+
+/**
+ * A short phrase for what clicking this token will do, shown as a hover tooltip.
+ *
+ * Written from the acting player's point of view and kept to a few words: the board already
+ * shows WHERE, so this only has to say WHAT. Tile numbers rather than coordinates, because
+ * coordinates do not exist in the game.
+ */
+export function actionHint(game: EngineState, action: Action): string {
+  const name = (id: string | undefined) =>
+    (id && (game.units[id]?.name ?? game.sites[id]?.name ?? game.artifacts[id]?.name ?? game.cards[id]?.name)) || "it";
+  switch (action.t) {
+    case "avatarSite":
+      return action.mode === "draw" ? "Draw a site" : `Play ${name(action.cardId)}`;
+    case "castSpell": {
+      const card = game.cards[action.cardId]?.name;
+      const def = card ? getCard(card) : undefined;
+      if (!def) return "Cast it";
+      return def.type === "Magic" ? `Cast ${def.name}` : `Summon ${def.name}`;
+    }
+    case "moveAttack": {
+      const who = name(action.unitId);
+      if ("unit" in (action.attack ?? {})) return `${who} attacks`;
+      if (action.attack && "site" in action.attack) return `${who} attacks the site`;
+      return `Move ${who}`;
+    }
+    case "activate":
+      return activateLabel(game, action.sourceId, action.ability);
+    case "pickUp":
+      return action.artifactIds.length === 1 ? `Pick up ${name(action.artifactIds[0])}` : "Pick these up";
+    case "drop":
+      return action.artifactIds.length === 1 ? `Drop ${name(action.artifactIds[0])}` : "Drop these";
+    case "endTurn":
+      return "End the turn";
+    default:
+      return "Take this action";
+  }
+}
+
+export function actionPaths(
+  game: EngineState,
+  actions: Action[],
+  seat: PlayerId = 0,
+): { paths: ActionPath[]; labels: Record<string, string> } {
+  const key = seat === 0 ? "p1" : "p2";
+  const labels: Record<string, string> = {};
+  const paths: ActionPath[] = [];
+  /** summon click-paths already emitted, so the same clicks never mean two different casters */
+  const summonSteps = new Set<string>();
+  const opt = (tile: string, id: string, label: string) => {
+    const token = optToken(tile, id);
+    labels[token] = label;
+    return token;
+  };
+
+  for (const action of actions) {
+    switch (action.t) {
+      case "avatarSite": {
+        if (action.mode === "draw") paths.push({ action, steps: [pileToken(key, "atlas")] });
+        else paths.push({ action, steps: [handToken(key, action.cardId), engineCellKey(action.x, action.y)] });
+        break;
+      }
+      case "castSpell": {
+        // Card first (from hand, or the cemetery panel), then — for a MAGIC — its caster.
+        //
+        // A summon does NOT ask which spellcaster casts it. Where a minion may be placed
+        // already accounts for every caster's reach, so the squares on offer are the whole
+        // answer: making the player choose a caster first only hides half of them behind an
+        // extra click. A Magic keeps the step, because which caster resolves it can matter.
+        const fromCemetery = game.players[seat].cemetery.includes(action.cardId);
+        const cardDef = getCard(game.cards[action.cardId]?.name ?? "");
+        const picksCaster = cardDef?.type === "Magic";
+        const steps = [fromCemetery ? cemToken(action.cardId) : handToken(key, action.cardId)];
+        if (picksCaster) steps.push(tokenForEngineId(game, action.casterId, seat));
+        if (action.at) {
+          const tile = engineCellKey(action.at.x, action.at.y);
+          const region = action.at.region ?? "surface";
+          steps.push(tile, opt(tile, `region-${region}`, REGION_LABEL[region] ?? region));
+        }
+        const extra = action.extra as { direction?: string; giveTo?: string; origin?: { x: number; y: number } } | undefined;
+        // an artifact handed straight to a bearer: pick the unit instead of a square
+        if (extra?.giveTo) steps.push(tokenForEngineId(game, extra.giveTo));
+        for (const target of action.targets ?? []) {
+          const token = tokenForEngineId(game, target);
+          steps.push(token);
+          // "sq:x,y,region" targets a layer of a square: pick the square, then the layer
+          const region = target.startsWith("sq:") ? target.split(",")[2] : undefined;
+          if (region) steps.push(opt(token, `region-${region}`, REGION_LABEL[region] ?? region));
+        }
+        if (extra?.direction) {
+          // a projectile flies from the caster; Chaos Twister's blow starts at its origin square
+          const from = extra.origin ? engineCellKey(extra.origin.x, extra.origin.y) : tileOf(game, action.casterId);
+          steps.push(dirToken(from, DIR[extra.direction] ?? extra.direction));
+        }
+        // Without the caster step, two spellcasters able to summon the same minion to the same
+        // square produce the SAME sequence of clicks. Keep one: offering both would make the
+        // click path ambiguous and `narrow` would pick between them arbitrarily. The one kept
+        // is a caster the engine itself offered for that square, so the summon is legal.
+        if (!picksCaster) {
+          const fingerprint = steps.join(">");
+          if (summonSteps.has(fingerprint)) break;
+          summonSteps.add(fingerprint);
+        }
+        paths.push({ action, steps });
+        break;
+      }
+      case "moveAttack": {
+        const unit = game.units[action.unitId];
+        if (!unit) break;
+        const last = action.path[action.path.length - 1] ?? { x: unit.x, y: unit.y, region: unit.region };
+        const tile = engineCellKey(last.x, last.y);
+        const steps = [tokenForEngineId(game, action.unitId), tile, opt(tile, `region-${last.region}`, REGION_LABEL[last.region] ?? last.region)];
+        if (!action.attack) steps.push(opt(tile, "move", "Move here"));
+        else if ("unit" in action.attack) steps.push(tokenForEngineId(game, action.attack.unit));
+        else steps.push(opt(tile, "attack-site", "Attack the site"));
+        paths.push({ action, steps });
+        break;
+      }
+      case "activate": {
+        const tile = tileOf(game, action.sourceId);
+        const source = tokenForEngineId(game, action.sourceId);
+        // the built-in Ranged shot: click the shooter, then a direction arrow
+        if (action.ability === "ranged") {
+          const direction = (action.extra as { direction?: string } | undefined)?.direction ?? "n";
+          paths.push({ action, steps: [source, dirToken(tile, DIR[direction] ?? direction)] });
+          break;
+        }
+        // Keyed on the SOURCE as well as the ability: a bearer can carry several artifacts,
+        // and two of them may use the same ability key. The label names the carried thing so
+        // the player can tell which one the button fires.
+        const steps = [
+          source,
+          opt(tile, `ability-${action.sourceId}-${action.ability}`, activateLabel(game, action.sourceId, action.ability)),
+        ];
+        for (const target of action.targets ?? []) {
+          const token = tokenForEngineId(game, target);
+          steps.push(token);
+          const region = target.startsWith("sq:") ? target.split(",")[2] : undefined;
+          if (region) steps.push(opt(token, `region-${region}`, REGION_LABEL[region] ?? region));
+        }
+        paths.push({ action, steps });
+        break;
+      }
+      case "pickUp": {
+        const tile = tileOf(game, action.unitId);
+        const carrier = tokenForEngineId(game, action.unitId);
+        if (action.unitIds?.length) {
+          const names = action.unitIds.map((id) => game.units[id]?.name ?? "unit").join(", ");
+          paths.push({ action, steps: [carrier, opt(tile, `carry-${action.unitIds.join("+")}`, `Carry ${names}`)] });
+          break;
+        }
+        const names = action.artifactIds.map((id) => game.artifacts[id]?.name ?? "artifact").join(", ");
+        paths.push({ action, steps: [carrier, opt(tile, `pickup-${action.artifactIds.join("+")}`, `Pick up ${names}`)] });
+        break;
+      }
+      case "drop": {
+        const tile = tileOf(game, action.unitId);
+        const carrier = tokenForEngineId(game, action.unitId);
+        if (action.unitIds?.length) {
+          const names = action.unitIds.map((id) => game.units[id]?.name ?? "unit").join(", ");
+          paths.push({ action, steps: [carrier, opt(tile, `dropu-${action.unitIds.join("+")}`, `Set down ${names}`)] });
+          break;
+        }
+        const names = action.artifactIds.map((id) => game.artifacts[id]?.name ?? "artifact").join(", ");
+        paths.push({ action, steps: [carrier, opt(tile, `drop-${action.artifactIds.join("+")}`, `Drop ${names}`)] });
+        break;
+      }
+      default:
+        // endTurn, mulligan, prompts: driven by buttons and the prompt panel, not board clicks
+        break;
+    }
+  }
+  return { paths, labels };
+}
+
+export interface Narrowed {
+  /** tokens clickable next */
+  next: string[];
+  /** an action the clicks so far already pick; dispatch it at once when `next` is empty, else offer Confirm */
+  done: Action | null;
+  /** prefix after auto-advancing through steps that offer only one choice */
+  prefix: string[];
+  /** the paths still live after the clicks so far, so a caller can describe each next token */
+  matching: ActionPath[];
+}
+
+/** Filter paths by the clicks so far, skipping steps where only one choice remains. */
+export function narrow(paths: ActionPath[], clicked: string[]): Narrowed {
+  const prefix = [...clicked];
+  for (;;) {
+    const matching = paths.filter((p) => prefix.every((step, i) => p.steps[i] === step));
+    const done = matching.find((p) => p.steps.length === prefix.length)?.action ?? null;
+    const next = [...new Set(matching.filter((p) => p.steps.length > prefix.length).map((p) => p.steps[prefix.length]))];
+    if (!done && next.length === 1 && prefix.length > 0) {
+      prefix.push(next[0]);
+      continue;
+    }
+    return { next, done, prefix, matching };
+  }
+}

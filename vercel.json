@@ -3,6 +3,10 @@
     {
       "path": "/api/pricing/refresh",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/summit/top-decks",
+      "schedule": "0 7 * * 1"
     }
   ]
 }

@@ -33,6 +33,8 @@ export function useBoardHotkeys({
         return;
       }
       if (isSpectator || overlayBlocking) return;
+      // a rules-enforced mode owns the board: its own HUD handles keys
+      if (store.getState().boardGesturesLocked) return;
 
       const {
         selectedPermanent,
@@ -85,6 +87,8 @@ export function useBoardHotkeys({
         return;
       }
       if (isSpectator || overlayBlocking) return;
+      // a rules-enforced mode owns the board: its own HUD handles keys
+      if (store.getState().boardGesturesLocked) return;
 
       const {
         selectedPermanent,
@@ -139,6 +143,8 @@ export function useBoardHotkeys({
         return;
       }
       if (isSpectator || overlayBlocking) return;
+      // a rules-enforced mode owns the board: its own HUD handles keys
+      if (store.getState().boardGesturesLocked) return;
 
       const { matchEnded, phase, actorKey, currentPlayer, requestEndTurn } =
         store.getState();
@@ -170,6 +176,8 @@ export function useBoardHotkeys({
         return;
       }
       if (isSpectator || overlayBlocking) return;
+      // a rules-enforced mode owns the board: its own HUD handles keys
+      if (store.getState().boardGesturesLocked) return;
 
       const {
         selectedPermanent,
@@ -243,6 +251,8 @@ export function useBoardHotkeys({
         return;
       }
       if (isSpectator || overlayBlocking) return;
+      // a rules-enforced mode owns the board: its own HUD handles keys
+      if (store.getState().boardGesturesLocked) return;
 
       const { actorKey, lastPointerWorldPos, spawnGemTokenAt } =
         store.getState();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   type Object3D,
   type Raycaster,
@@ -33,6 +33,8 @@ interface CardOutlineProps {
   pulseSpeed?: number; // cycles per second
   pulseMin?: number; // min opacity when pulsing
   pulseMax?: number; // max opacity when pulsing
+  /** false draws the ring over everything (pick outlines in stacks); true (default) lets cards occlude it */
+  depthTest?: boolean;
   /** When true (default), the outline lies flat in the XZ plane (for board cards).
    *  When false, it stays in the XY plane (for upright hand cards). */
   flat?: boolean;
@@ -93,6 +95,7 @@ export default function CardOutline({
   renderOrder = 10_000,
   opacity = 0.8,
   flat = true,
+  depthTest = true,
 }: CardOutlineProps) {
   // Card corner radius (proportional to card size)
   const cornerRadius = Math.min(width, height) * 0.06;
@@ -183,7 +186,7 @@ export default function CardOutline({
       color,
       transparent: true,
       depthWrite: false,
-      depthTest: true,
+      depthTest,
       toneMapped: false,
       side: DoubleSide,
     };
@@ -194,7 +197,17 @@ export default function CardOutline({
       glow2Mat: new MeshBasicMaterial({ ...baseMaterialProps, opacity: opacity * 0.25 }),
       glow3Mat: new MeshBasicMaterial({ ...baseMaterialProps, opacity: opacity * 0.1 }),
     };
-  }, [color, opacity]);
+  }, [color, opacity, depthTest]);
+
+  // These are built here, not by R3F, so nothing else will free them. Pick outlines mount and
+  // unmount constantly on the hand and the board, so leaking four of each would add up.
+  useEffect(
+    () => () => {
+      for (const geometry of [outlineGeom, glow1Geom, glow2Geom, glow3Geom]) geometry.dispose();
+      for (const material of [outlineMat, glow1Mat, glow2Mat, glow3Mat]) material.dispose();
+    },
+    [outlineGeom, glow1Geom, glow2Geom, glow3Geom, outlineMat, glow1Mat, glow2Mat, glow3Mat],
+  );
 
   // Static glow — no pulse animation. These outlines (token copies, combat
   // highlights) stay mounted on the board; animating them would re-render the

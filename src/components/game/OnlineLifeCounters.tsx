@@ -23,6 +23,8 @@ interface OnlineLifeCountersProps {
   matchId?: string | null;
   showYouLabels?: boolean;
   readOnly?: boolean;
+  /** True only for a viewer watching someone else's match; defaults to `readOnly`. */
+  spectating?: boolean;
   spectatorMode?: boolean;
 }
 
@@ -335,7 +337,12 @@ export default function OnlineLifeCounters({
   matchId = null,
   showYouLabels = false,
   readOnly = false,
+  spectating,
 }: OnlineLifeCountersProps) {
+  // "(Watching)" means a viewer with no stake in the match. Read-only alone does not mean that:
+  // a seated player can be read-only too (the tutorial, engine mode). Callers that are truly
+  // watching keep the old behaviour by default.
+  const isWatching = spectating ?? readOnly;
   // Detect iPhone for notch compensation
   const [isIPhone, setIsIPhone] = useState(false);
   useEffect(() => {
@@ -463,7 +470,9 @@ export default function OnlineLifeCounters({
           isMe={myPlayerKey === seat}
           showNameAbove={index === 0}
           showYou={showYouLabels || hasOwnSeat}
-          spectatorMode={readOnly}
+          // read-only WITH a seat is a player who just can't hand-edit life (tutorial,
+          // engine mode) — only a seatless read-only viewer is truly watching
+          spectatorMode={isWatching}
           isHotseatMode={isHotseatMode}
           compact={isMobileScreen}
         />

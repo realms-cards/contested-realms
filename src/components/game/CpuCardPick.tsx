@@ -25,8 +25,11 @@ function art(card: PickCard) {
 }
 
 /** A row of cards to choose one from, by its art: click (or Enter/Space) picks it; the picked card wears the selected ring. */
-export default function CpuCardPick({title,items,selected,onPick,onClose,children}: {
-  title: string; items: CardPickItem[]; selected?: string | null; onPick: (id: string) => void;
+export default function CpuCardPick({title,items,selected,selectedIds,onPick,onClose,children}: {
+  title: string; items: CardPickItem[]; selected?: string | null;
+  /** Several picked cards at once (a multi-select such as a mulligan); each wears the selected ring. */
+  selectedIds?: readonly string[];
+  onPick: (id: string) => void;
   /** Adds a close button to the header (e.g. keep the listed order). */
   onClose?: () => void;
   children?: ReactNode;
@@ -38,7 +41,7 @@ export default function CpuCardPick({title,items,selected,onPick,onClose,childre
     </div>
     <ul className="flex flex-wrap items-start justify-center gap-3">
       {items.map(item => {
-        const {card,badge,hidden} = item, picked = item.id === selected;
+        const {card,badge,hidden} = item, picked = item.id === selected || (selectedIds?.includes(item.id) ?? false);
         const name = hidden ? "Hidden card" : card.name;
         const {src,landscape} = hidden ? {src:null,landscape:false} : art(card);
         return <li key={item.id} className="flex flex-col items-center gap-1.5">

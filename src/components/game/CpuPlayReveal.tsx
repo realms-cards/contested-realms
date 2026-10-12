@@ -43,7 +43,12 @@ function useRulesText(card: CardRef | null): string {
 }
 
 /** Shows each CPU play large, one at a time; the CPU waits while any are up (see CpuBoardReady). */
-export default function CpuPlayReveal() {
+/**
+ * `placement` lets a mode put the computer's card where that mode puts everything else it
+ * says. Engine mode centres it, so "thinking…", the card, and the narration line all appear
+ * in one spot instead of the player watching the middle while the answer lands at the edge.
+ */
+export default function CpuPlayReveal({ placement = "edge" }: { placement?: "edge" | "center" } = {}) {
   const entry = useCpuReveals(state => state.queue[0] ?? null);
   const waiting = useCpuReveals(state => Math.max(0,state.queue.length-1));
   const timer = useCpuReveals(state => state.timer);
@@ -63,7 +68,9 @@ export default function CpuPlayReveal() {
   return (
     <div className={small
       ? "fixed inset-x-3 top-[calc(env(safe-area-inset-top,0px)+5.75rem)] z-[95] flex justify-center pointer-events-none"
-      : "fixed left-4 top-1/2 z-[95] -translate-y-1/2 pointer-events-none"}>
+      : placement === "center"
+        ? "fixed inset-x-0 top-1/2 z-[95] -translate-y-1/2 flex justify-center pointer-events-none"
+        : "fixed left-4 top-1/2 z-[95] -translate-y-1/2 pointer-events-none"}>
       <style>{DRAIN}</style>
       <section
         role="status"

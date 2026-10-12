@@ -31,8 +31,9 @@ import type {
 
 // ─── Source tagging ──────────────────────────────────────────────────────
 
-/** Where a state change came from: this client, a server patch, or undo. */
-export type SfxSource = "local" | "remote" | "undo";
+/** Where a state change came from: this client, a server patch, undo — or a cosmetic
+ *  re-projection ("silent": engine-mode layer switches rewrite the board without any game event). */
+export type SfxSource = "local" | "remote" | "undo" | "silent";
 
 let activeSource: SfxSource = "local";
 
@@ -360,7 +361,10 @@ export function diffGameSfx(prev: SfxState, next: SfxState, source: SfxSource): 
       }
     }
 
-    if (zonesChanged && !burst) {
+    // Setup is when the decks are shuffled and the opening hands dealt: a shuffle there is
+    // bookkeeping nobody asked to hear, and it fires for both seats at once. Only an in-game
+    // reorder (a tutor, a scry, a card that shuffles your spellbook) is worth a sound.
+    if (zonesChanged && !burst && next.phase !== "Setup") {
       for (const seat of SEATS) {
         for (const pile of ["spellbook", "atlas"] as const) {
           if (pileOrderChanged(prev.zones?.[seat]?.[pile], next.zones?.[seat]?.[pile])) ids.add("cardShuffle");
@@ -521,6 +525,7 @@ const KILL_MERGE_MS = 700;
 export function installGameSfx(store: SfxStore): () => void {
   let lastKillAt = 0;
   return store.subscribe((next, prev) => {
+    if (activeSource === "silent") return;
     if (activeSource === "undo") {
       if (RELEVANT_KEYS.some((key) => prev[key] !== next[key])) {
         soundManager.play("returnToHand");

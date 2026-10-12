@@ -4,10 +4,19 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { useGameStore } from "@/lib/game/store";
+import type { PlayerKey } from "@/lib/game/store/types";
 
 type TurnStartOverlayProps = {
   /** For online play: pass true when game board becomes visible (after mulligan + seer + portal phases) */
   gameStarted?: boolean;
+  /**
+   * Whose turns to announce, when the store's `actorKey` does not say.
+   *
+   * Engine mode runs the whole match in one client with `actorKey` deliberately null (it owns
+   * both seats and keeps the resolvers out of it), and a null actorKey otherwise means hotseat
+   * — "announce every turn". Without this the banner would interrupt the computer's turn too.
+   */
+  seat?: PlayerKey | null;
 };
 
 /**
@@ -15,7 +24,7 @@ type TurnStartOverlayProps = {
  * with a fade-in/fade-out animation and the turn gong sound.
  * Displayed for 2 seconds when the turn changes to the local player.
  */
-export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps = {}) {
+export default function TurnStartOverlay({ gameStarted, seat }: TurnStartOverlayProps = {}) {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const turn = useGameStore((s) => s.turn);
   const phase = useGameStore((s) => s.phase);
@@ -46,10 +55,9 @@ export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps 
     }
 
     // Only show when it's my turn
+    const mine = seat ?? actorKey;
     const isMyTurn =
-      !actorKey ||
-      (actorKey === "p1" && currentPlayer === 1) ||
-      (actorKey === "p2" && currentPlayer === 2);
+      !mine || (mine === "p1" && currentPlayer === 1) || (mine === "p2" && currentPlayer === 2);
 
     // Don't show if we've already shown for this turn
     const alreadyShownForThisTurn = shownForTurnRef.current >= turn;
@@ -108,7 +116,7 @@ export default function TurnStartOverlay({ gameStarted }: TurnStartOverlayProps 
     prevPlayerRef.current = currentPlayer;
     prevGameStartedRef.current = gameStarted;
 
-  }, [currentPlayer, turn, phase, actorKey, gameStarted, playTurnGong, setTurnOverlayActive]);
+  }, [currentPlayer, turn, phase, actorKey, seat, gameStarted, playTurnGong, setTurnOverlayActive]);
 
   // A phase update must not cancel the only timer that dismisses the overlay.
   useEffect(() => () => {

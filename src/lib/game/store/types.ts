@@ -132,6 +132,18 @@ export type CardRef = {
   attack?: number | null; // base attack value
   defence?: number | null; // base defence value
   rarity?: string | null; // card rarity (Ordinary, Exceptional, Elite, Unique)
+  /**
+   * This card may only be cast by the named permanent (Morgana le Fay's own three spells, an
+   * Omphalos's drawn spell, a card Archangel Gabriel bonded). The card sits in the ordinary
+   * hand — the restriction is the whole point, so it has to be visible on the card.
+   */
+  lockedTo?: string | null;
+  /**
+   * This card is sealed while the named thief lives (Pith Imp). It stays in your hand and
+   * cannot be cast — upstream's view.ts says such a card "still SHOWs in the owner's hand
+   * (as sealed/locked)", so it must look different from a card you can actually play.
+   */
+  sealedBy?: string | null;
 };
 
 export type Zones = {
@@ -530,6 +542,12 @@ export type PermanentItem = EntityBase<CardRef> & {
   isCarried?: boolean; // This unit is being carried by a carry-keyword minion
   enteredOnTurn?: number; // Turn number when this permanent entered the realm (for Savior ward ability)
   skipNextUntap?: boolean; // When true, this permanent skips its next untap step (Waveshaper). Cleared on that skipped untap.
+  /** Drawn dimmed: present as a hint, not as something you can act on here (a unit on the
+   *  other layer, shown tucked under its site while you look at the surface). */
+  faded?: boolean;
+  /** Per-card size multiplier, so a crowded tile can shrink its cards to fit side by side
+   *  instead of stacking them on top of each other. 1 (or absent) is full size. */
+  scale?: number;
 };
 
 export type Permanents = Record<CellKey, PermanentItem[]>;
@@ -1957,6 +1975,13 @@ export type GameState = {
       | null;
   };
   setTutorialActionGate: (gate: GameState["tutorialActionGate"]) => void;
+  /**
+   * Rules-enforced modes (engine mode) own the board: free-form gestures — dragging cards,
+   * tapping, drawing from a pile, the board hotkeys — would desync from the authoritative
+   * state, so they are refused at the gesture itself. Picking (the board picker) still works.
+   */
+  boardGesturesLocked: boolean;
+  setBoardGesturesLocked: (locked: boolean) => void;
   // Card meta cache (subset) used to detect base power and rarity
   metaByCardId: Record<
     number,

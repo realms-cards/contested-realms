@@ -9,10 +9,26 @@ import { useGameStore } from "@/lib/game/store";
  * Dialog shown when player tries to end turn with an untapped avatar.
  * Reminds them they can still draw a card or play a site.
  */
-export function EndTurnConfirmDialog() {
-  const showEndTurnConfirm = useGameStore((s) => s.showEndTurnConfirm);
-  const confirmEndTurn = useGameStore((s) => s.confirmEndTurn);
-  const dismissEndTurnConfirm = useGameStore((s) => s.dismissEndTurnConfirm);
+/**
+ * `open`/`onConfirm`/`onCancel` let a mode that does not use the store's own turn machinery
+ * (the Rules Engine mode, where the engine owns the turn) show the SAME warning with the same
+ * wording, rather than growing a second dialog that says the same thing differently.
+ */
+export function EndTurnConfirmDialog({
+  open,
+  onConfirm,
+  onCancel,
+}: {
+  open?: boolean;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+} = {}) {
+  const storeOpen = useGameStore((s) => s.showEndTurnConfirm);
+  const storeConfirm = useGameStore((s) => s.confirmEndTurn);
+  const storeDismiss = useGameStore((s) => s.dismissEndTurnConfirm);
+  const showEndTurnConfirm = open ?? storeOpen;
+  const confirmEndTurn = onConfirm ?? storeConfirm;
+  const dismissEndTurnConfirm = onCancel ?? storeDismiss;
   const { enabled: colorBlindEnabled } = useColorBlind();
 
   if (!showEndTurnConfirm) return null;

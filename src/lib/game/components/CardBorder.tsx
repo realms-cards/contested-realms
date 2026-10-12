@@ -33,6 +33,8 @@ export default function CardBorder({
 }: CardBorderProps) {
   const aspect = width / height;
 
+  // One uniforms object per mesh, updated in place: swapping in a new object on a colour change
+  // left the compiled material on the old one, so a pick outline kept its first colour.
   const uniforms = useMemo(
     () => ({
       u_color: { value: new Color(color) },
@@ -40,8 +42,12 @@ export default function CardBorder({
       u_thickness: { value: thickness },
       u_radius: { value: 0.08 },
     }),
-    [aspect, color, thickness],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
+  uniforms.u_color.value.set(color);
+  uniforms.u_aspect.value = aspect;
+  uniforms.u_thickness.value = thickness;
 
   return (
     <mesh
@@ -78,7 +84,9 @@ export default function CardBorder({
             vec2 p = (vUv - 0.5) * 2.0;
             p.x *= u_aspect;
 
-            vec2 b = vec2(u_aspect, 1.0) * 0.5;
+            // p spans the whole plane (-1..1, x scaled by aspect) and the plane is 1.06x the
+            // card, so a half-size just under 1 puts the ring on the card's own edge.
+            vec2 b = vec2(u_aspect, 1.0) * 0.985;
 
             float d = sdRoundedBox(p, b, u_radius);
             

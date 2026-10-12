@@ -11,8 +11,7 @@ import { useSound } from "@/lib/contexts/SoundContext";
 import { isMagician } from "@/lib/game/avatarAbilities";
 import { cardRefToPreview } from "@/lib/game/card-preview.types";
 import type { CardPreviewData } from "@/lib/game/card-preview.types";
-import CardBorder from "@/lib/game/components/CardBorder";
-import CardGlow from "@/lib/game/components/CardGlow";
+import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
 import MaterialCardBack from "@/lib/game/components/MaterialCardBack";
 import {
@@ -183,25 +182,18 @@ function PilePickOverlay({
   return (
     <group>
       {tone ? (
-        <>
-          <CardGlow
-            width={width + 0.1}
-            height={height + 0.1}
-            rotationZ={rotationZ}
-            elevation={elevation + 0.004}
-            color={color}
-            renderOrder={1100}
-          />
-          <CardBorder
-            width={width}
-            height={height}
-            rotationZ={rotationZ}
-            elevation={elevation + 0.006}
-            color={color}
-            thickness={tone === "selected" ? 0.07 : 0.05}
-            renderOrder={1101}
-          />
-        </>
+        // The same thin ring + glow the board's pick targets wear; on top so the
+        // pile's own stack never bites chunks out of it.
+        <CardOutline
+          width={width}
+          height={height}
+          rotationZ={rotationZ}
+          elevation={elevation + 0.006}
+          color={color}
+          opacity={tone === "selected" ? 1 : 0.9}
+          renderOrder={1101}
+          depthTest={false}
+        />
       ) : null}
       {onPick ? (
         <mesh
@@ -673,6 +665,8 @@ export default function Piles3D({
                           const actorKey = store.actorKey;
                           const isMine = !actorKey || actorKey === owner;
                           if (store.transport && !isMine) return;
+                          // a rules-enforced mode owns the draws
+                          if (store.boardGesturesLocked) return;
                           const from = isAtlas
                             ? ("atlas" as const)
                             : ("spellbook" as const);
@@ -710,6 +704,7 @@ export default function Piles3D({
                         longPressTimerRef.current = window.setTimeout(() => {
                           longPressTimerRef.current = null;
                           pileDragStartRef.current = null;
+                          if (useGameStore.getState().boardGesturesLocked) return;
                           openContextMenu(
                             { kind: "pile", who: owner, from: pileType },
                             { x: cx, y: cy },
@@ -726,6 +721,8 @@ export default function Piles3D({
                         const actorKey = store.actorKey;
                         const isMine = !actorKey || actorKey === owner;
                         if (store.transport && !isMine) return;
+                        // a rules-enforced mode owns the piles: never begin a drag it would refuse
+                        if (store.boardGesturesLocked) return;
                         pileDragStartRef.current = {
                           who: owner,
                           key: key as PileKey,
@@ -749,6 +746,8 @@ export default function Piles3D({
                       const actorKey = store.actorKey;
                       const isMine = !actorKey || actorKey === owner;
                       if (store.transport && !isMine) return;
+                      // a rules-enforced mode owns the draws
+                      if (store.boardGesturesLocked) return;
                       const from = (key === "atlas" ? "atlas" : "spellbook") as
                         | "atlas"
                         | "spellbook";

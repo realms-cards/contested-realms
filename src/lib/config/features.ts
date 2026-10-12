@@ -32,8 +32,14 @@ export interface FeatureFlags {
   /**
    * Show the "VS CPU Precons" entry on the home page.
    * Requires cpuBots to be enabled as well.
+   *
+   * Nothing reads this (or `cpuBots`) while those two tiles are hidden — see src/app/page.tsx.
    */
   vsCpuPrecons: {
+    enabled: boolean;
+  };
+  /** Rules-enforced vs CPU mode on the vendored Untested Realm engine */
+  engineMode: {
     enabled: boolean;
   };
   teachingMode: {
@@ -113,6 +119,12 @@ export const FEATURE_FLAGS: FeatureFlags = {
       process.env.NEXT_PUBLIC_FEATURE_VS_CPU_PRECONS === "1" ||
       parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_VS_CPU_PRECONS, false),
   },
+  engineMode: {
+    // Rules-enforced vs CPU on the vendored Untested Realm engine (vendor/untested-realm).
+    // Open to everyone — it carries no patron check anywhere — so it defaults ON and only an
+    // explicit NEXT_PUBLIC_FEATURE_ENGINE_MODE=false takes it away again.
+    enabled: parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_ENGINE_MODE, true),
+  },
   teachingMode: {
     enabled: parseBooleanFlag(
       process.env.NEXT_PUBLIC_FEATURE_TEACHING_MODE,
@@ -167,6 +179,7 @@ export const FEATURE_CARD_SLEEVES: boolean = FEATURE_FLAGS.cardSleeves.enabled;
 export const FEATURE_CPU_BOTS: boolean = FEATURE_FLAGS.cpuBots.enabled;
 export const FEATURE_VS_CPU_PRECONS: boolean =
   FEATURE_FLAGS.cpuBots.enabled && FEATURE_FLAGS.vsCpuPrecons.enabled;
+export const FEATURE_ENGINE_MODE: boolean = FEATURE_FLAGS.engineMode.enabled;
 export const FEATURE_TEACHING_MODE: boolean =
   FEATURE_FLAGS.teachingMode.enabled;
 export const FEATURE_TUTORIAL_MODE: boolean =

@@ -32,7 +32,10 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@sorcery/shared": ["./vendor/untested-realm/shared/src/index.ts"],
+      "@untested-realm/bot/*": ["./vendor/untested-realm/bot/*"],
+      "@untested-realm/upstream": ["./vendor/untested-realm/UPSTREAM.json"]
     }
   },
   "include": [
