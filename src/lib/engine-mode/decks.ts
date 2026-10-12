@@ -1,5 +1,5 @@
 import { betaPrecons } from "@/lib/game/cpu/precons";
-import { findCard } from "@sorcery/shared";
+import { findCard, getScript } from "@sorcery/shared";
 import type { DeckList } from "@sorcery/shared";
 
 /** Deck list as our precon JSON and deck exports store it. */
@@ -78,12 +78,21 @@ export function apiDeckToEngine(data: ApiDeckData, fallbackName: string): Engine
   if (avatars.size !== 1) {
     return { ok: false, error: avatars.size ? "The deck has more than one avatar." : "The deck has no avatar." };
   }
-  if (!Object.keys(spellbook).length || !Object.keys(atlas).length) {
-    return { ok: false, error: "The deck needs both a spellbook and an atlas." };
+  // The Magician keeps its sites in the spellbook and leaves the atlas empty — the engine
+  // says so itself ("Magician: sites go in the spellbook, the atlas stays empty",
+  // engine/decks.ts) and builds the piles that way in setup.ts. Demanding both piles here
+  // rejected a legal deck that imports fine everywhere else in the app.
+  const avatarName = [...avatars][0];
+  const sitesInSpellbook = !!getScript(avatarName)?.sitesInSpellbook;
+  if (!Object.keys(spellbook).length) {
+    return { ok: false, error: "The deck has no spellbook." };
+  }
+  if (!sitesInSpellbook && !Object.keys(atlas).length) {
+    return { ok: false, error: `The deck has no atlas (only ${avatarName} may keep its sites in the spellbook).` };
   }
   return {
     ok: true,
-    deck: { name: data.name || fallbackName, avatar: [...avatars][0], spellbook, atlas, collection },
+    deck: { name: data.name || fallbackName, avatar: avatarName, spellbook, atlas, collection },
   };
 }
 

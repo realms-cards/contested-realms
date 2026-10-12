@@ -1,13 +1,21 @@
 "use client";
 
 import { Icon } from "@iconify/react";
-import { useEffect, useRef, useState } from "react";
-import { HUMAN_SEAT, useEngineSession } from "@/lib/engine-mode/session";
+import { useEffect, useState } from "react";
+import { useEngineSession } from "@/lib/engine-mode/session";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useCpuReveals } from "@/lib/game/cpu/revealQueue";
 
-/** A line stays readable this long after the computer stops acting. */
-const LINGER_MS = 2600;
+/**
+ * How long one line stays up after it appears.
+ *
+ * Each line now expires on its own clock rather than the whole stack waiting for the
+ * computer to finish its turn: the old behaviour left the last thing it did sitting on
+ * screen long after it had happened. Narration should track the action, then get out of
+ * the way. Comfortably longer than the bot's own 1.5s gap between actions, so a line is
+ * still readable when the next one arrives.
+ */
+const LINE_MS = 2200;
 /** How many of the computer's recent lines stay on screen. */
 const KEEP = 3;
 
@@ -27,7 +35,6 @@ export default function EngineNarration() {
   const botThinking = useEngineSession((s) => s.botThinking);
   const [lines, setLines] = useState<Line[]>([]);
   const revealUp = useCpuReveals((state) => state.queue.length > 0);
-  const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // keep the tab-hidden state in sync so a reveal never expires unseen
   useEffect(() => {
@@ -42,24 +49,20 @@ export default function EngineNarration() {
       setLines([]);
       return;
     }
-    setLines((prev) => (prev[0]?.seq === narration.seq ? prev : [{ seq: narration.seq, text: narration.text }, ...prev].slice(0, KEEP)));
+    setLines((prev) =>
+      prev[0]?.seq === narration.seq ? prev : [{ seq: narration.seq, text: narration.text }, ...prev].slice(0, KEEP),
+    );
+    // this line's own lifetime, independent of whose turn it is
+    const seq = narration.seq;
+    const timer = setTimeout(() => setLines((prev) => prev.filter((l) => l.seq !== seq)), LINE_MS);
+    return () => clearTimeout(timer);
   }, [narration]);
 
-  // clear once the computer is done and the player has had a moment to read
-  const botTurn = !!game && game.activePlayer !== HUMAN_SEAT;
+  // A turn that ends takes its narration with it; individual lines expire on their own above.
   useEffect(() => {
-    if (fadeTimer.current) clearTimeout(fadeTimer.current);
-    if (botTurn || botThinking || !lines.length) return;
-    fadeTimer.current = setTimeout(() => setLines([]), LINGER_MS);
-    return () => {
-      if (fadeTimer.current) clearTimeout(fadeTimer.current);
-    };
-  }, [botTurn, botThinking, lines.length]);
+    if (!game || game.phase === "over") setLines([]);
+  }, [game]);
 
-  // ONE channel at a time. When CpuPlayReveal has the computer's card on screen it is already
-  // saying what just happened, with the card itself — a pill repeating it in a second place is
-  // the "multiple notifications in multiple locations" problem. The pill carries the actions
-  // that have no card to show (end turn, a move, a pass) and the thinking state.
   if (!game || game.phase === "over" || (!lines.length && !botThinking) || revealUp) return null;
 
   return (

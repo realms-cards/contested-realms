@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { RcButton } from "@/components/ui/rc-button";
+import { soundManager } from "@/lib/audio/soundManager";
 import { HUMAN_SEAT, useEngineSession } from "@/lib/engine-mode/session";
 import type { EngineInteraction } from "./useEngineInteraction";
 
@@ -62,17 +63,29 @@ export default function EngineHud({
       if (!g || g.phase !== "main" || g.activePlayer !== HUMAN_SEAT || g.prompts.length) return;
       e.preventDefault();
       if (confirmRef.current) return confirmRef.current();
-      s.dispatch({ t: "endTurn" });
+      s.requestEndTurn();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // The same fanfare the other modes play when a match ends.
+  const over = game?.phase === "over";
+  const won = over && game?.winner === HUMAN_SEAT;
+  const played = useRef(false);
+  useEffect(() => {
+    if (!over) {
+      played.current = false;
+      return;
+    }
+    if (played.current) return;
+    played.current = true;
+    soundManager.play(won ? "victory" : "defeat");
+  }, [over, won]);
+
   if (!game) return null;
   const myTurn = game.activePlayer === HUMAN_SEAT;
   const myMain = myTurn && game.phase === "main" && game.prompts.length === 0;
-  const over = game.phase === "over";
-  const won = over && game.winner === HUMAN_SEAT;
 
   return (
     <>

@@ -3,8 +3,10 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import CardPreview from "@/components/game/CardPreview";
 import CpuPlayReveal from "@/components/game/CpuPlayReveal";
+import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
 import MusicGameSync from "@/components/game/MusicGameSync";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
@@ -19,6 +21,7 @@ import { useEngineSession } from "@/lib/engine-mode/session";
 import type { BotLevel } from "@/lib/engine-mode/session";
 import { createCardPreviewData } from "@/lib/game/card-preview.types";
 import { useGameStore } from "@/lib/game/store";
+import { getStoredCardPreviewsEnabled } from "@/lib/game/store/uiState";
 import EngineActionRail from "./EngineActionRail";
 import EngineContextMenu from "./EngineContextMenu";
 import EngineDeckPicker, { choiceToSource, RANDOM_PRECON, useDeckLists } from "./EngineDeckPicker";
@@ -255,9 +258,58 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
   const interaction = useEngineInteraction();
   const previewCard = useGameStore((s) => s.previewCard);
   const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
+  const toggleCardPreviews = useGameStore((s) => s.toggleCardPreviews);
+  const controlsRef = useRef<OrbitControlsImpl | null>(null);
+  const endTurnConfirm = useEngineSession((s) => s.endTurnConfirm);
+  const dismissEndTurn = useEngineSession((s) => s.dismissEndTurn);
+  const dispatch = useEngineSession((s) => s.dispatch);
+  const dragFromHand = useGameStore((s) => s.dragFromHand);
+
+  // The card-preview setting is remembered across sessions in the other modes; honour the
+  // same stored value here instead of always opening at the store default.
+  useEffect(() => {
+    const stored = getStoredCardPreviewsEnabled();
+    if (stored !== useGameStore.getState().cardPreviewsEnabled) {
+      useGameStore.getState().setCardPreviewsEnabled(stored);
+    }
+  }, []);
+
+  // Space hides/shows your hand, the same key as the other modes — Hand3D already honours
+  // `handVisibilityMode`, only the binding was missing here.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space" && e.key !== " " && e.key !== "Spacebar") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(t.tagName))) return;
+      e.preventDefault();
+      const store = useGameStore.getState();
+      store.setHandVisibilityMode(store.handVisibilityMode === "visible" ? "hidden" : "visible");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // P hides/shows the card preview, the same key as the other modes.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "p" && e.key !== "P") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName))) return;
+      e.preventDefault();
+      toggleCardPreviews();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleCardPreviews]);
   return (
-    <div className="fixed inset-0 overflow-hidden bg-[#0b0b0c]">
-      <EngineBoard3D />
+    <div
+      className="fixed inset-0 overflow-hidden bg-[#0b0b0c]"
+      // Right-click is a game gesture here (it opens EngineContextMenu), so the browser's own
+      // menu must never appear over the board. Individual 3D objects preventDefault when they
+      // open the menu, but empty board space and every DOM overlay did not.
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <EngineBoard3D controlsRef={controlsRef} cameraLocked={interaction.picking || dragFromHand} />
       <GameSoundEffects store={useGameStore} />
       {/* the engine owns life totals — the familiar counters, read-only */}
       <OnlineLifeCounters
@@ -268,14 +320,15 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
         spectating={false}
         showYouLabels
       />
-      {/* The wrapper is sized by the mana/threshold panels ALONE and centred exactly as they
-          were before the rail existed; the rail hangs off its bottom edge with `top-full`, so
-          adding or removing a rail button can never shift the readout. */}
+      {/* The mana/threshold readout keeps its own centred spot, untouched by the rail. */}
       <div className="pointer-events-none fixed right-3 top-1/2 z-[150] -translate-y-1/2">
         <EngineResourcePanels />
-        <div className="absolute right-0 top-full mt-3">
-          <EngineActionRail interaction={interaction} onExit={onExit} />
-        </div>
+      </div>
+
+      {/* The actions sit right in the bottom-right corner as one tight cluster, so they take
+          the least possible room and never reach toward the middle of the board. */}
+      <div className="pointer-events-none fixed bottom-1 right-1 z-[150]">
+        <EngineActionRail interaction={interaction} onExit={onExit} />
       </div>
       {cardPreviewsEnabled && previewCard && (
         <CardPreview
@@ -306,7 +359,19 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
         />
       </div>
 
-      <CpuPlayReveal />
+
+      {/* The same warning /play shows, same component and wording. */}
+      <EndTurnConfirmDialog
+        open={endTurnConfirm}
+        onCancel={dismissEndTurn}
+        onConfirm={() => {
+          dismissEndTurn();
+          dispatch({ t: "endTurn" });
+        }}
+      />
+
+      {/* centre, with the thinking pill and the narration line — one place for the computer */}
+      <CpuPlayReveal placement="center" />
       {/* Mood-matched music, same as /play and /online/play. The rail owns play/pause. */}
       <MusicGameSync myPlayerKey="p1" />
       <EngineContextMenu />

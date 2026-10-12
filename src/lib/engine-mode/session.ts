@@ -100,6 +100,11 @@ interface EngineSession {
   legal: Action[] | null;
   /** Whose turn the human is deciding: our own seat, the opponent's while piloting, or null. */
   decisionSeat: PlayerId | null;
+  /** The "your avatar is still untapped" warning is up, the same one /play shows. */
+  endTurnConfirm: boolean;
+  /** End the turn, or ask first when the avatar has not been used. */
+  requestEndTurn: () => void;
+  dismissEndTurn: () => void;
   lastError: string | null;
   canUndo: boolean;
   start: (human: DeckList, bot: DeckList, botLevel: BotLevel, opts?: { secondSeer?: boolean }) => Promise<void>;
@@ -288,6 +293,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       canUndo: history.length > 0,
       legal: null,
       decisionSeat: humanDecisionSeat(game),
+      endTurnConfirm: false,
     }));
     persist();
     project(game, source);
@@ -492,6 +498,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     narration: null,
     reveal: null,
     decisionSeat: null,
+    endTurnConfirm: false,
     legal: null,
     lastError: null,
     canUndo: false,
@@ -635,6 +642,22 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       committed(game, "local");
       return result;
     },
+
+    requestEndTurn: () => {
+      const { game } = get();
+      if (!game) return;
+      const seat = humanDecisionSeat(game);
+      // Mirrors /play's requestEndTurn: an untapped avatar almost always means a forgotten
+      // site or draw, so ask before spending the turn. Same wording, same dialog.
+      const avatar = seat !== null ? game.units[game.players[seat].avatarUnitId] : null;
+      if (avatar && !avatar.tapped) {
+        set({ endTurnConfirm: true });
+        return;
+      }
+      get().dispatch({ t: "endTurn" });
+    },
+
+    dismissEndTurn: () => set({ endTurnConfirm: false }),
 
     undo: () => {
       const snapshot = history.pop();

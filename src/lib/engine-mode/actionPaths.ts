@@ -1,5 +1,5 @@
 import { dirToken, handToken, optToken, pileToken, unitToken } from "@/lib/game/cpu/pickTokens";
-import { getScript, grantedAbilities } from "@sorcery/shared";
+import { getCard, getScript, grantedAbilities } from "@sorcery/shared";
 import type { Action, GameState as EngineState, PlayerId } from "@sorcery/shared";
 import { engineCellKey } from "./coords";
 
@@ -88,6 +88,44 @@ function abilityLabel(game: EngineState, sourceId: string, key: string): string 
   const unit = game.units[sourceId];
   const granted = unit ? grantedAbilities(game, unit).find((a) => a.key === key) : undefined;
   return granted?.label ?? key;
+}
+
+/**
+ * A short phrase for what clicking this token will do, shown as a hover tooltip.
+ *
+ * Written from the acting player's point of view and kept to a few words: the board already
+ * shows WHERE, so this only has to say WHAT. Tile numbers rather than coordinates, because
+ * coordinates do not exist in the game.
+ */
+export function actionHint(game: EngineState, action: Action): string {
+  const name = (id: string | undefined) =>
+    (id && (game.units[id]?.name ?? game.sites[id]?.name ?? game.artifacts[id]?.name ?? game.cards[id]?.name)) || "it";
+  switch (action.t) {
+    case "avatarSite":
+      return action.mode === "draw" ? "Draw a site" : `Play ${name(action.cardId)}`;
+    case "castSpell": {
+      const card = game.cards[action.cardId]?.name;
+      const def = card ? getCard(card) : undefined;
+      if (!def) return "Cast it";
+      return def.type === "Magic" ? `Cast ${def.name}` : `Summon ${def.name}`;
+    }
+    case "moveAttack": {
+      const who = name(action.unitId);
+      if ("unit" in (action.attack ?? {})) return `${who} attacks`;
+      if (action.attack && "site" in action.attack) return `${who} attacks the site`;
+      return `Move ${who}`;
+    }
+    case "activate":
+      return activateLabel(game, action.sourceId, action.ability);
+    case "pickUp":
+      return action.artifactIds.length === 1 ? `Pick up ${name(action.artifactIds[0])}` : "Pick these up";
+    case "drop":
+      return action.artifactIds.length === 1 ? `Drop ${name(action.artifactIds[0])}` : "Drop these";
+    case "endTurn":
+      return "End the turn";
+    default:
+      return "Take this action";
+  }
 }
 
 export function actionPaths(
@@ -214,6 +252,8 @@ export interface Narrowed {
   done: Action | null;
   /** prefix after auto-advancing through steps that offer only one choice */
   prefix: string[];
+  /** the paths still live after the clicks so far, so a caller can describe each next token */
+  matching: ActionPath[];
 }
 
 /** Filter paths by the clicks so far, skipping steps where only one choice remains. */
@@ -227,6 +267,6 @@ export function narrow(paths: ActionPath[], clicked: string[]): Narrowed {
       prefix.push(next[0]);
       continue;
     }
-    return { next, done, prefix };
+    return { next, done, prefix, matching };
   }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { actionPaths, narrow } from "@/lib/engine-mode/actionPaths";
+import { actionHint, actionPaths, narrow } from "@/lib/engine-mode/actionPaths";
 import { useEngineSession } from "@/lib/engine-mode/session";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import type { Action } from "@sorcery/shared";
@@ -96,9 +96,25 @@ export function useEngineInteraction(): EngineInteraction {
     // a hand card's second pick is its caster: light both as sources, the rest as chosen targets
     const sourceCount = chosen[0]?.startsWith("hand:") ? 2 : 1;
     picker.setGlow(request, chosen.slice(sourceCount), chosen.slice(0, sourceCount));
+    // Every clickable token gets a hover label saying what the click will do. `labels` already
+    // carries the text of anchored option buttons; anything else is described from the action
+    // the token leads to, so a highlighted tile or card can explain itself.
     const nextLabels: Record<string, string> = {};
-    for (const token of narrowed.next) if (labels[token]) nextLabels[token] = labels[token];
+    for (const token of narrowed.next) {
+      if (labels[token]) {
+        nextLabels[token] = labels[token];
+        continue;
+      }
+      if (!game) continue;
+      const leadsTo = narrowed.matching.filter((path) => path.steps[narrowed.prefix.length] === token);
+      if (!leadsTo.length) continue;
+      const hints = new Set<string>(leadsTo.map((path) => actionHint(game, path.action)));
+      nextLabels[token] = hints.size === 1 ? [...hints][0] : `${hints.size} actions here`;
+    }
     picker.setLabels(request, nextLabels);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `game` is mutated in place by the
+  // engine, so `rev` (inside `request`) is what marks a real change; adding it would re-run
+  // this effect on every projection without the board having changed.
   }, [active, request, narrowed, labels]);
 
   // A board click extends the prefix.

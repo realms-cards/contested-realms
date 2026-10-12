@@ -142,10 +142,15 @@ function TargetMeshes({offsetX,offsetY,tones,arrows,labels,zRange}: {offsetX:num
         <bufferGeometry><bufferAttribute attach="attributes-position" args={[OUTLINE,3]} /></bufferGeometry>
         <lineBasicMaterial color={color} transparent opacity={0.9} />
       </lineLoop>}
-      {pulses(tone) && <mesh name={`cpu-pick:${tile}`} position={[0,0,CLICK_PLANE_Z]} onPointerDown={stop} onPointerUp={stop} onClick={event => pick(event,tile)}>
+      {pulses(tone) && <mesh name={`cpu-pick:${tile}`} position={[0,0,CLICK_PLANE_Z]} onPointerDown={stop} onPointerUp={stop} onClick={event => pick(event,tile)}
+        onPointerOver={event => { event.stopPropagation(); setHovered(tile); }} onPointerOut={() => { if (useCpuBoardPicker.getState().hovered === tile) setHovered(null); }}>
         <planeGeometry args={[TILE_SIZE,TILE_SIZE]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
       </mesh>}
+      {/* what clicking here will do — the board says where, the tooltip says what */}
+      {hovered === tile && labels[tile] && <Html center zIndexRange={zRange} position={[0,0,LIFT]} style={{pointerEvents:"none"}}>
+        <div role="tooltip" className="rc-toast whitespace-nowrap px-2 py-1 font-rc-sans text-xs text-rc-fg">{labels[tile]}</div>
+      </Html>}
     </group>;
   })}{arrows.map(({token,at,dir,tone,clickable}) => {
     const [x,y] = cell(at), [dx,dy] = ARROW_STEPS[dir], color = COLORS[tone], label = labels[token];

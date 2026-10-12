@@ -2,6 +2,7 @@
 
 import { Children, type ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import AudioControls from "@/components/game/AudioControls";
 import CpuCardPick from "@/components/game/CpuCardPick";
 import { RcButton } from "@/components/ui/rc-button";
 import { useMusicPlayer } from "@/hooks/useMusicPlayer";
@@ -20,25 +21,29 @@ import type { EngineInteraction } from "./useEngineInteraction";
  */
 
 const BUTTON =
-  "pointer-events-auto relative grid h-10 w-10 place-items-center rounded-rc-md border bg-[rgba(7,10,20,0.88)] shadow-rc-panel transition-colors hover:border-rc-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rc-accent-ring disabled:cursor-not-allowed disabled:opacity-40";
-const QUIET = "border-transparent";
-const LIVE = "border-rc-accent/55";
+  "pointer-events-auto relative grid h-9 w-9 place-items-center rounded-rc-sm border transition-colors hover:border-rc-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rc-accent-ring disabled:cursor-not-allowed disabled:opacity-40";
+const QUIET = "border-transparent bg-transparent";
+const LIVE = "border-rc-accent/55 bg-[rgba(60,48,12,0.55)]";
+/** Cancel is the way OUT, so it must not look like the affirmative action beside it. */
+const WAYOUT = "border-rc-danger/60 bg-[rgba(60,12,12,0.78)]";
 
 /**
  * A themed block of actions. Actions appear and disappear with the engine's legal moves, so a
  * group renders nothing at all when none of its buttons apply — no empty frame, and the blocks
  * below move up to meet the readout.
  */
-function RailGroup({ label, children }: { label: string; children: ReactNode }) {
+function RailGroup({ label, children, divider }: { label: string; children: ReactNode; divider?: boolean }) {
   const shown = Children.toArray(children);
   if (!shown.length) return null;
+  // one button on its own spans both columns, so a lone icon stays centred
+  const single = shown.length === 1;
   return (
     <div
       role="group"
       aria-label={label}
-      className="pointer-events-auto flex flex-col items-center gap-1 rounded-rc-lg border border-rc-line/18 bg-[rgba(7,10,20,0.72)] p-1 shadow-rc-panel"
+      className={`grid grid-cols-2 justify-items-center gap-0.5 ${divider ? "border-t border-rc-line/18 pt-1" : ""}`}
     >
-      {shown}
+      {single ? <div className="col-span-2">{shown}</div> : shown}
     </div>
   );
 }
@@ -56,7 +61,7 @@ function RailButton({
   id: ActionSpriteId;
   label: string;
   onClick: () => void;
-  tone?: "quiet" | "live";
+  tone?: "quiet" | "live" | "exit";
   count?: number;
   pressed?: boolean;
   disabled?: boolean;
@@ -72,9 +77,9 @@ function RailButton({
       disabled={disabled}
       onClick={onClick}
       onPointerEnter={() => setHovered((n) => n + 1)}
-      className={`${BUTTON} ${tone === "live" ? LIVE : QUIET}`}
+      className={`${BUTTON} ${tone === "exit" ? WAYOUT : tone === "live" ? LIVE : QUIET}`}
     >
-      <ActionSprite id={id} playKey={`${id}:${hovered}`} />
+      <ActionSprite id={id} size={28} playKey={`${id}:${hovered}`} />
       {count !== undefined && count > 0 && (
         <span className="absolute bottom-0 right-0 min-w-[16px] rounded-rc-sm bg-[rgba(7,10,20,0.95)] px-0.5 text-center font-rc-mono text-[10px] leading-4 tabular-nums text-rc-fg ring-1 ring-rc-line/30">
           {count > 99 ? "99+" : count}
@@ -95,6 +100,7 @@ export default function EngineActionRail({
   useEngineSession((s) => s.rev);
   const canUndo = useEngineSession((s) => s.canUndo);
   const dispatch = useEngineSession((s) => s.dispatch);
+  const requestEndTurn = useEngineSession((s) => s.requestEndTurn);
   const undo = useEngineSession((s) => s.undo);
   const layer = useEngineSession((s) => s.layer);
   const setLayer = useEngineSession((s) => s.setLayer);
@@ -152,19 +158,19 @@ export default function EngineActionRail({
 
   return (
     <>
-      <div className="thin-scrollbar pointer-events-none flex max-h-[62vh] flex-col items-end gap-2 overflow-y-auto overflow-x-visible">
+      <div className="thin-scrollbar pointer-events-auto flex max-h-[76vh] flex-col items-end gap-1 overflow-y-auto overflow-x-visible rounded-rc-md border border-rc-line/18 bg-[rgba(7,10,20,0.78)] p-1 shadow-rc-panel">
         {/* THIS TURN — what the engine will accept from you right now */}
         <RailGroup label={piloting ? "Their turn — you decide" : "This turn"}>
           {interaction.confirmable && <RailButton id="confirm" label="Confirm" tone="live" onClick={interaction.confirm} />}
-          {interaction.picking && <RailButton id="cancel" label="Cancel this action" tone="live" onClick={interaction.cancel} />}
+          {interaction.picking && <RailButton id="cancel" label="Cancel this action (Esc)" tone="exit" onClick={interaction.cancel} />}
           {myMain && !interaction.confirmable && (
-            <RailButton id="end-turn" label="End turn" tone="live" onClick={() => dispatch(interaction.endTurn ?? { t: "endTurn" })} />
+            <RailButton id="end-turn" label="End turn" tone="live" onClick={requestEndTurn} />
           )}
           {canUndo && <RailButton id="undo" label="Undo" onClick={undo} />}
         </RailGroup>
 
         {/* YOUR CARDS — the piles you can act on or look through */}
-        <RailGroup label={piloting ? "Their cards" : "Your cards"}>
+        <RailGroup label={piloting ? "Their cards" : "Your cards"} divider>
           {myMain && interaction.cemetery.length > 0 && (
             <RailButton
               id="cemetery"
@@ -195,7 +201,7 @@ export default function EngineActionRail({
         </RailGroup>
 
         {/* THE TABLE — how you look at the game, not what you do to it */}
-        <RailGroup label="Table">
+        <RailGroup label="Table" divider>
           <RailButton
             id={layer === "subsurface" ? "subsurface-on" : "subsurface-off"}
             label="Show burrowed and submerged units (V)"
@@ -212,7 +218,7 @@ export default function EngineActionRail({
         </RailGroup>
 
         {/* LEAVING — kept in its own block so neither is ever a mis-click away from the rest */}
-        <RailGroup label="Leaving">
+        <RailGroup label="Leaving" divider>
           {!over && (
             <RailButton
               id={concedeArmed ? "concede-armed" : "concede"}
@@ -237,6 +243,9 @@ export default function EngineActionRail({
         {toolsOpen && (
           <div className="pointer-events-auto fixed bottom-20 right-16 z-[160] flex w-[240px] flex-col gap-2 rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-3 font-rc-sans text-sm text-rc-fg shadow-rc-panel">
             <div className="font-rc-mono text-xs uppercase tracking-[0.08em] text-rc-fg-subtle">Table tools</div>
+          {/* The full audio panel the other modes carry: tracks, music volume, SFX volume and
+              the mix groups. The rail's music button stays the quick play/pause. */}
+          <AudioControls enableMusic />
             <div className="flex flex-wrap gap-1.5">
               <RcButton variant="outline" size="xs" onClick={() => roll("d20", 20)}>
                 Roll d20

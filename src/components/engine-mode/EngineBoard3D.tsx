@@ -20,6 +20,7 @@ import {
   DynamicHud3D as Hud3D,
   DynamicPiles3D as Piles3D,
 } from "@/components/game/dynamic-3d";
+import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import { useEngineSession } from "@/lib/engine-mode/session";
 import { computeTopdownFitDistance } from "@/lib/game/cameraFit";
 import TextureCache from "@/lib/game/components/TextureCache";
@@ -95,14 +96,27 @@ const LAYER_LIGHT: Record<"surface" | "subsurface", BoardLight> = {
  */
 const ENGINE_HUD_INSETS = { top: 56, bottom: 64, left: 96, right: 96 };
 /** Almost straight down, with just enough tilt to read the cards. */
+/** Orbit sits slightly off straight-down; top-down is flat on the table, like /play's 2D. */
 const BASELINE_TILT = 0.14;
+const TOPDOWN_TILT = 0.0001;
 
-export default function EngineBoard3D() {
+export default function EngineBoard3D({
+  controlsRef: externalControls,
+  cameraLocked = false,
+}: {
+  controlsRef?: React.RefObject<OrbitControlsImpl | null>;
+  /** Mirrors /play's `canPanCamera`: while a pick or a drag is in progress the table holds
+   *  still, so dragging onto a target cannot spin the board out from under you. */
+  cameraLocked?: boolean;
+} = {}) {
   const boardSize = useGameStore((s) => s.board.size);
   const layer = useEngineSession((s) => s.layer);
+  // the same orbit/top-down switch the other modes use
+  const cameraMode = useGameStore((s) => s.cameraMode);
   const light = LAYER_LIGHT[layer === "subsurface" ? "subsurface" : "surface"];
   const viewport = useViewportSize();
-  const controlsRef = useRef<OrbitControlsImpl | null>(null);
+  const ownControls = useRef<OrbitControlsImpl | null>(null);
+  const controlsRef = externalControls ?? ownControls;
 
   const baseGridW = boardSize.w * BASE_TILE_SIZE;
   const baseGridH = boardSize.h * BASE_TILE_SIZE;
@@ -142,7 +156,7 @@ export default function EngineBoard3D() {
     cam.up.set(0, 1, 0);
     cam.lookAt(0, 0, 0);
     c.update();
-  }, [baselineDist]);
+  }, [baselineDist, controlsRef]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -168,7 +182,7 @@ export default function EngineBoard3D() {
       t.set(x, 0, z);
       c.update();
     }
-  }, [matW, matH]);
+  }, [matW, matH, controlsRef]);
 
   return (
     <ClientCanvas
@@ -231,7 +245,9 @@ export default function EngineBoard3D() {
         target={[0, 0, 0]}
         mouseButtons={{ MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
         touches={{ TWO: THREE.TOUCH.PAN }}
-        enableRotate={false}
+        enabled={!cameraLocked}
+        enablePan={!cameraLocked}
+        enableRotate={!cameraLocked && cameraMode === "orbit"}
         enableDamping={false}
         zoomSpeed={0.6}
         onChange={clampControls}
@@ -240,8 +256,9 @@ export default function EngineBoard3D() {
         minPolarAngle={0}
         maxPolarAngle={Math.PI / 2.4}
       />
-      <CameraBaseline dist={baselineDist} tilt={BASELINE_TILT} />
+      <CameraBaseline dist={baselineDist} tilt={cameraMode === "topdown" ? TOPDOWN_TILT : BASELINE_TILT} />
       <KeyboardPanControls />
+      <TrackpadOrbitAdapter />
     </ClientCanvas>
   );
 }
@@ -257,6 +274,7 @@ function CameraBaseline({ dist, tilt }: { dist: number; tilt: number }) {
   const controls = useThree((state) => state.controls as OrbitControlsImpl | undefined);
   const camera = useThree((state) => state.camera);
   const touched = useRef(false);
+  const lastTilt = useRef(tilt);
 
   useEffect(() => {
     if (!controls) return;
@@ -268,7 +286,11 @@ function CameraBaseline({ dist, tilt }: { dist: number; tilt: number }) {
   }, [controls]);
 
   useEffect(() => {
-    if (!controls || touched.current) return;
+    // Asking for a different camera mode is an explicit request to be re-framed, so it
+    // overrides "the player has moved the camera, leave it alone".
+    const modeChanged = lastTilt.current !== tilt;
+    lastTilt.current = tilt;
+    if (!controls || (touched.current && !modeChanged)) return;
     controls.target.set(0, 0, 0);
     camera.position.set(0, Math.cos(tilt) * dist, Math.sin(tilt) * dist);
     camera.up.set(0, 1, 0);
