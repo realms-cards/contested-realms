@@ -179,6 +179,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         caster: null,
         name: "",
         element: "none",
+        card: null,
       };
       showReveal(
         {

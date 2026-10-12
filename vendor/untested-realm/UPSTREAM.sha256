@@ -466,7 +466,7 @@ a847cb6b79c4ba3d5755205c2719dd0bfd0deada7febdf03f9f447b509ffe9bf  shared/src/car
 336e4e997a22df50a332fc627a838ca594b63fbac7489c6dcb0abd13705a18ea  shared/src/cards/scripts/gen/ignited.ts
 ebd095bbbc4150ca6ae991212abd2d2cfb88346f7fb9b0317fa40e07415d72f4  shared/src/cards/scripts/gen/immolation.ts
 20627e71db59d79ee76babb62f0b79ff547e3484c57f536cf3c8b5a6bbe04766  shared/src/cards/scripts/gen/impenetrable-copse.ts
-a010db04e9a959b0159432cb501371e8e824c7fabc024dfc83b88706f4da39d4  shared/src/cards/scripts/gen/imperial-road.ts
+81ffebb2154fc8798c2842ad1308ce2e726ff36606d758fdfd1f51c89560b298  shared/src/cards/scripts/gen/imperial-road.ts
 d5f2a6c6cb1b57e0bf440de5f6070c7c2ea08be78496ecdc852736b818b48441  shared/src/cards/scripts/gen/imposter.ts
 a41f8996077d8d67a625ed22baeed679b6ca13657cbe8c1349dab4351bec96b9  shared/src/cards/scripts/gen/incinerate.ts
 fa56c71e77a5a0769388d36f02afe3e8f1a018d35448c3f58294d0a05f9afc4e  shared/src/cards/scripts/gen/index.ts
@@ -1067,7 +1067,7 @@ d708f2d6020ef17bc24ce51b635a87b884b25cddc948f6ed634795c89a2b4b1d  shared/src/car
 948398c569840c5ca0a64b7e00d50c3d916080e5e93a955374d3b76e7452c8b3  shared/src/cards/scripts/multi-card-utils/plunder-card.ts
 70e0fe06d0615fd3c03a0733db555e1fad04a5c556c159a612c1a9b19c16e904  shared/src/cards/scripts/multi-card-utils/remove-aura.ts
 79991146f0978c6a7c6a35cd8c4be9586ce69d6e48492a78cc08531f3c975cf0  shared/src/cards/scripts/multi-card-utils/response.ts
-b11a75b25bff1c89b31922eda96125ca930daf46516c0a0555f92cbc2b77f9f4  shared/src/cards/scripts/multi-card-utils/rift-entry.ts
+3a7dad6880f9dbf4cf3d1d185e3a605bca5538050ba405f0ef009c05e1241854  shared/src/cards/scripts/multi-card-utils/rift-entry.ts
 b71ecdc96c3bdd6b137c6a893bc08cd8c94d6a2d66da31623f39f5b78393f41d  shared/src/cards/scripts/multi-card-utils/sac-for-discount.ts
 90f80ea9baeaac4c4a3e58dcd5cd039968deca8a2661318aa7ed92503993fd50  shared/src/cards/scripts/multi-card-utils/site-terrain-targets.ts
 3e5b5796fc0627dbcc4574ab6ab423312fd032280ded32b1f4fc71ab539b9231  shared/src/cards/scripts/multi-card-utils/step-range-targets.ts
@@ -1090,7 +1090,7 @@ c512d0a0af4fa708acd7bd7b322593d5512d35919f7b24289db74096bf3394ac  shared/src/car
 121ff58432b34a93a168bb0d84d33b6b2831f2bdf8d6b354f4f55a9366f4c0e9  shared/src/engine/achievements.ts
 2b2919f241223eaea87bf25a81d78302123706a413570796a944cbe4c2df0e90  shared/src/engine/auditboard.ts
 33b460d23677692b88f16c0adbfb769b4cd45b234587eaaa989392164ac90f3d  shared/src/engine/carrying.ts
-31de78b41083c7071d28fd100fa502ac83d182250cb0fa2d497482caf5ff8ab9  shared/src/engine/casting.ts
+528a0bc3185051b254e8ad126e408fb3ee6c7b4ca502e69f85f30674b97571d7  shared/src/engine/casting.ts
 d4f16ac3bcf6b7cf09d4a5283450425520e4249bbe122c9c092e0b6a82cf469b  shared/src/engine/castplan.ts
 666ce9ee82019b029561213a5c079e13a84a1bc00d4b980472b72205d1c524db  shared/src/engine/clock.ts
 7469d6344da2a9df323f9cfc69cf7a86d74ab67debbc9f34498447d6f8437750  shared/src/engine/combat.ts
@@ -1104,7 +1104,7 @@ c922ec9e01972c50fd81830ff2b4932508b893caaad67cdd75e976588e15ce2c  shared/src/eng
 b35a389390cfad7d97dbf62868e8a5a2c3017269a77ee549d2c57c2fe5fa3a7e  shared/src/engine/setup.ts
 96af0b2afb6e851256f7f86632d33881b11187a5af634a583b64581ba64d5fa7  shared/src/engine/statics.ts
 382bcb18eae104ae96efd7d0fb37835768783578da3bff7216596b19d766fbe8  shared/src/engine/traps.ts
-426a4972ec8e77d0fd02ac833b45a4692c0cfcab5c3830fdf66b12b799129d91  shared/src/engine/turn.ts
+822d994d2784094fdbb1973a0ca14cb20105c0e0ee57c874097387c923c5b476  shared/src/engine/turn.ts
 29d313fb32fc70d2f88df18c0c792b93513ec92b35ec0ca36306699d315cba45  shared/src/engine/types.ts
 e4865d268586db0e58b84e8d66061cddecb598b72de54307a5a99eec1293f775  shared/src/engine/view.ts
 f6d452f282625d5ee8e1ec092cf1ff3e09a0e2046a0b00e65238fcd344956d43  shared/src/index.ts

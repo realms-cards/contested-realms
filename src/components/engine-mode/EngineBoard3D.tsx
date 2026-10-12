@@ -228,6 +228,11 @@ export default function EngineBoard3D({
           {/* steady: slides down out of the way like always, but only the pointer moves it —
             a draw or an open pick never shoves it over the board */}
         <Hand3D owner="p1" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} steadyReveal />
+        {/* The computer's hand, face down along their edge — the same second Hand3D the online
+            view mounts. Without it there was no way to see how many cards they are holding, which
+            is public information in this game. The projection already fills their hand with one
+            hidden card per held card, so the count is right. */}
+        <Hand3D owner="p2" matW={MAT_PIXEL_W} matH={MAT_PIXEL_H} showCardBacks viewerPlayerNumber={1} />
 
         <TextureCache />
         <EngineLayerOverlay />

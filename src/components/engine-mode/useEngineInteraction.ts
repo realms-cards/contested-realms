@@ -112,9 +112,12 @@ export function useEngineInteraction(): EngineInteraction {
       nextLabels[token] = hints.size === 1 ? [...hints][0] : `${hints.size} actions here`;
     }
     picker.setLabels(request, nextLabels);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- `game` is mutated in place by the
-  // engine, so `rev` (inside `request`) is what marks a real change; adding it would re-run
-  // this effect on every projection without the board having changed.
+    // Once a choice has been started, what is lit is the NEXT STEP of it, not a fresh option.
+    // The board colours and paces those differently so a half-finished action is obvious.
+    picker.setSequence(request, narrowed.prefix.length > 0);
+    // `game` is mutated in place by the engine, so `rev` — carried inside `request` — is what
+    // marks a real change; the identity of `game` never does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, request, narrowed, labels]);
 
   // A board click extends the prefix.

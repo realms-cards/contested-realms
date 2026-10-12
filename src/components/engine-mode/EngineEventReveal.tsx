@@ -6,7 +6,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { BoardReveal } from "@/lib/engine-mode/projection";
 import { useEngineSession } from "@/lib/engine-mode/session";
-import { TILE_SIZE } from "@/lib/game/constants";
+import CardPlane from "@/lib/game/components/CardPlane";
+import { CARD_LONG, CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 
 /**
@@ -23,6 +24,12 @@ import { useGameStore } from "@/lib/game/store";
 const NUMBER_MS = 1250;
 /** How long the tile glow lives; it clears a little sooner so the number lands alone. */
 const GLOW_MS = 1050;
+/** How long a cast card lies on the table — long enough to take in its name and art. */
+const CARD_MS = 2400;
+/** Readable size for a card laid on the board: a little over one tile across. */
+const CARD_SCALE = 2.4;
+/** Clear of the tallest permanent, so the card never intersects what it was cast at. */
+const CARD_HEIGHT = 0.46;
 
 const DAMAGE = "#f0514f";
 const AFFECTED = "#f3cf6a";
@@ -101,18 +108,21 @@ export default function EngineEventReveal() {
     setShown(reveal);
     let frame = 0;
     const startedAt = performance.now();
+    // a cast card has to stay up long enough to read; the numbers keep their own shorter life
+    const span = reveal.card ? CARD_MS : NUMBER_MS;
     const pump = () => {
-      const t = Math.min(1, (performance.now() - startedAt) / NUMBER_MS);
+      const elapsed = performance.now() - startedAt;
+      const t = Math.min(1, elapsed / NUMBER_MS);
       for (const [key, node] of floats.current) {
         const step = key.startsWith("caption") ? captionStep(t) : floatStep(t);
         node.style.opacity = String(step.opacity);
         node.style.transform = `translateY(${step.lift}px) scale(${"scale" in step ? step.scale : 1})`;
       }
       invalidate();
-      if (t < 1) frame = requestAnimationFrame(pump);
+      if (elapsed < span) frame = requestAnimationFrame(pump);
     };
     pump();
-    const timer = setTimeout(() => setShown((current) => (current?.seq === reveal.seq ? null : current)), NUMBER_MS);
+    const timer = setTimeout(() => setShown((current) => (current?.seq === reveal.seq ? null : current)), span);
     return () => {
       clearTimeout(timer);
       cancelAnimationFrame(frame);
@@ -135,12 +145,18 @@ export default function EngineEventReveal() {
   };
 
   if (!shown) return null;
-  const caption = shown.name.trim();
+  // the card names itself, so it replaces the caption rather than being labelled twice
+  const caption = shown.card ? "" : shown.name.trim();
   // the caption rides the first damaged square, else the first affected one, else the caster
   const captionCell = shown.hits[0]?.at ?? shown.sites[0] ?? shown.caster;
+  // a spell is laid where it was cast from; failing that, on the square it touched
+  const cardCell = shown.caster ?? shown.sites[0] ?? shown.hits[0]?.at;
 
   return (
     <group key={shown.seq}>
+      {shown.card && cardCell && (
+        <CastCard card={shown.card} position={[at(cardCell)[0], CARD_HEIGHT, at(cardCell)[2]]} />
+      )}
       {shown.caster && shown.caster !== shown.hits[0]?.at && <Ring position={at(shown.caster)} color={CASTER} opacity={0.5} />}
       {shown.sites.map((site) => (
         <Ring key={`site:${site}`} position={at(site)} color={AFFECTED} opacity={0.65} wash={0.1} />
@@ -178,6 +194,62 @@ export default function EngineEventReveal() {
           </span>
         </Html>
       )}
+    </group>
+  );
+}
+
+/**
+ * The cast card itself, laid on the board where it was played.
+ *
+ * A Magic never becomes a permanent, so without this a spell leaves nothing on the table but a
+ * line of text — and both players should see the card, as they would across a real table. It
+ * rises into place, holds, then lifts away.
+ *
+ * The fade is written straight onto the materials: CardPlane rebuilds its material array
+ * whenever its `opacity` prop changes, which per frame would thrash the GPU.
+ */
+function CastCard({
+  card,
+  position,
+}: {
+  card: NonNullable<BoardReveal["card"]>;
+  position: [number, number, number];
+}) {
+  const group = useRef<THREE.Group>(null);
+  const started = useRef<number | null>(null);
+  useFrame(({ clock }) => {
+    const node = group.current;
+    if (!node) return;
+    started.current ??= clock.getElapsedTime();
+    const t = Math.min(1, (clock.getElapsedTime() - started.current) / (CARD_MS / 1000));
+    const rise = t < 0.16 ? t / 0.16 : 1;
+    const leave = t < 0.82 ? 0 : (t - 0.82) / 0.18;
+    node.position.y = position[1] - 0.14 * (1 - rise) + 0.3 * leave;
+    node.scale.setScalar((0.84 + 0.16 * rise) * (1 + 0.12 * leave));
+    const opacity = Math.min(rise, 1 - leave);
+    node.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        material.transparent = true;
+        material.opacity = opacity;
+      }
+    });
+  });
+  return (
+    <group ref={group} position={position}>
+      <CardPlane
+        slug={card.slug ?? ""}
+        width={CARD_SHORT * CARD_SCALE}
+        height={CARD_LONG * CARD_SCALE}
+        elevation={0}
+        lit={false}
+        castShadow={false}
+        receiveShadow={false}
+        envMapIntensity={0}
+        depthWrite={false}
+        renderOrder={1095}
+      />
     </group>
   );
 }

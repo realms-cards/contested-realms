@@ -2,7 +2,7 @@ import { registerScript, type EffectAPI } from '../registry'
 import { getCard } from '../../db'
 import { opponent } from '../../../engine/effects'
 import { orthAdjacentWrapped, siteAt } from '../../../engine/grid'
-import { playSite } from '../../../engine/casting'
+import { playSite, forcedSiteSquares } from '../../../engine/casting'
 import type { PlayerId } from '../../../engine/types'
 
 // 'Genesis → Target opponent, then you, may play a site adjacent to this one.'
@@ -16,7 +16,10 @@ registerScript('Imperial Road', {
       if (typeof idx !== 'number' || !sites[idx]) return roadDone(ctx, c)
       const self = ctx.state.sites[ctx.sourceId]
       if (!self) return
-      const spots = orthAdjacentWrapped(ctx.state, self.x, self.y).filter((s) => !siteAt(ctx.state, s.x, s.y))
+      // beside the road, and judged for THIS card: Rift Valley may take an occupied seam and
+      // pull the land apart, which is the only way it can ever be played here
+      const spots = forcedSiteSquares(ctx.state, who, ctx.state.cards[sites[idx]].name,
+        orthAdjacentWrapped(ctx.state, self.x, self.y))
       if (!spots.length) return roadDone(ctx, c)
       ctx.ask({ kind: 'chooseSquare', title: 'Play it where?', data: { squares: spots }, player: who }, 'place', { ...c, cardId: sites[idx] })
     },
@@ -26,7 +29,8 @@ registerScript('Imperial Road', {
       // the site is played BESIDE THE ROAD (not beside the player's own sites), so bypass the
       // normal placement-adjacency rule — but confirm the chosen square really is a free
       // square orthogonally adjacent to the road before forcing it in.
-      if (sq && self && orthAdjacentWrapped(ctx.state, self.x, self.y).some((s) => s.x === sq.x && s.y === sq.y && !siteAt(ctx.state, s.x, s.y))) {
+      if (sq && self && forcedSiteSquares(ctx.state, who, ctx.state.cards[c.cardId as string].name,
+            orthAdjacentWrapped(ctx.state, self.x, self.y)).some((s) => s.x === sq.x && s.y === sq.y)) {
         playSite(ctx.state, who, c.cardId as string, sq.x, sq.y, { force: true })
       }
       roadDone(ctx, c)

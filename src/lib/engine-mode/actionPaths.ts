@@ -136,6 +136,8 @@ export function actionPaths(
   const key = seat === 0 ? "p1" : "p2";
   const labels: Record<string, string> = {};
   const paths: ActionPath[] = [];
+  /** summon click-paths already emitted, so the same clicks never mean two different casters */
+  const summonSteps = new Set<string>();
   const opt = (tile: string, id: string, label: string) => {
     const token = optToken(tile, id);
     labels[token] = label;
@@ -150,9 +152,17 @@ export function actionPaths(
         break;
       }
       case "castSpell": {
-        // card (from hand, or the cemetery panel), then its caster (skipped when only the avatar)
+        // Card first (from hand, or the cemetery panel), then — for a MAGIC — its caster.
+        //
+        // A summon does NOT ask which spellcaster casts it. Where a minion may be placed
+        // already accounts for every caster's reach, so the squares on offer are the whole
+        // answer: making the player choose a caster first only hides half of them behind an
+        // extra click. A Magic keeps the step, because which caster resolves it can matter.
         const fromCemetery = game.players[seat].cemetery.includes(action.cardId);
-        const steps = [fromCemetery ? cemToken(action.cardId) : handToken(key, action.cardId), tokenForEngineId(game, action.casterId, seat)];
+        const cardDef = getCard(game.cards[action.cardId]?.name ?? "");
+        const picksCaster = cardDef?.type === "Magic";
+        const steps = [fromCemetery ? cemToken(action.cardId) : handToken(key, action.cardId)];
+        if (picksCaster) steps.push(tokenForEngineId(game, action.casterId, seat));
         if (action.at) {
           const tile = engineCellKey(action.at.x, action.at.y);
           const region = action.at.region ?? "surface";
@@ -172,6 +182,15 @@ export function actionPaths(
           // a projectile flies from the caster; Chaos Twister's blow starts at its origin square
           const from = extra.origin ? engineCellKey(extra.origin.x, extra.origin.y) : tileOf(game, action.casterId);
           steps.push(dirToken(from, DIR[extra.direction] ?? extra.direction));
+        }
+        // Without the caster step, two spellcasters able to summon the same minion to the same
+        // square produce the SAME sequence of clicks. Keep one: offering both would make the
+        // click path ambiguous and `narrow` would pick between them arbitrarily. The one kept
+        // is a caster the engine itself offered for that square, so the summon is legal.
+        if (!picksCaster) {
+          const fingerprint = steps.join(">");
+          if (summonSteps.has(fingerprint)) break;
+          summonSteps.add(fingerprint);
         }
         paths.push({ action, steps });
         break;

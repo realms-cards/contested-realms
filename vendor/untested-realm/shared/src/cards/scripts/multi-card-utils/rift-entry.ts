@@ -22,9 +22,10 @@ export function riftShifts(state: GameState, x: number, y: number): Shift[] {
     while (runEnd + 1 < max && siteAt(state, cellAt(runEnd + 1).x, cellAt(runEnd + 1).y)) runEnd++
     if (runEnd - runStart + 1 >= max) continue
     for (const dir of [1, -1] as const) {
-      // 'pull apart' needs TWO adjacent sites: one stays behind at the seam
-      if (dir === 1 && coord <= runStart) continue
-      if (dir === -1 && coord >= runEnd) continue
+      // The seam may sit at the run's own edge, so the WHOLE run slides outward and the rift
+      // opens behind it. Requiring a site to stay behind made the card dead whenever the line
+      // was a single site — with one road on the board there was nothing to pull apart at all,
+      // even though sliding that road one square plainly opens a void to play into.
       const end = dir === 1 ? runEnd : runStart
       const beyond = end + dir
       if (beyond < 0 || beyond >= max) continue

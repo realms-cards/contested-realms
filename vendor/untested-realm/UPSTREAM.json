@@ -1,4 +1,7 @@
 {
-  "repo": "https://github.com/DeliziosoJalapeno/Untested-realm.git",
-  "commit": "6cce19d3db748dc17444c1d42568f10aa51bfeb2"
+  "source": "fork",
+  "repo": "https://github.com/realms-cards/Untested-realm.git",
+  "ref": "realms",
+  "commit": "e13f4c5c0d6327071be68033e2cf3f183baf69bd",
+  "upstreamBase": "6cce19d3db748dc17444c1d42568f10aa51bfeb2"
 }

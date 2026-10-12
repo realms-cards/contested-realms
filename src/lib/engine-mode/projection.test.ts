@@ -1,8 +1,9 @@
 import { applyAction, createGame, viewFor } from "@sorcery/shared";
 import type { PlayerId } from "@sorcery/shared";
 import { botAction, botNeedsToAct } from "@untested-realm/bot/bot";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { actionPaths, narrow } from "./actionPaths";
+import { loadCardIndex } from "./cardIndex";
 import { legalActionsWithCasters } from "./casterActions";
 import { engineCellKey } from "./coords";
 import { apiDeckToEngine, enginePrecons, toEngineDeck } from "./decks";
@@ -410,5 +411,45 @@ describe("tile layout", () => {
     expect(scale).toBeGreaterThan(0.3);
     const widest = Math.max(...items.map((p) => Math.abs(p.offset?.[0] ?? 0)));
     expect(widest + (CARD_SHORT * scale) / 2).toBeLessThanOrEqual(TILE_SIZE / 2);
+  });
+});
+
+/**
+ * Kept last in the file on purpose: loading the printing index is module-global, and earlier
+ * tests assert on refs built WITHOUT it.
+ */
+describe("the cast card on the table", () => {
+  const viewWith = (areaReveal: unknown) =>
+    ({ flow: { areaReveal }, units: {}, sites: {} }) as unknown as Parameters<typeof boardReveal>[0];
+
+  it("carries the card for a magic cast and nothing for an ability", async () => {
+    // cardRefFor can only name art once the printing index is in (the session loads it at
+    // match start); one entry only, so every other name in this file still resolves to null.
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve({
+        json: () => Promise.resolve({ entries: [[412, 7, 0, "Chain Lightning", "alp-chain_lightning-b-s", "", false, false]] }),
+      }),
+    );
+    await loadCardIndex();
+
+    const spell = boardReveal(
+      viewWith({ seq: 1, cells: [], redSites: [{ x: 1, y: 1 }], name: "Chain Lightning", spell: true }),
+      0,
+    );
+    expect(spell?.card?.name).toBe("Chain Lightning");
+    expect(spell?.card?.slug).toBe("alp-chain_lightning-b-s");
+
+    // an activated ability's caption is a sentence, and its source is already on the board —
+    // laying a card down for it would both misread and duplicate the permanent
+    const ability = boardReveal(
+      viewWith({ seq: 2, cells: [], redSites: [{ x: 1, y: 1 }], name: "Cherubim shoots!" }),
+      1,
+    );
+    expect(ability?.card).toBeNull();
+
+    // a magic we hold no printing for must not put a blank rectangle on the board
+    const unknown = boardReveal(viewWith({ seq: 3, cells: [], redSites: [{ x: 1, y: 1 }], name: "Dark Tower", spell: true }), 2);
+    expect(unknown?.card).toBeNull();
+    vi.unstubAllGlobals();
   });
 });

@@ -106,6 +106,29 @@ export function legalSiteSquares(state: GameState, player: PlayerId, cardName?: 
   )
 }
 
+/** Squares a FORCED placement may use for `cardName`: the free (or rubble) ones among
+ *  `candidates`, PLUS any occupied square the card's own script can still enter — Rift Valley
+ *  and Mirror Realm pull a partial row or column apart to make the void they are played into,
+ *  so for them an occupied seam is a legal destination, not an obstacle.
+ *
+ *  A card with no `customSitePlay` gets exactly the old free-square set, so nothing else moves.
+ *  Callers that dictate WHERE a site goes should filter their candidates through this rather
+ *  than testing occupancy themselves, or a card whose whole identity is "played where there is
+ *  no room" silently loses its ability. */
+export function forcedSiteSquares(
+  state: GameState,
+  player: PlayerId,
+  cardName: string,
+  candidates: { x: number; y: number }[],
+): { x: number; y: number }[] {
+  const script = getScript(cardName)
+  const extra = script?.customSitePlay ? script.extraSiteSquares?.(state, player) : undefined
+  return candidates.filter((c) => {
+    const here = siteAt(state, c.x, c.y)
+    return !here || here.isRubble || !!extra?.some((e) => e.x === c.x && e.y === c.y)
+  })
+}
+
 export function playSite(state: GameState, player: PlayerId, cardId: string, x: number, y: number, opts?: { force?: boolean }): string | null {
   const p = state.players[player]
   const card = state.cards[cardId]
@@ -116,8 +139,8 @@ export function playSite(state: GameState, player: PlayerId, cardId: string, x: 
   // road, not beside their own sites), so the normal placement-adjacency rule doesn't apply.
   // The caller is responsible for validating the square; only occupancy is still checked here.
   if (opts?.force) {
-    const here = siteAt(state, x, y)
-    if (here && !here.isRubble) return 'A site already occupies that square.'
+    if (!forcedSiteSquares(state, player, card.name, [{ x, y }]).length)
+      return 'A site already occupies that square.'
   } else if (!legalSiteSquares(state, player, card.name).some((s) => s.x === x && s.y === y)) {
     return 'You cannot play a site there.'
   }

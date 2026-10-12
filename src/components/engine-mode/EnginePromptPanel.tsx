@@ -1,9 +1,13 @@
 "use client";
 
+import { Icon } from "@iconify/react";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import CpuCardPick from "@/components/game/CpuCardPick";
+import { cardImage } from "@/components/game/CpuPlayReveal";
 import { RcButton } from "@/components/ui/rc-button";
 import { tokenForEngineId } from "@/lib/engine-mode/actionPaths";
+import { areaFootprints, edgeFootprints, edgeToken, type EngineEdge, permutationPlacements, swapSlots } from "@/lib/engine-mode/areaPrompt";
 import { cardRefFor } from "@/lib/engine-mode/cardIndex";
 import {
   BOARD_DIRECTION,
@@ -17,6 +21,7 @@ import { HUMAN_SEAT, useEngineSession } from "@/lib/engine-mode/session";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import type { ArrowDirection } from "@/lib/game/cpu/fieldTargets";
 import { dirToken, handToken, pileToken } from "@/lib/game/cpu/pickTokens";
+import { useGameStore } from "@/lib/game/store";
 import type { Action, GameState as EngineState, Prompt } from "@sorcery/shared";
 import { actingSeatFor, allCards, GRID_H, GRID_W } from "@sorcery/shared";
 import { botAction } from "@untested-realm/bot/bot";
@@ -33,6 +38,22 @@ export interface PromptData {
   power?: number;
   strikerId?: string;
   squares?: { x: number; y: number }[];
+  /**
+   * The squares are the ANCHORS of a two-by-two area, not the squares themselves — the engine
+   * sets this for Earthquake, Corpse Explosion, Whirlwind, Scatter/Displace's aura shoves, a
+   * 2x2 aura's placement and an oversized minion's summon.
+   */
+  area2x2?: boolean;
+  /**
+   * The choice is between BORDERS, not squares, and `squares` is absent entirely: a Wall aura
+   * sits on a border and both Scatter and Displace shove one. Answered with the border's `key`.
+   */
+  edgeSelect?: boolean;
+  edges?: EngineEdge[];
+  /** sitePermutation: the area's squares that may actually move (an immovable site is a fixed point) */
+  movable?: { x: number; y: number }[];
+  /** sitePermutation: what currently stands on each square of the area */
+  cells?: { x: number; y: number; name: string | null; movable: boolean }[];
   cards?: string[];
   pick?: number;
   skipLabel?: string;
@@ -226,6 +247,21 @@ function DirectionPick({
   );
 }
 
+/**
+ * The card an engine continuation is carrying, when its prompt is about one.
+ *
+ * `viewFor` deliberately passes a prompt's `cont`/`ctx` to the addressed player, so a
+ * placement step like Imperial Road's "Play it where?" can say WHICH site it means. Without
+ * it that step is an anonymous one-line bar arriving straight after two full dialogs, which is
+ * easy to miss entirely — and missing it looks exactly like the card refusing to leave your
+ * hand.
+ */
+function promptCtxCard(game: EngineState, prompt: Prompt): string | null {
+  const ctx = (prompt as { ctx?: { cardId?: unknown } }).ctx;
+  const cardId = typeof ctx?.cardId === "string" ? ctx.cardId : null;
+  return cardId ? (game.cards[cardId]?.name ?? null) : null;
+}
+
 /** Our 1–20 tile number for a board cell key. */
 function tileNumberOf(cellKey: string): number {
   const [x, y] = cellKey.split(",").map(Number);
@@ -259,7 +295,13 @@ export default function EnginePromptPanel() {
   const game = useEngineSession((s) => s.game);
   const rev = useEngineSession((s) => s.rev);
   const portalsRevealed = useEngineSession((s) => s.portalsRevealed);
+  // Hold prompts while the turn is being announced, exactly as /play does ("Defer all game
+  // overlays while Turn overlay is active"). The draw prompt used to land in the same frame as
+  // the "Turn N" banner, so the turn never got its beat. TurnStartOverlay always clears this
+  // within two seconds, and a click on the banner clears it at once, so nothing can wait on it.
+  const announcing = useGameStore((s) => s.turnOverlayActive);
   if (!game) return null;
+  if (announcing) return null;
   const prompt = game.prompts[0];
   switch (preGameSurface(game, portalsRevealed)) {
     case "portal":
@@ -282,19 +324,28 @@ function useBoardPick(
   glow: string[],
   onPick: (token: string) => void,
   labels?: Record<string, string>,
+  extra?: {
+    /** squares this choice is coming FROM (the square being moved, a caster) */
+    sources?: string[];
+    /** tile token -> the squares picking it would cover, previewed under the pointer */
+    areas?: Record<string, string[]>;
+  },
 ) {
   const tokenKey = tokens.join("|");
   const glowKey = glow.join("|");
   const labelKey = labels ? Object.entries(labels).map(([k, v]) => `${k}=${v}`).join("|") : "";
+  const sourceKey = (extra?.sources ?? []).join("|");
+  const areaKey = extra?.areas ? Object.entries(extra.areas).map(([k, v]) => `${k}>${v.join(",")}`).join("|") : "";
   useEffect(() => {
     const picker = useCpuBoardPicker.getState();
     useEngineSession.getState().revealTokens(tokens);
     picker.configure(request, tokens);
-    picker.setGlow(request, glow);
+    picker.setGlow(request, glow, extra?.sources ?? []);
     if (labels) picker.setLabels(request, labels);
-    // configure/setGlow/setLabels read the arrays once; the keys capture their contents
+    if (extra?.areas) picker.setAreas(request, extra.areas);
+    // configure/setGlow/setLabels/setAreas read the arrays once; the keys capture their contents
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [request, tokenKey, glowKey, labelKey]);
+  }, [request, tokenKey, glowKey, labelKey, sourceKey, areaKey]);
   useEffect(
     () =>
       useCpuBoardPicker.subscribe((state, prev) => {
@@ -427,11 +478,19 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
     }
     case "chooseSquare": {
       const squares = data.squares ?? [];
+      // A border, not a square — and `squares` is empty, so this MUST come first or the prompt
+      // falls through to a tile pick with nothing armed and can never be answered.
+      if (data.edgeSelect && data.edges?.length)
+        return <EdgePick prompt={prompt} edges={data.edges} onSend={send}>{autoButton}</EdgePick>;
+      // the engine offered ANCHORS of a 2x2, which on their own say nothing about the footprint
+      if (data.area2x2 && squares.length)
+        return <AreaPick prompt={prompt} game={game} squares={squares} onSend={send}>{autoButton}</AreaPick>;
       return (
         <SinglePick
           request={`engine-prompt:${prompt.id}`}
           title={prompt.title || "Choose a square"}
           tokens={squares.map((sq) => engineCellKey(sq.x, sq.y))}
+          card={promptCtxCard(game, prompt)}
           onPick={(token) => send(squares.find((sq) => engineCellKey(sq.x, sq.y) === token) ?? null)}
         >
           {autoButton}
@@ -525,6 +584,8 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
           </PromptDialog>
         );
       }
+    case "sitePermutation":
+      return <SitePermutation prompt={prompt} data={data} onSend={send} auto={autoButton} />;
     case "allocateDamage":
       return <AllocateDamage game={game} prompt={prompt} data={data} onSend={send} />;
     case "chooseCards":
@@ -551,19 +612,54 @@ function SinglePick({
   title,
   tokens,
   onPick,
+  card,
   children,
 }: {
   request: string;
   title: string;
   tokens: string[];
   onPick: (token: string) => void;
+  /** The card this step is placing or aiming, shown so the step is unmistakable. */
+  card?: string | null;
   children?: React.ReactNode;
 }) {
   useBoardPick(request, tokens, [], onPick);
   return (
-    <PromptBanner title={title} hint="Click the highlighted card, unit or tile on the board.">
+    <PromptBanner
+      title={card ? `${title} — ${card}` : title}
+      hint={
+        card
+          ? `${card} is waiting on you: click one of the highlighted squares on the board.`
+          : "Click the highlighted card, unit or tile on the board."
+      }
+      counter={`${tokens.length} ${tokens.length === 1 ? "square" : "squares"}`}
+    >
+      {card && <PromptCardChip name={card} />}
       {children}
     </PromptBanner>
+  );
+}
+
+/** A thumbnail of the card a prompt concerns — prompts here act on real cards, not on labels. */
+function PromptCardChip({ name }: { name: string }) {
+  const { src, landscape } = cardImage(cardRefFor(name));
+  if (!src) return null;
+  return (
+    <span
+      className={`relative overflow-hidden rounded-rc-md border border-rc-accent/45 bg-black/30 shadow-rc-md ${
+        landscape ? "aspect-[4/3] w-16" : "aspect-[63/88] w-11"
+      }`}
+    >
+      <Image
+        src={src}
+        alt=""
+        fill
+        unoptimized
+        sizes="64px"
+        draggable={false}
+        className={`${landscape ? "rotate-90 scale-[1.333] origin-center object-contain" : "object-cover"} object-center`}
+      />
+    </span>
   );
 }
 
@@ -703,7 +799,12 @@ function ChooseCards({
     const i = Number(id);
     setChosen((cur) => (cur.includes(i) ? cur.filter((c) => c !== i) : cur.length < pick ? [...cur, i] : cur));
   };
-  const ready = data.upTo ? chosen.length <= pick : chosen.length === Math.min(pick, cards.length);
+  // With `upTo`, Confirm used to be enabled at ZERO picks, where it answers exactly like Skip
+  // — an empty array. On Imperial Road that is indistinguishable from declining: the engine's
+  // `pick` cont sees no index, quietly drops the whole offer, and the site stays in your hand
+  // with no further prompt and nothing in the log. Declining is Skip's job; Confirm now needs
+  // something chosen.
+  const ready = data.upTo ? chosen.length > 0 && chosen.length <= pick : chosen.length === Math.min(pick, cards.length);
   const need = Math.min(pick, cards.length);
   return (
     <PromptDialog
@@ -867,3 +968,237 @@ function NameCard({
   );
 }
 
+
+/**
+ * A two-by-two AREA, chosen by its anchor square.
+ *
+ * The engine answers these with the anchor alone (`area2x2`), which is all it needs — but an
+ * anchor on the board tells the player nothing about which four squares they are about to
+ * pick. Hovering one washes its whole footprint, so Earthquake, Corpse Explosion, Whirlwind,
+ * a 2x2 aura's placement and an oversized minion's summon are all aimed by eye.
+ *
+ * The footprint goes to the picker as an `areas` map rather than as glow re-armed per hover:
+ * re-keying the request on hover would reconfigure the board, and `configure` clears `hovered`
+ * — the preview would clear itself on the frame it appeared.
+ */
+function AreaPick({
+  prompt,
+  game,
+  squares,
+  onSend,
+  children,
+}: {
+  prompt: Prompt;
+  game: EngineState;
+  squares: { x: number; y: number }[];
+  onSend: (choice: unknown) => void;
+  children?: React.ReactNode;
+}) {
+  const hovered = useCpuBoardPicker((picker) => picker.hovered);
+  const areas = useMemo(() => areaFootprints(game, squares), [game, squares]);
+  const onPick = useMemo(
+    () => (token: string) => {
+      const hit = squares.find((anchor) => engineCellKey(anchor.x, anchor.y) === token);
+      if (hit) onSend(hit);
+    },
+    [squares, onSend],
+  );
+  const tokens = useMemo(() => Object.keys(areas), [areas]);
+  useBoardPick(`engine-prompt:${prompt.id}`, tokens, [], onPick, undefined, { areas });
+  const preview = hovered ? (areas[hovered] ?? []) : [];
+  return (
+    <PromptBanner
+      title={prompt.title}
+      hint={
+        preview.length
+          ? `Covers tiles ${preview.map(tileNumberOf).sort((a, b) => a - b).join(", ")}.`
+          : "Hover a highlighted square to see the two-by-two it would cover, then click it."
+      }
+      counter={`${tokens.length} ${tokens.length === 1 ? "area" : "areas"}`}
+    >
+      {children}
+    </PromptBanner>
+  );
+}
+
+/**
+ * A choice between BORDERS of squares, picked on the board.
+ *
+ * A Wall aura lies on a border rather than on a square, and Scatter and Displace both push one
+ * along. The engine phrases that as a `chooseSquare` carrying `edgeSelect` + `edges` and no
+ * `squares` at all, which our square branch read as "no candidates": the banner asked for a
+ * click, the board armed nothing, and the prompt sat there unanswerable with the match stuck
+ * behind it. Each border gets a marker on the border itself, and hovering lights the two
+ * squares it divides.
+ */
+function EdgePick({
+  prompt,
+  edges,
+  onSend,
+  children,
+}: {
+  prompt: Prompt;
+  edges: EngineEdge[];
+  onSend: (choice: unknown) => void;
+  children?: React.ReactNode;
+}) {
+  const hovered = useCpuBoardPicker((picker) => picker.hovered);
+  const areas = useMemo(() => edgeFootprints(edges), [edges]);
+  const onPick = useMemo(
+    () => (token: string) => {
+      const edge = edges.find((candidate) => edgeToken(candidate.key) === token);
+      // the continuations match on the key, accepting either the bare string or { key }
+      if (edge) onSend(edge.key);
+    },
+    [edges, onSend],
+  );
+  const tokens = useMemo(() => Object.keys(areas), [areas]);
+  useBoardPick(`engine-prompt:${prompt.id}`, tokens, [], onPick, undefined, { areas });
+  const preview = hovered ? (areas[hovered] ?? []) : [];
+  return (
+    <PromptBanner
+      title={prompt.title}
+      hint={
+        preview.length
+          ? `The border between tiles ${preview.map(tileNumberOf).sort((a, b) => a - b).join(" and ")}.`
+          : "Click one of the border markers on the board."
+      }
+      counter={`${tokens.length} ${tokens.length === 1 ? "border" : "borders"}`}
+    >
+      {children}
+    </PromptBanner>
+  );
+}
+
+/**
+ * Earthquake's rearrangement: "You may rearrange sites within a two-by-two area."
+ *
+ * The engine takes the FINAL arrangement in one shot (`placements`, each square naming the
+ * square whose site lands on it) and only validates it, so the swapping is entirely ours to
+ * author. It is done the way /play does it: click a square, click another, their sites trade
+ * places, repeat. The panel shows the cards as they will stand, because the board itself does
+ * not move until the whole thing resolves.
+ *
+ * Immovable sites (Bedrock, a Bluecap Knockers site) are fixed points — lit on the board but
+ * never clickable, since a permutation that moves one is rejected wholesale.
+ */
+function SitePermutation({
+  prompt,
+  data,
+  onSend,
+  auto,
+}: {
+  prompt: Prompt;
+  data: PromptData;
+  onSend: (choice: unknown) => void;
+  auto?: React.ReactNode;
+}) {
+  /** The area's squares in reading order on OUR board, so the grid matches what is on screen. */
+  const slots = useMemo(() => {
+    const cells = data.cells ?? (data.squares ?? []).map((sq) => ({ ...sq, name: null, movable: true }));
+    return cells
+      .map((cell) => ({ ...cell, at: engineCellKey(cell.x, cell.y) }))
+      .sort((a, b) => tileNumberOf(a.at) - tileNumberOf(b.at));
+  }, [data.cells, data.squares]);
+  /** `holders[i]` is the slot whose site currently stands on slot `i`; identity = nothing moved. */
+  const [holders, setHolders] = useState<number[]>(() => slots.map((_, i) => i));
+  const [from, setFrom] = useState<number | null>(null);
+  // a fresh prompt (a second Earthquake) must not inherit the last one's arrangement
+  useEffect(() => {
+    setHolders(slots.map((_, i) => i));
+    setFrom(null);
+  }, [prompt.id, slots]);
+
+  const swap = useMemo(
+    () => (slot: number) => {
+      if (!slots[slot]?.movable) return;
+      setFrom((pending) => {
+        if (pending === null) return slot;
+        if (pending === slot) return null;
+        setHolders((current) => swapSlots(current, pending, slot));
+        return null;
+      });
+    },
+    [slots],
+  );
+  const onPick = useMemo(
+    () => (token: string) => {
+      const slot = slots.findIndex((candidate) => candidate.at === token);
+      if (slot >= 0) swap(slot);
+    },
+    [slots, swap],
+  );
+
+  const movableTokens = useMemo(() => slots.filter((slot) => slot.movable).map((slot) => slot.at), [slots]);
+  const fixedTokens = useMemo(() => slots.filter((slot) => !slot.movable).map((slot) => slot.at), [slots]);
+  const sources = from === null ? [] : [slots[from].at];
+  useBoardPick(
+    `engine-prompt:${prompt.id}:${from ?? ""}`,
+    movableTokens,
+    fixedTokens,
+    onPick,
+    undefined,
+    { sources },
+  );
+
+  const moved = holders.filter((holder, slot) => holder !== slot).length;
+  const send = () => onSend({ placements: permutationPlacements(slots, holders) });
+  return (
+    <PromptDialog
+      title={prompt.title}
+      hint={
+        from === null
+          ? "Click a square on the board, then the square to trade it with. Leave it as it is to rearrange nothing."
+          : `Moving the site on tile ${tileNumberOf(slots[from].at)} — click where it should go.`
+      }
+    >
+      <div className="mx-auto grid w-[min(20rem,70vw)] grid-cols-2 gap-2 pt-1">
+        {slots.map((slot, i) => {
+          const holder = slots[holders[i]];
+          const pending = from === i;
+          return (
+            <button
+              key={slot.at}
+              type="button"
+              disabled={!slot.movable}
+              onClick={() => swap(i)}
+              className={`flex items-center gap-2 rounded-rc-md border px-2 py-1.5 text-left transition-colors ${
+                pending
+                  ? "border-rc-accent-link/70 bg-rc-accent-link/10"
+                  : slot.movable
+                    ? "border-rc-line/25 hover:border-rc-accent/45"
+                    : "border-rc-line/15 opacity-60"
+              }`}
+            >
+              <span className="font-rc-mono text-[11px] tabular-nums text-rc-fg-subtle">{tileNumberOf(slot.at)}</span>
+              <span className="min-w-0 flex-1 truncate font-rc-display text-[13px] text-rc-fg-strong">
+                {holder.name ?? "void"}
+              </span>
+              {!slot.movable && (
+                <Icon icon="game-icons:stone-block" className="h-3.5 w-3.5 flex-none text-rc-fg-subtle" aria-hidden />
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+        <RcButton size="sm" onClick={send}>
+          {moved ? "Rearrange" : "Leave as it is"}
+        </RcButton>
+        {moved > 0 && (
+          <RcButton
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setHolders(slots.map((_, i) => i));
+              setFrom(null);
+            }}
+          >
+            Reset
+          </RcButton>
+        )}
+        {auto}
+      </div>
+    </PromptDialog>
+  );
+}

@@ -1,84 +1,72 @@
 /**
- * The top 8 of the most recent Sorcerers Summit tournament — what sorcererssummit.com/top-8 shows.
+ * Top-8 decklists from the most recent OFFLINE tournament, as collected on
+ * sorcererssummit.com/top-8 (SCG events, Grand Contests, Cornerstones and the like).
  *
- * Source: their postseason BRACKETS.
- *   GET /api/brackets              — every bracket; the newest completed one wins
- *   GET /api/brackets/{slug}       — entrants and rounds. Summit titles its rounds, so the
- *                                    "Quarterfinals" participants ARE the top eight.
- *   GET /api/brackets/{slug}/decks — each entrant's submitted deck, with a visibility flag
- * The detail routes take the bracket's SLUG; the numeric `bracket_id` 404s.
+ *   GET /api/top-8-events     — every collected event: folder, name, date, player_count,
+ *                               has_top8, winner. The `folder` is the id used below.
+ *   GET /api/events/{folder}  — that event's `top8_decks`, each with a `deck_id`
  *
- * These are decks players deliberately submitted to a tournament and marked public — not
- * anything read out of a private profile. We still honour `deck_visible`/`visibility` and skip
- * anyone who did not publish theirs. All we keep is the deck's own public URL (sorcerytcg.com
- * or curiosa.io), which is exactly what our ordinary deck importer already accepts.
+ * These are NOT Summit's own ELO seasons or postseason brackets: those are their online
+ * league. A `deck_id` is a deck on sorcerytcg.com, which is where the lists are published
+ * and what our ordinary deck importer already accepts — all we keep is that public URL.
+ *
+ * The weekly job asks one cheap question first: has a new event been collected since last
+ * time? If not it does nothing, so the standing list only changes when a real tournament has
+ * been added, and the previous event's decks are retired by being replaced wholesale.
  */
 
 import { getCached, setCached } from "@/lib/cache/redis-cache";
 
 const BASE = "https://www.sorcererssummit.com/api";
-const CACHE_KEY = "summit:top-decks:v2";
-/** Brackets change rarely; a week of cache behind a Monday refresh is plenty. */
-const CACHE_TTL_SECONDS = 8 * 24 * 60 * 60;
+const CACHE_KEY = "summit:top-decks:v3";
+const CACHE_TTL_SECONDS = 40 * 24 * 60 * 60;
 const REQUEST_TIMEOUT_MS = 15_000;
-/** The round whose players are, by definition, the top eight. */
-const TOP8_ROUND_TITLE = /quarter/i;
+/** Where a `deck_id` resolves to. */
+const DECK_BASE = "https://sorcerytcg.com/decks/";
 
 export interface SummitTopDeck {
   player: string;
   avatar: string | null;
   deckName: string | null;
-  /** a public deck page (sorcerytcg.com / curiosa.io) — the only thing we keep */
+  /** the public deck page our importer takes */
   url: string;
-  seed: number | null;
-  /** 1 champion, 2 runner-up, 4 losing semifinalist, 8 otherwise */
-  placing: number;
+  elements: string[];
+  /** 1..8 where the event named a placing, else null */
+  placing: number | null;
 }
 
 export interface SummitTopDecks {
-  bracketSlug: string;
-  bracketName: string;
-  champion: string | null;
-  completedAt: string | null;
+  folder: string;
+  eventName: string;
+  eventDate: string | null;
+  playerCount: number | null;
+  winner: string | null;
   decks: SummitTopDeck[];
   fetchedAt: string;
-  /**
-   * The newest finished tournament at the time of the fetch, whether or not it had decks.
-   * The weekly job compares against this to decide if anything happened at all.
-   */
-  seenBracket: { slug: string; completedAt: string | null } | null;
 }
 
-export interface BracketSummary {
-  bracket_id: number;
-  slug: string;
+export interface SummitEventSummary {
+  folder: string;
   name: string;
-  status: string;
-  completed_at: string | null;
-  champion: { display_name?: string } | null;
+  event_date: string | null;
+  player_count?: number | null;
+  has_top8?: boolean;
+  winner_username?: string | null;
 }
 
-interface BracketMatch {
-  round: number;
-  p1_user_id?: string | null;
-  p2_user_id?: string | null;
-  winner_user_id?: string | null;
-}
-
-export interface BracketDetail {
-  champion?: { display_name?: string; user_id?: string } | null;
-  rounds?: { round: number; title?: string; matches: BracketMatch[] }[];
-}
-
-interface BracketDeckPlayer {
-  user_id?: string;
-  display_name?: string;
-  avatar_name?: string | null;
+interface EventDeck {
+  player?: string;
+  avatar?: string | null;
   deck_name?: string | null;
-  deck_url?: string | null;
-  deck_visible?: boolean;
-  visibility?: string;
-  seed?: number | null;
+  deck_id?: string | null;
+  elements?: string[];
+}
+
+interface EventDetail {
+  event_name?: string;
+  event_folder?: string;
+  top8_decks?: EventDeck[];
+  all_decks?: EventDeck[];
 }
 
 function apiKey(): string | null {
@@ -110,126 +98,79 @@ async function summitGet<T>(path: string): Promise<T | null> {
   }
 }
 
-/** Finished brackets, newest first. */
-export function completedBrackets(brackets: BracketSummary[]): BracketSummary[] {
-  return brackets
-    .filter((b) => b.status === "complete" && b.completed_at && b.slug)
-    .sort((a, b) => Date.parse(b.completed_at ?? "") - Date.parse(a.completed_at ?? ""));
+/** Collected events that actually have a top 8 and a date, newest first. */
+export function datedEvents(events: SummitEventSummary[]): SummitEventSummary[] {
+  return events
+    .filter((e) => e.folder && e.event_date && e.has_top8 !== false)
+    .sort((a, b) => Date.parse(b.event_date ?? "") - Date.parse(a.event_date ?? ""));
 }
 
-/** The newest bracket that has actually finished. */
-export function latestCompletedBracket(brackets: BracketSummary[]): BracketSummary | null {
-  return completedBrackets(brackets)[0] ?? null;
-}
-
-/**
- * Who finished in the top eight, and how far each got.
- *
- * Read from the bracket's own structure rather than guessed from seeds — a 14th seed won one
- * of these. Everyone who played a quarterfinal is top 8; later rounds promote them.
- */
-export function top8Placings(detail: BracketDetail): Map<string, number> {
-  const placings = new Map<string, number>();
-  const rounds = detail.rounds ?? [];
-  const quarters = rounds.find((r) => TOP8_ROUND_TITLE.test(r.title ?? ""));
-  if (!quarters) return placings;
-
-  const enter = (id: string | null | undefined, placing: number) => {
-    if (!id) return;
-    const existing = placings.get(id);
-    if (existing === undefined || placing < existing) placings.set(id, placing);
-  };
-
-  for (const m of quarters.matches) {
-    enter(m.p1_user_id, 8);
-    enter(m.p2_user_id, 8);
-  }
-  for (const round of rounds) {
-    if (round.round <= quarters.round) continue;
-    const placing = round.matches.length === 1 ? 2 : 4; // the final, else the semifinals
-    for (const m of round.matches) {
-      enter(m.p1_user_id, placing);
-      enter(m.p2_user_id, placing);
-      if (placing === 2 && m.winner_user_id) enter(m.winner_user_id, 1);
-    }
-  }
-  return placings;
-}
-
-/** A deck page we can actually hand to our importer. */
-export function isPublicDeckUrl(url: string): boolean {
-  return /^https:\/\/(www\.)?(sorcerytcg\.com|curiosa\.io)\/decks\//i.test(url);
-}
-
-/** Build the list from a bracket's rounds and its submitted decks. */
-export function buildTopDecks(detail: BracketDetail, players: BracketDeckPlayer[]): SummitTopDeck[] {
-  const placings = top8Placings(detail);
-  const decks: SummitTopDeck[] = [];
-  for (const player of players) {
-    const placing = player.user_id ? placings.get(player.user_id) : undefined;
-    if (placing === undefined) continue; // not in the top 8
-    const url = player.deck_url ?? "";
-    if (!url || !isPublicDeckUrl(url)) continue;
-    // never republish a deck its owner did not publish
-    if (player.deck_visible === false) continue;
-    if (player.visibility && player.visibility !== "public") continue;
-    decks.push({
-      player: player.display_name || "Unknown",
-      avatar: player.avatar_name ?? null,
-      deckName: player.deck_name ?? null,
-      url,
-      seed: player.seed ?? null,
-      placing,
-    });
-  }
-  return decks.sort((a, b) => a.placing - b.placing || (a.seed ?? 99) - (b.seed ?? 99));
+/** Has a newer event been collected than the one we already published? */
+export function hasNewEvent(cached: SummitTopDecks | null, events: SummitEventSummary[]): boolean {
+  const newest = datedEvents(events)[0];
+  if (!newest) return false;
+  if (!cached) return true;
+  return cached.folder !== newest.folder;
 }
 
 /**
- * Walk finished brackets newest-first until one actually has decks.
- *
- * Submitting a decklist is optional, and the most recent tournament frequently has none at
- * all — measured live, the newest completed bracket had 24 entrants and 0 decks while the one
- * before it had 24 of 24. Stopping at the newest would have shipped an empty list.
- * `depth` bounds both the walk and the number of requests we make of Summit.
+ * The placing an event encodes in a deck's name ("… - Champion", "… - 3rd Place").
+ * Events that name the player instead ("… - Jeremy Murray") simply have no placing.
  */
-export async function fetchSummitTopDecks(depth = 4): Promise<SummitTopDecks | null> {
-  const list = await summitGet<{ brackets: BracketSummary[] }>("/brackets");
-  if (!list?.brackets) return null;
-
-  const finished = completedBrackets(list.brackets);
-  const newest = finished[0] ?? null;
-
-  for (const bracket of finished.slice(0, depth)) {
-    const slug = encodeURIComponent(bracket.slug);
-    const [detail, deckList] = await Promise.all([
-      summitGet<BracketDetail>(`/brackets/${slug}`),
-      summitGet<{ players?: BracketDeckPlayer[] }>(`/brackets/${slug}/decks`),
-    ]);
-    if (!detail || !deckList?.players?.length) continue;
-
-    const decks = buildTopDecks(detail, deckList.players);
-    if (!decks.length) continue; // nobody published a decklist for that one
-
-    return {
-      bracketSlug: bracket.slug,
-      bracketName: bracket.name,
-      champion: bracket.champion?.display_name ?? detail.champion?.display_name ?? null,
-      completedAt: bracket.completed_at,
-      decks,
-      fetchedAt: new Date().toISOString(),
-      seenBracket: newest ? { slug: newest.slug, completedAt: newest.completed_at } : null,
-    };
+export function placingFromName(deckName: string | null | undefined): number | null {
+  if (!deckName) return null;
+  const tail = deckName.split(" - ").pop() ?? "";
+  if (/champion|1st/i.test(tail)) return 1;
+  const ordinal = /(\d+)(?:st|nd|rd|th)\s*place/i.exec(tail);
+  if (ordinal) {
+    const n = Number(ordinal[1]);
+    if (n >= 1 && n <= 8) return n;
   }
   return null;
 }
 
-/** Has a tournament finished since the cached list was built? */
-export function hasNewTournament(cached: SummitTopDecks | null, brackets: BracketSummary[]): boolean {
-  const newest = completedBrackets(brackets)[0];
-  if (!newest) return false;
-  if (!cached?.seenBracket) return true;
-  return cached.seenBracket.slug !== newest.slug || cached.seenBracket.completedAt !== newest.completed_at;
+export function buildEventDecks(detail: EventDetail): SummitTopDeck[] {
+  const source = detail.top8_decks?.length ? detail.top8_decks : (detail.all_decks ?? []);
+  const decks: SummitTopDeck[] = [];
+  for (const deck of source) {
+    if (!deck?.deck_id) continue;
+    decks.push({
+      player: deck.player || "Unknown",
+      avatar: deck.avatar ?? null,
+      deckName: deck.deck_name ?? null,
+      url: `${DECK_BASE}${deck.deck_id}`,
+      elements: deck.elements ?? [],
+      placing: placingFromName(deck.deck_name),
+    });
+  }
+  // placed decks first, in order; anything unplaced keeps its original position behind them
+  return decks.sort((a, b) => (a.placing ?? 99) - (b.placing ?? 99));
+}
+
+/**
+ * Walk collected events newest-first until one yields decks. `depth` bounds both the walk and
+ * the number of requests we make of Summit.
+ */
+export async function fetchSummitTopDecks(depth = 3): Promise<SummitTopDecks | null> {
+  const list = await summitGet<{ events: SummitEventSummary[] }>("/top-8-events");
+  if (!list?.events) return null;
+
+  for (const event of datedEvents(list.events).slice(0, depth)) {
+    const detail = await summitGet<EventDetail>(`/events/${encodeURIComponent(event.folder)}`);
+    if (!detail) continue;
+    const decks = buildEventDecks(detail);
+    if (!decks.length) continue;
+    return {
+      folder: event.folder,
+      eventName: detail.event_name || event.name,
+      eventDate: event.event_date,
+      playerCount: event.player_count ?? null,
+      winner: event.winner_username ?? null,
+      decks,
+      fetchedAt: new Date().toISOString(),
+    };
+  }
+  return null;
 }
 
 export async function getCachedSummitTopDecks(): Promise<SummitTopDecks | null> {
@@ -237,23 +178,16 @@ export async function getCachedSummitTopDecks(): Promise<SummitTopDecks | null> 
 }
 
 export interface RefreshOutcome {
-  /** "fetched" replaced the list, "unchanged" means no new tournament has finished */
   status: "fetched" | "unchanged" | "empty";
   decks: SummitTopDecks | null;
 }
 
-/**
- * The weekly job. It asks one cheap question first — has a tournament finished since last
- * time? — and does nothing further if not, so the usual Monday costs a single request and
- * leaves the standing list alone. When a new one HAS finished, the fresh top 8 replaces the
- * cached list wholesale, which is what retires the previous event's decks.
- */
 export async function refreshSummitTopDecks(force = false): Promise<RefreshOutcome> {
   const cached = await getCachedSummitTopDecks();
   if (!force) {
-    const list = await summitGet<{ brackets: BracketSummary[] }>("/brackets");
-    if (!list?.brackets) return { status: "unchanged", decks: cached };
-    if (!hasNewTournament(cached, list.brackets)) return { status: "unchanged", decks: cached };
+    const list = await summitGet<{ events: SummitEventSummary[] }>("/top-8-events");
+    if (!list?.events) return { status: "unchanged", decks: cached };
+    if (!hasNewEvent(cached, list.events)) return { status: "unchanged", decks: cached };
   }
   const fresh = await fetchSummitTopDecks();
   if (!fresh) return { status: "empty", decks: cached };

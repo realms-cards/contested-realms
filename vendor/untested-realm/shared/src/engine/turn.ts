@@ -278,7 +278,7 @@ function afterDrawStep(state: GameState, player: PlayerId): void {
       p.hand.push(cardId) // playSite plays from hand
       const tap = canTap(state, avatar)
       if (tap) tapUnit(state, avatar) // uses the avatar's own ability
-      const err = playSite(state, player, cardId, avatar.x, avatar.y) // fires Genesis
+      const err = playSite(state, player, cardId, avatar.x, avatar.y, { force: true }) // fires Genesis
       if (err) {
         // revert on the (near-impossible) illegal placement
         const i = p.hand.indexOf(cardId)
@@ -323,7 +323,7 @@ registerCont('turn:firstSite', (state, ctx: { player: PlayerId }, choice) => {
     // Special avatars that play sites through their own ability pay their own cost.
     const tap = !getScript(avatar.name)?.noStandardSiteAction && canTap(state, avatar)
     if (tap) tapUnit(state, avatar)
-    const err = playSite(state, ctx.player, cardId, avatar.x, avatar.y) // fires the site's Genesis
+    const err = playSite(state, ctx.player, cardId, avatar.x, avatar.y, { force: true }) // fires the site's Genesis
     if (err) {
       if (tap) avatar.tapped = false // refund the tap on an illegal placement
       pushLog(state, ctx.player, `First site could not be placed: ${err}`)

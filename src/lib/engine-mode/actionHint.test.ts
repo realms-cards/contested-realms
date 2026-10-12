@@ -38,3 +38,20 @@ describe("action hints", () => {
     expect(actionHint(game(), { t: "concede" } as Action)).toBe("Take this action");
   });
 });
+
+describe("field tones", () => {
+  it("lights a fresh choice and a continuation differently", async () => {
+    const { fieldTargets } = await import("@/lib/game/cpu/fieldTargets");
+    const base = { glow: [], sources: [], selected: null, labels: {} };
+    expect(fieldTargets({ ...base, tiles: ["2,1"] }).tiles.get("2,1")).toBe("candidate");
+    expect(fieldTargets({ ...base, tiles: ["2,1"], sequence: true }).tiles.get("2,1")).toBe("continue");
+  });
+
+  it("still marks the clicked tile as selected mid-sequence", () => {
+    // the one you just clicked should not look like another thing to click
+    return import("@/lib/game/cpu/fieldTargets").then(({ fieldTargets }) => {
+      const tones = fieldTargets({ tiles: ["2,1"], glow: [], sources: [], selected: "2,1", labels: {}, sequence: true }).tiles;
+      expect(tones.get("2,1")).toBe("selected");
+    });
+  });
+});

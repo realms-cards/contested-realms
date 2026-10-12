@@ -91,3 +91,6 @@ design_handoff/support.js
 
 # Local pg_dump output from docker-compose.prod.allinone.yml
 /backups
+
+# Working clone of our Untested Realm fork (scripts/untested-realm-fork.sh)
+.untested-realm-fork/

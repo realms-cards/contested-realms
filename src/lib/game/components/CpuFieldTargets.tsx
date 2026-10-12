@@ -14,11 +14,14 @@ import { useGameStore } from "@/lib/game/store";
 
 type Level = {opacity: number; pulse: number};
 type Fills = RefObject<Map<string, THREE.MeshBasicMaterial>>;
-const COLORS: Record<FieldTone, string> = {candidate:"#f59e0b",selected:"#22c55e",target:"#22c55e",source:"#22d3ee"};
+// Amber = something you could start. Violet = the next step of something you already began,
+// so a target prompt never looks like a fresh choice. Green = picked. Cyan = where it comes from.
+const COLORS: Record<FieldTone, string> = {candidate:"#f59e0b",continue:"#a78bfa",selected:"#22c55e",target:"#22c55e",source:"#22d3ee",area:"#a78bfa"};
 // Outline-led like MagicTargetOverlay: the border does the work, a faint pulsing fill keeps the tile readable.
-const TILE_LEVELS: Record<FieldTone, Level> = {candidate:{opacity:0.07,pulse:0.04},selected:{opacity:0.16,pulse:0.05},target:{opacity:0.1,pulse:0.03},source:{opacity:0.08,pulse:0.03}};
+// `area` is the heaviest static wash: it has to read as one block of ground, not four tiles.
+const TILE_LEVELS: Record<FieldTone, Level> = {candidate:{opacity:0.07,pulse:0.04},continue:{opacity:0.12,pulse:0.07},selected:{opacity:0.16,pulse:0.05},target:{opacity:0.1,pulse:0.03},source:{opacity:0.08,pulse:0.03},area:{opacity:0.2,pulse:0}};
 // Arrows are small, so their fill carries the signal.
-const ARROW_LEVELS: Record<FieldTone, Level> = {candidate:{opacity:0.5,pulse:0.18},selected:{opacity:0.85,pulse:0.1},target:{opacity:0.7,pulse:0},source:{opacity:0.5,pulse:0}};
+const ARROW_LEVELS: Record<FieldTone, Level> = {candidate:{opacity:0.5,pulse:0.18},continue:{opacity:0.6,pulse:0.22},selected:{opacity:0.85,pulse:0.1},target:{opacity:0.7,pulse:0},source:{opacity:0.5,pulse:0},area:{opacity:0.5,pulse:0}};
 // Exactly the cell boundary: the playmat's grid line is centred on it, so the outline lands
 // ON the line rather than a hair inside it. Any inset here reads as a visible misalignment.
 const HALF = TILE_SIZE/2;
@@ -82,17 +85,20 @@ const pick = (event: ThreeEvent<MouseEvent>, token: string) => { event.stopPropa
 /** Html buttons live in the canvas container: keep their presses from reaching the board's pointer handlers underneath. */
 const stopDom = (event: SyntheticEvent) => event.stopPropagation();
 const cell = (at: string) => at.split(",").map(Number) as [number, number];
-const pulses = (tone: FieldTone) => tone === "candidate" || tone === "selected";
+const pulses = (tone: FieldTone) => tone === "candidate" || tone === "continue" || tone === "selected";
 
 export default function CpuFieldTargets({offsetX,offsetY}: {offsetX:number;offsetY:number}) {
   const cpu = useGameStore(state => state.opponentPlayerId?.startsWith("cpu_") === true);
-  const {request,tiles,selected,glow,sources,labels} = useCpuBoardPicker(useShallow(picker => ({request:picker.request,tiles:picker.tiles,selected:picker.selected,glow:picker.glow,sources:picker.sources,labels:picker.labels})));
-  const targets = useMemo(() => fieldTargets({tiles,selected,glow,sources,labels}),[tiles,selected,glow,sources,labels]);
+  const {request,tiles,selected,glow,sources,labels,sequence,areas,hovered} = useCpuBoardPicker(useShallow(picker => ({request:picker.request,tiles:picker.tiles,selected:picker.selected,glow:picker.glow,sources:picker.sources,labels:picker.labels,sequence:picker.sequence,areas:picker.areas,hovered:picker.hovered})));
+  // `hovered` only feeds the area preview, so a board with no areas never re-derives on hover.
+  const anchor = Object.keys(areas).length ? hovered : null;
+  const targets = useMemo(() => fieldTargets({tiles,selected,glow,sources,labels,sequence,areas,hovered:anchor}),[tiles,selected,glow,sources,labels,sequence,areas,anchor]);
   // Rules Engine matches (src/lib/engine-mode) drive the same picker; their requests start with "engine".
   if (!cpu && !request.startsWith("engine")) return null;
   const zRange = request.startsWith("engine") ? HTML_Z_ENGINE : HTML_Z;
   return <>
     {(targets.tiles.size > 0 || targets.arrows.length > 0) && <TargetMeshes offsetX={offsetX} offsetY={offsetY} tones={targets.tiles} arrows={targets.arrows} labels={labels} zRange={zRange} />}
+    {Object.keys(areas).length > 0 && <AreaMarkers offsetX={offsetX} offsetY={offsetY} areas={areas} hovered={hovered} selected={selected} />}
     {targets.rows.length > 0 && <OptionRows offsetX={offsetX} offsetY={offsetY} rows={targets.rows} zRange={zRange} />}
   </>;
 }
@@ -112,8 +118,10 @@ function TargetMeshes({offsetX,offsetY,tones,arrows,labels,zRange}: {offsetX:num
   }
   for (const arrow of arrows) if (pulses(arrow.tone)) levels.set(arrow.token,ARROW_LEVELS[arrow.tone]);
   const pulsing = levels.size > 0;
+  // any tile awaiting the next step of a started choice puts the whole board on the slow rhythm
+  const slow = [...tones.values()].some((tone) => tone === "continue") || arrows.some((a) => a.tone === "continue");
   const fill = (token: string) => (material: THREE.MeshBasicMaterial | null) => { if (material) fills.current.set(token,material); else fills.current.delete(token); };
-  return <group>{pulsing && <Pulse fills={fills} levels={levels} />}{[...tones].map(([tile,tone]) => {
+  return <group>{pulsing && <Pulse fills={fills} levels={levels} slow={slow} />}{[...tones].map(([tile,tone]) => {
     const [x,y] = cell(tile), color = COLORS[tone];
     return <group key={tile} position={[offsetX+x*TILE_SIZE,VISUAL_LIFT,offsetY+y*TILE_SIZE]} rotation-x={-Math.PI/2}>
       <mesh raycast={noRaycast} renderOrder={1100}>
@@ -176,6 +184,57 @@ function TargetMeshes({offsetX,offsetY,tones,arrows,labels,zRange}: {offsetX:num
 }
 
 /** Real buttons anchored above a tile, one row per tile, only while the picker offers `opt:` choices. */
+// A 2x2 area is anchored on an INTERSECTION — the point four squares meet at — not on a square.
+// Auras go there strictly, so the board has to say so: a diamond sits on the crossing itself,
+// and hovering it washes the four squares it would cover. Drawing the anchor as a tile instead
+// invited the player to read it as "choose this square", which is a different thing entirely.
+const DIAMOND_R = TILE_SIZE * 0.17;
+const DIAMOND = new Float32Array([0,DIAMOND_R,0, DIAMOND_R,0,0, 0,-DIAMOND_R,0, -DIAMOND_R,0,0]);
+// generous, so the crossing is easy to hit with a mouse
+const MARKER_HIT = TILE_SIZE * 0.52;
+
+function AreaMarkers({offsetX,offsetY,areas,hovered,selected}: {offsetX:number;offsetY:number;areas:Record<string, string[]>;hovered:string | null;selected:string | null}) {
+  const setHovered = useCpuBoardPicker.getState().setHovered;
+  const rings = useRef(new Map<string, THREE.LineBasicMaterial>());
+  // The crossing is the CENTRE of the covered squares, which stays correct however the board is
+  // rotated relative to the engine, and degrades sensibly for an area clipped at the edge.
+  const anchors = useMemo(() => Object.entries(areas).map(([token,cells]) => {
+    const points = cells.map(cell);
+    const cx = points.reduce((sum,[x]) => sum+x,0)/(points.length || 1);
+    const cy = points.reduce((sum,[,y]) => sum+y,0)/(points.length || 1);
+    return {token,cx,cy};
+  }),[areas]);
+  // One loop for every marker, like Pulse: no per-marker subscription.
+  useFrame(({clock}) => {
+    const wave = (Math.sin(clock.getElapsedTime()*2.2)+1)/2;
+    for (const [token,material] of rings.current) {
+      const lit = token === hovered || token === selected;
+      material.opacity = lit ? 1 : 0.5+0.35*wave;
+    }
+    requestCosmeticFrame();
+  });
+  const ring = (token: string) => (material: THREE.LineBasicMaterial | null) => { if (material) rings.current.set(token,material); else rings.current.delete(token); };
+  return <group>{anchors.map(({token,cx,cy}) => {
+    const lit = token === hovered || token === selected;
+    const color = token === selected ? COLORS.selected : lit ? COLORS.area : COLORS.candidate;
+    return <group key={token} position={[offsetX+cx*TILE_SIZE,VISUAL_LIFT+0.001,offsetY+cy*TILE_SIZE]} rotation-x={-Math.PI/2}>
+      <mesh raycast={noRaycast} renderOrder={1104}>
+        <circleGeometry args={[DIAMOND_R*0.42,4]} />
+        <meshBasicMaterial color={color} transparent opacity={lit ? 0.9 : 0.5} depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      <lineLoop raycast={noRaycast} renderOrder={1105}>
+        <bufferGeometry><bufferAttribute attach="attributes-position" args={[DIAMOND,3]} /></bufferGeometry>
+        <lineBasicMaterial ref={ring(token)} color={color} transparent opacity={0.8} />
+      </lineLoop>
+      <mesh name={`cpu-pick:${token}`} position={[0,0,CLICK_PLANE_Z]} onPointerDown={stop} onPointerUp={stop} onClick={event => pick(event,token)}
+        onPointerOver={event => { event.stopPropagation(); setHovered(token); }} onPointerOut={() => { if (useCpuBoardPicker.getState().hovered === token) setHovered(null); }}>
+        <planeGeometry args={[MARKER_HIT,MARKER_HIT]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+    </group>;
+  })}</group>;
+}
+
 function OptionRows({offsetX,offsetY,rows,zRange}: {offsetX:number;offsetY:number;rows:OptionRow[];zRange:[number, number]}) {
   return <>{rows.map(({at,options}) => {
     const [x,y] = cell(at);
@@ -193,9 +252,11 @@ function OptionRows({offsetX,offsetY,rows,zRange}: {offsetX:number;offsetY:numbe
 }
 
 /** Mounted only while a target awaits a click (frameloop="demand"): the pulse asks for cosmetic frames, never invalidate(). */
-function Pulse({fills,levels}: {fills: Fills; levels: Map<string, Level>}) {
+function Pulse({fills,levels,slow}: {fills: Fills; levels: Map<string, Level>; slow?: boolean}) {
   useFrame(({clock}) => {
-    const wave = Math.sin(clock.getElapsedTime()*3);
+    // A choice in progress breathes at roughly half speed. The slower rhythm reads as "this is
+    // waiting on you" rather than "look here", which is what stops players stalling mid-action.
+    const wave = Math.sin(clock.getElapsedTime()*(slow ? 1.4 : 3));
     for (const [token,{opacity,pulse}] of levels) {
       const material = fills.current.get(token);
       if (material) material.opacity = opacity+wave*pulse;

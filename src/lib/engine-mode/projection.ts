@@ -89,6 +89,12 @@ export interface BoardReveal {
   /** the caption the engine wrote: a spell name, "<card> shoots!", or "<card>'s ability" */
   name: string;
   element: string;
+  /**
+   * The card to lay on the table while this resolves, when the caption names a real one.
+   * A Magic never becomes a permanent, so without this the only trace of a spell on the board
+   * is a line of text — both players should see the card itself, as they would on a table.
+   */
+  card: CardRef | null;
 }
 
 /**
@@ -157,6 +163,8 @@ interface RawAreaReveal {
   casterId?: string;
   name?: string;
   element?: string;
+  /** set only for a Magic cast — an ability's `name` is a sentence, not a card */
+  spell?: boolean;
 }
 
 /**
@@ -179,7 +187,12 @@ export function boardReveal(view: PlayerView, sinceSeq: number): BoardReveal | n
     source && typeof source.x === "number" && typeof source.y === "number" ? engineCellKey(source.x, source.y) : null;
   const name = raw.name ?? "";
   if (!sites.length && !caster && !name) return null;
-  return { seq, hits: [], sites, caster, name, element: raw.element ?? "none" };
+  // `spell` marks a Magic cast, whose `name` IS the card's name; an ability's is a sentence
+  // ("Cherubim shoots!"). Only a Magic needs showing — everything else stays on the board as a
+  // permanent of its own. No printing, no card: we would render a blank.
+  const named = raw.spell && name ? cardRefFor(name) : null;
+  const card = named?.slug ? named : null;
+  return { seq, hits: [], sites, caster, name, element: raw.element ?? "none", card };
 }
 
 export function hiddenLayerCounts(view: PlayerView, layer: BoardLayer): Record<string, HiddenCounts> {

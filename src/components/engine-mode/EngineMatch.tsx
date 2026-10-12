@@ -10,6 +10,7 @@ import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
 import MusicGameSync from "@/components/game/MusicGameSync";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
+import TurnStartOverlay from "@/components/game/TurnStartOverlay";
 import AppShell from "@/components/ui/AppShell";
 import { PageHeader } from "@/components/ui/page-header";
 import { RcButton } from "@/components/ui/rc-button";
@@ -264,6 +265,9 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
   const dismissEndTurn = useEngineSession((s) => s.dismissEndTurn);
   const dispatch = useEngineSession((s) => s.dispatch);
   const dragFromHand = useGameStore((s) => s.dragFromHand);
+  // Mulligan over = the board is really in play; this is what turn 1's announcement waits for,
+  // exactly as /play waits on mulliganComplete && seerComplete.
+  const pastSetup = useGameStore((s) => s.phase !== "Setup");
 
   // The card-preview setting is remembered across sessions in the other modes; honour the
   // same stored value here instead of always opening at the store default.
@@ -359,6 +363,11 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
         />
       </div>
 
+
+      {/* "Turn N" + the draw reminder, the same announcement the other modes open a turn with.
+          `seat` is needed because engine mode leaves actorKey null, which elsewhere means
+          hotseat — otherwise the computer's turns would be announced too. */}
+      <TurnStartOverlay gameStarted={pastSetup} seat="p1" />
 
       {/* The same warning /play shows, same component and wording. */}
       <EndTurnConfirmDialog
