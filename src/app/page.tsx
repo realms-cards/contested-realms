@@ -10,14 +10,12 @@ import OtherRealms from "@/components/ui/OtherRealms";
 import { Badge } from "@/components/ui/badge";
 import PanelTile from "@/components/ui/panel-tile";
 import { RcButton } from "@/components/ui/rc-button";
-import { FEATURE_CPU_BOTS, FEATURE_ENGINE_MODE, FEATURE_VS_CPU_PRECONS } from "@/lib/config/features";
-import { fetchPatrons, isPatron } from "@/lib/patrons";
+import { FEATURE_ENGINE_MODE } from "@/lib/config/features";
 
 export default function Home() {
   const router = useRouter();
   const { data: session } = useSession();
   // Start with null (hidden) to avoid hydration mismatch, then show after mount if not dismissed
-  const [userIsPatron, setUserIsPatron] = useState(false);
   const [showAlphaBanner, setShowAlphaBanner] = useState<boolean | null>(null);
   const [showCookieNotice, setShowCookieNotice] = useState<boolean | null>(
     null,
@@ -41,14 +39,6 @@ export default function Home() {
       setShowCookieNotice(true);
     }
   }, []);
-
-  useEffect(() => {
-    const userId = session?.user?.id as string | undefined;
-    if (!userId) return;
-    fetchPatrons().then(() => {
-      setUserIsPatron(isPatron(userId));
-    });
-  }, [session]);
 
   const dismissAlpha = () => {
     try {
@@ -142,62 +132,22 @@ export default function Home() {
             </PanelTile>
           </div>
         )}
-        {/* Every row is an auto-fit grid: tiles share the row evenly and a
-            lone tile (e.g. a feature flag is off) grows to the full width,
-            so no row ever ends in a gap. */}
-        {session && (FEATURE_CPU_BOTS || FEATURE_VS_CPU_PRECONS || FEATURE_ENGINE_MODE) && (
+        {/* Goldfish and VS CPU Precons are no longer offered here: the Rules Engine mode
+            supersedes both. Their pages and feature flags are untouched, so they stay reachable
+            by direct URL (/play/goldfish, /play/vs-cpu) and the tiles can be put back by
+            restoring them here — nothing else in the app reads those two flags.
+
+            Every row is an auto-fit grid: tiles share the row evenly and a lone tile grows to
+            the full width, so no row ever ends in a gap. */}
+        {session && FEATURE_ENGINE_MODE && (
           <div className="mx-auto grid max-w-4xl grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-3 md:gap-4">
-            {FEATURE_CPU_BOTS && (
-              <PanelTile
-                href={
-                  userIsPatron
-                    ? "/play/goldfish"
-                    : "https://www.patreon.com/realmscards"
-                }
-                className="w-full"
-              >
-                <div className="flex flex-col items-center justify-center py-3 md:py-4">
-                  <span className="rc-eyebrow mb-1.5">experimental</span>
-                  <h4 className={subTitle}>Goldfish — Any Deck</h4>
-                  <span className={tileNote}>
-                    {userIsPatron
-                      ? "test your builds against the CPU"
-                      : "patrons only"}
-                  </span>
-                </div>
-              </PanelTile>
-            )}
-            {FEATURE_VS_CPU_PRECONS && (
-              <PanelTile
-                href={
-                  userIsPatron
-                    ? "/play/vs-cpu"
-                    : "https://www.patreon.com/realmscards"
-                }
-                className="w-full"
-              >
-                <div
-                  className={`flex flex-col items-center justify-center py-3 md:py-4 ${
-                    userIsPatron ? "" : "opacity-60"
-                  }`}
-                >
-                  <span className="rc-eyebrow mb-1.5">experimental</span>
-                  <h4 className={subTitle}>VS CPU Precons</h4>
-                  {!userIsPatron && (
-                    <span className={tileNote}>patrons only</span>
-                  )}
-                </div>
-              </PanelTile>
-            )}
-            {FEATURE_ENGINE_MODE && (
-              <PanelTile href="/play/engine" className="w-full">
-                <div className="flex flex-col items-center justify-center py-3 md:py-4">
-                  <span className="rc-eyebrow mb-1.5">experimental</span>
-                  <h4 className={subTitle}>Rules Engine vs CPU</h4>
-                  <span className={tileNote}>every card enforced</span>
-                </div>
-              </PanelTile>
-            )}
+            <PanelTile href="/play/engine" className="w-full">
+              <div className="flex flex-col items-center justify-center py-3 md:py-4">
+                <span className="rc-eyebrow mb-1.5">experimental</span>
+                <h4 className={subTitle}>Rules Engine vs CPU</h4>
+                <span className={tileNote}>every card enforced</span>
+              </div>
+            </PanelTile>
           </div>
         )}
         {session && (

@@ -32,6 +32,8 @@ export interface FeatureFlags {
   /**
    * Show the "VS CPU Precons" entry on the home page.
    * Requires cpuBots to be enabled as well.
+   *
+   * Nothing reads this (or `cpuBots`) while those two tiles are hidden — see src/app/page.tsx.
    */
   vsCpuPrecons: {
     enabled: boolean;
@@ -118,8 +120,10 @@ export const FEATURE_FLAGS: FeatureFlags = {
       parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_VS_CPU_PRECONS, false),
   },
   engineMode: {
-    // Rules-enforced vs CPU on the vendored Untested Realm engine (vendor/untested-realm)
-    enabled: parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_ENGINE_MODE, false),
+    // Rules-enforced vs CPU on the vendored Untested Realm engine (vendor/untested-realm).
+    // Open to everyone — it carries no patron check anywhere — so it defaults ON and only an
+    // explicit NEXT_PUBLIC_FEATURE_ENGINE_MODE=false takes it away again.
+    enabled: parseBooleanFlag(process.env.NEXT_PUBLIC_FEATURE_ENGINE_MODE, true),
   },
   teachingMode: {
     enabled: parseBooleanFlag(
