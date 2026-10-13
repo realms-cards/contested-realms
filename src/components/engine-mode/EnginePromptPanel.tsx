@@ -26,6 +26,7 @@ import type { Action, GameState as EngineState, Prompt } from "@sorcery/shared";
 import { actingSeatFor, allCards, GRID_H, GRID_W } from "@sorcery/shared";
 import { botAction } from "@untested-realm/bot/bot";
 import EnginePortalScreen from "./EnginePortalScreen";
+import { pickNoun } from "./promptNoun";
 import { Compass, directionKey, PromptBanner, PromptDialog } from "./EnginePromptShell";
 
 /** Prompt data shapes, per PromptKind (see the engine's pushPrompt callers). */
@@ -607,6 +608,7 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
   }
 }
 
+
 function SinglePick({
   request,
   title,
@@ -624,15 +626,18 @@ function SinglePick({
   children?: React.ReactNode;
 }) {
   useBoardPick(request, tokens, [], onPick);
+  const noun = pickNoun(tokens);
   return (
     <PromptBanner
       title={card ? `${title} — ${card}` : title}
       hint={
         card
           ? `${card} is waiting on you: click one of the highlighted squares on the board.`
-          : "Click the highlighted card, unit or tile on the board."
+          : noun
+            ? `Click the highlighted ${noun.one} on the board.`
+            : "Click the highlighted card, unit or tile on the board."
       }
-      counter={`${tokens.length} ${tokens.length === 1 ? "square" : "squares"}`}
+      counter={noun ? `${tokens.length} ${tokens.length === 1 ? noun.one : noun.many}` : null}
     >
       {card && <PromptCardChip name={card} />}
       {children}

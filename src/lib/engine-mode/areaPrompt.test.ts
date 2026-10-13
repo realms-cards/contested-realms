@@ -102,3 +102,21 @@ describe("borders between squares", () => {
     expect(areas).toEqual({});
   });
 });
+
+describe("what a board pick calls its own options", () => {
+  // Regression: the banner hardcoded "squares", so "Draw from your spellbook or your atlas?"
+  // — whose options are the two deck PILES — announced "2 squares".
+  it("counts squares, cards and targets by what the tokens really are", async () => {
+    const { pickNounForTest } = await import("@/components/engine-mode/promptNoun");
+    expect(pickNounForTest(["1,1", "2,1"])).toEqual({ one: "square", many: "squares" });
+    expect(pickNounForTest(["hand:p1:c1"])).toEqual({ one: "card", many: "cards" });
+    expect(pickNounForTest(["unit:perm:u1", "unit:avatar:p2"])).toEqual({ one: "target", many: "targets" });
+  });
+
+  it("says nothing for piles, or for a mixed bag it cannot name", async () => {
+    const { pickNounForTest } = await import("@/components/engine-mode/promptNoun");
+    expect(pickNounForTest(["pile:p1:spellbook", "pile:p1:atlas"]), "the buttons already name these").toBeNull();
+    expect(pickNounForTest(["1,1", "hand:p1:c1"]), "mixed kinds").toBeNull();
+    expect(pickNounForTest([])).toBeNull();
+  });
+});
