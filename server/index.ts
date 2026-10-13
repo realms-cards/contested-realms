@@ -93,6 +93,107 @@ const modules = modulesIndex;
 const { applyGenesis, applyKeywordAnnotations } = triggersModule;
 const { registerChatHandlers, getGlobalChatHistory } = chatHandlersModule;
 
+/**
+ * Rules-engine matches run a SECOND, parallel pipeline: the server owns the engine's GameState
+ * in a worker thread and pushes each seat a redacted view, instead of merging patches the
+ * clients send. Loaded lazily and defensively — if the vendored engine cannot be loaded, engine
+ * matches fail to start and say so, while every legacy match carries on untouched.
+ */
+let _engineService: import("./modules/engine/service").EngineMatchService | null = null;
+let _engineServiceFailed = false;
+function engineService(): import("./modules/engine/service").EngineMatchService | null {
+  if (_engineService || _engineServiceFailed) return _engineService;
+  try {
+    // A deliberate lazy require, not an oversight: a static import would pull the whole
+    // vendored engine into the module graph at boot, so a bad vendor sync would stop the
+    // server starting at all and take every LEGACY match down with it. Loading it on first
+    // use keeps that failure contained to engine matches. Mirrors bots/bot-worker-pool.js.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { EngineMatchService } = require("./modules/engine/service") as typeof import("./modules/engine/service");
+    _engineService = new EngineMatchService();
+    console.log(`[Engine] rules-engine matches ready (${_engineService ? "pool up" : "unavailable"})`);
+  } catch (error) {
+    _engineServiceFailed = true;
+    console.error("[Engine] could not load the rules engine; engine matches are unavailable:", error);
+  }
+  return _engineService;
+}
+
+/**
+ * Start the engine for a match, once both players have handed in a deck.
+ *
+ * Called whenever a deck is registered, and does nothing until the second one lands — which is
+ * also the first moment the match CAN start, because `createGame` needs both. A deck the
+ * engine does not recognise refuses the match here rather than surfacing later as a card that
+ * cannot be cast.
+ */
+async function maybeStartEngineMatch(match: AnyRecord | null | undefined): Promise<void> {
+  if (!match || match.engineMode !== true || match._engineStarted) return;
+  const engine = engineService();
+  const matchId = String(match.id);
+  if (!engine || engine.isEngineMatch(matchId)) return;
+  const ids: string[] = Array.isArray(match.playerIds) ? match.playerIds : [];
+  if (ids.length < 2) return;
+  const decks = match.playerDecks instanceof Map ? match.playerDecks : null;
+  if (!decks) return;
+  const submitted = ids.map((pid) => decks.get(pid));
+  if (submitted.some((deck) => !Array.isArray(deck) || !deck.length)) return;
+
+  // Lazy for the same reason the service is: this module reaches the vendored engine, and a
+  // static import would load it at boot and let a bad vendor sync stop the server entirely.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { submittedDeckToEngine } = require("../shared/engine/decks") as typeof import("../shared/engine/decks");
+  const converted = submitted.map((deck, seat) =>
+    submittedDeckToEngine(deck as never, players.get(ids[seat])?.displayName ?? `Seat ${seat + 1}`),
+  );
+  const bad = converted.find((result) => !result.ok);
+  if (bad && !bad.ok) {
+    console.warn(`[Engine] match ${matchId} cannot start: ${bad.error}`);
+    io.to(`match:${matchId}`).emit("error", {
+      message: `This match cannot be played on the rules engine: ${bad.error}`,
+      code: "engine_deck_unsupported",
+      retryable: false,
+    });
+    return;
+  }
+
+  // The SERVER picks the seed and who goes first. In single player the client does, which is
+  // fine when it is also the only player; here it would be a knob on the opponent's game.
+  const seedText = String((match.seed as string | undefined) ?? (match.id as string));
+  let seed = 0;
+  for (const ch of seedText) seed = (seed * 31 + ch.charCodeAt(0)) | 0;
+  const first = ((seed >>> 0) % 2) as 0 | 1;
+  const names = ids.map((pid) => players.get(pid)?.displayName ?? "Player") as [string, string];
+  const started = await engine.start(
+    matchId,
+    [converted[0].ok && converted[0].deck, converted[1].ok && converted[1].deck] as [unknown, unknown],
+    names,
+    Math.abs(seed) || 1,
+    first,
+  );
+  if (!started.ok) {
+    console.error(`[Engine] match ${matchId} failed to start:`, started.reason);
+    return;
+  }
+  match._engineStarted = true;
+  // Push each seat its opening board straight away; neither client has one yet.
+  for (const seat of [0, 1] as const) {
+    const target = players.get(ids[seat]);
+    const targetSocket = target?.socketId ? io.sockets.sockets.get(target.socketId) : null;
+    if (!targetSocket) continue;
+    const envelope = await engine.viewFor(matchId, seat);
+    if (envelope) targetSocket.emit("engine:view", envelope);
+  }
+  console.log(`[Engine] match ${matchId} started (seat ${first} goes first)`);
+}
+
+/** Which engine seat a player holds in a match, or null if they are not in it. */
+function engineSeatOf(match: AnyRecord | null | undefined, playerId: string): 0 | 1 | null {
+  const ids: string[] = Array.isArray(match?.playerIds) ? match.playerIds : [];
+  const index = ids.indexOf(playerId);
+  return index === 0 || index === 1 ? index : null;
+}
+
 const _seatFromOwner = (owner: 1 | 2): "p1" | "p2" =>
   owner === 1 ? "p1" : "p2";
 
@@ -2341,6 +2442,9 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
         : undefined,
     matchType: match.matchType || "constructed",
     enableSeer: match.enableSeer === true,
+    // Must be declared on MatchInfoSchema too, or zod strips it silently and the client opens
+    // the legacy board over a rules-engine match.
+    engineMode: match.engineMode === true,
     sealedConfig: match.sealedConfig
       ? normalizeSealedConfig(match.sealedConfig)
       : null,
@@ -2453,6 +2557,11 @@ async function hydrateMatchFromDatabase(
             );
             match.enableSeer =
               settings.enableSeer === true || sealedSeer || draftSeer;
+          }
+          // Rules engine: an organiser choice for the whole tournament. Tournament matches
+          // have no match-start dialog to click, so the setting is the only way in.
+          if (typeof match.engineMode !== "boolean") {
+            match.engineMode = settings.engineMode === true;
           }
         } catch {}
       }
@@ -3601,6 +3710,18 @@ io.on("connection", async (socket: SocketClient) => {
     const player = getPlayerBySocket(socket);
     if (!player || !player.matchId) return;
     const matchId = player.matchId;
+    // A rules-engine match has ONE authority, and it is not this path. The legacy pipeline
+    // deep-merges whatever a client sends with rule enforcement off by default, so letting a
+    // patch through here — from a stale tab, or a client that lost the mode flag — would
+    // corrupt the engine's state for both players. Refuse loudly rather than drop it quietly.
+    if (engineService()?.isEngineMatch(matchId)) {
+      socket.emit("error", {
+        message: "This match is played on the rules engine; reload to reconnect to it.",
+        code: "engine_match",
+        retryable: false,
+      });
+      return;
+    }
     const patch = payload ? payload.action : null;
 
     // Server readiness gate: reject D20 rolls if server isn't fully ready
@@ -3711,6 +3832,59 @@ io.on("connection", async (socket: SocketClient) => {
     const matchId = player.matchId;
     const type =
       payload && typeof payload.type === "string" ? payload.type : null;
+
+    // ---- rules-engine matches -------------------------------------------------------------
+    // The chain below ends with no generic fallback, so an unlisted type is dropped in
+    // silence; these two have to be named here or the match simply never responds.
+    if (type === "engine:action" || type === "engine:resync") {
+      const engine = engineService();
+      const match = matches.get(matchId);
+      if (!engine || !engine.isEngineMatch(matchId)) return;
+      const seat = engineSeatOf(match, player.id);
+      if (seat === null) return; // a spectator has no actions to take
+      const pushView = async () => {
+        // Each seat is sent ITS OWN view; they are different documents on purpose, and the
+        // difference is the whole security property.
+        for (const other of [0, 1] as const) {
+          const pid = match?.playerIds?.[other];
+          const target = pid ? players.get(pid) : null;
+          const targetSocket = target?.socketId ? io.sockets.sockets.get(target.socketId) : null;
+          if (!targetSocket) continue;
+          const envelope = await engine.viewFor(matchId, other);
+          if (envelope) targetSocket.emit("engine:view", envelope);
+        }
+      };
+      if (type === "engine:resync") {
+        const envelope = await engine.viewFor(matchId, seat);
+        if (envelope) socket.emit("engine:view", envelope);
+        return;
+      }
+      const outcome = await engine.act(matchId, seat, payload?.action, payload?.rev);
+      if (!outcome.ok) {
+        socket.emit("engine:reject", { matchId, reason: outcome.reason, rev: outcome.rev });
+        // Send the board back as the server has it, so a refused client is never left guessing.
+        const envelope = await engine.viewFor(matchId, seat);
+        if (envelope) socket.emit("engine:view", envelope);
+        return;
+      }
+      await pushView();
+      if (outcome.over && match) {
+        // The engine decided this, not a client claim — strictly more trustworthy than the
+        // legacy `client_patch` route, which matters because these matches are rated.
+        const winnerSeat = outcome.winner === 0 ? "p1" : outcome.winner === 1 ? "p2" : null;
+        try {
+          await finalizeMatch(match, {
+            ...(winnerSeat ? { winnerSeat, loserSeat: winnerSeat === "p1" ? "p2" : "p1" } : {}),
+            draw: outcome.draw,
+            source: "engine",
+          });
+        } finally {
+          await engine.end(matchId);
+        }
+      }
+      return;
+    }
+
     if (type === "playerReady") {
       const ready = !!(payload && payload.ready);
       try {
@@ -5422,6 +5596,7 @@ io.on("connection", async (socket: SocketClient) => {
       zone: typeof c.zone === "string" ? c.zone : "",
     }));
     match.playerDecks.set(player.id, cards);
+    void maybeStartEngineMatch(match);
     try {
       persistMatchUpdate(match, null, player.id, Date.now());
     } catch {
