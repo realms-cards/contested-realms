@@ -720,13 +720,9 @@ function createLobbyFeature(deps) {
     const hostPlayer = await ensurePlayerCached(lobby.hostId);
     if (!hostPlayer || hostPlayer.lobbyId !== lobby.id) return;
 
-    const res = await startMatchFromLobby(
-      hostPlayer,
-      "constructed",
-      null,
-      null,
-      null,
-    );
+    const res = await startMatchFromLobby(hostPlayer, {
+      matchType: "constructed",
+    });
     if (!res?.ok) {
       console.warn(
         `[lobby] Failed to auto-start constructed matchmaking lobby ${lobby.id}: ${res?.error || "unknown_error"}`,
@@ -757,16 +753,20 @@ function createLobbyFeature(deps) {
     };
   }
 
-  async function startMatchFromLobby(
-    requestingPlayer,
-    matchType = "constructed",
-    sealedConfig = null,
-    draftConfig = null,
-    soatcLeagueMatch = null,
-    timerConfig = null,
-    enableSeer = false,
-    rematchOfMatch = null,
-  ) {
+  // Options object rather than positionals: the match settings chosen at lobby
+  // creation only grow, and a caller that omits a middle argument silently gets
+  // the default for every setting after it.
+  async function startMatchFromLobby(requestingPlayer, options = {}) {
+    const {
+      matchType = "constructed",
+      sealedConfig = null,
+      draftConfig = null,
+      soatcLeagueMatch = null,
+      timerConfig = null,
+      enableSeer = false,
+      engineMode = false,
+      rematchOfMatch = null,
+    } = options;
     console.log(
       `[Match] Starting match requested by ${requestingPlayer?.displayName}, type: ${matchType}`,
     );
@@ -793,11 +793,17 @@ function createLobbyFeature(deps) {
       enableSeer === true ||
       (matchType === "sealed" && sealedConfig?.enableSeer === true) ||
       (matchType === "draft" && draftConfig?.enableSeer === true);
+    // Engine mode: host opt-in, and only for the deck formats the first cut
+    // supports (sealed/draft pools never reach the engine's card loader).
+    const engineEnabled =
+      engineMode === true &&
+      (matchType === "constructed" || matchType === "precon");
     const match = {
       id: rid("match"),
       lobbyId: lobby.id,
       lobbyName: lobby.name || null,
       enableSeer: seerEnabled,
+      engineMode: engineEnabled,
       timedMatch: Boolean(timer),
       matchTimeMinutes: timer ? timer.matchTimeMinutes : undefined,
       // Flat mirrors so raw `{ ...match }` broadcasts carry them too
@@ -838,8 +844,9 @@ function createLobbyFeature(deps) {
         mulligans: { p1: 1, p2: 1 },
         d20Rolls: { p1: null, p2: null },
         setupWinner: null,
-        // Persisted with the session so the flat flag can be restored on recovery
+        // Persisted with the session so the flat flags can be restored on recovery
         enableSeer: seerEnabled,
+        engineMode: engineEnabled,
       },
       lastTs: 0,
       interactionRequests: new Map(),
@@ -1537,6 +1544,7 @@ function createLobbyFeature(deps) {
         soatcLeagueMatch,
         timerConfig,
         enableSeer,
+        engineMode,
       } = msg;
       const p = await ensurePlayerCached(playerId);
       const lobby = findLobbyForPlayer(playerId, p.lobbyId);
@@ -1544,15 +1552,15 @@ function createLobbyFeature(deps) {
       try {
         p.lobbyId = lobby.id;
       } catch {}
-      const res = await startMatchFromLobby(
-        p,
-        matchType || "constructed",
-        sealedConfig || null,
-        draftConfig || null,
-        soatcLeagueMatch || null,
-        timerConfig || null,
-        enableSeer === true,
-      );
+      const res = await startMatchFromLobby(p, {
+        matchType: matchType || "constructed",
+        sealedConfig: sealedConfig || null,
+        draftConfig: draftConfig || null,
+        soatcLeagueMatch: soatcLeagueMatch || null,
+        timerConfig: timerConfig || null,
+        enableSeer: enableSeer === true,
+        engineMode: engineMode === true,
+      });
       if (lobby && lobbies.has(lobby.id)) {
         await publishLobbyState(lobbies.get(lobby.id));
       } else if (res && res.ok && res.matchId) {
@@ -1699,16 +1707,15 @@ function createLobbyFeature(deps) {
           : null;
         // soatcLeagueMatch is intentionally NOT carried over: the league match
         // was already reported, so the rematch is a casual game.
-        const res = await startMatchFromLobby(
-          host,
-          rematchType,
-          prev.sealedConfig || null,
-          prev.draftConfig || null,
-          null,
+        const res = await startMatchFromLobby(host, {
+          matchType: rematchType,
+          sealedConfig: prev.sealedConfig || null,
+          draftConfig: prev.draftConfig || null,
           timerConfig,
-          prev.enableSeer === true,
-          prev,
-        );
+          enableSeer: prev.enableSeer === true,
+          engineMode: prev.engineMode === true,
+          rematchOfMatch: prev,
+        });
         if (res && res.ok && res.matchId) {
           prev.rematch = null;
           emitToRoster("rematchStarted", {
@@ -2341,7 +2348,9 @@ function createLobbyFeature(deps) {
 
         // 7. Mark bot as ready and start the match
         lobby.ready.add(botId);
-        const res = await startMatchFromLobby(host, cpuMatchType);
+        const res = await startMatchFromLobby(host, {
+          matchType: cpuMatchType,
+        });
         if (!res || !res.ok) {
           socket.emit("cpuMatchError", {
             message: res?.error || "Failed to start match",
@@ -2475,6 +2484,7 @@ function createLobbyFeature(deps) {
         soatcLeagueMatch: payload?.soatcLeagueMatch || null,
         timerConfig: payload?.timerConfig || null,
         enableSeer: payload?.enableSeer === true,
+        engineMode: payload?.engineMode === true,
       };
       try {
         const leader = await getOrClaimLobbyLeader();
