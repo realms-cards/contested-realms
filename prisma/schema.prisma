@@ -578,6 +578,14 @@ model OnlineMatchSession {
   playerDecks  Json?
   sealedPacks  Json?
   game         Json?
+  /// This match is played on the vendored rules engine rather than the legacy board.
+  /// Chosen by the lobby host at creation and fixed for the life of the match — the two
+  /// pipelines cannot be mixed, so the legacy `action` handler refuses an engine match.
+  engineMode   Boolean             @default(false)
+  /// The engine's own GameState, kept apart from `game` on purpose: the legacy column is
+  /// deep-merged with client patches and read by the spectator sanitiser, neither of which
+  /// understands this shape, and either would corrupt a live match.
+  engineState  Json?
   lastTs       BigInt?
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt

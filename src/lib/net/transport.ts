@@ -6,6 +6,8 @@ import type {
   InteractionResultMessage,
 } from "@/lib/net/interactions";
 import type {
+  EngineRejectMessage,
+  EngineViewMessage,
   LobbyUpdatedPayloadT,
   MatchStartedPayloadT,
   MatchReadyPayloadT,
@@ -64,6 +66,13 @@ export type TransportEventMap = {
   /** Every seated player finished loading — board unlocks and the clock starts */
   matchReady: MatchReadyPayloadT;
   matchEnded: { matchId: string; tournamentId?: string; reason?: string };
+  /**
+   * A rules-engine match's board, as the server sees it for THIS seat. It replaces statePatch
+   * entirely for such a match: there is no patch to merge, only the authoritative picture.
+   */
+  "engine:view": EngineViewMessage;
+  /** The server would not apply an action. It sends the real board straight after. */
+  "engine:reject": EngineRejectMessage;
   // Post-match rematch handshake (matchId is the match that just ended)
   rematchState: {
     matchId: string;
@@ -140,6 +149,8 @@ export type StartMatchConfig = {
   timerConfig?: MatchTimerConfig;
   /** Second Player Seer (2nd player scries 1 before game start); off by default */
   enableSeer?: boolean;
+  /** Play on the vendored rules engine instead of the legacy board; off by default */
+  engineMode?: boolean;
 };
 
 export type MatchTimerConfig = {
