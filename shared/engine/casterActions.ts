@@ -17,8 +17,8 @@ import {
   resolveCaster,
   validateSummonAt,
   validateTarget,
-} from "@sorcery/shared";
-import type { Action, CardDef, GameState, PlayerId, Region, UnitState } from "@sorcery/shared";
+} from "../../vendor/untested-realm/shared/src/index";
+import type { Action, CardDef, GameState, PlayerId, Region, UnitState } from "../../vendor/untested-realm/shared/src/index";
 
 /**
  * Upstream's move generator (bot/moves.ts expandActions) covers what its bot needs: avatar casts
@@ -34,6 +34,16 @@ import type { Action, CardDef, GameState, PlayerId, Region, UnitState } from "@s
  *  - Ranged projectile shots (the built-in 'ranged' ability)
  *  - carrying units (pickUp/drop with unitIds), multi-artifact pickups, partial drops
  * Kept in our code so the vendored engine stays pristine.
+ *
+ * It lives in shared/ rather than src/ because BOTH sides need it. In single-player the client
+ * generates its own moves in a worker; in a player-vs-player match the server must, because
+ * the generator trial-applies candidates against a full GameState and a client only ever holds
+ * a redacted view. The server cannot import from src/ — it is a separate tsc build and a
+ * separate image — so a copy there would have rotted against this one.
+ *
+ * The engine is reached by RELATIVE path, never the `@sorcery/shared` alias: tsc does not
+ * rewrite path aliases into the CommonJS the server build emits, so the alias works in the
+ * browser bundle and under tsx, and throws `Cannot find module` in the production image.
  */
 const REGIONS: Region[] = ["surface", "underground", "underwater"];
 /** granted squares can be bare ground — the unit then stands in the void */

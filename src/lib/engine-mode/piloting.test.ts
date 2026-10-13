@@ -2,7 +2,7 @@ import { actingSeatFor, applyAction, createGame } from "@sorcery/shared";
 import type { GameState as EngineState, PlayerId } from "@sorcery/shared";
 import { botNeedsToAct } from "@untested-realm/bot/bot";
 import { describe, expect, it } from "vitest";
-import { legalActionsWithCasters } from "./casterActions";
+import { legalActionsWithCasters } from "@shared/engine/casterActions";
 import { enginePrecons, toEngineDeck } from "./decks";
 import { humanDecisionSeat, isPiloting } from "./session";
 

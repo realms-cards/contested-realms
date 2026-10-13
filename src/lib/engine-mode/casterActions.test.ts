@@ -2,7 +2,7 @@ import { applyAction, cloneState, createGame, getCard, orthAdjacentWrapped, vali
 import type { GameState, PlayerId, Region } from "@sorcery/shared";
 import { botAction, botNeedsToAct } from "@untested-realm/bot/bot";
 import { describe, expect, it } from "vitest";
-import { legalActionsWithCasters } from "./casterActions";
+import { legalActionsWithCasters } from "@shared/engine/casterActions";
 import { enginePrecons, toEngineDeck } from "./decks";
 
 /** Squares upstream's generator tries for summons: on or beside a live site. */

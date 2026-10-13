@@ -1,32 +1,12 @@
 import { betaPrecons } from "@/lib/game/cpu/precons";
+import { toEngineDeck, type NamedCountDeck } from "@shared/engine/decks";
 import { findCard, getScript } from "@sorcery/shared";
 import type { DeckList } from "@sorcery/shared";
 
-/** Deck list as our precon JSON and deck exports store it. */
-export interface NamedCountDeck {
-  id?: string;
-  name: string;
-  avatar: string;
-  spellbook: { name: string; count: number }[];
-  atlas: { name: string; count: number }[];
-}
-
-function toCounts(entries: { name: string; count: number }[]): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const { name, count } of entries) out[name] = (out[name] ?? 0) + count;
-  return out;
-}
-
-/** Card names are identical in both card databases, so decks map one-to-one. */
-export function toEngineDeck(deck: NamedCountDeck): DeckList {
-  return {
-    id: deck.id,
-    name: deck.name,
-    avatar: deck.avatar,
-    spellbook: toCounts(deck.spellbook),
-    atlas: toCounts(deck.atlas),
-  };
-}
+// The conversion itself lives in shared/ because the SERVER needs it too when it starts a
+// player-vs-player match, and the server cannot import from src/.
+export type { NamedCountDeck } from "@shared/engine/decks";
+export { toEngineDeck } from "@shared/engine/decks";
 
 export const enginePrecons: NamedCountDeck[] = betaPrecons;
 
