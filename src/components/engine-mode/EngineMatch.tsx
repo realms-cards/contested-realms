@@ -203,6 +203,8 @@ export default function EngineMatch() {
         <div className="rc-alert" data-tone="info">
           Powered by the open-source Untested Realm engine by Roberto Fratello. All 1,108 cards are scripted, so any
           deck works.
+          Powered by the open-source "Untested Realm" engine by
+          DeliziosoJalapeno. All 1,108 cards are scripted, so any deck works.
         </div>
         <EngineDeckPicker
           label="Your deck"
