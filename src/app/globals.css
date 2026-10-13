@@ -146,12 +146,20 @@ select,
   filter: grayscale(1) saturate(0.9);
 }
 
-body[data-monochrome-mode="true"] > :not(.card-preview-saturation-portal) {
+/* Monochrome must sit on the DOCUMENT ROOT, never on body's children.
+ *
+ * A `filter` other than `none` makes an element a containing block for every `position: fixed`
+ * descendant — the spec exempts only the root element. This rule used to read
+ * `body[data-monochrome-mode="true"] > :not(...)`, which handed each body child that role, and a
+ * body child whose content is entirely fixed collapses to height 0. Measured in Chrome: a
+ * `fixed inset-0` match view went from 1512x807 to 1512x0 and the whole game disappeared, while
+ * the few overlays that do not depend on that box's height stayed put and looked fine.
+ *
+ * The card preview used to be exempted here and kept half its colour. That cannot be expressed
+ * under a root filter — grayscale is destructive and no descendant can undo it — so in
+ * monochrome the preview is now monochrome too, which is what the mode says on the tin. */
+html[data-monochrome-mode="true"] {
   filter: grayscale(1) saturate(0);
-}
-
-body[data-monochrome-mode="true"] > .card-preview-saturation-portal {
-  filter: saturate(0.5);
 }
 
 /* In colorful mode, still tone down color intensity a touch for cohesion */

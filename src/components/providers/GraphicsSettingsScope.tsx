@@ -8,7 +8,10 @@ export default function GraphicsSettingsScope() {
 
   useEffect(() => {
     if (typeof document === "undefined") return;
-    document.body.dataset.monochromeMode = settings.monochromeMode
+    // On the ROOT element, not body: the grayscale filter keyed off this would otherwise make
+    // its host a containing block for fixed-positioned descendants and collapse the game view.
+    // See the rule in globals.css.
+    document.documentElement.dataset.monochromeMode = settings.monochromeMode
       ? "true"
       : "false";
   }, [settings.monochromeMode]);

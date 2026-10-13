@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useCpuBoardPicker } from "./boardPicker";
-import { fieldTargets } from "./fieldTargets";
+import { fieldTargets, toneColors, type FieldTone } from "./fieldTargets";
 
 /**
  * Regression cover for the board-death bug.
@@ -130,5 +130,59 @@ describe("the footprint of a 2x2 anchor", () => {
     expect(Object.keys(useCpuBoardPicker.getState().areas)).toHaveLength(2);
     picker.configure("engine:2", ["3,1"]);
     expect(useCpuBoardPicker.getState().areas).toEqual({});
+  });
+});
+
+describe("the board's colour language under a visual aid", () => {
+  /** What `filter: grayscale(1)` actually leaves of a colour. CSS uses Rec. 709 luma. */
+  const luma = (hex: string): number => {
+    const n = parseInt(hex.slice(1), 16);
+    return 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255);
+  };
+  const TONES: FieldTone[] = ["candidate", "continue", "selected", "target", "source", "area"];
+
+  it("keeps the ordinary board exactly as it was", () => {
+    const colors = toneColors("none");
+    expect(colors.candidate).toBe("#f59e0b");
+    expect(colors.continue).toBe("#a78bfa");
+    expect(colors.selected).toBe("#22c55e");
+    expect(colors.source).toBe("#22d3ee");
+  });
+
+  it("gives every tone its own colour in each mode", () => {
+    for (const aid of ["none", "colorblind", "monochrome"] as const) {
+      const colors = toneColors(aid);
+      for (const tone of TONES) expect(colors[tone], `${aid}/${tone}`).toMatch(/^#[0-9a-f]{6}$/);
+    }
+    // `selected` and `target` share green on the default board by design (both mean "chosen"),
+    // but a mode meant to aid reading must not merge anything else.
+    const cb = toneColors("colorblind");
+    expect(new Set(TONES.map((t) => cb[t])).size, "colour-blind tones are all distinct").toBe(TONES.length);
+    const mono = toneColors("monochrome");
+    expect(new Set(TONES.map((t) => mono[t])).size, "monochrome tones are all distinct").toBe(TONES.length);
+  });
+
+  it("separates the monochrome tones by luminance, which is all it has", () => {
+    const mono = toneColors("monochrome");
+    const steps = TONES.map((t) => luma(mono[t])).sort((a, b) => a - b);
+    // every neighbouring pair clearly apart — the default palette's six all sit inside a
+    // 22-step band once the grayscale filter has had them, which is what this replaces
+    for (let i = 1; i < steps.length; i++) {
+      expect(steps[i] - steps[i - 1], `step ${i} of the ladder`).toBeGreaterThan(20);
+    }
+    expect(steps[steps.length - 1] - steps[0], "the ladder uses most of the range").toBeGreaterThan(140);
+    // what you committed to is the brightest thing on the board
+    expect(luma(mono.selected)).toBe(Math.max(...TONES.map((t) => luma(mono[t]))));
+  });
+
+  it("shows why the default palette needed replacing under grayscale", () => {
+    const plain = toneColors("none");
+    const band = TONES.map((t) => luma(plain[t]));
+    expect(Math.max(...band) - Math.min(...band), "six tones inside one narrow band").toBeLessThan(30);
+  });
+
+  it("falls back to the ordinary board for an unknown mode", () => {
+    const unknown = "something-else" as unknown as Parameters<typeof toneColors>[0];
+    expect(toneColors(unknown)).toEqual(toneColors("none"));
   });
 });

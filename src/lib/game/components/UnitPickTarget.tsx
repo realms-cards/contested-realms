@@ -3,12 +3,13 @@
 import { invalidate, useFrame, type ThreeEvent } from "@react-three/fiber";
 import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DoubleSide, type Group, type Intersection, MathUtils, Mesh, type MeshBasicMaterial, type Raycaster } from "three";
+import { useVisualAid } from "@/hooks/useGraphicsSettings";
 import CardOutline from "@/lib/game/components/CardOutline";
+import { toneColors } from "@/lib/game/cpu/fieldTargets";
 import {
   isPickable,
   pickUnit,
   registerUnitPickPulse,
-  UNIT_PICK_COLORS,
   UNIT_PICK_FILL,
   unitPickDistance,
   type UnitPickOffset,
@@ -66,8 +67,12 @@ const stop = (event: ThreeEvent<PointerEvent | MouseEvent>) => event.stopPropaga
 export function UnitPickCapture({token,state,width,height,rotationZ,elevation = 0.004}: {
   token: string; state: UnitPickState; width: number; height: number; rotationZ: number; elevation?: number;
 }) {
+  // Hooks first: `state` is null for most cards on the board, and an early return above this
+  // would change the hook order between a lit card and an unlit one.
+  const colors = toneColors(useVisualAid());
   if (!state) return null;
-  const color = UNIT_PICK_COLORS[state];
+  // the cards speak the same colour language as the tiles
+  const color = colors[state];
   return <>
     {/* depthTest off: in a stack the neighbours overlap the card — the pick ring must stay whole */}
     <CardOutline width={width} height={height} rotationZ={rotationZ} elevation={elevation} color={color} renderOrder={1700} opacity={0.95} depthTest={false} />

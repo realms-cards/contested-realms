@@ -1,3 +1,4 @@
+import type { VisualAid } from "@/hooks/useGraphicsSettings";
 import { isTileToken, parsePickToken } from "@/lib/game/cpu/pickTokens";
 
 /** How a board target is lit.
@@ -13,6 +14,59 @@ import { isTileToken, parsePickToken } from "@/lib/game/cpu/pickTokens";
  *                 would be choosing */
 export type FieldTone = "candidate" | "continue" | "selected" | "target" | "source" | "area";
 export type ArrowDirection = "N" | "E" | "S" | "W";
+
+/**
+ * The board's colour language, per visual aid. Every renderer that paints a FieldTone — tiles,
+ * arrows and the cards themselves — takes its colours from here, so the three stay in step.
+ *
+ * `none` is the default board: amber to start, violet mid-sequence, green picked, cyan source.
+ * Amber-against-green is exactly the pair red/green colour blindness loses, and it is carrying
+ * the most important distinction on the board ("you may start this" vs "you have picked this"),
+ * so it is the first thing that has to change.
+ *
+ * `colorblind` uses the Okabe-Ito palette, chosen because its eight colours stay mutually
+ * distinguishable under deuteranopia, protanopia and tritanopia alike — one palette instead of
+ * one per condition. The pairs that matter most are kept on the blue/orange axis, which survives
+ * every common dichromacy.
+ *
+ * `monochrome` has no hue to spend, so it separates the tones by LUMINANCE instead: brightest
+ * for what you have committed to, stepping down through what you could still do, down to mere
+ * context. That is not a nicety. Measured through the grayscale filter the app actually applies
+ * (CSS uses Rec. 709 luma), the default six land on 166/153/155/155/175/153 out of 255 — the
+ * entire colour language inside a 22-step band, which is no language at all. The steps below
+ * are ~30 apart. Shape carries the rest: a clickable tile wears brackets and a breathing pip,
+ * a merely-lit one a plain box.
+ */
+const TONE_PALETTES: Record<VisualAid, Record<FieldTone, string>> = {
+  none: {
+    candidate: "#f59e0b",
+    continue: "#a78bfa",
+    selected: "#22c55e",
+    target: "#22c55e",
+    source: "#22d3ee",
+    area: "#a78bfa",
+  },
+  colorblind: {
+    candidate: "#e69f00", // orange
+    continue: "#0072b2", // blue
+    selected: "#f0e442", // yellow — far brighter than anything else, so a pick is unmistakable
+    target: "#009e73", // bluish green
+    source: "#56b4e9", // sky
+    area: "#cc79a7", // reddish purple
+  },
+  monochrome: {
+    selected: "#ffffff", // 255 — what you have picked
+    continue: "#e4e4e4", // 228 — the step you must finish
+    candidate: "#c8c8c8", // 200 — what you could begin
+    area: "#a0a0a0", // 160 — the ground an area would cover
+    target: "#808080", // 128 — already chosen, not clickable
+    source: "#5a5a5a", // 90  — where it comes from
+  },
+};
+
+export function toneColors(aid: VisualAid): Record<FieldTone, string> {
+  return TONE_PALETTES[aid] ?? TONE_PALETTES.none;
+}
 /** Grid step per direction (y grows toward p1's home row), matching the CPU rules' DIRECTIONS. */
 export const ARROW_STEPS: Record<ArrowDirection, readonly [number, number]> = {N:[0,-1],E:[1,0],S:[0,1],W:[-1,0]};
 

@@ -9,10 +9,8 @@ import type { PlayerKey } from "@/lib/game/store/types";
 
 /** How a board card is lit by the CPU board picker, or null when the picker ignores it. */
 export type UnitPickState = FieldTone | null;
-/** Same tones as the tile layer (CpuFieldTargets): amber to start, violet to continue a
- *  started choice, green clicked/chosen, cyan source. `area` is a tile-only tone (the footprint
- *  of a 2x2 anchor) and never reaches a card, but the map has to be total. */
-export const UNIT_PICK_COLORS: Record<FieldTone, string> = {candidate:"#f59e0b",continue:"#a78bfa",selected:"#22c55e",target:"#22c55e",source:"#22d3ee",area:"#a78bfa"};
+// Cards take their colours from `toneColors` in fieldTargets.ts, the same table the tiles and
+// arrows read, so a visual aid changes all three together and a second copy cannot drift.
 
 type PickerView = { tiles: readonly string[]; glow: readonly string[]; sources: readonly string[]; selected: string | null };
 type TileAvatars = Partial<Record<PlayerKey, { pos?: readonly [number, number] | number[] | null } | null | undefined>>;

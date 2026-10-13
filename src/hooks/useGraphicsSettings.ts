@@ -208,3 +208,49 @@ export function useGraphicsSettings() {
 export function getGraphicsSettings(): GraphicsSettings {
   return loadSettings();
 }
+
+/**
+ * Which visual aid is in force, for anything that encodes meaning in COLOUR.
+ *
+ * Both aids are already written to <body> — `data-colorblind` by ColorBlindContext and
+ * `data-monochrome-mode` by GraphicsSettingsScope — and the CSS that follows from them restyles
+ * the DOM. None of that reaches WebGL: a canvas takes the grayscale filter as one flat image, so
+ * the board's own colour language (which tile is clickable, whose unit is whose) has to pick its
+ * palette itself.
+ *
+ * The body attributes are the single source of truth rather than the React context, because
+ * React context does NOT cross into the react-three-fiber tree — the board renders under its own
+ * reconciler. Reading the DOM works identically on both sides of that boundary, the same reason
+ * `getGraphicsSettings` exists.
+ *
+ * Monochrome wins when both are on: once hue is gone, a hue-based palette has nothing to say.
+ */
+export type VisualAid = "none" | "colorblind" | "monochrome";
+
+export function getVisualAid(): VisualAid {
+  if (typeof document === "undefined") return "none";
+  // monochrome lives on <html> (its filter must not become a containing block — see globals.css),
+  // colour blindness on <body> alongside the CSS that keys off it
+  if (document.documentElement.dataset.monochromeMode === "true") return "monochrome";
+  if (document.body.dataset.colorblind === "true") return "colorblind";
+  return "none";
+}
+
+/** `getVisualAid`, re-read whenever either body attribute changes. */
+export function useVisualAid(): VisualAid {
+  // start at "none" so the server render and the first client render agree
+  const [aid, setAid] = useState<VisualAid>("none");
+  useEffect(() => {
+    const sync = () => setAid((current) => {
+      const next = getVisualAid();
+      return next === current ? current : next;
+    });
+    sync();
+    const observer = new MutationObserver(sync);
+    const watch = { attributes: true, attributeFilter: ["data-colorblind", "data-monochrome-mode"] };
+    observer.observe(document.documentElement, watch);
+    observer.observe(document.body, watch);
+    return () => observer.disconnect();
+  }, []);
+  return aid;
+}

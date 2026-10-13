@@ -6,9 +6,10 @@ import { type RefObject, type SyntheticEvent, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useShallow } from "zustand/react/shallow";
 import { RcButton } from "@/components/ui/rc-button";
+import { useVisualAid } from "@/hooks/useGraphicsSettings";
 import { TILE_SIZE } from "@/lib/game/constants";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
-import { ARROW_STEPS, fieldTargets, type ArrowDirection, type ArrowTarget, type FieldTone, type OptionRow } from "@/lib/game/cpu/fieldTargets";
+import { ARROW_STEPS, fieldTargets, toneColors, type ArrowDirection, type ArrowTarget, type FieldTone, type OptionRow } from "@/lib/game/cpu/fieldTargets";
 import { requestCosmeticFrame } from "@/lib/game/render/cosmeticFrame";
 import { useGameStore } from "@/lib/game/store";
 
@@ -16,7 +17,7 @@ type Level = {opacity: number; pulse: number};
 type Fills = RefObject<Map<string, THREE.MeshBasicMaterial>>;
 // Amber = something you could start. Violet = the next step of something you already began,
 // so a target prompt never looks like a fresh choice. Green = picked. Cyan = where it comes from.
-const COLORS: Record<FieldTone, string> = {candidate:"#f59e0b",continue:"#a78bfa",selected:"#22c55e",target:"#22c55e",source:"#22d3ee",area:"#a78bfa"};
+// Under a visual aid the whole set is swapped — see toneColors in fieldTargets.ts.
 // Outline-led like MagicTargetOverlay: the border does the work, a faint pulsing fill keeps the tile readable.
 // `area` is the heaviest static wash: it has to read as one block of ground, not four tiles.
 const TILE_LEVELS: Record<FieldTone, Level> = {candidate:{opacity:0.07,pulse:0.04},continue:{opacity:0.12,pulse:0.07},selected:{opacity:0.16,pulse:0.05},target:{opacity:0.1,pulse:0.03},source:{opacity:0.08,pulse:0.03},area:{opacity:0.2,pulse:0}};
@@ -92,18 +93,19 @@ export default function CpuFieldTargets({offsetX,offsetY}: {offsetX:number;offse
   const {request,tiles,selected,glow,sources,labels,sequence,areas,hovered} = useCpuBoardPicker(useShallow(picker => ({request:picker.request,tiles:picker.tiles,selected:picker.selected,glow:picker.glow,sources:picker.sources,labels:picker.labels,sequence:picker.sequence,areas:picker.areas,hovered:picker.hovered})));
   // `hovered` only feeds the area preview, so a board with no areas never re-derives on hover.
   const anchor = Object.keys(areas).length ? hovered : null;
+  const COLORS = toneColors(useVisualAid());
   const targets = useMemo(() => fieldTargets({tiles,selected,glow,sources,labels,sequence,areas,hovered:anchor}),[tiles,selected,glow,sources,labels,sequence,areas,anchor]);
   // Rules Engine matches (src/lib/engine-mode) drive the same picker; their requests start with "engine".
   if (!cpu && !request.startsWith("engine")) return null;
   const zRange = request.startsWith("engine") ? HTML_Z_ENGINE : HTML_Z;
   return <>
-    {(targets.tiles.size > 0 || targets.arrows.length > 0) && <TargetMeshes offsetX={offsetX} offsetY={offsetY} tones={targets.tiles} arrows={targets.arrows} labels={labels} zRange={zRange} />}
-    {Object.keys(areas).length > 0 && <AreaMarkers offsetX={offsetX} offsetY={offsetY} areas={areas} hovered={hovered} selected={selected} />}
+    {(targets.tiles.size > 0 || targets.arrows.length > 0) && <TargetMeshes offsetX={offsetX} offsetY={offsetY} tones={targets.tiles} arrows={targets.arrows} labels={labels} zRange={zRange} colors={COLORS} />}
+    {Object.keys(areas).length > 0 && <AreaMarkers offsetX={offsetX} offsetY={offsetY} areas={areas} hovered={hovered} selected={selected} colors={COLORS} />}
     {targets.rows.length > 0 && <OptionRows offsetX={offsetX} offsetY={offsetY} rows={targets.rows} zRange={zRange} />}
   </>;
 }
 
-function TargetMeshes({offsetX,offsetY,tones,arrows,labels,zRange}: {offsetX:number;offsetY:number;tones:Map<string, FieldTone>;arrows:ArrowTarget[];labels:Readonly<Record<string, string>>;zRange:[number, number]}) {
+function TargetMeshes({offsetX,offsetY,tones,arrows,labels,zRange,colors}: {offsetX:number;offsetY:number;tones:Map<string, FieldTone>;arrows:ArrowTarget[];labels:Readonly<Record<string, string>>;zRange:[number, number];colors:Record<FieldTone, string>}) {
   const fills = useRef(new Map<string, THREE.MeshBasicMaterial>());
   // Hover lives in the picker store, not locally: a caller can then preview what the hovered
   // token would do (the engine's direction prompt lights that direction's whole lane).
@@ -122,7 +124,7 @@ function TargetMeshes({offsetX,offsetY,tones,arrows,labels,zRange}: {offsetX:num
   const slow = [...tones.values()].some((tone) => tone === "continue") || arrows.some((a) => a.tone === "continue");
   const fill = (token: string) => (material: THREE.MeshBasicMaterial | null) => { if (material) fills.current.set(token,material); else fills.current.delete(token); };
   return <group>{pulsing && <Pulse fills={fills} levels={levels} slow={slow} />}{[...tones].map(([tile,tone]) => {
-    const [x,y] = cell(tile), color = COLORS[tone];
+    const [x,y] = cell(tile), color = colors[tone];
     return <group key={tile} position={[offsetX+x*TILE_SIZE,VISUAL_LIFT,offsetY+y*TILE_SIZE]} rotation-x={-Math.PI/2}>
       <mesh raycast={noRaycast} renderOrder={1100}>
         <planeGeometry args={[TILE_SIZE,TILE_SIZE]} />
@@ -161,7 +163,7 @@ function TargetMeshes({offsetX,offsetY,tones,arrows,labels,zRange}: {offsetX:num
       </Html>}
     </group>;
   })}{arrows.map(({token,at,dir,tone,clickable}) => {
-    const [x,y] = cell(at), [dx,dy] = ARROW_STEPS[dir], color = COLORS[tone], label = labels[token];
+    const [x,y] = cell(at), [dx,dy] = ARROW_STEPS[dir], color = colors[tone], label = labels[token];
     return <group key={token} position={[offsetX+(x*TILE_SIZE)+dx*ARROW_REACH,VISUAL_LIFT+0.001,offsetY+(y*TILE_SIZE)+dy*ARROW_REACH]} rotation={[-Math.PI/2,0,ARROW_TURN[dir]]}>
       <mesh raycast={noRaycast} renderOrder={1102}>
         <shapeGeometry args={[ARROW_SHAPE]} />
@@ -193,7 +195,7 @@ const DIAMOND = new Float32Array([0,DIAMOND_R,0, DIAMOND_R,0,0, 0,-DIAMOND_R,0, 
 // generous, so the crossing is easy to hit with a mouse
 const MARKER_HIT = TILE_SIZE * 0.52;
 
-function AreaMarkers({offsetX,offsetY,areas,hovered,selected}: {offsetX:number;offsetY:number;areas:Record<string, string[]>;hovered:string | null;selected:string | null}) {
+function AreaMarkers({offsetX,offsetY,areas,hovered,selected,colors}: {offsetX:number;offsetY:number;areas:Record<string, string[]>;hovered:string | null;selected:string | null;colors:Record<FieldTone, string>}) {
   const setHovered = useCpuBoardPicker.getState().setHovered;
   const rings = useRef(new Map<string, THREE.LineBasicMaterial>());
   // The crossing is the CENTRE of the covered squares, which stays correct however the board is
@@ -216,7 +218,7 @@ function AreaMarkers({offsetX,offsetY,areas,hovered,selected}: {offsetX:number;o
   const ring = (token: string) => (material: THREE.LineBasicMaterial | null) => { if (material) rings.current.set(token,material); else rings.current.delete(token); };
   return <group>{anchors.map(({token,cx,cy}) => {
     const lit = token === hovered || token === selected;
-    const color = token === selected ? COLORS.selected : lit ? COLORS.area : COLORS.candidate;
+    const color = token === selected ? colors.selected : lit ? colors.area : colors.candidate;
     return <group key={token} position={[offsetX+cx*TILE_SIZE,VISUAL_LIFT+0.001,offsetY+cy*TILE_SIZE]} rotation-x={-Math.PI/2}>
       <mesh raycast={noRaycast} renderOrder={1104}>
         <circleGeometry args={[DIAMOND_R*0.42,4]} />
