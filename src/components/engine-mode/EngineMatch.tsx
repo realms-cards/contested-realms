@@ -206,6 +206,8 @@ export default function EngineMatch() {
           Powered by the open-source "Untested Realm" engine by
           Powered by the open-source &ldquo;Untested Realm&rdquo; engine by
           DeliziosoJalapeno. All 1,108 cards are scripted, so any deck works.
+          Powered by the open-source Untested Realm engine by DeliziosoJalapeno.
+          All 1,108 cards are scripted, so any deck works.
         </div>
         <EngineDeckPicker
           label="Your deck"
