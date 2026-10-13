@@ -98,6 +98,48 @@ const eslintConfig = [
       "no-global-assign": "error",
     },
   },
+  {
+    // The server build used to be fenced off from the app by `rootDir: "."` in
+    // server/tsconfig.json — tsc simply refused an import that climbed out of server/. That
+    // fence had to come down so the server could compile the vendored rules engine alongside
+    // itself (see server/modules/engine/), and this rule is what replaces it.
+    //
+    // The constraint is about RUNTIME code, not types: server/types/socket-events.d.ts has
+    // always pulled types out of src/lib/net, and that is fine — a declaration file emits
+    // nothing, so nothing has to resolve at run time. It is importing a VALUE that breaks,
+    // which is why server/modules/meta-stats-compute.ts carries a duplicate of pure helpers
+    // from src/ instead of importing them. Declaration files are therefore exempt below.
+    //
+    // The engine is reached by RELATIVE path, never the `@sorcery/shared` alias: the alias is
+    // inherited from the root tsconfig and type-checks, and tsx resolves it in development,
+    // but tsc does not rewrite path aliases when emitting CommonJS — so the alias would fail
+    // only in production.
+    files: ["server/**/*.{ts,tsx,js}", "shared/**/*.{ts,tsx,js}"],
+    ignores: ["server/**/*.d.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              // Only the APP's src/, which is always reached either by the @/ alias or by
+              // climbing straight out of server/. A bare `**/src/*` would also match
+              // vendor/untested-realm/shared/src, which is exactly what the server is
+              // supposed to import.
+              group: ["@/*", "../src/*", "../../src/*", "../../../src/*", "../../../../src/*"],
+              message:
+                "The server cannot import RUNTIME code from src/ — it is a separate tsc build and a separate image. Types are fine in a .d.ts; for anything executable, duplicate the pure helper (see server/modules/meta-stats-compute.ts) or move it somewhere both can reach.",
+            },
+            {
+              group: ["@sorcery/shared", "@sorcery/shared/*", "@untested-realm/*", "@shared/*"],
+              message:
+                "Import the engine and shared/ by RELATIVE path from server code. tsc does not rewrite path aliases into the emitted CommonJS, so an alias resolves under server:dev (tsx) and breaks in the production image.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;
