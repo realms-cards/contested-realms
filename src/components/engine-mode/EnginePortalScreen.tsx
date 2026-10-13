@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import { RcButton } from "@/components/ui/rc-button";
 import { harbingerTiles } from "@/lib/engine-mode/projection";
-import { HUMAN_SEAT, useEngineSession } from "@/lib/engine-mode/session";
+import { useEngineSession } from "@/lib/engine-mode/session";
 import D20Dice from "@/lib/game/components/D20Dice";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import type { PlayerKey } from "@/lib/game/store/types";
@@ -21,8 +21,9 @@ const SEAT_NAME: Record<PlayerKey, string> = { p1: "You", p2: "Computer" };
  */
 export default function EnginePortalScreen() {
   const game = useEngineSession((s) => s.game);
+  const viewer = useEngineSession((s) => s.seat);
   const revealPortals = useEngineSession((s) => s.revealPortals);
-  const tiles = useMemo(() => (game ? harbingerTiles(viewFor(game, HUMAN_SEAT)) : {}), [game]);
+  const tiles = useMemo(() => (game ? harbingerTiles(viewFor(game, viewer), viewer) : {}), [game, viewer]);
   const seats = (["p1", "p2"] as const).filter((seat) => tiles[seat]);
 
   // per seat and die: rolled yet, and finished animating

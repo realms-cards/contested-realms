@@ -39,16 +39,18 @@ export function useEngineInteraction(): EngineInteraction {
   const rev = useEngineSession((s) => s.rev);
   const legal = useEngineSession((s) => s.legal);
   const decisionSeat = useEngineSession((s) => s.decisionSeat);
+  // the seat this client plays: every token below is a square on ITS side of the table
+  const viewer = useEngineSession((s) => s.seat);
   const dispatch = useEngineSession((s) => s.dispatch);
   const [clicked, setClicked] = useState<string[]>([]);
 
   useEffect(() => setClicked([]), [rev]);
 
   const { paths, labels } = useMemo(
-    () => (game && legal ? actionPaths(game, legal, decisionSeat ?? 0) : { paths: [], labels: {} }),
+    () => (game && legal ? actionPaths(game, legal, decisionSeat ?? viewer, viewer) : { paths: [], labels: {} }),
     // the engine mutates `game` in place; `rev` marks each new state
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [game, legal, rev, decisionSeat],
+    [game, legal, rev, decisionSeat, viewer],
   );
   const narrowed = useMemo(() => narrow(paths, clicked), [paths, clicked]);
   const cemetery = useMemo(() => {
@@ -133,15 +135,15 @@ export function useEngineInteraction(): EngineInteraction {
           !!next &&
           action.t === "castSpell" &&
           !!action.at &&
-          next === engineCellKey(action.at.x, action.at.y)
+          next === engineCellKey(action.at.x, action.at.y, viewer)
         );
       })
       .map((path) => path.action);
-    picker.setAreas(request, game && placingAura.length ? auraFootprints(game, placingAura) : {});
+    picker.setAreas(request, game && placingAura.length ? auraFootprints(game, placingAura, viewer) : {});
     // `game` is mutated in place by the engine, so `rev` — carried inside `request` — is what
     // marks a real change; the identity of `game` never does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, request, narrowed, labels]);
+  }, [active, request, narrowed, labels, viewer]);
 
   // A board click extends the prefix.
   useEffect(

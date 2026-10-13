@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import CpuCardPick from "@/components/game/CpuCardPick";
 import { RcButton } from "@/components/ui/rc-button";
-import { HUMAN_SEAT, useEngineSession } from "@/lib/engine-mode/session";
+import { useEngineSession } from "@/lib/engine-mode/session";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store/types";
 import { getCardImageUrl } from "@/lib/utils/cdnUrl";
@@ -26,6 +26,7 @@ export default function EngineContextMenu() {
   const contextMenu = useGameStore((s) => s.contextMenu);
   const closeContextMenu = useGameStore((s) => s.closeContextMenu);
   const game = useEngineSession((s) => s.game);
+  const viewer = useEngineSession((s) => s.seat);
   useEngineSession((s) => s.rev);
   const [inspect, setInspect] = useState<{ card: CardRef; facts: UnitFacts | null } | null>(null);
   const [browse, setBrowse] = useState<{ title: string; cards: CardRef[] } | null>(null);
@@ -68,7 +69,8 @@ export default function EngineContextMenu() {
     if (target.kind === "avatar") {
       const card = store.avatars[target.who]?.card;
       if (!card) return null;
-      const seat = target.who === "p1" ? HUMAN_SEAT : ((1 - HUMAN_SEAT) as 0 | 1);
+      // the board always draws the seat we play as p1, so p2 is simply the other one
+      const seat = target.who === "p1" ? viewer : viewer === 0 ? 1 : 0;
       const unit = game.units[game.players[seat].avatarUnitId];
       return { card, facts: unit ? { damage: unit.damage || undefined, tapped: unit.tapped, statuses: [] } : null };
     }

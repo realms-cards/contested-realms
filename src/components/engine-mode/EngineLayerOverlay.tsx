@@ -2,7 +2,7 @@
 
 import { Html } from "@react-three/drei";
 import { engineCellKey } from "@/lib/engine-mode/coords";
-import type { HiddenCounts } from "@/lib/engine-mode/projection";
+import { type HiddenCounts, seatKey } from "@/lib/engine-mode/projection";
 import { useEngineSession } from "@/lib/engine-mode/session";
 import { PLAYER_COLORS, TILE_SIZE } from "@/lib/game/constants";
 import { findCard, isWaterSite, occupiedSquares } from "@sorcery/shared";
@@ -59,6 +59,7 @@ function badgeText(counts: HiddenCounts, layer: "surface" | "subsurface"): strin
  */
 export default function EngineLayerOverlay() {
   const game = useEngineSession((s) => s.game);
+  const viewer = useEngineSession((s) => s.seat);
   useEngineSession((s) => s.rev);
   const layer = useEngineSession((s) => s.layer);
   const hidden = useEngineSession((s) => s.hidden);
@@ -69,7 +70,7 @@ export default function EngineLayerOverlay() {
     layer === "subsurface"
       ? Object.values(game.sites)
           .filter((site) => !site.isRubble)
-          .map((site) => ({ key: engineCellKey(site.x, site.y), water: isWaterSite(game, site, waterDefs) }))
+          .map((site) => ({ key: engineCellKey(site.x, site.y, viewer), water: isWaterSite(game, site, waterDefs) }))
       : [];
 
   // Oversized and stretched bodies (Mountain Giant, the Rack…): outline every occupied square,
@@ -78,10 +79,10 @@ export default function EngineLayerOverlay() {
     .filter((u) => !u.isAvatar && !u.carriedBy && (u.size || u.extraSquares?.length))
     .map((u) => ({
       id: u.id,
-      color: PLAYER_COLORS[u.controller === 0 ? "p1" : "p2"],
+      color: PLAYER_COLORS[seatKey(u.controller, viewer)],
       keys: [
         ...new Set(
-          [...occupiedSquares(u), ...(u.extraSquares ?? [])].map((sq) => engineCellKey(sq.x, sq.y)),
+          [...occupiedSquares(u), ...(u.extraSquares ?? [])].map((sq) => engineCellKey(sq.x, sq.y, viewer)),
         ),
       ],
     }))
@@ -92,8 +93,8 @@ export default function EngineLayerOverlay() {
     layer === "surface"
       ? Object.values(game.auras).map((aura) => ({
           id: aura.id,
-          color: PLAYER_COLORS[aura.controller === 0 ? "p1" : "p2"],
-          keys: [...new Set(aura.squares.map((sq) => engineCellKey(sq.x, sq.y)))],
+          color: PLAYER_COLORS[seatKey(aura.controller, viewer)],
+          keys: [...new Set(aura.squares.map((sq) => engineCellKey(sq.x, sq.y, viewer)))],
         }))
       : [];
 

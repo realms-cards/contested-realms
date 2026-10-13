@@ -2,7 +2,7 @@
 
 import { Html } from "@react-three/drei";
 import { engineCellKey } from "@/lib/engine-mode/coords";
-import { HUMAN_SEAT, useEngineSession } from "@/lib/engine-mode/session";
+import { useEngineSession } from "@/lib/engine-mode/session";
 import { TILE_SIZE } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 
@@ -28,6 +28,7 @@ const HTML_Z: [number, number] = [25, 0];
 
 export default function EngineDamageMarks() {
   const game = useEngineSession((s) => s.game);
+  const viewer = useEngineSession((s) => s.seat);
   useEngineSession((s) => s.rev);
   const layer = useEngineSession((s) => s.layer);
   const width = useGameStore((s) => s.board.size.w);
@@ -50,9 +51,9 @@ export default function EngineDamageMarks() {
   return (
     <group>
       {marks.map((unit) => {
-        const [bx, by] = engineCellKey(unit.x, unit.y).split(",").map(Number);
-        // engine seat 0 is our p1, who sits at the near edge; its cards shift toward it
-        const toward = unit.controller === HUMAN_SEAT ? OWNER_SHIFT : -OWNER_SHIFT;
+        const [bx, by] = engineCellKey(unit.x, unit.y, viewer).split(",").map(Number);
+        // the seat we are drawing for is our p1, who sits at the near edge; its cards shift toward it
+        const toward = unit.controller === viewer ? OWNER_SHIFT : -OWNER_SHIFT;
         return (
           <Html
             key={unit.id}

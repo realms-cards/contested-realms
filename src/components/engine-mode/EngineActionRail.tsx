@@ -7,7 +7,7 @@ import CpuCardPick from "@/components/game/CpuCardPick";
 import { RcButton } from "@/components/ui/rc-button";
 import { useMusicPlayer } from "@/hooks/useMusicPlayer";
 import { cardRefFor } from "@/lib/engine-mode/cardIndex";
-import { HUMAN_SEAT, humanDecisionSeat, useEngineSession } from "@/lib/engine-mode/session";
+import { humanDecisionSeat, useEngineSession } from "@/lib/engine-mode/session";
 import { useGameStore } from "@/lib/game/store";
 import ActionSprite, { type ActionSpriteId } from "./ActionSprite";
 import type { EngineInteraction } from "./useEngineInteraction";
@@ -97,6 +97,7 @@ export default function EngineActionRail({
   onExit: () => void;
 }) {
   const game = useEngineSession((s) => s.game);
+  const viewer = useEngineSession((s) => s.seat);
   useEngineSession((s) => s.rev);
   const canUndo = useEngineSession((s) => s.canUndo);
   const dispatch = useEngineSession((s) => s.dispatch);
@@ -154,7 +155,7 @@ export default function EngineActionRail({
   // Under Courtesan Thaïs the human plays the OPPONENT's turn: the decisions are ours even
   // though `activePlayer` is the other seat, so every action gate follows the decision seat.
   const deciding = humanDecisionSeat(game);
-  const piloting = deciding !== null && deciding !== HUMAN_SEAT;
+  const piloting = deciding !== null && deciding !== viewer;
   const myMain = deciding !== null && game.phase === "main" && game.prompts.length === 0;
   const over = game.phase === "over";
   const pool = collection ?? [];

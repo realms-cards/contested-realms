@@ -10,14 +10,15 @@ import { tokenForEngineId } from "@/lib/engine-mode/actionPaths";
 import { areaFootprints, edgeFootprints, edgeToken, type EngineEdge, permutationPlacements, swapSlots } from "@/lib/engine-mode/areaPrompt";
 import { cardRefFor } from "@/lib/engine-mode/cardIndex";
 import {
-  BOARD_DIRECTION,
+  BOARD_DIRECTIONS,
   boardArrowForStep,
   engineCellKey,
   type EngineDirection,
   engineToBoard,
   localizeEngineText,
+  type ViewerSeat,
 } from "@/lib/engine-mode/coords";
-import { HUMAN_SEAT, useEngineSession } from "@/lib/engine-mode/session";
+import { useEngineSession } from "@/lib/engine-mode/session";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import type { ArrowDirection } from "@/lib/game/cpu/fieldTargets";
 import { dirToken, handToken, pileToken } from "@/lib/game/cpu/pickTokens";
@@ -91,10 +92,10 @@ interface Lane {
  * (it only attaches `from`/`dirs` when every option is a bare n/s/e/w, so Windblast's
  * "north/south/east/west" wording and the 'hold fire' sets fall back to the compass).
  */
-function lanesFor(data: PromptData, options: string[]): { origin: string; lanes: Lane[] } | null {
+function lanesFor(data: PromptData, options: string[], viewer: ViewerSeat): { origin: string; lanes: Lane[] } | null {
   const from = data.from;
   if (!from || typeof from.x !== "number") return null;
-  const origin = engineCellKey(from.x, from.y);
+  const origin = engineCellKey(from.x, from.y, viewer);
   const lanes: Lane[] = [];
   for (const option of options) {
     const dir = directionKey(option) as EngineDirection | null;
@@ -103,16 +104,16 @@ function lanesFor(data: PromptData, options: string[]): { origin: string; lanes:
     // Prefer the arrow the lane actually walks: it survives any rotation mistake. A lane the
     // engine cut short (blocked, or the origin itself is void) has no second square, so fall
     // back to the rotation table; an edge-wrapped lane jumps, so only a unit step counts.
-    const head = squares[1] ? engineToBoard(squares[1].x, squares[1].y) : null;
-    const base = engineToBoard(from.x, from.y);
+    const head = squares[1] ? engineToBoard(squares[1].x, squares[1].y, viewer) : null;
+    const base = engineToBoard(from.x, from.y, viewer);
     const stepped = head ? boardArrowForStep(head.x - base.x, head.y - base.y) : null;
-    const arrow = stepped ?? BOARD_DIRECTION[dir];
+    const arrow = stepped ?? BOARD_DIRECTIONS[viewer][dir];
     lanes.push({
       option,
       dir,
       arrow,
       token: dirToken(origin, arrow),
-      path: squares.slice(1).map((sq) => engineCellKey(sq.x, sq.y)),
+      path: squares.slice(1).map((sq) => engineCellKey(sq.x, sq.y, viewer)),
     });
   }
   return lanes.length ? { origin, lanes } : null;
@@ -132,7 +133,7 @@ interface SquareOption {
  * through "lands at e4" plus "flies off the board", which we were rendering as a wall of
  * text buttons. Anything that names squares belongs on the board instead.
  */
-function squareOptionsFor(options: string[]): SquareOption[] {
+function squareOptionsFor(options: string[], viewer: ViewerSeat): SquareOption[] {
   const out: SquareOption[] = [];
   for (const option of options) {
     const match = /\b([a-e])([1-4])\b/.exec(option);
@@ -140,7 +141,7 @@ function squareOptionsFor(options: string[]): SquareOption[] {
     const x = match[1].charCodeAt(0) - 97;
     const y = Number(match[2]) - 1;
     if (x < 0 || x >= GRID_W || y < 0 || y >= GRID_H) continue;
-    out.push({ option, at: engineCellKey(x, y) });
+    out.push({ option, at: engineCellKey(x, y, viewer) });
   }
   return out;
 }
@@ -160,6 +161,7 @@ function SquarePick({
   squares: SquareOption[];
   onSend: (choice: unknown) => void;
 }) {
+  const viewer = useEngineSession((s) => s.seat);
   const onPick = useMemo(
     () => (token: string) => {
       const hit = squares.find((candidate) => candidate.at === token);
@@ -173,7 +175,7 @@ function SquarePick({
     <PromptBanner title={prompt.title} hint="Click the square on the board." counter={`${squares.length} squares`}>
       {extras.map((option) => (
         <RcButton key={option} variant="outline" size="sm" onClick={() => onSend(option)}>
-          {localizeEngineText(option)}
+          {localizeEngineText(option, viewer)}
         </RcButton>
       ))}
     </PromptBanner>
@@ -197,6 +199,7 @@ function DirectionPick({
   board: { origin: string; lanes: Lane[] };
   onSend: (choice: unknown) => void;
 }) {
+  const viewer = useEngineSession((s) => s.seat);
   const hovered = useCpuBoardPicker((picker) => picker.hovered);
   const byToken = useMemo(() => new Map(board.lanes.map((lane) => [lane.token, lane])), [board.lanes]);
   const onPick = useMemo(
@@ -241,7 +244,7 @@ function DirectionPick({
     >
       {extras.map((option) => (
         <RcButton key={option} variant="outline" size="sm" onClick={() => onSend(option)}>
-          {localizeEngineText(option)}
+          {localizeEngineText(option, viewer)}
         </RcButton>
       ))}
     </PromptBanner>
@@ -283,18 +286,20 @@ function tileNumberOf(cellKey: string): number {
 export function preGameSurface(
   game: EngineState,
   portalsRevealed: boolean,
+  viewer: ViewerSeat = 0,
 ): "portal" | "prompt" | "mulligan" | "none" {
   const prompt = game.prompts[0];
-  const mine = !!prompt && actingSeatFor(game, prompt.player) === HUMAN_SEAT;
+  const mine = !!prompt && actingSeatFor(game, prompt.player) === viewer;
   if (game.phase === "mulligan" && !portalsRevealed) return "portal";
   if (mine) return "prompt";
-  if (game.phase === "mulligan" && !game.players[HUMAN_SEAT].keptHand) return "mulligan";
+  if (game.phase === "mulligan" && !game.players[viewer].keptHand) return "mulligan";
   return prompt ? "none" : "none";
 }
 
 export default function EnginePromptPanel() {
   const game = useEngineSession((s) => s.game);
   const rev = useEngineSession((s) => s.rev);
+  const viewer = useEngineSession((s) => s.seat);
   const portalsRevealed = useEngineSession((s) => s.portalsRevealed);
   // Hold prompts while the turn is being announced, exactly as /play does ("Defer all game
   // overlays while Turn overlay is active"). The draw prompt used to land in the same frame as
@@ -304,7 +309,7 @@ export default function EnginePromptPanel() {
   if (!game) return null;
   if (announcing) return null;
   const prompt = game.prompts[0];
-  switch (preGameSurface(game, portalsRevealed)) {
+  switch (preGameSurface(game, portalsRevealed, viewer)) {
     case "portal":
       return <EnginePortalScreen />;
     case "mulligan":
@@ -380,8 +385,10 @@ const MULLIGAN_MAX = 3;
  */
 function Mulligan({ game }: { game: EngineState }) {
   const dispatch = useEngineSession((s) => s.dispatch);
+  // our own hand, whichever seat we are; the board always draws it as p1's
+  const viewer = useEngineSession((s) => s.seat);
   const [back, setBack] = useState<string[]>([]);
-  const hand = game.players[HUMAN_SEAT].hand;
+  const hand = game.players[viewer].hand;
   const toggle = useMemo(
     () => (id: string) =>
       setBack((cur) => (cur.includes(id) ? cur.filter((c) => c !== id) : cur.length < MULLIGAN_MAX ? [...cur, id] : cur)),
@@ -421,11 +428,12 @@ function Mulligan({ game }: { game: EngineState }) {
 
 function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Prompt }) {
   const dispatch = useEngineSession((s) => s.dispatch);
+  const viewer = useEngineSession((s) => s.seat);
   // titles come from the engine and may name squares in engine space — show our tile numbers
-  const prompt = { ...rawPrompt, title: localizeEngineText(rawPrompt.title ?? "") };
+  const prompt = { ...rawPrompt, title: localizeEngineText(rawPrompt.title ?? "", viewer) };
   const data = (prompt.data ?? {}) as PromptData;
   const send = (choice: unknown) => dispatch(answer(prompt.id, choice));
-  const auto = () => dispatch(botAction(game, HUMAN_SEAT));
+  const auto = () => dispatch(botAction(game, viewer));
   const autoButton = (
     <RcButton variant="ghost" size="xs" onClick={auto} title="Let the engine answer this for you">
       Auto
@@ -468,8 +476,8 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
         <SinglePick
           request={`engine-prompt:${prompt.id}`}
           title={prompt.title || "Intercept with a unit?"}
-          tokens={ids.map((id) => tokenForEngineId(game, id))}
-          onPick={(token) => send(ids.find((id) => tokenForEngineId(game, id) === token) ?? null)}
+          tokens={ids.map((id) => tokenForEngineId(game, id, viewer, viewer))}
+          onPick={(token) => send(ids.find((id) => tokenForEngineId(game, id, viewer, viewer) === token) ?? null)}
         >
           <RcButton variant="outline" size="xs" onClick={() => send(null)}>
             Don&apos;t intercept
@@ -490,9 +498,9 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
         <SinglePick
           request={`engine-prompt:${prompt.id}`}
           title={prompt.title || "Choose a square"}
-          tokens={squares.map((sq) => engineCellKey(sq.x, sq.y))}
+          tokens={squares.map((sq) => engineCellKey(sq.x, sq.y, viewer))}
           card={promptCtxCard(game, prompt)}
-          onPick={(token) => send(squares.find((sq) => engineCellKey(sq.x, sq.y) === token) ?? null)}
+          onPick={(token) => send(squares.find((sq) => engineCellKey(sq.x, sq.y, viewer) === token) ?? null)}
         >
           {autoButton}
         </SinglePick>
@@ -508,7 +516,7 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
           request={`engine-prompt:${prompt.id}`}
           title={prompt.title}
           ids={ids}
-          tokenOf={(id) => tokenForEngineId(game, id)}
+          tokenOf={(id) => tokenForEngineId(game, id, viewer, viewer)}
           min={min}
           max={max}
           confirmLabel={(n) => (prompt.kind === "defend" ? (n ? `Defend with ${n}` : "No defenders") : "Confirm")}
@@ -545,7 +553,7 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
               <div className="mt-3 flex justify-center gap-2">
                 {(data.options ?? []).map((option) => (
                   <RcButton key={option} variant="outline" size="sm" onClick={() => send(option)}>
-                    {localizeEngineText(option)}
+                    {localizeEngineText(option, viewer)}
                   </RcButton>
                 ))}
               </div>
@@ -556,17 +564,17 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
         const options = data.options ?? [];
         const dirs = options.map((option) => ({ key: directionKey(option), label: option }));
         // A direction belongs on the board, aimed from the source square — not in a popup.
-        const board = dirs.filter((d) => d.key).length >= 3 ? lanesFor(data, options) : null;
+        const board = dirs.filter((d) => d.key).length >= 3 ? lanesFor(data, options, viewer) : null;
         if (board) return <DirectionPick prompt={prompt} options={options} board={board} onSend={send} />;
         // options that name squares (Chaos Twister's landing roll) are picked on the board
-        const squares = squareOptionsFor(options);
+        const squares = squareOptionsFor(options, viewer);
         if (squares.length >= 2) return <SquarePick prompt={prompt} options={options} squares={squares} onSend={send} />;
         // no origin from the engine (Windblast's worded options, 'hold fire' sets): compass
         if (options.length >= 3 && dirs.every((d) => d.key)) {
           return (
             <PromptDialog title={prompt.title} hint="Choose a direction.">
               <Compass
-                options={dirs.map((d) => ({ key: BOARD_DIRECTION[d.key as EngineDirection], label: d.label }))}
+                options={dirs.map((d) => ({ key: BOARD_DIRECTIONS[viewer][d.key as EngineDirection], label: d.label }))}
                 onPick={send}
               />
             </PromptDialog>
@@ -578,7 +586,7 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
               {options.map((option) => (
                 // display localized, but answer with the engine's own option string
                 <RcButton key={option} variant="outline" size="sm" onClick={() => send(option)}>
-                  {localizeEngineText(option)}
+                  {localizeEngineText(option, viewer)}
                 </RcButton>
               ))}
             </div>
@@ -745,6 +753,7 @@ function AllocateDamage({
   data: PromptData;
   onSend: (choice: unknown) => void;
 }) {
+  const viewer = useEngineSession((s) => s.seat);
   const ids = data.candidates ?? [];
   const power = data.power ?? 0;
   const [split, setSplit] = useState<Record<string, number>>(() => (ids[0] ? { [ids[0]]: power } : {}));
@@ -755,7 +764,12 @@ function AllocateDamage({
       if (delta > 0 && used >= power) return cur;
       return { ...cur, [id]: next };
     });
-  useBoardPick(`engine-prompt:${prompt.id}:glow`, [], ids.map((id) => tokenForEngineId(game, id)), () => undefined);
+  useBoardPick(
+    `engine-prompt:${prompt.id}:glow`,
+    [],
+    ids.map((id) => tokenForEngineId(game, id, viewer, viewer)),
+    () => undefined,
+  );
   return (
     <PromptDialog title={prompt.title} hint={`Split ${power} damage among the enemy.`}>
       <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
@@ -999,14 +1013,15 @@ function AreaPick({
   onSend: (choice: unknown) => void;
   children?: React.ReactNode;
 }) {
+  const viewer = useEngineSession((s) => s.seat);
   const hovered = useCpuBoardPicker((picker) => picker.hovered);
-  const areas = useMemo(() => areaFootprints(game, squares), [game, squares]);
+  const areas = useMemo(() => areaFootprints(game, squares, viewer), [game, squares, viewer]);
   const onPick = useMemo(
     () => (token: string) => {
-      const hit = squares.find((anchor) => engineCellKey(anchor.x, anchor.y) === token);
+      const hit = squares.find((anchor) => engineCellKey(anchor.x, anchor.y, viewer) === token);
       if (hit) onSend(hit);
     },
-    [squares, onSend],
+    [squares, onSend, viewer],
   );
   const tokens = useMemo(() => Object.keys(areas), [areas]);
   useBoardPick(`engine-prompt:${prompt.id}`, tokens, [], onPick, undefined, { areas });
@@ -1047,8 +1062,9 @@ function EdgePick({
   onSend: (choice: unknown) => void;
   children?: React.ReactNode;
 }) {
+  const viewer = useEngineSession((s) => s.seat);
   const hovered = useCpuBoardPicker((picker) => picker.hovered);
-  const areas = useMemo(() => edgeFootprints(edges), [edges]);
+  const areas = useMemo(() => edgeFootprints(edges, viewer), [edges, viewer]);
   const onPick = useMemo(
     () => (token: string) => {
       const edge = edges.find((candidate) => edgeToken(candidate.key) === token);
@@ -1098,13 +1114,14 @@ function SitePermutation({
   onSend: (choice: unknown) => void;
   auto?: React.ReactNode;
 }) {
+  const viewer = useEngineSession((s) => s.seat);
   /** The area's squares in reading order on OUR board, so the grid matches what is on screen. */
   const slots = useMemo(() => {
     const cells = data.cells ?? (data.squares ?? []).map((sq) => ({ ...sq, name: null, movable: true }));
     return cells
-      .map((cell) => ({ ...cell, at: engineCellKey(cell.x, cell.y) }))
+      .map((cell) => ({ ...cell, at: engineCellKey(cell.x, cell.y, viewer) }))
       .sort((a, b) => tileNumberOf(a.at) - tileNumberOf(b.at));
-  }, [data.cells, data.squares]);
+  }, [data.cells, data.squares, viewer]);
   /** `holders[i]` is the slot whose site currently stands on slot `i`; identity = nothing moved. */
   const [holders, setHolders] = useState<number[]>(() => slots.map((_, i) => i));
   const [from, setFrom] = useState<number | null>(null);

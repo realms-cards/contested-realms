@@ -4,7 +4,7 @@ import { botAction, botNeedsToAct } from "@untested-realm/bot/bot";
 import { describe, expect, it, vi } from "vitest";
 import { actionPaths, narrow } from "./actionPaths";
 import { loadCardIndex } from "./cardIndex";
-import { legalActionsWithCasters } from "./casterActions";
+import { legalActionsWithCasters } from "@shared/engine/casterActions";
 import { engineCellKey } from "./coords";
 import { apiDeckToEngine, enginePrecons, toEngineDeck } from "./decks";
 import {
@@ -548,5 +548,61 @@ describe("modified power and life", () => {
     const after = unitPower(game).uWeak;
     expect(after.atk, "the engine floors power at zero").toBe(0);
     expect(after.def).toBe(0);
+  });
+});
+
+describe("projecting for the seat-1 viewer", () => {
+  // Online, either seat may be looking. Whoever is looking has to be P1 at the bottom of the
+  // board, so the projection takes the viewer's seat and everything seat-shaped follows it.
+  const freshGame = () => {
+    const [a, b] = [enginePrecons[0], enginePrecons[1]];
+    return createGame([toEngineDeck(a), toEngineDeck(b)], ["You", "Computer"], 23, 0 as PlayerId);
+  };
+
+  it("seats the viewer at the bottom and the opponent at the top", () => {
+    const game = freshGame();
+    const seen = projectView(viewFor(game, 1), "surface", true, {}, 1);
+    for (const unit of Object.values(game.units)) {
+      if (!unit.isAvatar) continue;
+      const avatar = seen.avatars[unit.owner === 1 ? "p1" : "p2"];
+      expect(avatar.pos && `${avatar.pos[0]},${avatar.pos[1]}`).toBe(engineCellKey(unit.x, unit.y, 1));
+    }
+    // seat 1's avatar starts at engine (2,3), which for this viewer is the near row
+    expect(seen.avatars.p1.pos).toEqual([2, 3]);
+    expect(seen.avatars.p2.pos).toEqual([2, 0]);
+  });
+
+  it("shows the viewer their own hand and hides the opponent's", () => {
+    const game = freshGame();
+    const seen = projectView(viewFor(game, 1), "surface", true, {}, 1);
+    expect(seen.zones.p1.hand).toHaveLength(game.players[1].hand.length);
+    expect(seen.zones.p1.hand.every((c) => c.name !== "Unknown")).toBe(true);
+    expect(seen.zones.p2.hand.every((c) => c.name === "Unknown")).toBe(true);
+  });
+
+  it("is the seat-0 projection turned around, not mirrored", () => {
+    const game = freshGame();
+    // same engine state, both viewpoints: a square one viewer calls (x,y) the other calls
+    // (4-x,3-y) — a left-right mirror would agree on x
+    const mine = projectView(viewFor(game, 0), "surface", true, {}, 0);
+    const theirs = projectView(viewFor(game, 1), "surface", true, {}, 1);
+    const site = Object.values(game.sites).find((s) => !s.isRubble);
+    if (site) {
+      expect(mine.board.sites[engineCellKey(site.x, site.y, 0)]).toBeTruthy();
+      expect(theirs.board.sites[engineCellKey(site.x, site.y, 1)]).toBeTruthy();
+      const [mx, my] = engineCellKey(site.x, site.y, 0).split(",").map(Number);
+      const [tx, ty] = engineCellKey(site.x, site.y, 1).split(",").map(Number);
+      expect({ x: tx, y: ty }).toEqual({ x: 4 - mx, y: 3 - my });
+    }
+    // and each viewer's own seat owns the P1 side of every seat-derived field
+    expect(mine.currentPlayer).toBe(game.activePlayer === 0 ? 1 : 2);
+    expect(theirs.currentPlayer).toBe(game.activePlayer === 1 ? 1 : 2);
+  });
+
+  it("still defaults to seat 0 when no viewer is given", () => {
+    const game = freshGame();
+    const view = viewFor(game, 0);
+    expect(projectView(view)).toEqual(projectView(view, "surface", true, {}, 0));
+    expect(harbingerTiles(view)).toEqual(harbingerTiles(view, 0));
   });
 });

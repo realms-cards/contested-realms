@@ -1,6 +1,6 @@
 import { aura2x2Squares, edgesConnected, getCard, getScript } from "@sorcery/shared";
 import type { Action, GameState as EngineState } from "@sorcery/shared";
-import { engineCellKey } from "./coords";
+import { engineCellKey, type ViewerSeat } from "./coords";
 
 /**
  * The board logic behind the engine's two AREA prompts, kept out of the component so it can be
@@ -14,12 +14,18 @@ import { engineCellKey } from "./coords";
  */
 
 /** Anchor tile token -> the board cells picking that anchor would cover. */
-export function areaFootprints(game: EngineState, anchors: readonly { x: number; y: number }[]): Record<string, string[]> {
+export function areaFootprints(
+  game: EngineState,
+  anchors: readonly { x: number; y: number }[],
+  viewer: ViewerSeat = 0,
+): Record<string, string[]> {
   // Magellan Globe joins the board's edges, and then a 2x2 wraps around them
   const wrap = edgesConnected(game);
   const out: Record<string, string[]> = {};
   for (const anchor of anchors) {
-    out[engineCellKey(anchor.x, anchor.y)] = aura2x2Squares(anchor, wrap).map((sq) => engineCellKey(sq.x, sq.y));
+    out[engineCellKey(anchor.x, anchor.y, viewer)] = aura2x2Squares(anchor, wrap).map((sq) =>
+      engineCellKey(sq.x, sq.y, viewer),
+    );
   }
   return out;
 }
@@ -56,7 +62,11 @@ export function areaFootprints(game: EngineState, anchors: readonly { x: number;
  */
 export const SINGLE_SQUARE_AURAS: ReadonlySet<string> = new Set(["Salt the Earth", "Sow the Earth"]);
 
-export function auraFootprints(game: EngineState, actions: readonly Action[]): Record<string, string[]> {
+export function auraFootprints(
+  game: EngineState,
+  actions: readonly Action[],
+  viewer: ViewerSeat = 0,
+): Record<string, string[]> {
   const anchors: { x: number; y: number }[] = [];
   const seen = new Set<string>();
   for (const action of actions) {
@@ -70,7 +80,7 @@ export function auraFootprints(game: EngineState, actions: readonly Action[]): R
     seen.add(key);
     anchors.push({ x: action.at.x, y: action.at.y });
   }
-  return anchors.length ? areaFootprints(game, anchors) : {};
+  return anchors.length ? areaFootprints(game, anchors, viewer) : {};
 }
 
 export interface EngineEdge {
@@ -89,11 +99,11 @@ export interface EngineEdge {
  * Feeding the pair of squares through the same area machinery puts a marker on the border itself
  * (the midpoint of the two cells) and lights both squares it divides.
  */
-export function edgeFootprints(edges: readonly EngineEdge[]): Record<string, string[]> {
+export function edgeFootprints(edges: readonly EngineEdge[], viewer: ViewerSeat = 0): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const edge of edges) {
     if (!edge?.key) continue;
-    out[edgeToken(edge.key)] = [engineCellKey(edge.a.x, edge.a.y), engineCellKey(edge.b.x, edge.b.y)];
+    out[edgeToken(edge.key)] = [engineCellKey(edge.a.x, edge.a.y, viewer), engineCellKey(edge.b.x, edge.b.y, viewer)];
   }
   return out;
 }
