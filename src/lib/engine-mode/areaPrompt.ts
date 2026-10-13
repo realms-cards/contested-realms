@@ -1,5 +1,5 @@
-import { aura2x2Squares, edgesConnected } from "@sorcery/shared";
-import type { GameState as EngineState } from "@sorcery/shared";
+import { aura2x2Squares, edgesConnected, getCard, getScript } from "@sorcery/shared";
+import type { Action, GameState as EngineState } from "@sorcery/shared";
 import { engineCellKey } from "./coords";
 
 /**
@@ -22,6 +22,55 @@ export function areaFootprints(game: EngineState, anchors: readonly { x: number;
     out[engineCellKey(anchor.x, anchor.y)] = aura2x2Squares(anchor, wrap).map((sq) => engineCellKey(sq.x, sq.y));
   }
   return out;
+}
+
+/**
+ * The footprint of every Aura among `actions`, keyed by the tile token of the square it would be
+ * anchored on.
+ *
+ * An ordinary aura cast never raises a prompt — the square is part of the action and our
+ * click-path offers it as a plain tile, which told the player nothing about the four sites they
+ * were about to cover. Feeding these to the picker turns those tiles into markers on the
+ * crossings, with the covered sites lit under the pointer.
+ *
+ * An aura that covers ONE site needs no footprint (the tile it sits on says it), and a Wall
+ * picks its border afterwards in its own Genesis step, so both are deliberately left out and
+ * stay ordinary tiles — as are the auras in SINGLE_SQUARE_AURAS.
+ */
+/**
+ * Auras that end up on ONE square although nothing static says so.
+ *
+ * The engine decides an aura's footprint twice. `singleSiteAura` / `edgeAura` are declared up
+ * front and we can read them — but a Genesis may simply overwrite `aura.squares` afterwards,
+ * and these two set it to the single square they were conjured on. Upstream cannot express
+ * that with the flag it has: `singleSiteAura` makes the engine offer only squares that HOLD a
+ * site, which is right for Salt the Earth ("conjured atop a site") and exactly wrong for Sow
+ * the Earth ("needs a void square"). Upstream's own placement UI shows 2x2 markers for both.
+ *
+ * So the list is kept here, and `auraShapes.test.ts` re-derives it from the vendored scripts on
+ * every run: if a re-vendor brings in another aura that rewrites its squares, that test fails
+ * rather than the board quietly promising four sites and delivering one.
+ *
+ * Thunderstorm is deliberately NOT here — it only translates its squares as it drifts, so the
+ * 2x2 it is placed as is honest.
+ */
+export const SINGLE_SQUARE_AURAS: ReadonlySet<string> = new Set(["Salt the Earth", "Sow the Earth"]);
+
+export function auraFootprints(game: EngineState, actions: readonly Action[]): Record<string, string[]> {
+  const anchors: { x: number; y: number }[] = [];
+  const seen = new Set<string>();
+  for (const action of actions) {
+    if (action.t !== "castSpell" || !action.at) continue;
+    const name = game.cards[action.cardId]?.name;
+    if (!name || getCard(name)?.type !== "Aura") continue;
+    const script = getScript(name) as { singleSiteAura?: boolean; edgeAura?: boolean } | undefined;
+    if (script?.singleSiteAura || script?.edgeAura || SINGLE_SQUARE_AURAS.has(name)) continue;
+    const key = `${action.at.x},${action.at.y}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    anchors.push({ x: action.at.x, y: action.at.y });
+  }
+  return anchors.length ? areaFootprints(game, anchors) : {};
 }
 
 export interface EngineEdge {

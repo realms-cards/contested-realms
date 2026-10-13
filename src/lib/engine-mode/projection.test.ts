@@ -372,12 +372,27 @@ describe("subsurface hint", () => {
 });
 
 describe("tile layout", () => {
-  const crowd = (n: number) => {
+  /**
+   * `n` units on one square. They are placed AWAY from the avatar on purpose: the avatar takes
+   * a slot in the tile layout like anything else, so putting the crowd under it would be
+   * measuring a tile with n+1 occupants.
+   */
+  const crowd = (n: number, onAvatarSquare = false) => {
     const deck = toEngineDeck(enginePrecons[0]);
     const game = createGame([deck, deck], ["You", "Computer"], 23, 0 as PlayerId);
     const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === 0)!;
+    const spot = onAvatarSquare ? { x: avatar.x, y: avatar.y } : { x: 0, y: 2 };
+    expect(onAvatarSquare || spot.x !== avatar.x || spot.y !== avatar.y, "crowd is clear of the avatar").toBe(true);
     for (let i = 0; i < n; i++) {
-      game.units[`uX${i}`] = { ...avatar, id: `uX${i}`, isAvatar: false, name: `Crowd ${i}`, region: "surface" };
+      game.units[`uX${i}`] = {
+        ...avatar,
+        id: `uX${i}`,
+        isAvatar: false,
+        name: `Crowd ${i}`,
+        region: "surface",
+        x: spot.x,
+        y: spot.y,
+      };
     }
     return projectView(viewFor(game, 0), "surface");
   };
@@ -389,6 +404,25 @@ describe("tile layout", () => {
       expect(only[0].offset).toBeNull();
       expect(only[0].scale).toBeUndefined();
     }
+  });
+
+  it("gives the avatar a slot of its own rather than letting a card sit on it", () => {
+    // The avatar is the most-read thing on the board; a card dropped on its square used to
+    // land exactly on top of it, hiding each from the other.
+    const projected = crowd(1, true);
+    const avatar = projected.avatars.p1;
+    const at = `${avatar.pos![0]},${avatar.pos![1]}`;
+    const card = projected.permanents[at]?.find((p) => p.instanceId === "uX0");
+    expect(card, "the card is on the avatar's square").toBeTruthy();
+    expect(avatar.offset, "the avatar stepped aside").not.toBeNull();
+    expect(card!.offset, "and the card took its own slot").not.toBeNull();
+    const apart = Math.hypot(avatar.offset![0] - card!.offset![0], avatar.offset![1] - card!.offset![1]);
+    expect(apart, "they are not in the same place").toBeGreaterThan(0);
+  });
+
+  it("leaves an avatar standing alone exactly where it was", () => {
+    const projected = crowd(1); // the crowd is elsewhere, so the avatar's square is its own
+    expect(projected.avatars.p1.offset).toBeNull();
   });
 
   it("gives every card on a crowded tile its own spot", () => {

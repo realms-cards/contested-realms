@@ -192,8 +192,10 @@ function TargetMeshes({offsetX,offsetY,tones,arrows,labels,zRange,colors}: {offs
 // invited the player to read it as "choose this square", which is a different thing entirely.
 const DIAMOND_R = TILE_SIZE * 0.17;
 const DIAMOND = new Float32Array([0,DIAMOND_R,0, DIAMOND_R,0,0, 0,-DIAMOND_R,0, -DIAMOND_R,0,0]);
-// generous, so the crossing is easy to hit with a mouse
-const MARKER_HIT = TILE_SIZE * 0.52;
+// Exactly one tile across, so the markers' hit boxes TILE the board: wherever the pointer is,
+// it falls inside the box of the crossing nearest to it and that crossing previews itself. The
+// preview therefore follows the cursor around the board instead of waiting to be hovered.
+const MARKER_HIT = TILE_SIZE;
 
 function AreaMarkers({offsetX,offsetY,areas,hovered,selected,colors}: {offsetX:number;offsetY:number;areas:Record<string, string[]>;hovered:string | null;selected:string | null;colors:Record<FieldTone, string>}) {
   const setHovered = useCpuBoardPicker.getState().setHovered;

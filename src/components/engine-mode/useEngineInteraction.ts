@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { actionHint, actionPaths, narrow } from "@/lib/engine-mode/actionPaths";
 import { useEngineSession } from "@/lib/engine-mode/session";
+import { auraFootprints } from "@/lib/engine-mode/areaPrompt";
+import { engineCellKey } from "@/lib/engine-mode/coords";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import type { Action } from "@sorcery/shared";
 
@@ -115,6 +117,27 @@ export function useEngineInteraction(): EngineInteraction {
     // Once a choice has been started, what is lit is the NEXT STEP of it, not a fresh option.
     // The board colours and paces those differently so a half-finished action is obvious.
     picker.setSequence(request, narrowed.prefix.length > 0);
+    // An aura covers a 2x2 of sites and is anchored on the crossing between them. Hand the
+    // board those footprints and the candidate squares become markers on the crossings, each
+    // lighting exactly the sites it would cover as the pointer passes over it.
+    //
+    // Only once the square is the step actually being asked for. Before that — while the aura
+    // is merely sitting in hand, castable — every one of its anchors is still in `matching`,
+    // and publishing those covered the whole board in crossings before the player had chosen
+    // anything at all.
+    const placingAura = narrowed.matching
+      .filter((path) => {
+        const next = path.steps[narrowed.prefix.length];
+        const action = path.action;
+        return (
+          !!next &&
+          action.t === "castSpell" &&
+          !!action.at &&
+          next === engineCellKey(action.at.x, action.at.y)
+        );
+      })
+      .map((path) => path.action);
+    picker.setAreas(request, game && placingAura.length ? auraFootprints(game, placingAura) : {});
     // `game` is mutated in place by the engine, so `rev` — carried inside `request` — is what
     // marks a real change; the identity of `game` never does.
     // eslint-disable-next-line react-hooks/exhaustive-deps

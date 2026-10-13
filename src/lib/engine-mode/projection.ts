@@ -283,21 +283,40 @@ function tokenCard(name: string, instanceId: string, owner: PlayerKey): CardRef 
  * comfortably and anything more has to shrink. Attached items (status tokens, carried
  * artifacts) are excluded: the board draws those on their host, not as tile occupants.
  */
-function spreadOnTile(items: PermanentItem[]): void {
+/**
+ * Lay a tile's occupants out side by side instead of in a pile.
+ *
+ * `standing` are the avatars on this square. They take a slot in the grid like everything else
+ * — an avatar that sits UNDER the units sharing its square hides them and is hidden by them,
+ * and "whose avatar is where" is the single most-read fact on the board. They are counted
+ * first so they keep the leftmost slots as the tile fills up.
+ *
+ * Only the permanents are scaled down to fit. An avatar keeps its size: its root group owns a
+ * RigidBody whose collider does not follow a parent scale, so shrinking it would leave its
+ * physics body behind. The grid is therefore sized by the cards, and the avatar occupies its
+ * cell at full size — which is also how it reads at a table.
+ */
+function spreadOnTile(items: PermanentItem[], standing: AvatarState[] = []): void {
   const loose = items.filter((item) => !item.attachedTo);
-  if (loose.length < 2) return;
-  const cols = loose.length <= 2 ? loose.length : loose.length <= 6 ? 3 : 4;
-  const rows = Math.ceil(loose.length / cols);
+  const total = loose.length + standing.length;
+  if (total < 2) return;
+  const cols = total <= 2 ? total : total <= 6 ? 3 : 4;
+  const rows = Math.ceil(total / cols);
   // leave a small margin so a card never bleeds over the grid line
   const room = TILE_SIZE * 0.94;
   const scale = Math.min(1, room / (cols * CARD_SHORT), room / (rows * CARD_LONG));
   const stepX = CARD_SHORT * scale * 1.04;
   const stepZ = CARD_LONG * scale * 1.04;
+  /** centre the block on the tile; the board still nudges it toward its owner afterwards */
+  const slot = (i: number): [number, number] => [
+    ((i % cols) - (cols - 1) / 2) * stepX,
+    (Math.floor(i / cols) - (rows - 1) / 2) * stepZ,
+  ];
+  standing.forEach((avatar, i) => {
+    avatar.offset = slot(i);
+  });
   loose.forEach((item, i) => {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    // centre the block on the tile; the board still nudges it toward its owner afterwards
-    item.offset = [(col - (cols - 1) / 2) * stepX, (row - (rows - 1) / 2) * stepZ];
+    item.offset = slot(standing.length + i);
     item.scale = scale;
   });
 }
@@ -527,9 +546,21 @@ export function projectView(view: PlayerView, layer: BoardLayer = "surface", por
     if (theft?.cardId && thief) sealed.set(theft.cardId, thief.name);
   }
 
-  // every occupant of a square is known by now (units, artifacts, auras, status tokens and
-  // the other layer's hints), so give each tile a side-by-side layout
-  for (const items of Object.values(permanents)) spreadOnTile(items);
+  // Every occupant of a square is known by now (units, artifacts, auras, status tokens, the
+  // other layer's hints — and the avatars), so give each tile a side-by-side layout. The
+  // avatars are grouped by square first so a tile they share is laid out as one block.
+  const standingAt = new Map<string, AvatarState[]>();
+  for (const avatar of Object.values(avatars)) {
+    if (!avatar.pos) continue;
+    const at = `${avatar.pos[0]},${avatar.pos[1]}`;
+    const here = standingAt.get(at);
+    if (here) here.push(avatar);
+    else standingAt.set(at, [avatar]);
+  }
+  for (const [at, avatarsHere] of standingAt) {
+    if (!permanents[at]) spreadOnTile([], avatarsHere); // two avatars sharing a bare square
+  }
+  for (const [at, items] of Object.entries(permanents)) spreadOnTile(items, standingAt.get(at) ?? []);
 
   const zones = {} as Record<PlayerKey, Zones>;
   for (const p of players) {
