@@ -1,4 +1,4 @@
-import { applyAction, createGame, viewFor } from "@sorcery/shared";
+import { applyAction, createGame, getCard, viewFor } from "@sorcery/shared";
 import type { PlayerId } from "@sorcery/shared";
 import { botAction, botNeedsToAct } from "@untested-realm/bot/bot";
 import { describe, expect, it, vi } from "vitest";
@@ -16,6 +16,7 @@ import {
   hiddenLayerCounts,
   layerOf,
   projectView,
+  unitPower,
 } from "./projection";
 import { getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
 import { CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
@@ -397,13 +398,36 @@ describe("tile layout", () => {
     return projectView(viewFor(game, 0), "surface");
   };
 
-  it("leaves a lone card centred and full size", () => {
+  it("pushes even a lone card to its owner's edge, a little under full size", () => {
+    // Nothing sits centred any more: a card parked in the middle of a tile covers the site
+    // it is standing on, and the site is what tells you where you are.
     const at = Object.values(crowd(1).permanents).find((items) => items.some((p) => p.instanceId === "uX0"))!;
     const only = at.filter((p) => !p.attachedTo);
-    if (only.length === 1) {
-      expect(only[0].offset).toBeNull();
-      expect(only[0].scale).toBeUndefined();
+    expect(only).toHaveLength(1);
+    expect(only[0].offset, "it took an edge slot").not.toBeNull();
+    expect(only[0].scale!).toBeLessThan(1);
+    expect(only[0].scale!).toBeGreaterThan(0.5);
+  });
+
+  it("sends each side's cards to its own edge, never the same one", () => {
+    const deck = toEngineDeck(enginePrecons[0]);
+    const game = createGame([deck, deck], ["You", "Computer"], 23, 0 as PlayerId);
+    const mine = Object.values(game.units).find((u) => u.isAvatar && u.owner === 0)!;
+    const theirs = Object.values(game.units).find((u) => u.isAvatar && u.owner === 1)!;
+    // one unit from each player on the SAME square, well clear of both avatars
+    for (const [i, src] of [mine, theirs].entries()) {
+      game.units[`uS${i}`] = { ...src, id: `uS${i}`, isAvatar: false, name: `Side ${i}`, region: "surface", x: 1, y: 2 };
     }
+    const projected = projectView(viewFor(game, 0), "surface");
+    const here = Object.values(projected.permanents).flat();
+    const p1 = here.find((p) => p.instanceId === "uS0")!;
+    const p2 = here.find((p) => p.instanceId === "uS1")!;
+    // final Z is the board's own owner nudge plus the offset; the two must end up opposed
+    const worldZ = (card: typeof p1) => getPermanentOwnerBaseZ(card.owner) + card.offset![1];
+    expect(Math.sign(worldZ(p1)), "ours toward our edge").toBe(1);
+    expect(Math.sign(worldZ(p2)), "theirs toward theirs").toBe(-1);
+    // and neither leaves its tile
+    for (const card of [p1, p2]) expect(Math.abs(worldZ(card))).toBeLessThan(TILE_SIZE / 2);
   });
 
   it("gives the avatar a slot of its own rather than letting a card sit on it", () => {
@@ -420,9 +444,12 @@ describe("tile layout", () => {
     expect(apart, "they are not in the same place").toBeGreaterThan(0);
   });
 
-  it("leaves an avatar standing alone exactly where it was", () => {
+  it("stands an avatar at its own edge even with its square to itself", () => {
     const projected = crowd(1); // the crowd is elsewhere, so the avatar's square is its own
-    expect(projected.avatars.p1.offset).toBeNull();
+    const offset = projected.avatars.p1.offset;
+    expect(offset, "the avatar hugs its edge too, so its home site reads").not.toBeNull();
+    expect(Math.sign(offset![1])).toBe(1);
+    expect(Math.abs(offset![1])).toBeLessThan(TILE_SIZE / 2);
   });
 
   it("gives every card on a crowded tile its own spot", () => {
@@ -485,5 +512,41 @@ describe("the cast card on the table", () => {
     const unknown = boardReveal(viewWith({ seq: 3, cells: [], redSites: [{ x: 1, y: 1 }], name: "Dark Tower", spell: true }), 2);
     expect(unknown?.card).toBeNull();
     vi.unstubAllGlobals();
+  });
+});
+
+describe("modified power and life", () => {
+  it("says nothing about a unit standing at its printed numbers", () => {
+    const deck = toEngineDeck(enginePrecons[0]);
+    const game = createGame([deck, deck], ["You", "Computer"], 11, 0 as PlayerId);
+    // every unit is untouched, so there is nothing to report — the card art already says it
+    expect(unitPower(game)).toEqual({});
+  });
+
+  it("reports the current numbers once a modifier is on the unit", () => {
+    const deck = toEngineDeck(enginePrecons[0]);
+    const game = createGame([deck, deck], ["You", "Computer"], 11, 0 as PlayerId);
+    const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === 0)!;
+    const unit = { ...avatar, id: "uBuff", isAvatar: false, name: "Ogre Goons", region: "surface" as const };
+    game.units.uBuff = unit;
+    const printed = getCard("Ogre Goons");
+    expect(unitPower(game).uBuff, "unmodified to begin with").toBeUndefined();
+
+    game.units.uBuff.modifiers = [{ kind: "power", amount: 2, duration: "permanent", turn: 0, sourcePlayer: 0 }];
+    const after = unitPower(game).uBuff;
+    expect(after, "a modified unit is reported").toBeTruthy();
+    expect(after.atk).toBe((printed.attack ?? 0) + 2);
+    expect(after.def).toBe((printed.defence ?? printed.attack ?? 0) + 2);
+  });
+
+  it("reports a debuff too, and never a negative number", () => {
+    const deck = toEngineDeck(enginePrecons[0]);
+    const game = createGame([deck, deck], ["You", "Computer"], 11, 0 as PlayerId);
+    const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === 0)!;
+    game.units.uWeak = { ...avatar, id: "uWeak", isAvatar: false, name: "Ogre Goons", region: "surface" };
+    game.units.uWeak.modifiers = [{ kind: "power", amount: -99, duration: "permanent", turn: 0, sourcePlayer: 1 }];
+    const after = unitPower(game).uWeak;
+    expect(after.atk, "the engine floors power at zero").toBe(0);
+    expect(after.def).toBe(0);
   });
 });

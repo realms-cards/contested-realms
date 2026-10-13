@@ -15,7 +15,8 @@ import type {
 import { MAX_EVENTS } from "@/lib/game/store/types";
 import { computeAvailableMana } from "@/lib/game/store/utils/resourceHelpers";
 import { TOKEN_BY_NAME, tokenCardId, tokenSlug } from "@/lib/game/tokens";
-import type { PlayerId, PlayerView, Region } from "@sorcery/shared";
+import { effAttack, effDefence, getCard } from "@sorcery/shared";
+import type { GameState as EngineState, PlayerId, PlayerView, Region } from "@sorcery/shared";
 import { cardRefFor } from "./cardIndex";
 import { engineCellKey, engineToBoard, localizeEngineText } from "./coords";
 
@@ -284,41 +285,71 @@ function tokenCard(name: string, instanceId: string, owner: PlayerKey): CardRef 
  * artifacts) are excluded: the board draws those on their host, not as tile occupants.
  */
 /**
- * Lay a tile's occupants out side by side instead of in a pile.
+ * Lay a tile's occupants out so the SITE under them stays readable.
  *
- * `standing` are the avatars on this square. They take a slot in the grid like everything else
- * — an avatar that sits UNDER the units sharing its square hides them and is hidden by them,
- * and "whose avatar is where" is the single most-read fact on the board. They are counted
- * first so they keep the leftmost slots as the tile fills up.
+ * Everything on a square belongs to one side or the other, so each side's cards are gathered
+ * into a row hugging that side's edge of the tile: ours along the near rim, theirs along the
+ * far one. That leaves a clear band across the middle of the site — which is the whole point,
+ * because a couple of cards centred on a tile used to bury the site entirely and there was no
+ * way to tell what you were standing on.
  *
- * Only the permanents are scaled down to fit. An avatar keeps its size: its root group owns a
- * RigidBody whose collider does not follow a parent scale, so shrinking it would leave its
- * physics body behind. The grid is therefore sized by the cards, and the avatar occupies its
- * cell at full size — which is also how it reads at a table.
+ * `standing` are the avatars here. They take a slot in their owner's row like anything else;
+ * an avatar sitting UNDER the units sharing its square hides them and is hidden by them, and
+ * "whose avatar is where" is the most-read fact on the board. Only the cards are scaled —
+ * an avatar's root group owns a RigidBody whose collider does not follow a parent scale, so
+ * shrinking it would leave its physics body behind.
+ *
+ * Offsets are returned in TILE space. The board then adds its own per-owner nudge to every
+ * permanent (`getPermanentOwnerBaseZ`), so that is subtracted back out here — otherwise the
+ * two biases would compound and push the cards off their own tile.
  */
-function spreadOnTile(items: PermanentItem[], standing: AvatarState[] = []): void {
+function spreadOnTile(items: PermanentItem[], standing: { owner: 1 | 2; avatar: AvatarState }[] = []): void {
   const loose = items.filter((item) => !item.attachedTo);
-  const total = loose.length + standing.length;
-  if (total < 2) return;
-  const cols = total <= 2 ? total : total <= 6 ? 3 : 4;
-  const rows = Math.ceil(total / cols);
-  // leave a small margin so a card never bleeds over the grid line
+  if (loose.length + standing.length < 1) return;
+
+  const sides: Record<1 | 2, { avatars: AvatarState[]; cards: PermanentItem[] }> = {
+    1: { avatars: [], cards: [] },
+    2: { avatars: [], cards: [] },
+  };
+  for (const { owner, avatar } of standing) sides[owner].avatars.push(avatar);
+  for (const item of loose) sides[item.owner].cards.push(item);
+
+  // One scale for the whole tile, set by whichever side is busiest, so the two rows match.
+  const widest = Math.max(sides[1].avatars.length + sides[1].cards.length, sides[2].avatars.length + sides[2].cards.length);
+  if (widest < 1) return;
+  const perRow = widest <= 3 ? widest : Math.ceil(widest / 2);
+  const rows = Math.ceil(widest / perRow);
   const room = TILE_SIZE * 0.94;
-  const scale = Math.min(1, room / (cols * CARD_SHORT), room / (rows * CARD_LONG));
-  const stepX = CARD_SHORT * scale * 1.04;
-  const stepZ = CARD_LONG * scale * 1.04;
-  /** centre the block on the tile; the board still nudges it toward its owner afterwards */
-  const slot = (i: number): [number, number] => [
-    ((i % cols) - (cols - 1) / 2) * stepX,
-    (Math.floor(i / cols) - (rows - 1) / 2) * stepZ,
-  ];
-  standing.forEach((avatar, i) => {
-    avatar.offset = slot(i);
-  });
-  loose.forEach((item, i) => {
-    item.offset = slot(standing.length + i);
-    item.scale = scale;
-  });
+  // never full size once a card shares its site with anything: the site has to show through
+  const cap = widest > 1 ? 0.78 : 0.88;
+  const scale = Math.min(cap, room / (perRow * CARD_SHORT), (TILE_SIZE * 0.46) / (rows * CARD_LONG));
+  const stepX = CARD_SHORT * scale * 1.06;
+  const stepZ = CARD_LONG * scale * 1.06;
+  // the outermost row sits just inside the tile edge; later rows step back toward the middle
+  const rim = TILE_SIZE / 2 - (CARD_LONG * scale) / 2 - TILE_SIZE * 0.02;
+
+  for (const owner of [1, 2] as const) {
+    const side = sides[owner];
+    const occupants = side.avatars.length + side.cards.length;
+    if (!occupants) continue;
+    const toward = owner === 1 ? 1 : -1; // p1 reads from the near edge, p2 from the far one
+    const ownerBase = getPermanentOwnerBaseZ(owner);
+    const place = (i: number): [number, number] => {
+      const row = Math.floor(i / perRow);
+      const inRow = i % perRow;
+      const count = Math.min(perRow, occupants - row * perRow);
+      return [(inRow - (count - 1) / 2) * stepX, toward * (rim - row * stepZ)];
+    };
+    // avatars first, so they keep the outermost, least-crowded places
+    side.avatars.forEach((avatar, i) => {
+      avatar.offset = place(i);
+    });
+    side.cards.forEach((card, i) => {
+      const [x, z] = place(side.avatars.length + i);
+      card.offset = [x, z - ownerBase];
+      card.scale = scale;
+    });
+  }
 }
 
 function cardOf(view: PlayerView, instanceId: string, owner: PlayerKey): CardRef {
@@ -393,7 +424,35 @@ function portalStateFor(view: PlayerView, revealed: boolean): ProjectedState["po
   return { harbingerSeats: [...seats], p1: player("p1"), p2: player("p2"), currentRoller: null, setupComplete: revealed };
 }
 
-export function projectView(view: PlayerView, layer: BoardLayer = "surface", portalsRevealed = true): ProjectedState {
+/**
+ * Every unit's CURRENT power and life, by unit id.
+ *
+ * `effAttack`/`effDefence` are the engine's own answer, and they need the FULL GameState: the
+ * `grantsPower` statics they consult can read `state.players[...]`, which `viewFor` reshapes
+ * (spellbook becomes a count, hands are hidden). Engine mode runs the engine in this tab and
+ * the session holds that state, so it computes this and hands it to the projection — a
+ * PlayerView alone could not produce it correctly.
+ */
+export function unitPower(game: EngineState): Record<string, { atk: number; def: number }> {
+  const out: Record<string, { atk: number; def: number }> = {};
+  for (const unit of Object.values(game.units)) {
+    const printed = getCard(unit.name);
+    const atk = effAttack(game, unit);
+    const def = effDefence(game, unit);
+    // only when something actually changed — an unmodified card already shows its own numbers
+    if (atk !== (printed?.attack ?? 0) || def !== (printed?.defence ?? printed?.attack ?? 0)) {
+      out[unit.id] = { atk, def };
+    }
+  }
+  return out;
+}
+
+export function projectView(
+  view: PlayerView,
+  layer: BoardLayer = "surface",
+  portalsRevealed = true,
+  power: Record<string, { atk: number; def: number }> = {},
+): ProjectedState {
   const players = view.players as ViewPlayer[];
 
   const sites: Record<string, SiteTile> = {};
@@ -450,6 +509,8 @@ export function projectView(view: PlayerView, layer: BoardLayer = "surface", por
       instanceId: unit.id,
       tapped: unit.tapped,
       damage: unit.damage || null,
+      // only present when an effect has moved them off the printed values
+      stats: power[unit.id] ?? null,
       offset: null,
       isCarried: Boolean(unit.carriedBy),
       enteredOnTurn: unit.enteredTurn,
@@ -549,13 +610,14 @@ export function projectView(view: PlayerView, layer: BoardLayer = "surface", por
   // Every occupant of a square is known by now (units, artifacts, auras, status tokens, the
   // other layer's hints — and the avatars), so give each tile a side-by-side layout. The
   // avatars are grouped by square first so a tile they share is laid out as one block.
-  const standingAt = new Map<string, AvatarState[]>();
-  for (const avatar of Object.values(avatars)) {
+  const standingAt = new Map<string, { owner: 1 | 2; avatar: AvatarState }[]>();
+  for (const [key, avatar] of Object.entries(avatars) as [PlayerKey, AvatarState][]) {
     if (!avatar.pos) continue;
     const at = `${avatar.pos[0]},${avatar.pos[1]}`;
+    const entry = { owner: (key === "p1" ? 1 : 2) as 1 | 2, avatar };
     const here = standingAt.get(at);
-    if (here) here.push(avatar);
-    else standingAt.set(at, [avatar]);
+    if (here) here.push(entry);
+    else standingAt.set(at, [entry]);
   }
   for (const [at, avatarsHere] of standingAt) {
     if (!permanents[at]) spreadOnTile([], avatarsHere); // two avatars sharing a bare square

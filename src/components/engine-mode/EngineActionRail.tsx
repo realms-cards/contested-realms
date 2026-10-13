@@ -5,9 +5,7 @@ import { createPortal } from "react-dom";
 import AudioControls from "@/components/game/AudioControls";
 import CpuCardPick from "@/components/game/CpuCardPick";
 import { RcButton } from "@/components/ui/rc-button";
-import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { useMusicPlayer } from "@/hooks/useMusicPlayer";
-import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { cardRefFor } from "@/lib/engine-mode/cardIndex";
 import { HUMAN_SEAT, humanDecisionSeat, useEngineSession } from "@/lib/engine-mode/session";
 import { useGameStore } from "@/lib/game/store";
@@ -110,9 +108,9 @@ export default function EngineActionRail({
   const [music, musicControls] = useMusicPlayer();
 
   const [toolsOpen, setToolsOpen] = useState(false);
-  const { enabled: colorBlind, toggle: toggleColorBlind } = useColorBlind();
-  const { settings: graphics, toggleMonochromeMode } = useGraphicsSettings();
-  const monochrome = graphics.monochromeMode;
+  const toggleUiHidden = useGameStore((state) => state.toggleUiHidden);
+  const cardPreviews = useGameStore((state) => state.cardPreviewsEnabled);
+  const toggleCardPreviews = useGameStore((state) => state.toggleCardPreviews);
   const [cemeteryOpen, setCemeteryOpen] = useState(false);
   const [collectionOpen, setCollectionOpen] = useState(false);
   const [pilotOpen, setPilotOpen] = useState(false);
@@ -283,29 +281,23 @@ export default function EngineActionRail({
                 ))}
               </ol>
             )}
-            {/* Both of these are account-wide settings that otherwise live only in the header
-                menu, which a match covers up. They matter most mid-game, when the board is
-                asking you to tell one highlight from another. */}
+            {/* The two view toggles the other modes bind to U and P. They live here rather than
+                on the rail because the rail is pixel-sprite art and these have no sprite; the
+                hotkeys still work, this is just the way to find them. */}
             <div className="mt-1 border-t border-rc-line/15 pt-2">
-              <div className="rc-field-label mb-1.5">Visual aids</div>
+              <div className="rc-field-label mb-1.5">View</div>
               <div className="flex flex-col gap-1.5">
-                <RcButton
-                  variant="outline"
-                  size="xs"
-                  tone={colorBlind ? "info" : undefined}
-                  aria-pressed={colorBlind}
-                  onClick={toggleColorBlind}
-                >
-                  Colour-blind palette
+                <RcButton variant="outline" size="xs" onClick={() => toggleUiHidden()}>
+                  Hide the interface (U)
                 </RcButton>
                 <RcButton
                   variant="outline"
                   size="xs"
-                  tone={monochrome ? "info" : undefined}
-                  aria-pressed={monochrome}
-                  onClick={toggleMonochromeMode}
+                  tone={cardPreviews ? "info" : undefined}
+                  aria-pressed={cardPreviews}
+                  onClick={toggleCardPreviews}
                 >
-                  Monochrome
+                  Card previews (P)
                 </RcButton>
               </div>
             </div>

@@ -10,7 +10,7 @@ import {
   type SetStateAction,
 } from "react";
 import { flushSync } from "react-dom";
-import { Group, MathUtils } from "three";
+import { DoubleSide, Group, MathUtils } from "three";
 import { getGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { soundManager } from "@/lib/audio/soundManager";
 import { BodyApi, getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
@@ -228,6 +228,112 @@ export type PermanentStackProps = {
   hasSite?: boolean;
   isBabelTower?: boolean;
 };
+
+/** A pill: a plane with a disc capping each end, so it matches the round counter badge. */
+function Pill({
+  w,
+  h,
+  color,
+  opacity = 1,
+  z = 0,
+  order,
+}: {
+  w: number;
+  h: number;
+  color: string;
+  opacity?: number;
+  z?: number;
+  order: number;
+}) {
+  const r = h / 2;
+  const bar = Math.max(0, w - h);
+  return (
+    <group position={[0, 0, z]}>
+      <mesh renderOrder={order}>
+        <planeGeometry args={[bar, h]} />
+        <meshBasicMaterial color={color} transparent opacity={opacity} depthTest={false} depthWrite={false} />
+      </mesh>
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[(side * bar) / 2, 0, 0]} renderOrder={order}>
+          <circleGeometry args={[r, 20]} />
+          <meshBasicMaterial color={color} transparent opacity={opacity} depthTest={false} depthWrite={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/**
+ * A card's CURRENT power and life, shown only when an effect has moved them off the printed
+ * numbers — the art already states those, so an unmodified card gets nothing.
+ *
+ * Built like CounterBadge3D above, which is the board's badge vocabulary: an outline behind a
+ * near-black fill with bold white text. The outline is the OWNER's colour, so the badge reads
+ * as part of the board rather than as a warning light.
+ *
+ * Direction is carried by the arrow, not by colour: up when the card is stronger than printed,
+ * down when weaker, judged on attack first and life second so a pure toughness debuff still
+ * reads as a debuff. A shape says it in monochrome and to a colour-blind player alike, which a
+ * red/green badge cannot.
+ *
+ * Everything draws with depthTest off at a renderOrder above the cards and their tokens: a
+ * token parked on the same card was painting straight over the numbers.
+ */
+function StatDelta({
+  stats,
+  card,
+  rotZ,
+  color,
+}: {
+  stats: { atk: number; def: number };
+  card: { attack?: number | null; defence?: number | null };
+  rotZ: number;
+  color: string;
+}) {
+  const printedAtk = card.attack ?? 0;
+  const printedDef = card.defence ?? card.attack ?? 0;
+  const stronger = stats.atk !== printedAtk ? stats.atk > printedAtk : stats.def > printedDef;
+  const label = `${stats.atk}/${stats.def}`;
+  const height = CARD_LONG * 0.22;
+  // Sized from the label, not fixed: a two-digit 10/10 needs noticeably more room than 5/5,
+  // and a pill that only fits the common case looks broken exactly when the card is scariest.
+  const glyph = height * 0.46;
+  const width = Math.max(CARD_SHORT * 0.72, label.length * glyph + height * 1.25);
+  const outline = height * 0.12;
+  const ORDER = 2400;
+  // a triangle, so the direction survives monochrome and colour blindness
+  const tip = height * 0.19;
+  const arrow = new Float32Array(
+    stronger
+      ? [0, tip, 0, -tip * 0.9, -tip, 0, tip * 0.9, -tip, 0]
+      : [0, -tip, 0, -tip * 0.9, tip, 0, tip * 0.9, tip, 0],
+  );
+  return (
+    <group position={[0, 0.008, CARD_LONG * 0.33]} rotation-x={-Math.PI / 2} rotation-z={rotZ}>
+      <Pill w={width + outline * 2} h={height + outline * 2} color={color} z={-0.002} order={ORDER} />
+      <Pill w={width} h={height} color="#07090f" opacity={0.95} z={-0.001} order={ORDER + 1} />
+      <mesh position={[-width / 2 + height * 0.42, 0, 0]} renderOrder={ORDER + 2}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[arrow, 3]} />
+        </bufferGeometry>
+        <meshBasicMaterial color="#ffffff" transparent depthTest={false} depthWrite={false} side={DoubleSide} />
+      </mesh>
+      <Text
+        position={[height * 0.42 / 2, 0, 0.001]}
+        fontSize={height * 0.66}
+        color="#ffffff"
+        anchorX="center"
+        anchorY="middle"
+        fontWeight={700}
+        renderOrder={ORDER + 3}
+        material-depthTest={false}
+        material-depthWrite={false}
+      >
+        {`${stats.atk}/${stats.def}`}
+      </Text>
+    </group>
+  );
+}
 
 /** Counter badge with +/- buttons that appear on hover */
 function CounterBadge3D({
@@ -1786,6 +1892,11 @@ export function PermanentStack({
                     }
                   />
                 )}
+                {/* Current power/life, when something has changed them. Drawn here, as a child
+                    of the card's own scaled group, so it follows the card's slot in the tile
+                    layout and shrinks with it — unlike EngineDamageMarks, which positions from
+                    the tile centre and can end up over the wrong card on a shared tile. */}
+                {p.stats && <StatDelta stats={p.stats} card={p.card} rotZ={rotZ} color={PLAYER_COLORS[ownerSeat]} />}
                 {/* Counter badge - shows +/- buttons on hover */}
                 {Number(p.counters || 0) > 0 && (
                   <CounterBadge3D

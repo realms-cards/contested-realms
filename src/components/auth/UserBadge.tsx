@@ -20,7 +20,7 @@ import SeatMediaControls from "@/components/rtc/SeatMediaControls";
 import CacheSettingsSection from "@/components/settings/CacheSettingsSection";
 import NotificationSettingsSection from "@/components/settings/NotificationSettingsSection";
 import { RcButton } from "@/components/ui/rc-button";
-import { useGraphicsSettings } from "@/hooks/useGraphicsSettings";
+import { getSiteCardScale, useGraphicsSettings } from "@/hooks/useGraphicsSettings";
 import { FEATURE_CARD_SLEEVES } from "@/lib/config/features";
 import { useColorBlind } from "@/lib/contexts/ColorBlindContext";
 import { useLoadingContext } from "@/lib/contexts/LoadingContext";
@@ -102,6 +102,8 @@ export default function UserBadge({
     toggleShowTable,
     setCardPreviewScale,
     setHandCardScale,
+    setSiteCardScale,
+    setSiteSaturation,
     setUiTextScale,
     toggleHandSortOrder,
     toggleGamepadLifeControls,
@@ -1253,6 +1255,65 @@ export default function UserBadge({
                     }
                     className="rc-range w-full"
                   />
+                </div>
+                {/* Site Size — a site's printed footprint is about a fifth of its tile, so
+                    anything standing on it hides it. 180% spans the tile edge to edge. */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-rc-mono text-[11px] font-medium text-rc-fg-strong">
+                      Sites on Board
+                    </span>
+                    <span className="font-rc-mono text-[10px] tabular-nums text-rc-fg-subtle">
+                      {graphicsSettings.siteCardScale === null
+                        ? "Auto"
+                        : `${Math.round(graphicsSettings.siteCardScale * 100)}%`}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="100"
+                    max="180"
+                    step="10"
+                    value={(graphicsSettings.siteCardScale ?? getSiteCardScale()) * 100}
+                    onChange={(e) =>
+                      setSiteCardScale(Number(e.target.value) / 100)
+                    }
+                    className="rc-range w-full"
+                  />
+                </div>
+                {/* Site Colour — sites are backdrops; draining them pushes them behind the
+                    units standing on them without shrinking or dimming them. */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-rc-mono text-[11px] font-medium text-rc-fg-strong">
+                      Site Colour
+                    </span>
+                  </div>
+                  <div className="flex gap-1">
+                    {[
+                      { label: "Full", value: 1 },
+                      { label: "Half", value: 0.5 },
+                      { label: "Mono", value: 0 },
+                    ].map((step) => {
+                      const current = graphicsSettings.siteSaturation ?? 1;
+                      const on = Math.abs(current - step.value) < 0.01;
+                      return (
+                        <button
+                          key={step.label}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => setSiteSaturation(step.value)}
+                          className={`flex-1 rounded-rc-md border px-2 py-1 font-rc-mono text-[10px] transition-colors ${
+                            on
+                              ? "border-rc-accent-link/60 bg-rc-accent-link/12 text-rc-fg-strong"
+                              : "border-rc-line/22 text-rc-fg-muted hover:border-rc-accent/45"
+                          }`}
+                        >
+                          {step.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 {/* Text Size */}
                 <div>

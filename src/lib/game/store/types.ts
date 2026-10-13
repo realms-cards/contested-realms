@@ -160,6 +160,11 @@ export type Zones = {
 export type EntityBase<TCard> = {
   card: TCard;
   offset?: [number, number] | null;
+  /**
+   * Current power/life when an effect has changed them from what is printed on the card.
+   * Absent means "as printed" — the card art already says it, so nothing is drawn.
+   */
+  stats?: { atk: number; def: number } | null;
   tapped?: boolean;
   cpuTurnEffect?: { turn: string; power: number; movement: number; blaze?: boolean; steps?: number } | null;
   cpuAirCast?: { turn: string; air: number };

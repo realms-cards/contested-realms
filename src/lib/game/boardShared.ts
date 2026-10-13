@@ -33,6 +33,22 @@ export const RUBBLE_ELEVATION = CARD_THICK * 2; // Same as BASE_CARD_ELEVATION t
 export const TILE_OFFSET_LIMIT_X = TILE_SIZE * 0.35;
 export const TILE_OFFSET_LIMIT_Z = TILE_SIZE * 0.65; // Increased to allow reaching tile center and beyond
 
+/**
+ * How far a SITE sits toward its owner's edge of its own tile.
+ *
+ * Keyed on the owner, exactly like the permanents below, so both biases point the same way and
+ * cannot drift apart. It deliberately does NOT go through the store's `calculateEdgePosition`:
+ * that aims at `playerPositions`, which is `{x:0,z:0}` for both seats in every mode (nothing
+ * ever fills it in), so it returned no offset at all — or, before, a nudge toward tile (0,0)
+ * for both players.
+ *
+ * Smaller than the permanents' bias on purpose: the site leans just far enough that the cards
+ * standing on it, which sit out at the tile rim, leave a readable strip of it showing.
+ */
+export function getSiteOwnerBaseZ(owner: 1 | 2): number {
+  return (owner === 1 ? 1 : -1) * (TILE_SIZE * 0.14);
+}
+
 export function getPermanentOwnerBaseZ(owner: 1 | 2): number {
   const ownerSign = owner === 1 ? 1 : -1;
   // A permanent's resting Z depends only on its owner, never on whether an avatar

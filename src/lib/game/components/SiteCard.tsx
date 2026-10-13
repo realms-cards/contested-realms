@@ -1,11 +1,11 @@
 import type { ThreeEvent } from "@react-three/fiber";
 import type { MutableRefObject } from "react";
-import { getGraphicsSettings } from "@/hooks/useGraphicsSettings";
-import { BASE_CARD_ELEVATION } from "@/lib/game/boardShared";
+import { getGraphicsSettings, getSiteCardScale } from "@/hooks/useGraphicsSettings";
+import { BASE_CARD_ELEVATION, getSiteOwnerBaseZ } from "@/lib/game/boardShared";
 import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
 import ResolverOutline from "@/lib/game/components/ResolverOutline";
-import { CARD_LONG, CARD_SHORT, PLAYER_COLORS } from "@/lib/game/constants";
+import { CARD_LONG, CARD_SHORT, PLAYER_COLORS, TILE_SIZE } from "@/lib/game/constants";
 import { hasCustomResolver } from "@/lib/game/resolverRegistry";
 import { useGameStore } from "@/lib/game/store";
 import type {
@@ -100,8 +100,10 @@ export function SiteCard({
   allowSiteDrag,
   draggingSite,
   setDraggingSite,
-  playerPositions,
-  calculateEdgePosition,
+  // kept on the props for the shared board's call sites; the site's lean now comes from its
+  // OWNER (getSiteOwnerBaseZ) because playerPositions is {0,0} for both seats in every mode
+  playerPositions: _playerPositions,
+  calculateEdgePosition: _calculateEdgePosition,
   getRemoteHighlightColor,
   isHandVisible,
   attackConfirm,
@@ -150,11 +152,26 @@ export function SiteCard({
     (site.owner === 1 ? 0 : Math.PI) +
     (site.tapped ? -Math.PI / 2 : 0);
   const ownerSeat = seatFromOwner(site.owner);
-  const playerPos = playerPositions[ownerSeat];
-  const edgeOffset = calculateEdgePosition(
-    { x: tileX, z: tileY },
-    playerPos.position,
-  );
+  /**
+   * How big the site is drawn, and how far it may lean toward its owner.
+   *
+   * A site's printed footprint is about a fifth of its tile, so anything standing on it hides
+   * it. The scale is applied once, as a group scale on the whole site (below) rather than as
+   * new width/height props: CardPlane allocates an undisposed BoxGeometry per distinct size on
+   * its fallback path, so a slider drag would leak one per step per site, and the outlines
+   * would stay at the printed size and end up drawn inside the art.
+   *
+   * Tapping turns the card another quarter turn, swinging its LONG edge into Z — the same axis
+   * the owner nudge pushes along. Untapped, the full nudge still fits at max scale; tapped, it
+   * would hang up to 14% of a tile into the row behind, over the opponent's site. So the nudge
+   * is clamped to whatever margin the card actually leaves.
+   */
+  const siteScale = getSiteCardScale();
+  const siteSaturation = getGraphicsSettings().siteSaturation ?? 1;
+  const halfDepth = (siteScale * (site.tapped ? CARD_LONG : CARD_SHORT)) / 2;
+  const lean = getSiteOwnerBaseZ(site.owner);
+  const nudgeZ = Math.sign(lean) * Math.min(Math.abs(lean), Math.max(0, TILE_SIZE / 2 - halfDepth));
+
   const siteInstanceKey = `site:${tileX},${tileY}`;
   const siteRemoteColor = getRemoteHighlightColor(site.card ?? null, {
     instanceKey: siteInstanceKey,
@@ -446,9 +463,11 @@ export function SiteCard({
   const CARD_STACK_OFFSET = 0.008; // Vertical offset between stacked cards
 
   return (
-    <group>
+    // One wrapper for the whole site: the nudge is in PARENT space so it is unaffected by this
+    // group's own scale, and scale.y stays 1 so card thickness and every elevation are untouched.
+    <group position={[0, 0, nudgeZ]} scale={[siteScale, 1, siteScale]}>
       {renderSiteGlow && (
-        <group position={[edgeOffset.x, 0, edgeOffset.z]}>
+        <group>
           <CardOutline
             width={CARD_SHORT}
             height={CARD_LONG}
@@ -460,7 +479,7 @@ export function SiteCard({
         </group>
       )}
       {highlight && (
-        <group position={[edgeOffset.x, 0, edgeOffset.z]}>
+        <group>
           <CardOutline
             width={CARD_SHORT}
             height={CARD_LONG}
@@ -477,7 +496,7 @@ export function SiteCard({
         !useGameStore.getState().resolversDisabled &&
         getGraphicsSettings().showResolverGlow &&
         hasCustomResolver(site.card?.name) && (
-          <group position={[edgeOffset.x, 0, edgeOffset.z]}>
+          <group>
             <ResolverOutline
               width={CARD_SHORT}
               height={CARD_LONG}
@@ -491,10 +510,11 @@ export function SiteCard({
       {/* Tower of Babel: render both Base (bottom) and Apex (top) cards stacked */}
       {/* Base is offset slightly so both cards are visible when stacked */}
       {towerMerge && towerMerge.baseCard && towerMerge.apexCard ? (
-        <group position={[edgeOffset.x, 0, edgeOffset.z]}>
+        <group>
           {/* Base of Babel (bottom card - offset to show card bottom text under Apex) */}
           <group position={[0, 0, -0.06]}>
             <CardPlane
+            saturation={siteSaturation}
               slug={towerMerge.baseCard.slug || ""}
               width={CARD_SHORT}
               height={CARD_LONG}
@@ -549,6 +569,7 @@ export function SiteCard({
           </group>
           {/* Apex of Babel (top card) */}
           <CardPlane
+            saturation={siteSaturation}
             slug={towerMerge.apexCard?.slug || ""}
             width={CARD_SHORT}
             height={CARD_LONG}
@@ -591,8 +612,9 @@ export function SiteCard({
           />
         </group>
       ) : site.card ? (
-        <group position={[edgeOffset.x, 0, edgeOffset.z]}>
+        <group>
           <CardPlane
+            saturation={siteSaturation}
             slug={site.card.slug || ""}
             width={CARD_SHORT}
             height={CARD_LONG}
@@ -638,7 +660,7 @@ export function SiteCard({
         <mesh
           rotation-x={-Math.PI / 2}
           rotation-z={rotZ}
-          position={[edgeOffset.x, BASE_CARD_ELEVATION, edgeOffset.z]}
+          position={[0, BASE_CARD_ELEVATION, 0]}
           castShadow
           onPointerDown={(e) => {
             handlePointerDown(e);

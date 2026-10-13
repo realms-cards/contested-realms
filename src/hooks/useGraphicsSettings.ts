@@ -4,6 +4,29 @@ import { useState, useEffect, useCallback } from "react";
 
 export type HandSortOrder = "sitesFirst" | "spellsFirst";
 
+/** TILE_SIZE / CARD_LONG — the point where a site spans its tile edge to edge. */
+export const SITE_SCALE_MAX = 1.82;
+
+/**
+ * What a site scales to when the player has expressed no preference.
+ *
+ * A mode sets this for as long as it is on screen — engine mode asks for 1.5, because its board
+ * is read far more than it is dragged on. It is deliberately NOT written into the stored
+ * settings: that would leak one mode's taste into every other mode and into the settings panel.
+ * The moment the player moves the slider their number is stored, and `getSiteCardScale` stops
+ * consulting this at all.
+ */
+let siteScaleFallback = 1;
+
+export function setSiteCardScaleFallback(scale: number): void {
+  siteScaleFallback = scale;
+}
+
+/** The scale a site should actually be drawn at: the player's choice, else the mode's. */
+export function getSiteCardScale(): number {
+  return loadSettings().siteCardScale ?? siteScaleFallback;
+}
+
 export interface GraphicsSettings {
   /** Use 3D cards with thickness and lighting (true) or flat planes (false) */
   enhanced3DCards: boolean;
@@ -15,6 +38,27 @@ export interface GraphicsSettings {
   cardPreviewScale: number;
   /** Scale multiplier for hand card size (0.5 - 2.0, default 1.0) */
   handCardScale: number;
+  /**
+   * How much larger a SITE is drawn on the board, 1 = as printed.
+   *
+   * A site's own footprint is only 55% of its tile across and 39% deep — about a fifth of the
+   * tile — so a couple of units standing on it hide it completely. 1.82 is the point where it
+   * fills the tile horizontally, and also very nearly the largest an untapped site can be and
+   * still fit (the limit is 1.83), so that is the ceiling.
+   *
+   * `null` means the player has never chosen, and whichever mode is on screen picks for them
+   * (see `setSiteCardScaleFallback`). Storing a number here is what makes it THEIR choice, so
+   * it then outranks the mode in every mode, forever.
+   */
+  siteCardScale: number | null;
+  /**
+   * How much colour a SITE keeps on the board: 1 as printed, 0.5 half drained, 0 grey.
+   *
+   * Sites are backdrops — the units standing on them are what you act on — so draining them is
+   * a way to push them back without making them smaller or dimmer. It applies to sites only,
+   * unlike the account-wide monochrome aid which takes the whole page.
+   */
+  siteSaturation: number;
   /** Scale multiplier for console/toolbox text size (0.5 - 1.5, default 1.0) */
   uiTextScale: number;
   /** Hand card sort order: sites first (default) or spells first */
@@ -36,6 +80,8 @@ const DEFAULT_SETTINGS: GraphicsSettings = {
   showTable: true,
   cardPreviewScale: 1.0,
   handCardScale: 1.0,
+  siteCardScale: null,
+  siteSaturation: 1,
   uiTextScale: 1.0,
   handSortOrder: "sitesFirst",
   gamepadLifeControls: false,
@@ -154,6 +200,23 @@ export function useGraphicsSettings() {
     [setSettings],
   );
 
+  /** 1.82 fills the tile horizontally and is as large as an untapped site can be and still fit. */
+  const setSiteCardScale = useCallback(
+    (scale: number) => {
+      setSettings({
+        siteCardScale: Math.max(1, Math.min(SITE_SCALE_MAX, scale)),
+      });
+    },
+    [setSettings],
+  );
+
+  const setSiteSaturation = useCallback(
+    (value: number) => {
+      setSettings({ siteSaturation: Math.max(0, Math.min(1, value)) });
+    },
+    [setSettings],
+  );
+
   const setUiTextScale = useCallback(
     (scale: number) => {
       setSettings({
@@ -195,6 +258,8 @@ export function useGraphicsSettings() {
     toggleShowTable,
     setCardPreviewScale,
     setHandCardScale,
+    setSiteCardScale,
+    setSiteSaturation,
     setUiTextScale,
     toggleHandSortOrder,
     toggleGamepadLifeControls,

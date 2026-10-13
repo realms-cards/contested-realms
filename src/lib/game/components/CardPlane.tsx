@@ -49,6 +49,7 @@ interface CardPlaneProps {
   textureRotation?: number; // rotation to apply to the texture itself
   forceTextureUrl?: boolean; // if true, ignore slug completely and only use textureUrl
   opacity?: number; // transparency (0.0 to 1.0, default 1.0)
+  saturation?: number; // 1 = as printed, 0.5 = half drained, 0 = grey
   preferRaster?: boolean; // if true, skip KTX2 attempt and use raster
   lit?: boolean; // if true (default), use lit material; if false, use unlit (for hand cards)
   castShadow?: boolean; // if true (default same as lit), cast shadows
@@ -71,6 +72,36 @@ const CARD_METALNESS = 0.02; // Tiny bit of metalness for subtle sheen
 const EDGE_ROUGHNESS = 0.9; // Matte card stock edge
 
 // Create material array for box: [+X, -X, +Y, -Y, +Z (front), -Z (back)]
+/**
+ * Drain the colour out of a card's art.
+ *
+ * `material.color` only multiplies, so it can darken or tint but never desaturate — mixing the
+ * sampled texel toward its own luminance needs a shader. The amount is baked into the GLSL as a
+ * literal rather than carried in a uniform, because the materials are already rebuilt when the
+ * setting changes (it is in the memo deps); `customProgramCacheKey` keeps three.js from handing
+ * back a program compiled for a different amount.
+ *
+ * Applied to every face that carries a map, so a card's back fades with its front.
+ */
+function applySaturation<T extends MeshStandardMaterial | MeshBasicMaterial>(materials: T[], saturation: number): T[] {
+  if (saturation >= 1) return materials;
+  const amount = Math.max(0, Math.min(1, saturation)).toFixed(3);
+  for (const material of materials) {
+    if (!material.map) continue;
+    material.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <map_fragment>",
+        `#include <map_fragment>
+         float _lum = dot( diffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
+         diffuseColor.rgb = mix( vec3( _lum ), diffuseColor.rgb, ${amount} );`,
+      );
+    };
+    material.customProgramCacheKey = () => `sat-${amount}`;
+    material.needsUpdate = true;
+  }
+  return materials;
+}
+
 function createBoxMaterials(
   frontMap: Texture | null,
   backMap: Texture | null,
@@ -350,6 +381,7 @@ function CardBackFallback({
   depthWrite = true,
   depthTest = true,
   opacity = 1.0,
+  saturation = 1,
   lit: litProp,
   castShadow: castShadowProp,
   receiveShadow: receiveShadowProp,
@@ -412,27 +444,17 @@ function CardBackFallback({
   const materials = useMemo(() => {
     if (!backTex) return null;
     if (cardGeometry) {
-      return createObjMaterials(
-        rotatedMap,
-        rotatedMap,
-        lit,
-        depthWrite,
-        depthTest,
-        opacity,
-        isLandscape,
-        envIntensity
+      return applySaturation(
+        createObjMaterials(rotatedMap, rotatedMap, lit, depthWrite, depthTest, opacity, isLandscape, envIntensity),
+        saturation,
       );
     }
-    return createBoxMaterials(
-      rotatedMap,
-      rotatedMap,
-      lit,
-      depthWrite,
-      depthTest,
-      opacity,
-      envIntensity
+    return applySaturation(
+      createBoxMaterials(rotatedMap, rotatedMap, lit, depthWrite, depthTest, opacity, envIntensity),
+      saturation,
     );
   }, [
+    saturation,
     rotatedMap,
     lit,
     depthWrite,
@@ -530,6 +552,7 @@ const CardWithTexture = React.memo(function CardWithTexture(
     textureUrl,
     forceTextureUrl = false,
     opacity = 1.0,
+    saturation = 1,
     preferRaster = false,
     lit: litProp,
     castShadow: castShadowProp,
@@ -648,27 +671,17 @@ const CardWithTexture = React.memo(function CardWithTexture(
   const materials = useMemo(() => {
     if (!tex) return null;
     if (cardGeometry) {
-      return createObjMaterials(
-        instancedMap,
-        backTex,
-        lit,
-        depthWrite,
-        depthTest,
-        opacity,
-        isLandscape,
-        envIntensity
+      return applySaturation(
+        createObjMaterials(instancedMap, backTex, lit, depthWrite, depthTest, opacity, isLandscape, envIntensity),
+        saturation,
       );
     }
-    return createBoxMaterials(
-      instancedMap,
-      backTex,
-      lit,
-      depthWrite,
-      depthTest,
-      opacity,
-      envIntensity
+    return applySaturation(
+      createBoxMaterials(instancedMap, backTex, lit, depthWrite, depthTest, opacity, envIntensity),
+      saturation,
     );
   }, [
+    saturation,
     instancedMap,
     backTex,
     lit,

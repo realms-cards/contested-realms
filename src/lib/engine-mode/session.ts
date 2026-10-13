@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { setSiteCardScaleFallback } from "@/hooks/useGraphicsSettings";
 import { withSfxSource } from "@/lib/audio/gameSfx";
 import type { SfxSource } from "@/lib/audio/gameSfx";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
@@ -30,11 +31,15 @@ import {
   harbingerTiles,
   hiddenLayerCounts,
   projectView,
+  unitPower,
   sitesLostSince,
 } from "./projection";
 import type { BoardLayer, BoardReveal, DamageSnapshot, HiddenCounts, ProjectedState } from "./projection";
 
 export const HUMAN_SEAT: PlayerId = 0;
+
+/** How large sites are drawn in engine mode when the player has not chosen a size themselves. */
+const ENGINE_SITE_SCALE = 1.5;
 export const BOT_SEAT: PlayerId = 1;
 
 /**
@@ -191,7 +196,8 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         source,
       );
     }
-    const projection = projectView(view, layer, get().portalsRevealed);
+    // `unitPower` needs the full engine state, which only this side has — see its docblock.
+    const projection = projectView(view, layer, get().portalsRevealed, unitPower(game));
     lastProjection = projection;
     // the sound director diffs store updates; tag who caused this one (cosmetic ones stay silent)
     withSfxSource(source, () => useGameStore.setState(projection));
@@ -264,6 +270,10 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     // purple "this card is automated" outline (hasCustomResolver) over cards whose automation
     // belongs to a different engine entirely — a promise engine mode cannot keep.
     useGameStore.setState({ transport: null, actorKey: null, boardGesturesLocked: true, resolversDisabled: true });
+    // This board is read far more than it is dragged on, so sites want to be bigger here than
+    // the printed fifth-of-a-tile. It is only a FALLBACK: the moment the player sets the slider
+    // themselves, their number wins here and everywhere else. Put back on stop().
+    setSiteCardScaleFallback(ENGINE_SITE_SCALE);
   }
 
   /** If anything else writes the projected slice (a stray drag, a hotkey), put the engine's picture back. */
@@ -682,6 +692,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       nextBotAt = 0;
       lastBotTurn = -1;
       useCpuReveals.getState().reset();
+      setSiteCardScaleFallback(1);
       useGameStore.setState({ boardGesturesLocked: false, ...(borrowed ?? {}) });
       borrowed = null;
       {

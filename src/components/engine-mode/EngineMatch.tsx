@@ -10,6 +10,7 @@ import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
 import MusicGameSync from "@/components/game/MusicGameSync";
 import OnlineConsole from "@/components/game/OnlineConsole";
 import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
+import RestoreUiButton from "@/components/game/RestoreUiButton";
 import TurnStartOverlay from "@/components/game/TurnStartOverlay";
 import AppShell from "@/components/ui/AppShell";
 import { PageHeader } from "@/components/ui/page-header";
@@ -268,6 +269,10 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
   // Mulligan over = the board is really in play; this is what turn 1's announcement waits for,
   // exactly as /play waits on mulliganComplete && seerComplete.
   const pastSetup = useGameStore((s) => s.phase !== "Setup");
+  // The same hide-everything mode the other modes have: the board alone, for reading it or
+  // taking a picture of it. Prompts stay — they are the game asking you a question, not
+  // furniture — and RestoreUiButton is always there to bring the rest back.
+  const uiHidden = useGameStore((s) => s.uiHidden);
 
   // The card-preview setting is remembered across sessions in the other modes; honour the
   // same stored value here instead of always opening at the store default.
@@ -288,6 +293,19 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
       e.preventDefault();
       const store = useGameStore.getState();
       store.setHandVisibilityMode(store.handVisibilityMode === "visible" ? "hidden" : "visible");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // U hides/shows the whole interface, the same key as the other modes.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "u" && e.key !== "U") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName))) return;
+      e.preventDefault();
+      useGameStore.getState().toggleUiHidden();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -315,6 +333,8 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
     >
       <EngineBoard3D controlsRef={controlsRef} cameraLocked={interaction.picking || dragFromHand} />
       <GameSoundEffects store={useGameStore} />
+      {/* Everything from here to the console is chrome, and hides together with U. */}
+      {!uiHidden && <>
       {/* the engine owns life totals — the familiar counters, read-only */}
       <OnlineLifeCounters
         dragFromHand={false}
@@ -340,9 +360,12 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
           anchor="top-right"
         />
       )}
+      </>}
+      {/* Not gated: a prompt is the game waiting on you, and hiding it would strand the match. */}
       <div className="pointer-events-none fixed inset-x-0 top-16 z-[200] flex justify-center px-4">
         <EnginePromptPanel />
       </div>
+      {!uiHidden && <>
       {/* the computer's turn, narrated: a line per action and the card it played */}
       <EngineNarration />
       {/* The same console the online and replay views use, in the same bottom-left spot, fed
@@ -362,7 +385,12 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
           playerNames={{ p1: "You", p2: "Computer" }}
         />
       </div>
+      </>}
 
+      {/* Brought back with a click when the interface is hidden. End-turn is not offered on it:
+          that button drives the STORE's requestEndTurn, which engine mode does not read — the
+          engine owns the turn — so it would be a button that does nothing. */}
+      <RestoreUiButton myPlayerKey="p1" canEndTurn={false} />
 
       {/* "Turn N" + the draw reminder, the same announcement the other modes open a turn with.
           `seat` is needed because engine mode leaves actorKey null, which elsewhere means
@@ -380,11 +408,11 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
       />
 
       {/* centre, with the thinking pill and the narration line — one place for the computer */}
-      <CpuPlayReveal placement="center" />
+      {!uiHidden && <CpuPlayReveal placement="center" />}
       {/* Mood-matched music, same as /play and /online/play. The rail owns play/pause. */}
       <MusicGameSync myPlayerKey="p1" />
       <EngineContextMenu />
-      <EngineHud interaction={interaction} onRestart={onRestart} onExit={onExit} />
+      {!uiHidden && <EngineHud interaction={interaction} onRestart={onRestart} onExit={onExit} />}
     </div>
   );
 }
