@@ -40,6 +40,7 @@ import {
   sitesLostSince,
 } from "./projection";
 import type { Arrangement, BoardLayer, BoardReveal, DamageSnapshot, HiddenCounts, ProjectedState } from "./projection";
+import { ENGINE_BUILD } from "@shared/engine/build";
 import "@shared/engine/scriptPatches";
 
 export const HUMAN_SEAT: PlayerId = 0;
@@ -205,6 +206,11 @@ interface EngineSession {
   requestEndTurn: () => void;
   dismissEndTurn: () => void;
   lastError: string | null;
+  /**
+   * Remote only: the server runs different rules from this page (a release landed on one and
+   * not yet the other). Nothing can be played until the player reloads.
+   */
+  outdated: boolean;
   canUndo: boolean;
   start: (human: DeckList, bot: DeckList, botLevel: BotLevel, opts?: { secondSeer?: boolean }) => Promise<void>;
   /** pre-game: true once the Harbinger portent roll has been shown (always true without a Harbinger) */
@@ -227,6 +233,8 @@ interface EngineSession {
     disabled: string[];
     legal: Action[];
     over?: boolean;
+    /** The server's ENGINE_BUILD */
+    build: string;
   }) => void;
   /** The server refused an action; show why and stop pretending it happened. */
   applyRemoteReject: (reason: string) => void;
@@ -813,6 +821,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     endTurnConfirm: false,
     legal: null,
     lastError: null,
+    outdated: false,
     canUndo: false,
     layer: "surface",
     hidden: {},
@@ -969,7 +978,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         // board changes when the next view arrives, which is also what makes a refused action
         // simply not happen rather than having to be rolled back.
         if (!remoteSend) return { ok: false, error: "Not connected to the match." };
-        remoteSend({ type: "engine:action", matchId: get().matchId, action, rev: get().rev });
+        remoteSend({ type: "engine:action", matchId: get().matchId, action, rev: get().rev, build: ENGINE_BUILD });
         return { ok: true };
       }
       if (!game) return { ok: false, error: "No game in progress." };
@@ -1034,6 +1043,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         botThinking: false,
         narration: null,
         lastError: null,
+        outdated: false,
         decisionSeat: null,
       });
       takeOverBoard();
@@ -1045,6 +1055,12 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       if (mode !== "remote" || envelope.matchId !== matchId) return;
       // Views can overtake each other; an older one would roll the board backwards.
       if (envelope.rev < rev) return;
+      // Painted with different rules the view could be misread, and every action built from it
+      // would be refused anyway — stop here and say why.
+      if (envelope.build !== ENGINE_BUILD) {
+        set({ outdated: true, legal: null, decisionSeat: null });
+        return;
+      }
       set({
         // The view is engine-state SHAPED (units, sites, players, prompts, flow), which is why
         // every board component reads it exactly as it reads a local game.

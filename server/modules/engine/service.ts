@@ -8,6 +8,7 @@
  * `action` handler refuses an engine match outright (see `isEngineMatch`), rather than merely
  * ignoring it.
  */
+import { ENGINE_BUILD } from "../../../shared/engine/build";
 import { EnginePool } from "./pool";
 
 /** Bumped on every applied action. A client that receives an older rev ignores it. */
@@ -26,6 +27,8 @@ export type ViewEnvelope = {
   /** Everything this seat may legally do right now — the client cannot work this out itself. */
   legal: unknown[];
   over: boolean;
+  /** Which rules produced this view; a client on different ones must reload before playing. */
+  build: string;
 };
 
 export type ActionOutcome =
@@ -90,7 +93,7 @@ export class EngineMatchService {
     if (!live) return null;
     const reply = await this.pool.view(matchId, seat);
     if (!reply.ok || reply.kind !== "view") return null;
-    return { matchId, rev: live.rev, seat, view: reply.view, power: reply.power, disabled: reply.disabled, legal: reply.legal, over: live.over };
+    return { matchId, rev: live.rev, seat, view: reply.view, power: reply.power, disabled: reply.disabled, legal: reply.legal, over: live.over, build: ENGINE_BUILD };
   }
 
   /** The full state, for persisting across a restart. Never goes to a client. */

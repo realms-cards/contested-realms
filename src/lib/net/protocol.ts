@@ -297,6 +297,8 @@ export const EngineActionSchema = z.object({
   action: z.unknown(),
   /** The view revision this action was decided on, so the server can spot a stale client. */
   rev: z.number().int().nonnegative().optional(),
+  /** The client's ENGINE_BUILD; the server refuses actions from a build other than its own. */
+  build: z.string().optional(),
 });
 export type EngineActionMessage = z.infer<typeof EngineActionSchema>;
 
@@ -319,6 +321,8 @@ export const EngineViewSchema = z.object({
   legal: z.array(z.unknown()),
   /** Set once the engine says the game is over, so the client stops asking for actions. */
   over: z.boolean().optional(),
+  /** The server's ENGINE_BUILD. A client on another build stops and asks the player to reload. */
+  build: z.string(),
 });
 export type EngineViewMessage = z.infer<typeof EngineViewSchema>;
 

@@ -53,6 +53,7 @@ export default function EngineOnlineMatch({
         disabled: envelope.disabled ?? [],
         legal: (envelope.legal ?? []) as Action[],
         over: envelope.over,
+        build: envelope.build,
       });
     });
     const offReject = transport.on("engine:reject", (message) => {
@@ -93,9 +94,36 @@ export function EngineOnlineGame({
   // Nothing to draw until the server starts the match, which it does once BOTH decks are in.
   const started = useEngineSession((s) => s.game !== null);
   const error = useEngineSession((s) => s.lastError);
+  const outdated = useEngineSession((s) => s.outdated);
   return (
     <EngineOnlineMatch matchId={matchId} seat={seat} transport={transport}>
-      {started ? (
+      {outdated ? (
+        <div className="fixed inset-0 flex items-center justify-center bg-[#0b0b0c] px-4 font-rc-sans text-rc-fg">
+          <div className="w-full max-w-md rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-center shadow-rc-panel">
+            <h2 className="m-0 font-rc-display text-[24px] leading-tight text-rc-fg-strong">New rules version</h2>
+            <p className="mt-3 text-sm text-rc-fg-muted">
+              The server has been updated and runs a different version of the rules than this page. Reload to carry on —
+              your match is kept.
+            </p>
+            <div className="mt-5 flex justify-center gap-2">
+              <button
+                type="button"
+                onClick={onExit}
+                className="rounded-rc-md border border-rc-line/30 px-4 py-1.5 text-sm text-rc-fg hover:border-rc-accent/50"
+              >
+                Leave
+              </button>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="rounded-rc-md border border-rc-accent/60 px-4 py-1.5 text-sm text-rc-fg-strong hover:bg-rc-accent/10"
+              >
+                Reload
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : started ? (
         <EngineGame onExit={onExit} />
       ) : (
         <div className="fixed inset-0 flex items-center justify-center bg-[#0b0b0c] px-4 font-rc-sans text-rc-fg">

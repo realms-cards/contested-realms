@@ -30,8 +30,11 @@ describe("a rules-engine match, server to client", () => {
         seat: envelope.seat as PlayerId,
         view: envelope.view as PlayerView,
         power: envelope.power,
+        disabled: envelope.disabled,
         legal: envelope.legal as Action[],
         over: envelope.over,
+        // the server's own id, so this also checks a client and server built together agree
+        build: envelope.build,
       });
       return envelope;
     };

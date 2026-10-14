@@ -81,6 +81,8 @@ import type {
   ServerMatchState,
   VoiceParticipant,
 } from "./types";
+// Only the build id: a JSON read, safe to load at boot unlike the engine itself (see below).
+import { ENGINE_BUILD } from "../shared/engine/build";
 
 const {
   createRngFromString,
@@ -3905,6 +3907,16 @@ io.on("connection", async (socket: SocketClient) => {
       if (type === "engine:resync") {
         const envelope = await engine.viewFor(matchId, seat);
         if (envelope) socket.emit("engine:view", envelope);
+        return;
+      }
+      // A client on other rules builds actions from a different idea of the cards. Refused
+      // outright: its view already carries the server's build, so it has been told to reload.
+      if (payload?.build !== ENGINE_BUILD) {
+        socket.emit("engine:reject", {
+          matchId,
+          reason: "This page is running a different version of the rules than the server. Reload to keep playing.",
+          rev: engine.revOf(matchId),
+        });
         return;
       }
       const outcome = await engine.act(matchId, seat, payload?.action, payload?.rev);

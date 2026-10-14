@@ -1,6 +1,7 @@
 import { createGame, viewFor } from "@sorcery/shared";
 import type { GameState as EngineState, PlayerId, PlayerView } from "@sorcery/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ENGINE_BUILD } from "@shared/engine/build";
 import { enginePrecons, toEngineDeck } from "./decks";
 import { useEngineSession } from "./session";
 
@@ -23,6 +24,7 @@ const envelope = (seat: PlayerId, rev: number, view: PlayerView) => ({
   power: {},
   disabled: [],
   legal: [],
+  build: ENGINE_BUILD,
 });
 
 describe("a client in a server-run match", () => {
@@ -39,7 +41,7 @@ describe("a client in a server-run match", () => {
 
     const result = useEngineSession.getState().dispatch({ t: "endTurn" } as never);
     expect(result.ok, "accepted for sending, not resolved").toBe(true);
-    expect(sent[1]).toMatchObject({ type: "engine:action", matchId: "m1", action: { t: "endTurn" } });
+    expect(sent[1]).toMatchObject({ type: "engine:action", matchId: "m1", action: { t: "endTurn" }, build: ENGINE_BUILD });
     expect(useEngineSession.getState().game, "no board was conjured from nothing").toBeNull();
   });
 
@@ -74,6 +76,16 @@ describe("a client in a server-run match", () => {
     useEngineSession.getState().joinRemote("m1", 0 as PlayerId, () => undefined);
     useEngineSession.getState().applyRemoteView({ ...envelope(0 as PlayerId, 2, view), matchId: "somewhere-else" });
     expect(useEngineSession.getState().rev).toBe(-1);
+  });
+
+  it("stops, rather than paints, a view from a server on different rules", () => {
+    const { view } = serverView(0 as PlayerId);
+    useEngineSession.getState().joinRemote("m1", 0 as PlayerId, () => undefined);
+    useEngineSession.getState().applyRemoteView({ ...envelope(0 as PlayerId, 1, view), build: "someothercommit.r9" });
+    const state = useEngineSession.getState();
+    expect(state.outdated, "the player is asked to reload").toBe(true);
+    expect(state.game, "nothing painted with rules this page does not have").toBeNull();
+    expect(state.legal).toBeNull();
   });
 
   it("shows a refusal without rolling anything back", () => {
