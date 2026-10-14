@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
+import { useResolvedBoardView } from "@/lib/engine-mode/boardView";
 import { useEngineSession } from "@/lib/engine-mode/session";
 import type { GameTransport } from "@/lib/net/transport";
 import type { Action, PlayerId, PlayerView } from "@sorcery/shared";
+import EngineGame2D from "./2d/EngineGame2D";
 import { EngineGame } from "./EngineMatch";
 
 /**
@@ -95,6 +97,7 @@ export function EngineOnlineGame({
   const started = useEngineSession((s) => s.game !== null);
   const error = useEngineSession((s) => s.lastError);
   const outdated = useEngineSession((s) => s.outdated);
+  const boardView = useResolvedBoardView();
   return (
     <EngineOnlineMatch matchId={matchId} seat={seat} transport={transport}>
       {outdated ? (
@@ -123,8 +126,12 @@ export function EngineOnlineGame({
             </div>
           </div>
         </div>
+      ) : started && !boardView ? (
+        // neither board until the device is known, so a phone never loads the 3D bundle
+        <div className="fixed inset-0 bg-[#0b0b0c]" aria-busy="true" />
       ) : started ? (
-        <EngineGame onExit={onExit} />
+        // the same choice single player makes: the 2D board on phones (or when picked)
+        boardView === "2d" ? <EngineGame2D onExit={onExit} /> : <EngineGame onExit={onExit} />
       ) : (
         <div className="fixed inset-0 flex items-center justify-center bg-[#0b0b0c] px-4 font-rc-sans text-rc-fg">
           <div className="w-full max-w-md rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-center shadow-rc-panel">

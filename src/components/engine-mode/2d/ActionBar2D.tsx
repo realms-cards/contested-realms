@@ -62,7 +62,8 @@ export default function ActionBar2D({
 }: {
   interaction: EngineInteraction;
   onExit: () => void;
-  onRestart: () => void;
+  /** Absent in a player-vs-player match: the finished game's button leaves instead. */
+  onRestart?: () => void;
   orientation?: "row" | "column";
   columns?: 2 | 3;
 }) {
@@ -110,20 +111,22 @@ export default function ActionBar2D({
   const piloting = deciding !== null && deciding !== viewer;
   const myMain = deciding !== null && game.phase === "main" && game.prompts.length === 0;
   const over = game.phase === "over";
-  const primary = primaryAction({
+  const suggested = primaryAction({
     over,
     myMain,
     confirmable: !!interaction.confirmable,
     picking: interaction.picking,
     active: interaction.active,
   });
+  // against a person there is no local game to start again: the finished game's button leaves
+  const primary = suggested.kind === "restart" && !onRestart ? { ...suggested, label: "Leave" } : suggested;
   const toggle = layerToggle(layer, hidden);
   const below = layer === "subsurface";
   // what the More sheet holds that the player can act on right now
   const castable = myMain ? interaction.cemetery.length : 0;
   const onPrimary = () => {
     if (primary.kind === "confirm") interaction.confirm();
-    else if (primary.kind === "restart") onRestart();
+    else if (primary.kind === "restart") (onRestart ?? onExit)();
     else requestEndTurn();
   };
 
