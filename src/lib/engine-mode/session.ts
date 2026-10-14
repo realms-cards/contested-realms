@@ -7,6 +7,7 @@ import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import { CPU_SPELL_REVEAL_READ_MS, cpuRevealsPending, useCpuReveals } from "@/lib/game/cpu/revealQueue";
 import { useGameStore } from "@/lib/game/store";
 import type { BoardArrangeTarget, GameState } from "@/lib/game/store/types";
+import { ENGINE_BUILD } from "@shared/engine/build";
 import {
   actingSeatFor,
   applyAchievements,
@@ -16,7 +17,7 @@ import {
   evaluate,
   viewFor,
 } from "@sorcery/shared";
-import type { Action, ActionResult, DeckList, GameState as EngineState, PlayerId } from "@sorcery/shared";
+import type { Action, ActionResult, DeckList, GameState as EngineState, PlayerId, PlayerView } from "@sorcery/shared";
 import { botActionKey, botNeedsToAct } from "@untested-realm/bot/bot";
 import type { BotReply, BotRequest } from "@untested-realm/bot/bot.worker";
 import { loadCardIndex } from "./cardIndex";
@@ -40,7 +41,7 @@ import {
   sitesLostSince,
 } from "./projection";
 import type { Arrangement, BoardLayer, BoardReveal, DamageSnapshot, HiddenCounts, ProjectedState } from "./projection";
-import "./scriptPatches";
+import "@shared/engine/scriptPatches";
 
 export const HUMAN_SEAT: PlayerId = 0;
 
@@ -58,15 +59,15 @@ export const BOT_SEAT: PlayerId = 1;
  * and `botNeedsToAct(BOT_SEAT)` is false because the decisions are not the bot's to make.
  * The match simply stopped.
  */
-export function humanDecisionSeat(game: EngineState): PlayerId | null {
-  if (actingSeatFor(game, game.activePlayer) === HUMAN_SEAT) return game.activePlayer;
+export function humanDecisionSeat(game: EngineState, viewer: PlayerId = HUMAN_SEAT): PlayerId | null {
+  if (actingSeatFor(game, game.activePlayer) === viewer) return game.activePlayer;
   return null;
 }
 
 /** True while the human is playing the opponent's turn for them. */
-export function isPiloting(game: EngineState): boolean {
-  const seat = humanDecisionSeat(game);
-  return seat !== null && seat !== HUMAN_SEAT;
+export function isPiloting(game: EngineState, viewer: PlayerId = HUMAN_SEAT): boolean {
+  const seat = humanDecisionSeat(game, viewer);
+  return seat !== null && seat !== viewer;
 }
 
 const isSeat = (value: unknown): value is PlayerId => value === 0 || value === 1;
@@ -94,25 +95,72 @@ export interface ControlSwap {
   text: string;
 }
 
+/** Stands in for a card this client is not allowed to know (an unseen deck card). */
+export const HIDDEN_CARD = "hidden";
+
+/** A player record as it arrives in a view: piles as counts, some bookkeeping left out. */
+interface ViewPlayer {
+  atlasCount?: number;
+  spellbookCount?: number;
+  atlas?: unknown;
+  spellbook?: unknown;
+}
+
+/**
+ * A server view, made the shape every board component and engine helper expects of a game.
+ *
+ * A view keeps units, sites and cards as they are, but its players carry `atlasCount` and
+ * `spellbookCount` instead of the piles (deck order is secret, and the seed would give it away),
+ * and leave out some bookkeeping flags. Code that reads `player.spellbook.length` — the resource
+ * panels, the seat bars — then threw on the first remote board. The piles become arrays of
+ * HIDDEN_CARD of the right length, so counts read true and nothing can be learned from them.
+ */
+export function stateFromView(view: PlayerView): EngineState {
+  const hidden = (n: unknown) => Array.from({ length: typeof n === "number" && n > 0 ? n : 0 }, () => HIDDEN_CARD);
+  const players = (view.players as ViewPlayer[]).map((p) => ({
+    usedAvatarSiteAbility: false,
+    ...p,
+    atlas: Array.isArray(p.atlas) ? p.atlas : hidden(p.atlasCount),
+    spellbook: Array.isArray(p.spellbook) ? p.spellbook : hidden(p.spellbookCount),
+  }));
+  return { ...view, players } as unknown as EngineState;
+}
+
+/**
+ * What to call the other player. Single player seats the bot as "Computer", and the server seats
+ * each player under their display name, so the name on the game is right in both — this only
+ * covers a seat with no name at all.
+ */
+export function opponentName(game: Pick<EngineState, "players"> | null, viewer: PlayerId = HUMAN_SEAT): string {
+  const them = viewer === 0 ? 1 : 0;
+  return game?.players?.[them]?.name?.trim() || "Opponent";
+}
+
 /**
  * Who is playing whose turn under Courtesan Thaïs, as one sentence for a banner — the turn in
  * progress (`flow.thaisActive`) first, else the swap the next turn will bring
  * (`flow.thaisPending` naming the seat whose turn comes next). Null when control is normal.
  */
-export function controlSwap(game: EngineState): ControlSwap | null {
+export function controlSwap(game: EngineState, viewer: PlayerId = HUMAN_SEAT): ControlSwap | null {
+  // "yours" is the viewer's seat and "theirs" the other one — in single player that is the
+  // human and the bot, in a player-vs-player match whichever seat this client holds
+  const them: PlayerId = viewer === 0 ? (1 as PlayerId) : (0 as PlayerId);
+  // single player keeps reading "the Computer"; a person is called by their name
+  const opponent = opponentName(game, viewer);
+  const name = opponent === "Computer" ? "the Computer" : opponent;
   if (game.phase === "over") return null;
   const active = thaisActiveSeat(game);
-  if (active === HUMAN_SEAT) {
-    return { kind: "computer-plays-yours", now: true, text: "Courtesan Thaïs: the Computer is playing your turn" };
+  if (active === viewer) {
+    return { kind: "computer-plays-yours", now: true, text: `Courtesan Thaïs: ${name} is playing your turn` };
   }
-  if (active === BOT_SEAT) {
-    return { kind: "you-play-theirs", now: true, text: "Courtesan Thaïs: you are playing the Computer's turn" };
+  if (active === them) {
+    return { kind: "you-play-theirs", now: true, text: `Courtesan Thaïs: you are playing ${name}'s turn` };
   }
-  const next: PlayerId = game.activePlayer === HUMAN_SEAT ? BOT_SEAT : HUMAN_SEAT;
+  const next: PlayerId = game.activePlayer === viewer ? them : viewer;
   if (!thaisPendingSeats(game).includes(next)) return null;
-  return next === HUMAN_SEAT
-    ? { kind: "computer-will-play-yours", now: false, text: "Courtesan Thaïs: the Computer will play your next turn" }
-    : { kind: "you-will-play-theirs", now: false, text: "Courtesan Thaïs: you will play the Computer's next turn" };
+  return next === viewer
+    ? { kind: "computer-will-play-yours", now: false, text: `Courtesan Thaïs: ${name} will play your next turn` }
+    : { kind: "you-will-play-theirs", now: false, text: `Courtesan Thaïs: you will play ${name}'s next turn` };
 }
 
 /**
@@ -154,6 +202,18 @@ const BOT_BUDGET_MS: Record<BotLevel, number> = { quick: 1500, thinking: 20000 }
 
 interface EngineSession {
   game: EngineState | null;
+  /**
+   * Which engine seat this client plays. Single player is always seat 0; in a player-vs-player
+   * match the server says, and the board, the hand, the prompts and every tile coordinate are
+   * drawn from this seat's side.
+   */
+  seat: PlayerId;
+  /**
+   * `local` owns the authoritative GameState and resolves its own actions. `remote` holds only
+   * the redacted view the server sent it and posts actions back — it cannot resolve anything,
+   * which is the point: the state it would need contains both hands and the seed.
+   */
+  mode: "local" | "remote";
   /** bumps on every applied action so React selectors re-render (the engine mutates in place) */
   rev: number;
   botLevel: BotLevel;
@@ -190,6 +250,11 @@ interface EngineSession {
   requestEndTurn: () => void;
   dismissEndTurn: () => void;
   lastError: string | null;
+  /**
+   * Remote only: the server runs different rules from this page (a release landed on one and
+   * not yet the other). Nothing can be played until the player reloads.
+   */
+  outdated: boolean;
   canUndo: boolean;
   start: (human: DeckList, bot: DeckList, botLevel: BotLevel, opts?: { secondSeer?: boolean }) => Promise<void>;
   /** pre-game: true once the Harbinger portent roll has been shown (always true without a Harbinger) */
@@ -197,6 +262,26 @@ interface EngineSession {
   revealPortals: () => void;
   /** apply a human action; returns the engine's verdict */
   dispatch: (action: Action) => ActionResult;
+  /**
+   * Hand this client over to a server-run match. From here it holds no GameState at all: it
+   * paints whatever view arrives and posts actions back.
+   */
+  joinRemote: (matchId: string, seat: PlayerId, send: (message: unknown) => void) => void;
+  /** A view envelope from the server. Older revisions are ignored, not applied out of order. */
+  applyRemoteView: (envelope: {
+    matchId: string;
+    rev: number;
+    seat: PlayerId;
+    view: PlayerView;
+    power: Record<string, { atk: number; def: number }>;
+    disabled: string[];
+    legal: Action[];
+    over?: boolean;
+    /** The server's ENGINE_BUILD */
+    build: string;
+  }) => void;
+  /** The server refused an action; show why and stop pretending it happened. */
+  applyRemoteReject: (reason: string) => void;
   undo: () => void;
   stop: () => void;
   /** Rebuild a match saved before a reload; false when the record could not be restored. */
@@ -318,21 +403,35 @@ let standaloneRevealSeq = 0;
 /** A deferred board reveal (see `showReveal`), cancelled if another lands first. */
 let revealTimer: ReturnType<typeof setTimeout> | null = null;
 let matchCounter = 0;
+/** How a remote match posts actions back. Null in single player. */
+let remoteSend: ((message: unknown) => void) | null = null;
 
 export const useEngineSession = create<EngineSession>((set, get) => {
-  function project(game: EngineState, source: SfxSource = "silent") {
-    // While piloting, the engine intends the pilot to see the hand they are playing.
-    const view = viewFor(game, HUMAN_SEAT, isPiloting(game) ? { revealAll: true } : undefined);
-    const { layer } = get();
-    set({ hidden: hiddenLayerCounts(view, layer) });
+  /**
+   * Turn an engine PICTURE into the board.
+   *
+   * Split from `project` because the two modes arrive at that picture differently. Single
+   * player holds the authoritative GameState and derives its own view; a player-vs-player
+   * client is SENT its view by the server and never has the state at all — it could not
+   * compute one, and must not be trusted with the hands and seed inside it. Everything after
+   * that point is identical, so it lives here once.
+   */
+  function paint(
+    view: PlayerView,
+    power: Record<string, { atk: number; def: number }>,
+    disabled: ReadonlySet<string>,
+    source: SfxSource,
+  ) {
+    const { layer, seat } = get();
+    set({ hidden: hiddenLayerCounts(view, layer, seat) });
     // What just resolved, drawn on the board: the engine's own caption/caster/affected squares
     // (only when its `seq` advances, so a cosmetic re-project never replays it), plus damage
     // numbers diffed off the units themselves so EVERY source lands — combat, spells,
     // abilities and triggers alike.
-    const hits = damageSince(lastDamage, view);
-    const razed = sitesLostSince(lastDamage, view);
-    lastDamage = damageSnapshot(view);
-    const event = boardReveal(view, lastRevealSeq);
+    const hits = damageSince(lastDamage, view, seat);
+    const razed = sitesLostSince(lastDamage, view, seat);
+    lastDamage = damageSnapshot(view, seat);
+    const event = boardReveal(view, lastRevealSeq, seat);
     if (event) lastRevealSeq = event.seq;
     if (event || hits.length || razed.length) {
       const base = event ?? {
@@ -354,13 +453,21 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         source,
       );
     }
-    // `unitPower` and `disabledUnits` need the full engine state, which only this side has —
-    // see their docblocks.
-    const projection = projectView(view, layer, get().portalsRevealed, unitPower(game), disabledUnits(game), get().arrangement);
+    const projection = projectView(view, layer, get().portalsRevealed, power, disabled, get().arrangement, seat);
     lastProjection = projection;
     // the sound director diffs store updates; tag who caused this one (cosmetic ones stay silent)
     withSfxSource(source, () => useGameStore.setState(projection));
   }
+
+  function project(game: EngineState, source: SfxSource = "silent") {
+    const seat = get().seat;
+    // While piloting, the engine intends the pilot to see the hand they are playing.
+    const view = viewFor(game, seat, isPiloting(game, seat) ? { revealAll: true } : undefined);
+    // `unitPower` and `disabledUnits` need the full engine state, which only this side has —
+    // see their docblocks. In a player-vs-player match the server computes both instead.
+    paint(view, unitPower(game), disabledUnits(game), source);
+  }
+
 
   /**
    * Put a board reveal on screen — but not on top of the computer's own card.
@@ -412,7 +519,11 @@ export const useEngineSession = create<EngineSession>((set, get) => {
    * disk before the player can reload — no debounce and no flush window to lose actions in.
    */
   function persist() {
-    const { game, botLevel, portalsRevealed, layer, matchId, controlTurns, feedNotes, arrangement } = get();
+    const { game, botLevel, portalsRevealed, layer, matchId, controlTurns, feedNotes, arrangement, mode } = get();
+    // Never save a remote match. What this client holds is a redacted view, not a game, and a
+    // state restored from a player's own machine is a state that player could have edited.
+    // Reconnecting asks the server instead.
+    if (mode === "remote") return;
     if (game) saveEngineGame(game, { botLevel, portalsRevealed, layer, matchId, controlTurns, feedNotes, arrangement });
   }
 
@@ -421,6 +532,23 @@ export const useEngineSession = create<EngineSession>((set, get) => {
    * checks, and free-form gestures refused. Borrow, don't steal — the online provider installs
    * its transport once per page load, so stop() puts it back.
    */
+  /**
+   * Shut down everything that only makes sense when this tab owns the game.
+   *
+   * Against a human none of it is merely useless: an undo history, a bot that can be asked to
+   * move for you, and a locally saved state a client could edit and resume from are all ways
+   * to cheat.
+   */
+  function stopLocalWork() {
+    if (botTimer) clearTimeout(botTimer);
+    botTimer = null;
+    worker?.terminate();
+    worker = null;
+    legalWorker?.terminate();
+    legalWorker = null;
+    history.length = 0;
+  }
+
   function takeOverBoard() {
     useGameStore.getState().resetGameState();
     const shared = useGameStore.getState();
@@ -554,7 +682,9 @@ export const useEngineSession = create<EngineSession>((set, get) => {
   }
 
   function scheduleBot() {
-    const { game } = get();
+    const { game, mode } = get();
+    // There is no bot in a match against a human, and `game` is only a view here anyway.
+    if (mode === "remote") return;
     if (!game || botTimer || get().botThinking || !botNeedsToAct(game, BOT_SEAT)) return;
     // a fresh computer turn gets its own opening beat
     if (lastBotTurn !== game.turn) {
@@ -721,6 +851,8 @@ export const useEngineSession = create<EngineSession>((set, get) => {
 
   return {
     game: null,
+    seat: HUMAN_SEAT,
+    mode: "local",
     rev: 0,
     botLevel: "quick",
     botThinking: false,
@@ -733,6 +865,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     endTurnConfirm: false,
     legal: null,
     lastError: null,
+    outdated: false,
     canUndo: false,
     layer: "surface",
     hidden: {},
@@ -882,7 +1015,16 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     },
 
     dispatch: (action) => {
-      const { game } = get();
+      const { game, mode } = get();
+      if (mode === "remote") {
+        // Nothing is applied here. The server is the only authority, and this client does not
+        // even hold a state to apply against — `game` is the redacted view it was sent. The
+        // board changes when the next view arrives, which is also what makes a refused action
+        // simply not happen rather than having to be rolled back.
+        if (!remoteSend) return { ok: false, error: "Not connected to the match." };
+        remoteSend({ type: "engine:action", matchId: get().matchId, action, rev: get().rev, build: ENGINE_BUILD });
+        return { ok: true };
+      }
       if (!game) return { ok: false, error: "No game in progress." };
       const snapshot = JSON.stringify(game);
       let result: ActionResult;
@@ -928,6 +1070,64 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     },
 
     dismissEndTurn: () => set({ endTurnConfirm: false }),
+
+    joinRemote: (matchId, seat, send) => {
+      // Tear down anything local first: a remote match must not have a bot thinking, an undo
+      // history, or a saved game on this machine. Those are all cheats against a human.
+      stopLocalWork();
+      remoteSend = send;
+      set({
+        mode: "remote",
+        matchId,
+        seat,
+        game: null,
+        rev: -1,
+        legal: null,
+        canUndo: false,
+        botThinking: false,
+        narration: null,
+        lastError: null,
+        outdated: false,
+        decisionSeat: null,
+        // The Harbinger roll screen reads the FULL game (viewFor), which a remote client never
+        // has — and the server already fixed the portents. Online the portals simply show; a
+        // value left over from an earlier local game must not open that screen on a view.
+        portalsRevealed: true,
+      });
+      takeOverBoard();
+      send({ type: "engine:resync", matchId });
+    },
+
+    applyRemoteView: (envelope) => {
+      const { mode, matchId, rev } = get();
+      if (mode !== "remote" || envelope.matchId !== matchId) return;
+      // Views can overtake each other; an older one would roll the board backwards.
+      if (envelope.rev < rev) return;
+      // Painted with different rules the view could be misread, and every action built from it
+      // would be refused anyway — stop here and say why.
+      if (envelope.build !== ENGINE_BUILD) {
+        set({ outdated: true, legal: null, decisionSeat: null });
+        return;
+      }
+      set({
+        // The view is engine-state SHAPED (units, sites, prompts, flow), which is why every
+        // board component reads it exactly as it reads a local game — except its players,
+        // which stateFromView fills in.
+        game: stateFromView(envelope.view),
+        rev: envelope.rev,
+        seat: envelope.seat,
+        legal: envelope.legal,
+        lastError: null,
+        decisionSeat: envelope.over ? null : envelope.seat,
+      });
+      paint(envelope.view, envelope.power, new Set(envelope.disabled), "remote");
+    },
+
+    applyRemoteReject: (reason) => {
+      // The server also sends the real board straight after, so there is nothing to undo —
+      // only something to say.
+      set({ lastError: reason });
+    },
 
     undo: () => {
       const snapshot = history.pop();

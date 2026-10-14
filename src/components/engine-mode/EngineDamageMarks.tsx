@@ -2,7 +2,7 @@
 
 import { Html } from "@react-three/drei";
 import { auraPlacement, PINNED_SCALE, unitCell } from "@/lib/engine-mode/projection";
-import { HUMAN_SEAT, useEngineSession } from "@/lib/engine-mode/session";
+import { useEngineSession } from "@/lib/engine-mode/session";
 import { getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
 import { TILE_SIZE } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
@@ -30,6 +30,7 @@ const HTML_Z: [number, number] = [25, 0];
 
 export default function EngineDamageMarks() {
   const game = useEngineSession((s) => s.game);
+  const viewer = useEngineSession((s) => s.seat);
   useEngineSession((s) => s.rev);
   const layer = useEngineSession((s) => s.layer);
   const width = useGameStore((s) => s.board.size.w);
@@ -54,14 +55,14 @@ export default function EngineDamageMarks() {
       {marks.map((unit) => {
         // A multi-square body is drawn pinned at its footprint's centre, smaller (projectView's
         // auraPlacement + PINNED_SCALE), with the owner nudge cancelled: ride on THAT card.
-        const owner = unit.controller === HUMAN_SEAT ? 1 : 2;
+        const owner = unit.controller === viewer ? 1 : 2;
         const body = occupiedSquares(unit);
-        const placed = body.length > 1 ? auraPlacement(body, owner) : null;
-        const [bx, by] = (placed?.at ?? unitCell(unit)).split(",").map(Number);
-        // engine seat 0 is our p1, who sits at the near edge; its cards shift toward it
+        const placed = body.length > 1 ? auraPlacement(body, owner, viewer) : null;
+        const [bx, by] = (placed?.at ?? unitCell(unit, viewer)).split(",").map(Number);
+        // the seat we are drawing for is our p1, who sits at the near edge; its cards shift toward it
         const toward = placed
           ? placed.offset[1] + getPermanentOwnerBaseZ(owner)
-          : unit.controller === HUMAN_SEAT
+          : unit.controller === viewer
             ? OWNER_SHIFT
             : -OWNER_SHIFT;
         const sideX = placed ? placed.offset[0] : 0;

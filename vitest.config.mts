@@ -31,6 +31,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
+      '@shared': path.resolve(__dirname, 'shared'),
       '@sorcery/shared': path.resolve(__dirname, 'vendor/untested-realm/shared/src/index.ts'),
       '@untested-realm/bot': path.resolve(__dirname, 'vendor/untested-realm/bot'),
       '@untested-realm/upstream': path.resolve(__dirname, 'vendor/untested-realm/UPSTREAM.json'),

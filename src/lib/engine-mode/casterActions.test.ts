@@ -2,8 +2,8 @@ import { applyAction, cloneState, createGame, getCard, legalActions, occupiedSqu
 import type { Action, GameState, PlayerId, Region, UnitState } from "@sorcery/shared";
 import { botAction, botNeedsToAct } from "@untested-realm/bot/bot";
 import { describe, expect, it } from "vitest";
+import { legalActionsWithCasters } from "@shared/engine/casterActions";
 import { actionPaths, narrow } from "./actionPaths";
-import { legalActionsWithCasters } from "./casterActions";
 import { engineCellKey } from "./coords";
 import { enginePrecons, toEngineDeck } from "./decks";
 import { unitCell } from "./projection";

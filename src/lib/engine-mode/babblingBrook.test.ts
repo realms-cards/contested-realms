@@ -2,7 +2,7 @@ import { applyAction, createGame, isDisabled, legalActions, viewFor } from "@sor
 import type { Action, GameState as EngineState, PlayerId } from "@sorcery/shared";
 import { botAction, botNeedsToAct } from "@untested-realm/bot/bot";
 import { describe, expect, it } from "vitest";
-import { legalActionsWithCasters } from "./casterActions";
+import { legalActionsWithCasters } from "@shared/engine/casterActions";
 import { enginePrecons, toEngineDeck } from "./decks";
 import { disabledUnits, projectView, unitPower } from "./projection";
 

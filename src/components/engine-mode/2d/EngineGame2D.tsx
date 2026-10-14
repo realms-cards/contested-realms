@@ -86,7 +86,8 @@ function Slot({ box, className = "", children }: { box: Box2D; className?: strin
  * sit on the opponent's bar or the prompt; it stands down while this page is mounted and the
  * account controls live in the More sheet instead.
  */
-export default function EngineGame2D({ onRestart, onExit }: { onRestart: () => void; onExit: () => void }) {
+/** `onRestart` is absent in a player-vs-player match: there is no local game to start again. */
+export default function EngineGame2D({ onRestart, onExit }: { onRestart?: () => void; onExit: () => void }) {
   const interaction = useEngineInteraction();
   const frameRef = useRef<HTMLDivElement>(null);
   const sizing = useBoard2DSizing(frameRef);

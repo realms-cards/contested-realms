@@ -5,8 +5,9 @@ import type { CardPickItem } from "@/components/game/CpuCardPick";
 import { actionHint, actionPaths, narrow, pathAreas } from "@/lib/engine-mode/actionPaths";
 import { auraFootprints } from "@/lib/engine-mode/areaPrompt";
 import { cardRefFor } from "@/lib/engine-mode/cardIndex";
-import { engineCellKey } from "@/lib/engine-mode/coords";
-import { HUMAN_SEAT, useEngineSession } from "@/lib/engine-mode/session";
+import { engineCellKey, type ViewerSeat } from "@/lib/engine-mode/coords";
+import { seatKey } from "@/lib/engine-mode/projection";
+import { useEngineSession } from "@/lib/engine-mode/session";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import { handToken } from "@/lib/game/cpu/pickTokens";
 import { canCast, getCard } from "@sorcery/shared";
@@ -32,8 +33,15 @@ export interface PilotHandCard {
  * with the engine's own reason when it has one — so the pilot sees what they are working with,
  * not just the three cards that happen to be castable.
  */
-export function pilotHandCards(game: EngineState, seat: PlayerId, startTokens: ReadonlySet<string>): PilotHandCard[] {
-  const key = seat === 0 ? "p1" : "p2";
+export function pilotHandCards(
+  game: EngineState,
+  seat: PlayerId,
+  startTokens: ReadonlySet<string>,
+  viewer: ViewerSeat = 0,
+): PilotHandCard[] {
+  // The same key actionPaths builds hand tokens with — if these two disagree, `startTokens`
+  // never matches and every card in the piloted hand reads as unplayable.
+  const key = seatKey(seat, viewer);
   const player = game.players[seat];
   if (!player) return [];
   const avatar = game.units[player.avatarUnitId];
@@ -114,16 +122,18 @@ export function useEngineInteraction(): EngineInteraction {
   const rev = useEngineSession((s) => s.rev);
   const legal = useEngineSession((s) => s.legal);
   const decisionSeat = useEngineSession((s) => s.decisionSeat);
+  // the seat this client plays: every token below is a square on ITS side of the table
+  const viewer = useEngineSession((s) => s.seat);
   const dispatch = useEngineSession((s) => s.dispatch);
   const [clicked, setClicked] = useState<string[]>([]);
 
   useEffect(() => setClicked([]), [rev]);
 
   const { paths, labels } = useMemo(
-    () => (game && legal ? actionPaths(game, legal, decisionSeat ?? 0) : { paths: [], labels: {} }),
+    () => (game && legal ? actionPaths(game, legal, decisionSeat ?? viewer, viewer) : { paths: [], labels: {} }),
     // the engine mutates `game` in place; `rev` marks each new state
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [game, legal, rev, decisionSeat],
+    [game, legal, rev, decisionSeat, viewer],
   );
   const narrowed = useMemo(() => narrow(paths, clicked), [paths, clicked]);
   const cemetery = useMemo(() => {
@@ -157,12 +167,12 @@ export function useEngineInteraction(): EngineInteraction {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paths, game, rev]);
   const pilotFullHand = useMemo(() => {
-    if (!game || decisionSeat === null || decisionSeat === HUMAN_SEAT) return [];
+    if (!game || decisionSeat === null || decisionSeat === viewer) return [];
     const starts = new Set<string>();
     for (const path of paths) if (path.steps[0]) starts.add(path.steps[0]);
-    return pilotHandCards(game, decisionSeat, starts);
+    return pilotHandCards(game, decisionSeat, starts, viewer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paths, game, rev, decisionSeat]);
+  }, [paths, game, rev, decisionSeat, viewer]);
   const active = legal !== null && paths.length > 0;
   const request = `${REQUEST_PREFIX}${rev}:${narrowed.prefix.join(">")}`;
 
@@ -215,20 +225,21 @@ export function useEngineInteraction(): EngineInteraction {
           !!next &&
           action.t === "castSpell" &&
           !!action.at &&
-          next === engineCellKey(action.at.x, action.at.y)
+          next === engineCellKey(action.at.x, action.at.y, viewer)
         );
       })
       .map((path) => path.action);
     // A multi-square unit's move is keyed on its new footprint's cell; the footprint itself
-    // lights up the same way an aura's does.
+    // lights up the same way an aura's does. Both are board cells, so both need the viewer —
+    // pathAreas reads cells actionPaths already computed for this seat.
     picker.setAreas(request, {
-      ...(game && placingAura.length ? auraFootprints(game, placingAura) : {}),
+      ...(game && placingAura.length ? auraFootprints(game, placingAura, viewer) : {}),
       ...pathAreas(narrowed.matching, narrowed.prefix.length),
     });
     // `game` is mutated in place by the engine, so `rev` — carried inside `request` — is what
     // marks a real change; the identity of `game` never does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, request, narrowed, labels]);
+  }, [active, request, narrowed, labels, viewer]);
 
   // A board click extends the prefix.
   useEffect(

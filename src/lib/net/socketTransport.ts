@@ -7,7 +7,7 @@ import type {
   InteractionRequestMessage,
   InteractionResponseMessage,
 } from "@/lib/net/interactions";
-import { Protocol } from "@/lib/net/protocol";
+import { EngineRejectSchema, EngineViewSchema, Protocol } from "@/lib/net/protocol";
 import type {
   LobbyVisibility,
   ChatScope,
@@ -969,6 +969,19 @@ export class SocketTransport implements GameTransport {
           payload as TransportEventMap["rematchStarted"],
         ),
       );
+      // Rules-engine matches: the server's per-seat board and its refusals. Declared in the
+      // event map, but an event only reaches listeners once it is subscribed to HERE — without
+      // these two an engine match sat on "waiting for your opponent's deck" forever.
+      socket.on("engine:view", (payload) => {
+        const parsed = EngineViewSchema.safeParse(payload);
+        if (parsed.success) this.dispatch("engine:view", parsed.data);
+        else console.error("[Transport] engine:view payload failed to parse", parsed.error);
+      });
+      socket.on("engine:reject", (payload) => {
+        const parsed = EngineRejectSchema.safeParse(payload);
+        if (parsed.success) this.dispatch("engine:reject", parsed.data);
+        else console.error("[Transport] engine:reject payload failed to parse", parsed.error);
+      });
     });
 
     // Refresh token prior to reconnection attempts

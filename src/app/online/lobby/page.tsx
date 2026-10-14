@@ -603,6 +603,10 @@ function LobbyPageContent({
   // Sealed/draft carry their own enableSeer flag inside their configs.
   const [seerEnabled, setSeerEnabled] = useState(false);
 
+  // Rules-engine mode for constructed/precon matches (opt-in, host-selected).
+  // Sealed/draft pools are out of scope for the first cut.
+  const [engineModeEnabled, setEngineModeEnabled] = useState(false);
+
   // Match timer configuration (optional, host-selected)
   const [timerEnabled, setTimerEnabled] = useState(false);
   const [timerMinutes, setTimerMinutes] = useState(30);
@@ -1429,6 +1433,7 @@ function LobbyPageContent({
         soatcLeagueMatch: soatcPayload,
         timerConfig: timerPayload,
         enableSeer: seerEnabled,
+        engineMode: engineModeEnabled,
       });
       return;
     }
@@ -1491,6 +1496,7 @@ function LobbyPageContent({
     draftValid,
     timerPayload,
     seerEnabled,
+    engineModeEnabled,
   ]);
 
   // Planned match summary (client-side, only reliable for host)
@@ -2803,6 +2809,31 @@ function LobbyPageContent({
                   </div>
                 )}
 
+                {/* Rules-engine mode: constructed/precon only for the first cut */}
+                {(matchType === "constructed" || matchType === "precon") && (
+                  <div className="mt-4 border-t border-rc-line/12 pt-4">
+                    <label className="rc-check flex">
+                      <input
+                        type="checkbox"
+                        checked={engineModeEnabled}
+                        onChange={(e) => setEngineModeEnabled(e.target.checked)}
+                      />
+                      <span>
+                        Play with the rules engine
+                        <Badge tone="warn" className="ml-2">
+                          Experimental
+                        </Badge>
+                      </span>
+                    </label>
+                    <p className="mt-1 pl-6 font-rc-sans text-xs text-rc-fg-subtle">
+                      Every card rule is enforced by the engine instead of the
+                      players, so the match plays differently from the normal
+                      board: illegal plays are refused, and only the choices
+                      the rules allow are offered.
+                    </p>
+                  </div>
+                )}
+
                 {/* Match timer + tiebreak options (applies to all match types) */}
                 <div className="mt-4 border-t border-rc-line/12 pt-4">
                   <label className="rc-check flex">
@@ -2951,6 +2982,7 @@ function LobbyPageContent({
                           soatcLeagueMatch: soatcPayload,
                           timerConfig: timerPayload,
                           enableSeer: seerEnabled,
+                          engineMode: engineModeEnabled,
                         });
                         setConfigOpen(false);
                         return;

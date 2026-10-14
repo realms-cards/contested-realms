@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   BOARD_DIRECTION,
+  BOARD_DIRECTIONS,
   boardArrowForStep,
+  boardToEngine,
+  cellKeyToEngine,
   ENGINE_DIRECTIONS,
   ENGINE_STEPS,
   engineCellKey,
   engineToBoard,
   engineTileNumber,
   localizeEngineText,
+  type ViewerSeat,
 } from "./coords";
+
+const VIEWERS: readonly ViewerSeat[] = [0, 1];
 
 describe("engine coordinate localization", () => {
   it("maps engine squares to our tile numbers (180° rotation)", () => {
@@ -93,5 +99,71 @@ describe("square-naming engine options", () => {
   it("leaves options that name no square alone", () => {
     expect(parse("flies off the board")).toBeNull();
     expect(parse("hold fire")).toBeNull();
+  });
+});
+
+describe("drawing the same engine board for the seat-1 viewer", () => {
+  it("puts whichever seat is looking on the near row", () => {
+    // the anchor the seat-0 mapping was derived from: seat 0's avatar starts at engine (2,0),
+    // seat 1's at engine (2,3), and the viewer always sits at board (2,3)
+    expect(engineToBoard(2, 0, 0)).toEqual({ x: 2, y: 3 });
+    expect(engineToBoard(2, 3, 1)).toEqual({ x: 2, y: 3 });
+    expect(engineToBoard(2, 3, 0)).toEqual({ x: 2, y: 0 });
+    expect(engineToBoard(2, 0, 1)).toEqual({ x: 2, y: 0 });
+  });
+
+  it("turns the board rather than mirroring it", () => {
+    // A mirror would leave x alone for both viewers. The seat-0 view negates x too, so a
+    // seat-1 view that merely flipped y would be the left-right reflection of this one.
+    expect(engineToBoard(0, 0, 0)).toEqual({ x: 4, y: 3 });
+    expect(engineToBoard(0, 0, 1)).toEqual({ x: 0, y: 0 });
+    expect(engineToBoard(4, 1, 0)).toEqual({ x: 0, y: 2 });
+    expect(engineToBoard(4, 1, 1)).toEqual({ x: 4, y: 1 });
+  });
+
+  it("round-trips every square both ways, for both viewers", () => {
+    for (const viewer of VIEWERS) {
+      for (let x = 0; x < 5; x++) {
+        for (let y = 0; y < 4; y++) {
+          const engine = boardToEngine(x, y, viewer);
+          expect(engineToBoard(engine.x, engine.y, viewer)).toEqual({ x, y });
+          expect(cellKeyToEngine(engineCellKey(x, y, viewer), viewer)).toEqual({ x, y });
+        }
+      }
+    }
+  });
+
+  it("maps every engine direction to the board arrow its own step lands on, for both viewers", () => {
+    // Same authority as the seat-0 case: step in engine space, map both ends through the
+    // viewer's own transform, and the board delta must be the arrow the table claims.
+    for (const viewer of VIEWERS) {
+      for (const dir of ENGINE_DIRECTIONS) {
+        const [dx, dy] = ENGINE_STEPS[dir];
+        const from = engineToBoard(2, 1, viewer); // interior, so the step stays on the board
+        const to = engineToBoard(2 + dx, 1 + dy, viewer);
+        expect(boardArrowForStep(to.x - from.x, to.y - from.y)).toBe(BOARD_DIRECTIONS[viewer][dir]);
+      }
+    }
+  });
+
+  it("swaps north/south for seat 1 and leaves east/west alone", () => {
+    // the inverse of the seat-0 table in which axis flips — NOT the same table negated
+    expect(BOARD_DIRECTIONS[1]).toEqual({ n: "S", s: "N", e: "E", w: "W" });
+    expect(BOARD_DIRECTIONS[0]).toEqual(BOARD_DIRECTION);
+  });
+
+  it("numbers tiles and rewrites log text from the seat-1 viewer's side", () => {
+    expect(engineTileNumber(2, 3, 1)).toBe(18); // seat 1's home centre → our bottom centre
+    expect(engineTileNumber(2, 0, 1)).toBe(3);
+    expect(engineTileNumber(0, 0, 1)).toBe(1);
+    expect(localizeEngineText("You plays Stream at (3,4).", 1)).toBe("You play Stream at tile 18.");
+    expect(localizeEngineText("Hillock Basilisk moves to c1.", 1)).toBe("Hillock Basilisk moves to tile 3.");
+  });
+
+  it("defaults to the seat-0 viewer, so single-player callers are unchanged", () => {
+    expect(engineToBoard(1, 2)).toEqual(engineToBoard(1, 2, 0));
+    expect(engineCellKey(1, 2)).toBe(engineCellKey(1, 2, 0));
+    expect(engineTileNumber(1, 2)).toBe(engineTileNumber(1, 2, 0));
+    expect(localizeEngineText("Ends at c1.")).toBe(localizeEngineText("Ends at c1.", 0));
   });
 });

@@ -233,6 +233,11 @@ export const MatchInfoSchema = z.object({
   matchType: z.enum(["constructed", "sealed", "draft", "precon"]).optional(),
   // Second Player Seer (2nd player scries 1 before game start); off unless enabled at creation
   enableSeer: z.boolean().optional(),
+  // Played on the vendored rules engine rather than the legacy board. Chosen by the lobby host
+  // (or an organiser, per tournament) and fixed for the match. This schema has no passthrough,
+  // so a field missing from it is stripped SILENTLY — which is why it has to be declared here
+  // as well as on the match record.
+  engineMode: z.boolean().optional(),
   sealedConfig: SealedConfigSchema.nullable().optional(),
   draftConfig: DraftConfigSchema.nullable().optional(),
   deckSubmissions: z.array(z.string()).optional(),
@@ -277,6 +282,58 @@ export const MatchInfoSchema = z.object({
   extraTurnsRemaining: z.number().optional(),
 });
 export type MatchInfo = z.infer<typeof MatchInfoSchema>;
+
+/**
+ * The rules-engine wire protocol.
+ *
+ * Engine matches do not use the legacy patch pipeline at all. The server owns the one
+ * authoritative GameState; each client sends ACTIONS and receives its own redacted view. The
+ * envelope carries `power` alongside the view because current power and life cannot be derived
+ * from a view — the engine's grantsPower scripts read `state.players`, which `viewFor` reshapes.
+ */
+export const EngineActionSchema = z.object({
+  matchId: z.string(),
+  /** The engine's own Action, validated by the engine itself rather than re-specified here. */
+  action: z.unknown(),
+  /** The view revision this action was decided on, so the server can spot a stale client. */
+  rev: z.number().int().nonnegative().optional(),
+  /** The client's ENGINE_BUILD; the server refuses actions from a build other than its own. */
+  build: z.string().optional(),
+});
+export type EngineActionMessage = z.infer<typeof EngineActionSchema>;
+
+export const EngineViewSchema = z.object({
+  matchId: z.string(),
+  /** Increments per applied action; a client that receives an older rev ignores it. */
+  rev: z.number().int().nonnegative(),
+  seat: z.union([z.literal(0), z.literal(1)]),
+  view: z.unknown(),
+  power: z.record(z.string(), z.object({ atk: z.number(), def: z.number() })),
+  /**
+   * Units the engine considers disabled. Most disabling is DERIVED from the full state rather
+   * than stored on the unit, so like `power` it cannot be worked out from a view.
+   */
+  disabled: z.array(z.string()),
+  /**
+   * The actions this seat may take. Generated server-side because the generator trial-applies
+   * candidates against the full state, which no client holds.
+   */
+  legal: z.array(z.unknown()),
+  /** Set once the engine says the game is over, so the client stops asking for actions. */
+  over: z.boolean().optional(),
+  /** The server's ENGINE_BUILD. A client on another build stops and asks the player to reload. */
+  build: z.string(),
+});
+export type EngineViewMessage = z.infer<typeof EngineViewSchema>;
+
+export const EngineRejectSchema = z.object({
+  matchId: z.string(),
+  /** Why the engine refused it — shown to the player, and never a reason to resend. */
+  reason: z.string(),
+  /** The rev the server is actually on, so a stale client can catch up. */
+  rev: z.number().int().nonnegative(),
+});
+export type EngineRejectMessage = z.infer<typeof EngineRejectSchema>;
 
 // Tournament system types
 export const TournamentFormatSchema = z.enum([

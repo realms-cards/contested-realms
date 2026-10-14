@@ -25,6 +25,15 @@ jobs:
       - name: Run unit and contract tests
         run: npm run test:ci
 
+      # The server is compiled separately from the Next build and was previously only ever
+      # built inside Dockerfile.server at deploy time, so an emit that type-checks in dev and
+      # fails to resolve in production reached the droplet before anyone saw it.
+      - name: Build the socket server
+        run: npm run server:build
+
+      - name: Check the vendored engine matches its manifest
+        run: scripts/vendor-untested-realm.sh --check
+
   integration-tests:
     name: Integration & Performance Tests (Skipped)
     if: false

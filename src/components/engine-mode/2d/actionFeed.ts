@@ -56,7 +56,7 @@ export interface FeedTurn {
 }
 
 export interface FeedContext {
-  /** the seats' names as the engine writes them: [human, computer] — usually ["You", "Computer"] */
+  /** the seats' names as the engine writes them: [ours, theirs] — usually ["You", "Computer"] */
   players: readonly [string, string];
   /** the card's printed type ("Minion", "Magic", "Site"…) or null when the words are not a card */
   cardType: (name: string) => string | null;
@@ -77,6 +77,8 @@ export interface FeedContext {
   notes?: readonly EngineFeedNote[];
   /** turns played under Courtesan Thaïs: engine turn → the seat whose turn was piloted. Optional. */
   controlTurns?: Readonly<Record<number, 0 | 1>>;
+  /** the engine seat this client plays (seat 1 in a player-vs-player match). Default 0. */
+  viewer?: 0 | 1;
 }
 
 /** Lines that are pure bookkeeping: the feed would drown in them. */
@@ -279,8 +281,9 @@ export function buildActionFeed(events: readonly GameEvent[], ctx: FeedContext):
   const at: { turn: FeedTurn | null; last: FeedEntry | null } = { turn: null, last: null };
   const piloted = (turn: number): FeedSeat | null => {
     const seat = ctx.controlTurns?.[turn];
-    // the seat that DECIDED is the other one
-    return seat === 0 ? "p2" : seat === 1 ? "p1" : null;
+    // the seat that DECIDED is the other one: ours ("p1") when the piloted turn was theirs
+    if (seat !== 0 && seat !== 1) return null;
+    return seat === (ctx.viewer ?? 0) ? "p2" : "p1";
   };
   // notes by the log line they explain, and the ones that only know where they go
   const noteOf = new Map<number, EngineFeedNote>();

@@ -2,8 +2,8 @@
 // Enumerates the human's legal actions off the main thread: the move generator
 // trial-applies every candidate on a cloned state, which can take most of a second.
 import type { Action, GameState, PlayerId } from "@sorcery/shared";
-import { legalActionsWithCasters, legalGenerationStats } from "./casterActions";
-import "./scriptPatches";
+import { legalActionsWithCasters, legalGenerationStats } from "@shared/engine/casterActions";
+import "@shared/engine/scriptPatches";
 
 export interface LegalRequest {
   id: number;

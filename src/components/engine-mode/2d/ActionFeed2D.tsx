@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useVisualAid } from "@/hooks/useGraphicsSettings";
 import { cardRefFor } from "@/lib/engine-mode/cardIndex";
-import { useEngineSession } from "@/lib/engine-mode/session";
+import { opponentName, useEngineSession } from "@/lib/engine-mode/session";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, CellKey } from "@/lib/game/store/types";
@@ -133,7 +133,11 @@ export function useActionFeed(): FeedTurn[] {
   const permanents = useGameStore((s) => s.permanents);
   const sites = useGameStore((s) => s.board.sites);
   const avatars = useGameStore((s) => s.avatars);
-  const players = useEngineSession((s) => (s.game ? `${s.game.players[0].name}\u0000${s.game.players[1].name}` : ""));
+  // [ours, theirs], whichever engine seat we hold
+  const viewer = useEngineSession((s) => s.seat);
+  const players = useEngineSession((s) =>
+    s.game ? `${s.game.players[s.seat].name}\u0000${s.game.players[s.seat === 0 ? 1 : 0].name}` : "",
+  );
   const matchId = useEngineSession((s) => s.matchId);
   // The projection numbers the lines of the engine's 200-line view from 0, so once the log is
   // longer every id shifts by one per new line. Re-based on the whole log's length they are the
@@ -143,7 +147,7 @@ export function useActionFeed(): FeedTurn[] {
   const notes = useEngineSession((s) => s.feedNotes);
   const controlTurns = useEngineSession((s) => s.controlTurns);
   return useMemo(() => {
-    const inputs = [events, permanents, sites, avatars, players, matchId, logLength, notes, controlTurns] as const;
+    const inputs = [events, permanents, sites, avatars, players, matchId, logLength, notes, controlTurns, viewer] as const;
     if (memo && memo.inputs.every((v, i) => v === inputs[i])) return memo.turns;
     const [you = "You", them = "Computer"] = players ? players.split("\u0000") : [];
     const locate = locator(permanents, sites, avatars);
@@ -173,12 +177,12 @@ export function useActionFeed(): FeedTurn[] {
       changed = true;
       return pin;
     };
-    const ctx: FeedContext = { players: [you, them], cardType, locate, placedAt, notes, controlTurns };
+    const ctx: FeedContext = { players: [you, them], cardType, locate, placedAt, notes, controlTurns, viewer };
     const turns = buildActionFeed(list, ctx);
     if (changed) savePins();
     memo = { inputs, turns, locate, lastId };
     return turns;
-  }, [events, permanents, sites, avatars, players, matchId, logLength, notes, controlTurns]);
+  }, [events, permanents, sites, avatars, players, matchId, logLength, notes, controlTurns, viewer]);
 }
 
 /** Show a feed card in the preview (the inspector, or the floating preview on a phone). */
@@ -345,7 +349,7 @@ function EntryRow({
  */
 export default function ActionFeed2D({ compact = false, title = true }: { compact?: boolean; title?: boolean }) {
   const turns = useActionFeed();
-  const them = useEngineSession((s) => s.game?.players[1].name ?? "Computer");
+  const them = useEngineSession((s) => opponentName(s.game, s.seat));
   const colors = fxPalette(useVisualAid());
   const newestId = turns[0]?.entries[0]?.id;
 

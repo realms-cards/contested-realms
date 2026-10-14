@@ -58,6 +58,8 @@ export default function Board2D({ tileW, tileH, docked = false, children }: Boar
   const arrangement = useEngineSession((s) => s.arrangement);
   const arrangeMode = useEngineSession((s) => s.arrangeMode);
   const arrangeHeld = useEngineSession((s) => s.arrangeHeld);
+  // whose board this is: the overlay cells below are board cells, which differ by seat
+  const viewer = useEngineSession((s) => s.seat);
   /** the card being arranged and how far the pointer has taken it, in px */
   const [arrangeDrag, setArrangeDrag] = useState<{ key: string; dx: number; dy: number } | null>(null);
   /** the tile under the mouse, outlined while the arrange modifier is held */
@@ -81,19 +83,20 @@ export default function Board2D({ tileW, tileH, docked = false, children }: Boar
   const overlays = useMemo(() => {
     if (!game) return { spans: [], auras: [], bodies: [], disables: [], tints: new Map<string, boolean>() };
     return {
-      spans: spanEntities(game, layer),
-      auras: layer === "surface" ? auraAreas(game) : [],
-      bodies: multiSquareBodies(game),
-      disables: layer === "surface" ? disableAreas(game) : [],
-      tints: new Map(layerTints(game, layer).map((t) => [t.cell, t.water])),
+      spans: spanEntities(game, layer, viewer),
+      auras: layer === "surface" ? auraAreas(game, viewer) : [],
+      bodies: multiSquareBodies(game, viewer),
+      disables: layer === "surface" ? disableAreas(game, viewer) : [],
+      tints: new Map(layerTints(game, layer, viewer).map((t) => [t.cell, t.water])),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game, rev, layer]);
+  }, [game, rev, layer, viewer]);
 
   // arrangements are keyed by engine id; an avatar's is its unit's (fixed for the match)
   const avatarIds = useMemo(
-    () => (game ? { p1: game.players[0]?.avatarUnitId, p2: game.players[1]?.avatarUnitId } : undefined),
-    [game],
+    // p1 is always the viewer's seat (the bottom of the board), p2 the other
+    () => (game ? { p1: game.players[viewer]?.avatarUnitId, p2: game.players[viewer === 0 ? 1 : 0]?.avatarUnitId } : undefined),
+    [game, viewer],
   );
   const placed = useMemo(
     () => layoutBoard2D({ permanents, avatars, spans: overlays.spans, positions, tile, arrangement, avatarIds }),

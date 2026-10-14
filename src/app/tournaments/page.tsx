@@ -124,6 +124,8 @@ export default function TournamentsPage() {
   const [hostOnlyMode, setHostOnlyMode] = useState(false);
   // Second Player Seer (2nd player scries 1 before game start), off by default
   const [enableSeer, setEnableSeer] = useState(false);
+  // Play every match on the rules engine (constructed only for the first cut), off by default
+  const [engineMode, setEngineMode] = useState(false);
   // Round time limit in minutes
   const [roundTimeLimit, setRoundTimeLimit] = useState(45);
   // Timer warning threshold (minutes remaining) and tiebreak extra turns
@@ -301,6 +303,8 @@ export default function TournamentsPage() {
         creatorParticipates: !hostOnlyMode,
         // Second Player Seer (2nd player scries 1 before game start)
         enableSeer,
+        // Rules-engine matches; the server reads this when it sets up each pairing's match
+        engineMode: form.format === "constructed" && engineMode,
         // Tiebreaker settings for tournament matches
         tiebreakerSettings: {
           extraTurns: tiebreakExtraTurns, // Extra turns after time expires
@@ -1096,6 +1100,32 @@ export default function TournamentsPage() {
                 </span>
               </label>
             </div>
+
+            {/* Rules engine: constructed only for the first cut, as in the lobby */}
+            {form.format === "constructed" && (
+              <div className={OPTION_BOX}>
+                <label className={CHECK_ROW_TOP}>
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 accent-rc-accent"
+                    checked={engineMode}
+                    onChange={(e) => setEngineMode(e.target.checked)}
+                  />
+                  <span>
+                    <span className="block text-[13px] uppercase tracking-[0.14em] text-rc-fg-strong">
+                      Play with the rules engine
+                      <Badge tone="warn" className="ml-2">
+                        Experimental
+                      </Badge>
+                    </span>
+                    <span className="mt-0.5 block tracking-[0.04em] text-rc-fg-subtle">
+                      Every match is played on the rules engine: illegal plays are refused, and only the choices
+                      the rules allow are offered.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
 
             {/* Sealed Booster Configuration */}
             {form.format === "sealed" && (

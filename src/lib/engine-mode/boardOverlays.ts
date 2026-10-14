@@ -1,7 +1,7 @@
 import type { CellKey, PlayerKey } from "@/lib/game/store/types";
 import { findCard, isWaterSite, nearbySquaresW, occupiedSquares, siteAt } from "@sorcery/shared";
 import type { GameState as EngineState } from "@sorcery/shared";
-import { engineCellKey, engineToBoard } from "./coords";
+import { engineCellKey, engineToBoard, type ViewerSeat } from "./coords";
 import { animatedAuras, footprintCell, layerOf, seatKey } from "./projection";
 import type { BoardLayer } from "./projection";
 
@@ -65,16 +65,21 @@ export interface CellEdge {
 }
 
 const waterDefs = (name: string) => ({ thresholds: { water: findCard(name)?.thresholds.water ?? 0 } });
-const uniqueCells = (squares: readonly { x: number; y: number }[]): CellKey[] => [
-  ...new Set(squares.map((sq) => engineCellKey(sq.x, sq.y))),
+/**
+ * Every function here answers in BOARD cells, and a board cell depends on whose board it is: the
+ * two seats of a player-vs-player match see the same engine square in different cells. So each
+ * takes a trailing `viewer`, defaulting to seat 0 — single player, unchanged.
+ */
+const uniqueCells = (squares: readonly { x: number; y: number }[], viewer: ViewerSeat = 0): CellKey[] => [
+  ...new Set(squares.map((sq) => engineCellKey(sq.x, sq.y, viewer))),
 ];
 
 /** Each aura's whole area, in its controller's colour — animated (Enchantress) auras included. */
-export function auraAreas(game: EngineState): SeatArea[] {
+export function auraAreas(game: EngineState, viewer: ViewerSeat = 0): SeatArea[] {
   return Object.values(game.auras).map((aura) => ({
     id: aura.id,
-    controller: seatKey(aura.controller),
-    cells: uniqueCells(aura.squares),
+    controller: seatKey(aura.controller, viewer),
+    cells: uniqueCells(aura.squares, viewer),
   }));
 }
 
@@ -82,10 +87,10 @@ export function auraAreas(game: EngineState): SeatArea[] {
  * Oversized and stretched bodies (Mountain Giant, the Rack, a moeba…): every occupied square,
  * for the body outline. Carried units are left out; avatars never have one.
  */
-export function multiSquareBodies(game: EngineState): SeatArea[] {
+export function multiSquareBodies(game: EngineState, viewer: ViewerSeat = 0): SeatArea[] {
   return Object.values(game.units)
     .filter((u) => !u.isAvatar && !u.carriedBy && (u.size || u.extraSquares?.length))
-    .map((u) => ({ id: u.id, controller: seatKey(u.controller), cells: uniqueCells(occupiedSquares(u)) }))
+    .map((u) => ({ id: u.id, controller: seatKey(u.controller, viewer), cells: uniqueCells(occupiedSquares(u), viewer) }))
     .filter((b) => b.cells.length > 1);
 }
 
@@ -101,11 +106,11 @@ export const OVERLAY_COLORS = {
 } as const;
 
 /** The subsurface view's terrain tints (water blue / land brown) under each standing site; none on the surface. */
-export function layerTints(game: EngineState, layer: BoardLayer): LayerTint[] {
+export function layerTints(game: EngineState, layer: BoardLayer, viewer: ViewerSeat = 0): LayerTint[] {
   if (layer !== "subsurface") return [];
   return Object.values(game.sites)
     .filter((site) => !site.isRubble)
-    .map((site) => ({ cell: engineCellKey(site.x, site.y), water: isWaterSite(game, site, waterDefs) }));
+    .map((site) => ({ cell: engineCellKey(site.x, site.y, viewer), water: isWaterSite(game, site, waterDefs) }));
 }
 
 /**
@@ -115,12 +120,12 @@ export function layerTints(game: EngineState, layer: BoardLayer): LayerTint[] {
  * It bites only "atop sites" (statics.ts disabledByEffect: `siteAt`, rubble included), so the
  * void squares in reach are left out.
  */
-export function disableAreas(game: EngineState): PlainArea[] {
+export function disableAreas(game: EngineState, viewer: ViewerSeat = 0): PlainArea[] {
   const flow = game.flow as { areaDisables?: { siteId?: string }[] } | undefined;
   return (flow?.areaDisables ?? []).flatMap((entry, i) => {
     const source = entry?.siteId ? game.sites[entry.siteId] : undefined;
     if (!source) return []; // the engine checks only that the site still exists
-    return [{ id: `${entry.siteId}-${i}`, cells: uniqueCells(nearbySquaresW(game, source.x, source.y).filter((q) => siteAt(game, q.x, q.y))) }];
+    return [{ id: `${entry.siteId}-${i}`, cells: uniqueCells(nearbySquaresW(game, source.x, source.y).filter((q) => siteAt(game, q.x, q.y)), viewer) }];
   });
 }
 
@@ -129,15 +134,16 @@ function span(
   kind: SpanEntity["kind"],
   controller: PlayerKey,
   squares: readonly { x: number; y: number }[],
+  viewer: ViewerSeat = 0,
 ): SpanEntity | null {
-  const anchor = footprintCell(squares);
+  const anchor = footprintCell(squares, viewer);
   if (!anchor) return null;
-  const board = squares.map((sq) => engineToBoard(sq.x, sq.y));
+  const board = squares.map((sq) => engineToBoard(sq.x, sq.y, viewer));
   return {
     instanceId,
     kind,
     controller,
-    cells: uniqueCells(squares),
+    cells: uniqueCells(squares, viewer),
     anchor,
     centre: {
       x: board.reduce((sum, c) => sum + c.x, 0) / board.length,
@@ -151,21 +157,21 @@ function span(
  * projectView: a multi-square unit on the other layer still shows (faded) while looking at the
  * surface, and auras exist only on the surface.
  */
-export function spanEntities(game: EngineState, layer: BoardLayer = "surface"): SpanEntity[] {
+export function spanEntities(game: EngineState, layer: BoardLayer = "surface", viewer: ViewerSeat = 0): SpanEntity[] {
   const out: SpanEntity[] = [];
   for (const unit of Object.values(game.units)) {
     if (unit.isAvatar) continue;
     if (layerOf(unit.region) !== layer && layer !== "surface") continue;
     const body = occupiedSquares(unit);
     if (body.length < 2) continue;
-    const entity = span(unit.id, "body", seatKey(unit.controller), body);
+    const entity = span(unit.id, "body", seatKey(unit.controller, viewer), body, viewer);
     if (entity) out.push(entity);
   }
   if (layer !== "surface") return out;
   const animated = animatedAuras(game);
   for (const aura of Object.values(game.auras)) {
     if (animated.has(aura.id)) continue; // the Enchantress minion is the card
-    const entity = span(aura.id, "aura", seatKey(aura.controller), aura.squares);
+    const entity = span(aura.id, "aura", seatKey(aura.controller, viewer), aura.squares, viewer);
     if (entity) out.push(entity);
   }
   return out;

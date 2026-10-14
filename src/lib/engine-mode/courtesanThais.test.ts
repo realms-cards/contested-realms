@@ -4,7 +4,7 @@ import { botAction, botNeedsToAct } from "@untested-realm/bot/bot";
 import { describe, expect, it } from "vitest";
 import { pilotHandCards } from "@/components/engine-mode/useEngineInteraction";
 import { actionPaths } from "./actionPaths";
-import { legalActionsWithCasters } from "./casterActions";
+import { legalActionsWithCasters } from "@shared/engine/casterActions";
 import { enginePrecons, toEngineDeck } from "./decks";
 import { controlSwap, humanDecisionSeat, isPiloting, linesForToast } from "./session";
 
@@ -136,5 +136,17 @@ describe("linesForToast", () => {
   it("adds the lines it writes on OUR seat only while it is playing our turn", () => {
     expect(linesForToast(log, 0, true)).toEqual([log[0].msg, log[1].msg, log[2].msg]);
     expect(linesForToast(log, 2, true)).toEqual([log[2].msg]);
+  });
+});
+
+describe("naming the other player", () => {
+  it("calls a person by their name, and the bot still 'the Computer'", async () => {
+    const { controlSwap, opponentName } = await import("./session");
+    const players = (a: string, b: string) => ({ players: [{ name: a }, { name: b }] }) as unknown as Parameters<typeof opponentName>[0];
+    expect(opponentName(players("You", "Computer"), 0)).toBe("Computer");
+    // seat 1's opponent is seat 0
+    expect(opponentName(players("Morgana", "Ash"), 1)).toBe("Morgana");
+    expect(opponentName(players("Morgana", ""), 0), "a seat with no name").toBe("Opponent");
+    expect(typeof controlSwap).toBe("function");
   });
 });

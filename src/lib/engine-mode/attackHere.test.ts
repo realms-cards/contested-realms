@@ -2,7 +2,7 @@ import { createGame } from "@sorcery/shared";
 import type { Action, GameState as EngineState, PlayerId } from "@sorcery/shared";
 import { describe, expect, it } from "vitest";
 import { actionPaths, narrow } from "./actionPaths";
-import { attackRefused } from "./casterActions";
+import { attackRefused } from "@shared/engine/casterActions";
 import { enginePrecons, toEngineDeck } from "./decks";
 import { unitCell } from "./projection";
 

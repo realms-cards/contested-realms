@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
+import { seatKey } from "@/lib/engine-mode/projection";
 import { engineSeatResources, manaColor, THRESHOLD_ELEMENTS } from "@/lib/engine-mode/resources";
-import { HUMAN_SEAT, useEngineSession } from "@/lib/engine-mode/session";
+import { opponentName, useEngineSession } from "@/lib/engine-mode/session";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 
 /**
@@ -15,13 +16,17 @@ import { PLAYER_COLORS } from "@/lib/game/constants";
  */
 export default function EngineResourcePanels() {
   const game = useEngineSession((s) => s.game);
+  const viewer = useEngineSession((s) => s.seat);
   useEngineSession((s) => s.rev);
   if (!game || game.phase === "mulligan" || game.phase === "over") return null;
 
+  // the opponent's panel sits above ours, whichever seat we are
+  const order = viewer === 0 ? ([1, 0] as const) : ([0, 1] as const);
+
   return (
     <div className="pointer-events-none flex flex-col items-end gap-2">
-      {([1, 0] as const).map((seat) => {
-        const seatKey = seat === HUMAN_SEAT ? "p1" : "p2";
+      {order.map((seat) => {
+        const key = seatKey(seat, viewer);
         const resources = engineSeatResources(game, seat);
         const { mana, total, thresholds } = resources;
         const active = THRESHOLD_ELEMENTS.filter((el) => thresholds[el.key] > 0);
@@ -29,11 +34,12 @@ export default function EngineResourcePanels() {
           <div
             key={seat}
             className="pointer-events-auto flex min-w-[72px] flex-col items-center gap-1 rounded-rc-md border bg-[rgba(7,10,20,0.85)] px-2.5 py-2 shadow-rc-panel"
-            style={{ borderColor: `${PLAYER_COLORS[seatKey]}55` }}
-            title={seat === HUMAN_SEAT ? "Your mana and thresholds" : "Computer's mana and thresholds"}
+            style={{ borderColor: `${PLAYER_COLORS[key]}55` }}
+            title={seat === viewer ? "Your mana and thresholds" : `${opponentName(game, viewer)}'s mana and thresholds`}
           >
-            <span className="font-rc-mono text-[9px] uppercase tracking-[0.12em]" style={{ color: PLAYER_COLORS[seatKey] }}>
-              {seat === HUMAN_SEAT ? "You" : "CPU"}
+            <span className="font-rc-mono text-[9px] uppercase tracking-[0.12em]" style={{ color: PLAYER_COLORS[key] }}>
+              {/* a short tag; single player keeps its "CPU", a person is "Them" (the name is in the title) */}
+              {seat === viewer ? "You" : opponentName(game, viewer) === "Computer" ? "CPU" : "Them"}
             </span>
             <span className="font-rc-mono text-sm font-bold tabular-nums" style={{ color: manaColor(resources) }} title={`${mana} available / ${total} total mana`}>
               {mana}/{total}

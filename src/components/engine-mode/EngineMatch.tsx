@@ -21,7 +21,7 @@ import { enginePrecons, loadEngineDeck } from "@/lib/engine-mode/decks";
 import { loadEngineGame } from "@/lib/engine-mode/persistence";
 import type { SavedEngineGame } from "@/lib/engine-mode/persistence";
 import { useEngineGamePresence } from "@/lib/engine-mode/presence";
-import { useEngineSession, watchArrangeModifier } from "@/lib/engine-mode/session";
+import { opponentName, useEngineSession, watchArrangeModifier } from "@/lib/engine-mode/session";
 import type { BotLevel } from "@/lib/engine-mode/session";
 import { createCardPreviewData } from "@/lib/game/card-preview.types";
 import { useGameStore } from "@/lib/game/store";
@@ -286,11 +286,17 @@ export default function EngineMatch() {
   );
 }
 
-function EngineGame({
+/**
+ * The engine board and everything around it. Used for single player (below) and, wrapped in
+ * EngineOnlineMatch, for a match against another player — it never needed to know which, since
+ * the session it reads looks the same either way.
+ */
+export function EngineGame({
   onRestart,
   onExit,
 }: {
-  onRestart: () => void;
+  /** Absent in a player-vs-player match: there is no local game to start again. */
+  onRestart?: () => void;
   onExit: () => void;
 }) {
   const interaction = useEngineInteraction();
@@ -298,6 +304,8 @@ function EngineGame({
   const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
   const toggleCardPreviews = useGameStore((s) => s.toggleCardPreviews);
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
+  // "Computer" in single player (that is the bot's name on the game), the player's name online
+  const opponent = useEngineSession((s) => opponentName(s.game, s.seat));
   const endTurnConfirm = useEngineSession((s) => s.endTurnConfirm);
   const dismissEndTurn = useEngineSession((s) => s.dismissEndTurn);
   const dispatch = useEngineSession((s) => s.dispatch);
@@ -400,7 +408,7 @@ function EngineGame({
           <OnlineLifeCounters
             dragFromHand={false}
             myPlayerKey="p1"
-            playerNames={{ p1: "You", p2: "Computer" }}
+            playerNames={{ p1: "You", p2: opponent }}
             readOnly
             spectating={false}
             showYouLabels
@@ -449,7 +457,7 @@ function EngineGame({
               connected
               hideChat
               hideLeaveButton
-              playerNames={{ p1: "You", p2: "Computer" }}
+              playerNames={{ p1: "You", p2: opponent }}
             />
           </div>
         </>

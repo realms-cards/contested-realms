@@ -4,7 +4,7 @@ import { getCard, getScript, grantedAbilities } from "@sorcery/shared";
 import type { Action, GameState as EngineState, PlayerId } from "@sorcery/shared";
 import { tokenForEngineId } from "./actionPaths";
 import { cardRefFor } from "./cardIndex";
-import { footprintAfter } from "./casterActions";
+import { footprintAfter } from "@shared/engine/casterActions";
 import { engineTileNumber } from "./coords";
 import { footprintCell } from "./projection";
 

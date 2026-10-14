@@ -4,7 +4,7 @@ import { Icon } from "@iconify/react";
 import { useEffect, useRef, useState } from "react";
 import { RcButton } from "@/components/ui/rc-button";
 import { soundManager } from "@/lib/audio/soundManager";
-import { controlSwap, HUMAN_SEAT, humanDecisionSeat, useEngineSession } from "@/lib/engine-mode/session";
+import { controlSwap, humanDecisionSeat, opponentName, useEngineSession } from "@/lib/engine-mode/session";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import type { EngineInteraction } from "./useEngineInteraction";
 
@@ -35,12 +35,14 @@ export default function EngineHud({
   toastPlacement = "corner",
 }: {
   interaction: EngineInteraction;
-  onRestart: () => void;
+  /** Start a new local game. Absent in a player-vs-player match, which has nothing to restart. */
+  onRestart?: () => void;
   onExit: () => void;
   hideStatusPill?: boolean;
   toastPlacement?: "corner" | "top";
 }) {
   const game = useEngineSession((s) => s.game);
+  const viewer = useEngineSession((s) => s.seat);
   useEngineSession((s) => s.rev);
   const botThinking = useEngineSession((s) => s.botThinking);
   const lastError = useEngineSession((s) => s.lastError);
@@ -73,8 +75,9 @@ export default function EngineHud({
       if (e.key !== "Enter") return;
       const g = s.game;
       // only on a main phase whose decisions are ours (our own, or the one we pilot under
-      // Courtesan Thaïs — never ours while the computer is playing it) with nothing pending
-      if (!g || g.phase !== "main" || humanDecisionSeat(g) === null || g.prompts.length) return;
+      // Courtesan Thaïs — never ours while the opponent is playing it) with nothing pending.
+      // The handler is installed once, so the seat comes off the live state, not a closure.
+      if (!g || g.phase !== "main" || humanDecisionSeat(g, s.seat) === null || g.prompts.length) return;
       e.preventDefault();
       if (confirmRef.current) return confirmRef.current();
       s.requestEndTurn();
@@ -85,7 +88,7 @@ export default function EngineHud({
 
   // The same fanfare the other modes play when a match ends.
   const over = game?.phase === "over";
-  const won = over && game?.winner === HUMAN_SEAT;
+  const won = over && game?.winner === viewer;
   const played = useRef(false);
   useEffect(() => {
     if (!over) {
@@ -98,10 +101,10 @@ export default function EngineHud({
   }, [over, won]);
 
   if (!game) return null;
-  const myTurn = game.activePlayer === HUMAN_SEAT;
-  const myMain = humanDecisionSeat(game) !== null && game.phase === "main" && game.prompts.length === 0;
+  const myTurn = game.activePlayer === viewer;
+  const myMain = humanDecisionSeat(game, viewer) !== null && game.phase === "main" && game.prompts.length === 0;
   // Courtesan Thaïs: who is really playing this turn, said for the whole of it
-  const swap = controlSwap(game);
+  const swap = controlSwap(game, viewer);
   const swapDecider = swap && (swap.kind === "computer-plays-yours" || swap.kind === "computer-will-play-yours") ? "p2" : "p1";
 
   return (
@@ -113,7 +116,7 @@ export default function EngineHud({
             {/* the mulligan is simultaneous — no one's "turn" yet */}
             {game.phase !== "mulligan" && (
               <span className={myTurn ? "text-rc-accent-link" : "text-rc-fg-muted"}>
-                {myTurn ? "Your turn" : "Computer's turn"}
+                {myTurn ? "Your turn" : `${opponentName(game, viewer)}'s turn`}
               </span>
             )}
             <span className="text-rc-fg-subtle">
@@ -176,7 +179,7 @@ export default function EngineHud({
               <RcButton variant="outline" onClick={onExit}>
                 Leave
               </RcButton>
-              <RcButton onClick={onRestart}>Play again</RcButton>
+              {onRestart && <RcButton onClick={onRestart}>Play again</RcButton>}
             </div>
           </div>
         </div>

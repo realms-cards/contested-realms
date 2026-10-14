@@ -10,6 +10,12 @@ RUN npm ci
 COPY tsconfig.json ./tsconfig.json
 COPY prisma ./prisma
 COPY server ./server
+# The vendored rules engine: server/modules/engine imports it by relative path, and the server
+# tsconfig now compiles it to dist/vendor alongside dist/server.
+COPY vendor ./vendor
+# Our own engine helpers that BOTH the client and the server need (the human-grade legal-move
+# generator); see shared/engine/casterActions.ts for why it is not under src/.
+COPY shared ./shared
 COPY bots ./bots
 # Bots require these CommonJS modules at their original relative paths.
 COPY src/lib/game/cpu/*.js src/lib/game/cpu/cards.json ./src/lib/game/cpu/

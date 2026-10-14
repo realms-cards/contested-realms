@@ -45,21 +45,23 @@ function badgeText(counts: HiddenCounts, layer: "surface" | "subsurface"): strin
  */
 export default function EngineLayerOverlay() {
   const game = useEngineSession((s) => s.game);
+  const viewer = useEngineSession((s) => s.seat);
   useEngineSession((s) => s.rev);
   const layer = useEngineSession((s) => s.layer);
   const hidden = useEngineSession((s) => s.hidden);
   const setLayer = useEngineSession((s) => s.setLayer);
   if (!game) return null;
 
-  // Shared with the 2D board (boardOverlays.ts) so the two views never disagree on an area.
-  const tints = layerTints(game, layer);
+  // Shared with the 2D board (boardOverlays.ts) so the two views never disagree on an area —
+  // and every one takes the viewer, since a board cell depends on whose board it is.
+  const tints = layerTints(game, layer, viewer);
   // Oversized and stretched bodies (Mountain Giant, the Rack…): outline every occupied square;
   // the card itself is drawn once, centred over them.
-  const bodies = multiSquareBodies(game);
+  const bodies = multiSquareBodies(game, viewer);
   // Each aura's whole area, in its controller's colour (the card itself sits at the area's centre).
-  const auras = layer === "surface" ? auraAreas(game) : [];
+  const auras = layer === "surface" ? auraAreas(game, viewer) : [];
   // Babbling Brook's disabling squares, for as long as the effect lasts.
-  const disables = layer === "surface" ? disableAreas(game) : [];
+  const disables = layer === "surface" ? disableAreas(game, viewer) : [];
 
   return (
     <>

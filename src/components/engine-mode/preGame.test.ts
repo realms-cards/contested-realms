@@ -39,4 +39,14 @@ describe("pre-game surface order", () => {
     expect(applyAction(game, 0, { t: "keepHand" }).ok).toBe(true);
     expect(preGameSurface(game, true)).toBe("none");
   });
+
+  // In a player-vs-player match this client may be seat 1, and the mulligan is simultaneous:
+  // seat 0 keeping its hand says nothing about whether we still have ours to settle.
+  it("still asks the seat-1 player for its own mulligan", () => {
+    const game = createGame([precon(), precon()], ["You", "Opponent"], 3, 0);
+    expect(applyAction(game, 0, { t: "keepHand" }).ok).toBe(true);
+    expect(preGameSurface(game, true, 1)).toBe("mulligan");
+    expect(applyAction(game, 1, { t: "keepHand" }).ok).toBe(true);
+    expect(preGameSurface(game, true, 1)).toBe("none");
+  });
 });

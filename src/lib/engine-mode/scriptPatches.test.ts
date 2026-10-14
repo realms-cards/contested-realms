@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { engineCellKey } from "./coords";
 import { enginePrecons, toEngineDeck } from "./decks";
 import { disabledUnits, projectView } from "./projection";
-import { applyScriptPatches } from "./scriptPatches";
+import { applyScriptPatches } from "@shared/engine/scriptPatches";
 
 /**
  * Waveshaper: "Tap -> Flood a site near your body of water until you do so again. Tap minions

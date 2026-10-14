@@ -4,7 +4,7 @@ import { Icon } from "@iconify/react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import CpuCardPick from "@/components/game/CpuCardPick";
-import { HUMAN_SEAT, humanDecisionSeat, useEngineSession } from "@/lib/engine-mode/session";
+import { humanDecisionSeat, useEngineSession } from "@/lib/engine-mode/session";
 import { pilotPickItems, type EngineInteraction } from "../useEngineInteraction";
 import MoreSheet2D, { type MoreView } from "./MoreSheet2D";
 import { layerToggle, primaryAction } from "./actions2d";
@@ -62,11 +62,13 @@ export default function ActionBar2D({
 }: {
   interaction: EngineInteraction;
   onExit: () => void;
-  onRestart: () => void;
+  /** Absent in a player-vs-player match: the finished game's button leaves instead. */
+  onRestart?: () => void;
   orientation?: "row" | "column";
   columns?: 2 | 3;
 }) {
   const game = useEngineSession((s) => s.game);
+  const viewer = useEngineSession((s) => s.seat);
   useEngineSession((s) => s.rev);
   const canUndo = useEngineSession((s) => s.canUndo);
   const requestEndTurn = useEngineSession((s) => s.requestEndTurn);
@@ -81,7 +83,7 @@ export default function ActionBar2D({
   // prompt or the result dialog that arrives while it is open (say, the log open on the CPU's
   // turn when it attacks). Close it on the change INTO "something needs you", so the player
   // can still open More again afterwards.
-  const needsYou = !!game && (game.phase === "over" || (humanDecisionSeat(game) !== null && game.prompts.length > 0));
+  const needsYou = !!game && (game.phase === "over" || (humanDecisionSeat(game, viewer) !== null && game.prompts.length > 0));
   const neededYou = useRef(needsYou);
   useEffect(() => {
     if (needsYou && !neededYou.current) {
@@ -105,24 +107,26 @@ export default function ActionBar2D({
   }, [pilotOpen]);
 
   if (!game) return null;
-  const deciding = humanDecisionSeat(game);
-  const piloting = deciding !== null && deciding !== HUMAN_SEAT;
+  const deciding = humanDecisionSeat(game, viewer);
+  const piloting = deciding !== null && deciding !== viewer;
   const myMain = deciding !== null && game.phase === "main" && game.prompts.length === 0;
   const over = game.phase === "over";
-  const primary = primaryAction({
+  const suggested = primaryAction({
     over,
     myMain,
     confirmable: !!interaction.confirmable,
     picking: interaction.picking,
     active: interaction.active,
   });
+  // against a person there is no local game to start again: the finished game's button leaves
+  const primary = suggested.kind === "restart" && !onRestart ? { ...suggested, label: "Leave" } : suggested;
   const toggle = layerToggle(layer, hidden);
   const below = layer === "subsurface";
   // what the More sheet holds that the player can act on right now
   const castable = myMain ? interaction.cemetery.length : 0;
   const onPrimary = () => {
     if (primary.kind === "confirm") interaction.confirm();
-    else if (primary.kind === "restart") onRestart();
+    else if (primary.kind === "restart") (onRestart ?? onExit)();
     else requestEndTurn();
   };
 

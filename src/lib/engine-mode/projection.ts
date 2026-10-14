@@ -18,7 +18,7 @@ import { TOKEN_BY_NAME, tokenCardId, tokenSlug } from "@/lib/game/tokens";
 import { effAttack, effDefence, getCard, isDisabled, occupiedSquares } from "@sorcery/shared";
 import type { GameState as EngineState, PlayerId, PlayerView, Region, UnitState } from "@sorcery/shared";
 import { cardRefFor } from "./cardIndex";
-import { engineCellKey, engineToBoard, localizeEngineText } from "./coords";
+import { type ViewerSeat, engineCellKey, engineToBoard, localizeEngineText } from "./coords";
 
 /** The fields of PlayerView.players[i] we read (the engine types the array loosely). */
 interface ViewPlayer {
@@ -112,14 +112,14 @@ export interface DamageSnapshot {
   standing: Record<string, true>;
 }
 
-export function damageSnapshot(view: PlayerView): DamageSnapshot {
+export function damageSnapshot(view: PlayerView, viewer: ViewerSeat = 0): DamageSnapshot {
   const units: DamageSnapshot["units"] = {};
   for (const unit of Object.values(view.units)) {
     units[unit.id] = { damage: unit.damage ?? 0, life: unit.life ?? 0, x: unit.x, y: unit.y };
   }
   const standing: Record<string, true> = {};
   for (const site of Object.values(view.sites ?? {})) {
-    if (!site.isRubble) standing[engineCellKey(site.x, site.y)] = true;
+    if (!site.isRubble) standing[engineCellKey(site.x, site.y, viewer)] = true;
   }
   return { units, standing };
 }
@@ -129,9 +129,10 @@ export function damageSnapshot(view: PlayerView): DamageSnapshot {
  * it to rubble outright — so there is never a number to float for it; without this, a site
  * attack was the one action that produced no feedback at all.
  */
-export function sitesLostSince(prev: DamageSnapshot | null, view: PlayerView): string[] {
+export function sitesLostSince(prev: DamageSnapshot | null, view: PlayerView, viewer: ViewerSeat = 0): string[] {
   if (!prev) return [];
-  const now = damageSnapshot(view).standing;
+  // `prev` was keyed with the same viewer, so both sides of the diff must use it too
+  const now = damageSnapshot(view, viewer).standing;
   return Object.keys(prev.standing).filter((at) => !now[at]);
 }
 
@@ -139,7 +140,11 @@ export function sitesLostSince(prev: DamageSnapshot | null, view: PlayerView): s
  * Damage landed since `prev`, per board cell. A minion's `damage` counter going up and an
  * avatar's `life` coming down are both damage; healing, undo and a unit simply moving are not.
  */
-export function damageSince(prev: DamageSnapshot | null, view: PlayerView): { at: string; dmg: number }[] {
+export function damageSince(
+  prev: DamageSnapshot | null,
+  view: PlayerView,
+  viewer: ViewerSeat = 0,
+): { at: string; dmg: number }[] {
   if (!prev) return [];
   const totals = new Map<string, number>();
   for (const unit of Object.values(view.units)) {
@@ -150,7 +155,7 @@ export function damageSince(prev: DamageSnapshot | null, view: PlayerView): { at
       ? before.life - (unit.life ?? 0)
       : (unit.damage ?? 0) - before.damage;
     if (dealt <= 0) continue;
-    const at = unitCell(unit);
+    const at = unitCell(unit, viewer);
     totals.set(at, (totals.get(at) ?? 0) + dealt);
   }
   return [...totals].map(([at, dmg]) => ({ at, dmg }));
@@ -172,7 +177,7 @@ interface RawAreaReveal {
  * Read the engine's pending reveal, or null when there is nothing new since `sinceSeq`.
  * Damage on the same square is summed so a volley reads as one number, not a pile-up.
  */
-export function boardReveal(view: PlayerView, sinceSeq: number): BoardReveal | null {
+export function boardReveal(view: PlayerView, sinceSeq: number, viewer: ViewerSeat = 0): BoardReveal | null {
   const flow = (view as unknown as { flow?: { areaReveal?: RawAreaReveal } }).flow;
   const raw = flow?.areaReveal;
   const seq = raw?.seq ?? 0;
@@ -181,14 +186,16 @@ export function boardReveal(view: PlayerView, sinceSeq: number): BoardReveal | n
   // same hit appears in both, and the diff is the one that also sees combat. What areaReveal
   // uniquely gives us is the caption, the caster, and the squares an effect TOUCHED without
   // damaging (buffs, summons, taps), which no diff of damage counters can tell us.
-  const damaged = new Set((raw.cells ?? []).filter((c) => c && c.dmg > 0).map((c) => engineCellKey(c.x, c.y)));
-  const sites = [...new Set((raw.redSites ?? []).map((s) => engineCellKey(s.x, s.y)))].filter((at) => !damaged.has(at));
+  const damaged = new Set((raw.cells ?? []).filter((c) => c && c.dmg > 0).map((c) => engineCellKey(c.x, c.y, viewer)));
+  const sites = [...new Set((raw.redSites ?? []).map((s) => engineCellKey(s.x, s.y, viewer)))].filter(
+    (at) => !damaged.has(at),
+  );
   const casterUnit = raw.casterId ? view.units[raw.casterId] : undefined;
   const source = raw.casterId ? (casterUnit ?? view.sites?.[raw.casterId]) : null;
   const caster = casterUnit
-    ? unitCell(casterUnit)
+    ? unitCell(casterUnit, viewer)
     : source && typeof source.x === "number" && typeof source.y === "number"
-      ? engineCellKey(source.x, source.y)
+      ? engineCellKey(source.x, source.y, viewer)
       : null;
   const name = raw.name ?? "";
   if (!sites.length && !caster && !name) return null;
@@ -200,11 +207,15 @@ export function boardReveal(view: PlayerView, sinceSeq: number): BoardReveal | n
   return { seq, hits: [], sites, caster, name, element: raw.element ?? "none", card };
 }
 
-export function hiddenLayerCounts(view: PlayerView, layer: BoardLayer): Record<string, HiddenCounts> {
+export function hiddenLayerCounts(
+  view: PlayerView,
+  layer: BoardLayer,
+  viewer: ViewerSeat = 0,
+): Record<string, HiddenCounts> {
   const out: Record<string, HiddenCounts> = {};
   for (const unit of Object.values(view.units)) {
     if (unit.isAvatar || unit.carriedBy || layerOf(unit.region) === layer) continue;
-    const counts = (out[unitCell(unit)] ??= { underground: 0, underwater: 0, surface: 0 });
+    const counts = (out[unitCell(unit, viewer)] ??= { underground: 0, underwater: 0, surface: 0 });
     if (unit.region === "underground") counts.underground++;
     else if (unit.region === "underwater") counts.underwater++;
     else counts.surface++;
@@ -221,8 +232,9 @@ export function hiddenLayerCounts(view: PlayerView, layer: BoardLayer): Record<s
 export function auraPlacement(
   squares: { x: number; y: number }[],
   owner: 1 | 2,
+  viewer: ViewerSeat = 0,
 ): { at: string; offset: [number, number] } | null {
-  const centre = footprintCentre(squares);
+  const centre = footprintCentre(squares, viewer);
   if (!centre) return null;
   const { cx, cy, anchor } = centre;
   return {
@@ -231,11 +243,16 @@ export function auraPlacement(
   };
 }
 
-/** Board-space centre of some ENGINE squares, and the covered cell nearest it (first wins a tie). */
+/**
+ * Board-space centre of some ENGINE squares, and the covered cell nearest it (first wins a tie).
+ * "Board space" is per viewer: the same engine squares sit in different board cells for the two
+ * seats, so every caller has to say whose board it means.
+ */
 function footprintCentre(
   squares: readonly { x: number; y: number }[],
+  viewer: ViewerSeat = 0,
 ): { cx: number; cy: number; anchor: { x: number; y: number } } | null {
-  const cells = squares.map((sq) => engineToBoard(sq.x, sq.y));
+  const cells = squares.map((sq) => engineToBoard(sq.x, sq.y, viewer));
   if (cells.length === 0) return null;
   const cx = cells.reduce((sum, c) => sum + c.x, 0) / cells.length;
   const cy = cells.reduce((sum, c) => sum + c.y, 0) / cells.length;
@@ -244,8 +261,8 @@ function footprintCentre(
 }
 
 /** The board cell an area of ENGINE squares is keyed on: the covered cell nearest its centre. */
-export function footprintCell(squares: readonly { x: number; y: number }[]): string | null {
-  const centre = footprintCentre(squares);
+export function footprintCell(squares: readonly { x: number; y: number }[], viewer: ViewerSeat = 0): string | null {
+  const centre = footprintCentre(squares, viewer);
   return centre ? `${centre.anchor.x},${centre.anchor.y}` : null;
 }
 
@@ -258,10 +275,10 @@ export function footprintCell(squares: readonly { x: number; y: number }[]): str
  * Avatars are still drawn on their anchor square (projectView), so a Racked avatar answers its
  * anchor too; drop this check in the same change that centres avatars.
  */
-export function unitCell(unit: UnitState): string {
-  if (unit.isAvatar) return engineCellKey(unit.x, unit.y);
+export function unitCell(unit: UnitState, viewer: ViewerSeat = 0): string {
+  if (unit.isAvatar) return engineCellKey(unit.x, unit.y, viewer);
   const body = occupiedSquares(unit);
-  return (body.length > 1 ? footprintCell(body) : null) ?? engineCellKey(unit.x, unit.y);
+  return (body.length > 1 ? footprintCell(body, viewer) : null) ?? engineCellKey(unit.x, unit.y, viewer);
 }
 
 /**
@@ -276,9 +293,10 @@ export const PINNED_SCALE = 0.78;
  */
 const PINNED_LIFT = 3;
 
-/** The human is engine seat 0 = our P1 (bottom of the board). */
-export const seatKey = (seat: PlayerId): PlayerKey => (seat === 0 ? "p1" : "p2");
-const seatOwner = (seat: PlayerId): 1 | 2 => (seat === 0 ? 1 : 2);
+/** Our P1 is whoever is LOOKING at the board (they sit at the bottom); single-player is seat 0. */
+export const seatKey = (seat: PlayerId, viewer: ViewerSeat = 0): PlayerKey => (seat === viewer ? "p1" : "p2");
+const seatOwner = (seat: PlayerId, viewer: ViewerSeat = 0): 1 | 2 => (seat === viewer ? 1 : 2);
+const otherSeat = (seat: ViewerSeat): PlayerId => (seat === 0 ? 1 : 0);
 
 const PHASES: Record<PlayerView["phase"], Phase> = {
   mulligan: "Setup",
@@ -473,19 +491,28 @@ export function clampToTile(centre: number, half: number, room: number): number 
  * The board cell an engine card can be arranged on, or null when it cannot be: gone, carried
  * (it is drawn on its bearer), or a multi-square body (pinned over its area, like an aura).
  */
-export function arrangeableCell(game: Pick<EngineState, "units" | "artifacts">, id: string): string | null {
+export function arrangeableCell(
+  game: Pick<EngineState, "units" | "artifacts">,
+  id: string,
+  viewer: ViewerSeat = 0,
+): string | null {
   const unit = game.units[id];
-  if (unit) return !unit.isAvatar && occupiedSquares(unit).length > 1 ? null : engineCellKey(unit.x, unit.y);
+  if (unit) return !unit.isAvatar && occupiedSquares(unit).length > 1 ? null : engineCellKey(unit.x, unit.y, viewer);
   const artifact = game.artifacts[id];
-  if (artifact) return artifact.carriedBy ? null : engineCellKey(artifact.x, artifact.y);
+  if (artifact) return artifact.carriedBy ? null : engineCellKey(artifact.x, artifact.y, viewer);
   return null;
 }
 
 /** The arrangement without the cards that left the tile they were arranged on; the same object when none did. */
-export function pruneArrangement(arrangement: Arrangement, game: Pick<EngineState, "units" | "artifacts">): Arrangement {
+export function pruneArrangement(
+  arrangement: Arrangement,
+  game: Pick<EngineState, "units" | "artifacts">,
+  viewer: ViewerSeat = 0,
+): Arrangement {
   let out: Arrangement | null = null;
   for (const [id, entry] of Object.entries(arrangement)) {
-    if (arrangeableCell(game, id) === entry.at) continue;
+    // `entry.at` is a board cell on THIS viewer's board, so it has to be compared to one
+    if (arrangeableCell(game, id, viewer) === entry.at) continue;
     out ??= { ...arrangement };
     delete out[id];
   }
@@ -569,16 +596,15 @@ function pushTo(permanents: Permanents, key: string, item: PermanentItem): numbe
   return permanents[key].length - 1;
 }
 
-/** Project the engine's view for the human seat onto our store's board model. */
 /** Board tile numbers (1–20, left→right, top→bottom) of each Harbinger's portents, after rotation. */
-export function harbingerTiles(view: PlayerView): Partial<Record<PlayerKey, number[]>> {
+export function harbingerTiles(view: PlayerView, viewer: ViewerSeat = 0): Partial<Record<PlayerKey, number[]>> {
   const portents = (view.flow as { harbinger?: Partial<Record<PlayerId, { x: number; y: number }[]>> } | undefined)?.harbinger;
   const out: Partial<Record<PlayerKey, number[]>> = {};
   for (const seat of [0, 1] as PlayerId[]) {
     const squares = portents?.[seat];
     if (!squares?.length) continue;
-    out[seatKey(seat)] = squares.map((sq) => {
-      const b = engineToBoard(sq.x, sq.y);
+    out[seatKey(seat, viewer)] = squares.map((sq) => {
+      const b = engineToBoard(sq.x, sq.y, viewer);
       return b.y * 5 + b.x + 1;
     });
   }
@@ -586,8 +612,8 @@ export function harbingerTiles(view: PlayerView): Partial<Record<PlayerKey, numb
 }
 
 /** Our portal overlay state for the engine's portents; portals appear once the setup step revealed them. */
-function portalStateFor(view: PlayerView, revealed: boolean): ProjectedState["portalState"] {
-  const tiles = harbingerTiles(view);
+function portalStateFor(view: PlayerView, revealed: boolean, viewer: ViewerSeat): ProjectedState["portalState"] {
+  const tiles = harbingerTiles(view, viewer);
   const seats = (["p1", "p2"] as const).filter((seat) => tiles[seat]);
   if (!seats.length) return null;
   const player = (seat: PlayerKey) =>
@@ -635,6 +661,13 @@ export function disabledUnits(game: EngineState): Set<string> {
   return out;
 }
 
+/**
+ * Project the engine's view onto our store's board model, as seen from `viewer`'s side of the
+ * table: that seat becomes our P1 and sits at the bottom, whichever engine seat it is.
+ *
+ * `power` and `disabled` both need the FULL GameState, which a player-vs-player client never
+ * holds; there the server computes them and they arrive in the view envelope.
+ */
 export function projectView(
   view: PlayerView,
   layer: BoardLayer = "surface",
@@ -642,6 +675,7 @@ export function projectView(
   power: Record<string, { atk: number; def: number }> = {},
   disabled: ReadonlySet<string> = new Set(),
   arrangement: Arrangement = {},
+  viewer: ViewerSeat = 0,
 ): ProjectedState {
   const players = view.players as ViewPlayer[];
 
@@ -656,10 +690,10 @@ export function projectView(
     }
     if (site.flooded) flooded.push(site);
     const owner = site.controller ?? site.owner;
-    sites[engineCellKey(site.x, site.y)] = {
-      owner: seatOwner(owner),
+    sites[engineCellKey(site.x, site.y, viewer)] = {
+      owner: seatOwner(owner, viewer),
       tapped: site.tapped,
-      card: { ...cardRefFor(site.name), instanceId: site.id, owner: seatKey(site.owner) },
+      card: { ...cardRefFor(site.name), instanceId: site.id, owner: seatKey(site.owner, viewer) },
     };
   }
   const board: BoardState = { size: { w: 5, h: 4 }, sites };
@@ -678,11 +712,11 @@ export function projectView(
   const avatarIds: Partial<Record<PlayerKey, string>> = {};
 
   for (const unit of Object.values(view.units)) {
-    const owner = seatKey(unit.controller);
+    const owner = seatKey(unit.controller, viewer);
     if (unit.isAvatar) {
-      const p = engineToBoard(unit.x, unit.y);
-      avatars[seatKey(unit.owner)] = {
-        card: cardOf(view, unit.cardId, seatKey(unit.owner)),
+      const p = engineToBoard(unit.x, unit.y, viewer);
+      avatars[seatKey(unit.owner, viewer)] = {
+        card: cardOf(view, unit.cardId, seatKey(unit.owner, viewer)),
         pos: [p.x, p.y],
         tapped: unit.tapped,
         offset: null,
@@ -699,12 +733,12 @@ export function projectView(
     if (below && layer !== "surface") continue;
     // a multi-square body is drawn centred over everything it covers, like an aura
     const body = occupiedSquares(unit);
-    const placed = body.length > 1 ? auraPlacement(body, seatOwner(unit.controller)) : null;
-    const at = placed?.at ?? engineCellKey(unit.x, unit.y);
+    const placed = body.length > 1 ? auraPlacement(body, seatOwner(unit.controller, viewer), viewer) : null;
+    const at = placed?.at ?? engineCellKey(unit.x, unit.y, viewer);
     if (placed) pinned.add(unit.id);
     const index = pushTo(permanents, at, {
       card: cardOf(view, unit.cardId, owner),
-      owner: seatOwner(unit.controller),
+      owner: seatOwner(unit.controller, viewer),
       instanceId: unit.id,
       tapped: unit.tapped,
       damage: unit.damage || null,
@@ -735,10 +769,10 @@ export function projectView(
     // carried artifacts travel with their bearer; loose ones sit on their own layer
     if (artifact.carriedBy ? !carrier : layerOf(artifact.region) !== layer) continue;
     const controller = carrierUnit?.controller ?? artifact.conjuredBy;
-    const at = carrier?.at ?? engineCellKey(artifact.x, artifact.y);
+    const at = carrier?.at ?? engineCellKey(artifact.x, artifact.y, viewer);
     pushTo(permanents, at, {
-      card: cardOf(view, artifact.cardId, seatKey(controller)),
-      owner: seatOwner(controller),
+      card: cardOf(view, artifact.cardId, seatKey(controller, viewer)),
+      owner: seatOwner(controller, viewer),
       instanceId: artifact.id,
       tapped: artifact.tapped,
       offset: null,
@@ -750,7 +784,7 @@ export function projectView(
   for (const unit of Object.values(view.units)) {
     const slot = unitSlot.get(unit.id);
     if (!slot) continue;
-    const owner = seatKey(unit.controller);
+    const owner = seatKey(unit.controller, viewer);
     for (const { flag, token } of STATUS_TOKENS) {
       // Most disables are DERIVED (Babbling Brook, Basilisk, an aura, [X]bound off its terrain)
       // and never set the raw flag; the session works those out from the full state.
@@ -760,7 +794,7 @@ export function projectView(
       if (!card) continue;
       pushTo(permanents, slot.at, {
         card,
-        owner: seatOwner(unit.controller),
+        owner: seatOwner(unit.controller, viewer),
         instanceId: card.instanceId,
         tapped: false,
         offset: null,
@@ -771,13 +805,13 @@ export function projectView(
 
   if (layer === "surface") {
     for (const site of rubble) {
-      const card = tokenCard("Rubble", `${site.id}:rubble`, seatKey(site.owner));
-      if (card) pushTo(permanents, engineCellKey(site.x, site.y), { card, owner: seatOwner(site.owner), instanceId: card.instanceId, tapped: false, offset: null });
+      const card = tokenCard("Rubble", `${site.id}:rubble`, seatKey(site.owner, viewer));
+      if (card) pushTo(permanents, engineCellKey(site.x, site.y, viewer), { card, owner: seatOwner(site.owner, viewer), instanceId: card.instanceId, tapped: false, offset: null });
     }
     for (const site of flooded) {
       const controller = site.controller ?? site.owner;
-      const card = tokenCard("Flooded", `${site.id}:flooded`, seatKey(controller));
-      if (card) pushTo(permanents, engineCellKey(site.x, site.y), { card, owner: seatOwner(controller), instanceId: card.instanceId, tapped: false, offset: null });
+      const card = tokenCard("Flooded", `${site.id}:flooded`, seatKey(controller, viewer));
+      if (card) pushTo(permanents, engineCellKey(site.x, site.y, viewer), { card, owner: seatOwner(controller, viewer), instanceId: card.instanceId, tapped: false, offset: null });
     }
   }
 
@@ -787,12 +821,12 @@ export function projectView(
   const animated = animatedAuras(view);
   for (const aura of layer === "surface" ? Object.values(view.auras) : []) {
     if (animated.has(aura.id)) continue;
-    const placed = auraPlacement(aura.squares, seatOwner(aura.controller));
+    const placed = auraPlacement(aura.squares, seatOwner(aura.controller, viewer), viewer);
     if (!placed) continue;
     pinned.add(aura.id);
     pushTo(permanents, placed.at, {
-      card: cardOf(view, aura.cardId, seatKey(aura.controller)),
-      owner: seatOwner(aura.controller),
+      card: cardOf(view, aura.cardId, seatKey(aura.controller, viewer)),
+      owner: seatOwner(aura.controller, viewer),
       instanceId: aura.id,
       tapped: false,
       offset: placed.offset,
@@ -845,7 +879,7 @@ export function projectView(
 
   const zones = {} as Record<PlayerKey, Zones>;
   for (const p of players) {
-    const key = seatKey(p.id);
+    const key = seatKey(p.id, viewer);
     zones[key] = {
       hand: p.hand.map((id, i) => {
         if (id === "hidden") return hiddenCard(`${key}-hand-${i}`, key, "Unknown");
@@ -873,7 +907,7 @@ export function projectView(
 
   // Our store shows mana as (mana-providing sites) + offset; solve the offset for the engine's pool.
   const manaOffset = (seat: PlayerId): number => {
-    const key = seatKey(seat);
+    const key = seatKey(seat, viewer);
     const fromSites = computeAvailableMana({ board, permanents, who: key, avatars, zones });
     return players[seat].mana - fromSites;
   };
@@ -890,17 +924,17 @@ export function projectView(
     permanents,
     avatars,
     zones,
-    players: { p1: lifeOf(0), p2: lifeOf(1) },
+    players: { p1: lifeOf(viewer), p2: lifeOf(otherSeat(viewer)) },
     phase: PHASES[view.phase],
-    currentPlayer: seatOwner(view.activePlayer),
+    currentPlayer: seatOwner(view.activePlayer, viewer),
     turn: Math.max(1, view.turn),
     // The engine runs the draw (drawDeck prompt); keep our draw-phase helpers quiet.
     hasDrawnThisTurn: true,
-    portalState: portalStateFor(view, portalsRevealed),
+    portalState: portalStateFor(view, portalsRevealed, viewer),
     permanentPositions,
     matchEnded: view.phase === "over",
-    winner: view.phase === "over" && view.winner !== null ? seatKey(view.winner) : null,
-    events: engineEvents(view),
+    winner: view.phase === "over" && view.winner !== null ? seatKey(view.winner, viewer) : null,
+    events: engineEvents(view, viewer),
   };
 }
 
@@ -909,7 +943,7 @@ export function projectView(
  * in the same place, as the online and replay views instead of a panel of its own.
  * Squares are rewritten to our tile numbers on the way through.
  */
-function engineEvents(view: PlayerView): StoreState["events"] {
+function engineEvents(view: PlayerView, viewer: ViewerSeat = 0): StoreState["events"] {
   const log = view.log.slice(-MAX_EVENTS);
   // The engine's log is an ordered array with no ids of its own; index it from the end so a
   // given line keeps its id as the log grows and the console does not re-key every entry.
@@ -917,8 +951,8 @@ function engineEvents(view: PlayerView): StoreState["events"] {
   return log.map((entry, i) => ({
     id: base + i,
     ts: 0,
-    text: localizeEngineText(entry.msg),
+    text: localizeEngineText(entry.msg, viewer),
     turn: entry.turn,
-    player: entry.player === null || entry.player === undefined ? undefined : entry.player === 0 ? 1 : 2,
+    player: entry.player === null || entry.player === undefined ? undefined : seatOwner(entry.player, viewer),
   }));
 }
