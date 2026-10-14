@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import CpuCardPick from "@/components/game/CpuCardPick";
 import { RcButton } from "@/components/ui/rc-button";
-import { useEngineSession } from "@/lib/engine-mode/session";
+import { opponentName, useEngineSession } from "@/lib/engine-mode/session";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store/types";
 import { getCardImageUrl } from "@/lib/utils/cdnUrl";
@@ -132,7 +132,7 @@ export default function EngineContextMenu() {
               <RcButton
                 variant="ghost"
                 size="xs"
-                onClick={() => open(pileOf(target.who, target.from), `${target.who === "p1" ? "Your" : "Computer's"} ${target.from} (${pileOf(target.who, target.from).length})`)}
+                onClick={() => open(pileOf(target.who, target.from), `${target.who === "p1" ? "Your" : `${opponentName(game, viewer)}'s`} ${target.from} (${pileOf(target.who, target.from).length})`)}
               >
                 Browse {target.from} ({pileOf(target.who, target.from).length})
               </RcButton>

@@ -4,7 +4,7 @@ import { Icon } from "@iconify/react";
 import { useEffect, useRef, useState } from "react";
 import { RcButton } from "@/components/ui/rc-button";
 import { soundManager } from "@/lib/audio/soundManager";
-import { controlSwap, humanDecisionSeat, useEngineSession } from "@/lib/engine-mode/session";
+import { controlSwap, humanDecisionSeat, opponentName, useEngineSession } from "@/lib/engine-mode/session";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import type { EngineInteraction } from "./useEngineInteraction";
 
@@ -116,7 +116,7 @@ export default function EngineHud({
             {/* the mulligan is simultaneous — no one's "turn" yet */}
             {game.phase !== "mulligan" && (
               <span className={myTurn ? "text-rc-accent-link" : "text-rc-fg-muted"}>
-                {myTurn ? "Your turn" : "Computer's turn"}
+                {myTurn ? "Your turn" : `${opponentName(game, viewer)}'s turn`}
               </span>
             )}
             <span className="text-rc-fg-subtle">

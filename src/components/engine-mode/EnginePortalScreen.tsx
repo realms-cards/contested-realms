@@ -4,14 +4,13 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
 import { RcButton } from "@/components/ui/rc-button";
 import { harbingerTiles } from "@/lib/engine-mode/projection";
-import { useEngineSession } from "@/lib/engine-mode/session";
+import { opponentName, useEngineSession } from "@/lib/engine-mode/session";
 import D20Dice from "@/lib/game/components/D20Dice";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import type { PlayerKey } from "@/lib/game/store/types";
 import { viewFor } from "@sorcery/shared";
 
 const PORTAL_DICE_COLOR = "#22c55e";
-const SEAT_NAME: Record<PlayerKey, string> = { p1: "You", p2: "Computer" };
 
 /**
  * Harbinger setup before the mulligan, as in our regular games: each Harbinger rolls three d20s
@@ -55,7 +54,7 @@ export default function EnginePortalScreen() {
       {seats.map((seat) => (
         <section key={seat} className="mb-4">
           <div className="mb-2 text-center font-rc-mono text-xs tracking-[0.08em]" style={{ color: PLAYER_COLORS[seat] }}>
-            {SEAT_NAME[seat]} — Harbinger
+            {seat === "p1" ? "You" : opponentName(game, viewer)} — Harbinger
           </div>
           <div className="h-[22vh] min-h-[150px] overflow-hidden rounded-rc-md border border-rc-line/12 bg-black/30">
             <ClientCanvas camera={{ position: [0, 0, 5], fov: 60 }}>

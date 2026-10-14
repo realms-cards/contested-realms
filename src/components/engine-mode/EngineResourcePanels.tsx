@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { seatKey } from "@/lib/engine-mode/projection";
 import { engineSeatResources, manaColor, THRESHOLD_ELEMENTS } from "@/lib/engine-mode/resources";
-import { useEngineSession } from "@/lib/engine-mode/session";
+import { opponentName, useEngineSession } from "@/lib/engine-mode/session";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 
 /**
@@ -35,10 +35,11 @@ export default function EngineResourcePanels() {
             key={seat}
             className="pointer-events-auto flex min-w-[72px] flex-col items-center gap-1 rounded-rc-md border bg-[rgba(7,10,20,0.85)] px-2.5 py-2 shadow-rc-panel"
             style={{ borderColor: `${PLAYER_COLORS[key]}55` }}
-            title={seat === viewer ? "Your mana and thresholds" : "Computer's mana and thresholds"}
+            title={seat === viewer ? "Your mana and thresholds" : `${opponentName(game, viewer)}'s mana and thresholds`}
           >
             <span className="font-rc-mono text-[9px] uppercase tracking-[0.12em]" style={{ color: PLAYER_COLORS[key] }}>
-              {seat === viewer ? "You" : "CPU"}
+              {/* a short tag; single player keeps its "CPU", a person is "Them" (the name is in the title) */}
+              {seat === viewer ? "You" : opponentName(game, viewer) === "Computer" ? "CPU" : "Them"}
             </span>
             <span className="font-rc-mono text-sm font-bold tabular-nums" style={{ color: manaColor(resources) }} title={`${mana} available / ${total} total mana`}>
               {mana}/{total}

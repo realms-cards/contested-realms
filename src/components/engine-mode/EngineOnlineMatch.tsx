@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 import { useEngineSession } from "@/lib/engine-mode/session";
 import type { GameTransport } from "@/lib/net/transport";
-import { EngineGame } from "./EngineMatch";
 import type { Action, PlayerId, PlayerView } from "@sorcery/shared";
+import { EngineGame } from "./EngineMatch";
 
 /**
  * A rules-engine match against another player.

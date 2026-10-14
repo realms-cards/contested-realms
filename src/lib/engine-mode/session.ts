@@ -7,6 +7,7 @@ import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import { CPU_SPELL_REVEAL_READ_MS, cpuRevealsPending, useCpuReveals } from "@/lib/game/cpu/revealQueue";
 import { useGameStore } from "@/lib/game/store";
 import type { BoardArrangeTarget, GameState } from "@/lib/game/store/types";
+import { ENGINE_BUILD } from "@shared/engine/build";
 import {
   actingSeatFor,
   applyAchievements,
@@ -40,7 +41,6 @@ import {
   sitesLostSince,
 } from "./projection";
 import type { Arrangement, BoardLayer, BoardReveal, DamageSnapshot, HiddenCounts, ProjectedState } from "./projection";
-import { ENGINE_BUILD } from "@shared/engine/build";
 import "@shared/engine/scriptPatches";
 
 export const HUMAN_SEAT: PlayerId = 0;
@@ -96,6 +96,16 @@ export interface ControlSwap {
 }
 
 /**
+ * What to call the other player. Single player seats the bot as "Computer", and the server seats
+ * each player under their display name, so the name on the game is right in both — this only
+ * covers a seat with no name at all.
+ */
+export function opponentName(game: Pick<EngineState, "players"> | null, viewer: PlayerId = HUMAN_SEAT): string {
+  const them = viewer === 0 ? 1 : 0;
+  return game?.players?.[them]?.name?.trim() || "Opponent";
+}
+
+/**
  * Who is playing whose turn under Courtesan Thaïs, as one sentence for a banner — the turn in
  * progress (`flow.thaisActive`) first, else the swap the next turn will bring
  * (`flow.thaisPending` naming the seat whose turn comes next). Null when control is normal.
@@ -104,19 +114,22 @@ export function controlSwap(game: EngineState, viewer: PlayerId = HUMAN_SEAT): C
   // "yours" is the viewer's seat and "theirs" the other one — in single player that is the
   // human and the bot, in a player-vs-player match whichever seat this client holds
   const them: PlayerId = viewer === 0 ? (1 as PlayerId) : (0 as PlayerId);
+  // single player keeps reading "the Computer"; a person is called by their name
+  const opponent = opponentName(game, viewer);
+  const name = opponent === "Computer" ? "the Computer" : opponent;
   if (game.phase === "over") return null;
   const active = thaisActiveSeat(game);
   if (active === viewer) {
-    return { kind: "computer-plays-yours", now: true, text: "Courtesan Thaïs: the Computer is playing your turn" };
+    return { kind: "computer-plays-yours", now: true, text: `Courtesan Thaïs: ${name} is playing your turn` };
   }
   if (active === them) {
-    return { kind: "you-play-theirs", now: true, text: "Courtesan Thaïs: you are playing the Computer's turn" };
+    return { kind: "you-play-theirs", now: true, text: `Courtesan Thaïs: you are playing ${name}'s turn` };
   }
   const next: PlayerId = game.activePlayer === viewer ? them : viewer;
   if (!thaisPendingSeats(game).includes(next)) return null;
   return next === viewer
-    ? { kind: "computer-will-play-yours", now: false, text: "Courtesan Thaïs: the Computer will play your next turn" }
-    : { kind: "you-will-play-theirs", now: false, text: "Courtesan Thaïs: you will play the Computer's next turn" };
+    ? { kind: "computer-will-play-yours", now: false, text: `Courtesan Thaïs: ${name} will play your next turn` }
+    : { kind: "you-will-play-theirs", now: false, text: `Courtesan Thaïs: you will play ${name}'s next turn` };
 }
 
 /**

@@ -138,3 +138,15 @@ describe("linesForToast", () => {
     expect(linesForToast(log, 2, true)).toEqual([log[2].msg]);
   });
 });
+
+describe("naming the other player", () => {
+  it("calls a person by their name, and the bot still 'the Computer'", async () => {
+    const { controlSwap, opponentName } = await import("./session");
+    const players = (a: string, b: string) => ({ players: [{ name: a }, { name: b }] }) as unknown as Parameters<typeof opponentName>[0];
+    expect(opponentName(players("You", "Computer"), 0)).toBe("Computer");
+    // seat 1's opponent is seat 0
+    expect(opponentName(players("Morgana", "Ash"), 1)).toBe("Morgana");
+    expect(opponentName(players("Morgana", ""), 0), "a seat with no name").toBe("Opponent");
+    expect(typeof controlSwap).toBe("function");
+  });
+});

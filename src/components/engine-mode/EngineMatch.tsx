@@ -21,7 +21,7 @@ import { enginePrecons, loadEngineDeck } from "@/lib/engine-mode/decks";
 import { loadEngineGame } from "@/lib/engine-mode/persistence";
 import type { SavedEngineGame } from "@/lib/engine-mode/persistence";
 import { useEngineGamePresence } from "@/lib/engine-mode/presence";
-import { useEngineSession, watchArrangeModifier } from "@/lib/engine-mode/session";
+import { opponentName, useEngineSession, watchArrangeModifier } from "@/lib/engine-mode/session";
 import type { BotLevel } from "@/lib/engine-mode/session";
 import { createCardPreviewData } from "@/lib/game/card-preview.types";
 import { useGameStore } from "@/lib/game/store";
@@ -304,6 +304,8 @@ export function EngineGame({
   const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
   const toggleCardPreviews = useGameStore((s) => s.toggleCardPreviews);
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
+  // "Computer" in single player (that is the bot's name on the game), the player's name online
+  const opponent = useEngineSession((s) => opponentName(s.game, s.seat));
   const endTurnConfirm = useEngineSession((s) => s.endTurnConfirm);
   const dismissEndTurn = useEngineSession((s) => s.dismissEndTurn);
   const dispatch = useEngineSession((s) => s.dispatch);
@@ -406,7 +408,7 @@ export function EngineGame({
           <OnlineLifeCounters
             dragFromHand={false}
             myPlayerKey="p1"
-            playerNames={{ p1: "You", p2: "Computer" }}
+            playerNames={{ p1: "You", p2: opponent }}
             readOnly
             spectating={false}
             showYouLabels
@@ -455,7 +457,7 @@ export function EngineGame({
               connected
               hideChat
               hideLeaveButton
-              playerNames={{ p1: "You", p2: "Computer" }}
+              playerNames={{ p1: "You", p2: opponent }}
             />
           </div>
         </>
