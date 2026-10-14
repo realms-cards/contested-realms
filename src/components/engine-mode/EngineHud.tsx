@@ -35,7 +35,8 @@ export default function EngineHud({
   toastPlacement = "corner",
 }: {
   interaction: EngineInteraction;
-  onRestart: () => void;
+  /** Start a new local game. Absent in a player-vs-player match, which has nothing to restart. */
+  onRestart?: () => void;
   onExit: () => void;
   hideStatusPill?: boolean;
   toastPlacement?: "corner" | "top";
@@ -178,7 +179,7 @@ export default function EngineHud({
               <RcButton variant="outline" onClick={onExit}>
                 Leave
               </RcButton>
-              <RcButton onClick={onRestart}>Play again</RcButton>
+              {onRestart && <RcButton onClick={onRestart}>Play again</RcButton>}
             </div>
           </div>
         </div>

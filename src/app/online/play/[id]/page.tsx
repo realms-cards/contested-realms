@@ -3,6 +3,7 @@
 import { OrbitControls } from "@react-three/drei";
 import { useThree, useFrame, invalidate } from "@react-three/fiber";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import dynamic from "next/dynamic";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
@@ -197,6 +198,15 @@ const MATCH_STAGE_BACKDROP = "bg-[rgba(4,6,11,0.92)] backdrop-blur-md";
 const STAGE_EASE = [0.22, 1, 0.36, 1] as const;
 // Longest the curtain waits for board assets before revealing anyway.
 const BOARD_LOAD_TIMEOUT_MS = 20000;
+
+/**
+ * The rules-engine screen, loaded only for an engine match. A static import would pull the whole
+ * vendored engine into this page's bundle for every match, legacy ones included.
+ */
+const EngineOnlineGame = dynamic(
+  () => import("@/components/engine-mode/EngineOnlineMatch").then((m) => m.EngineOnlineGame),
+  { ssr: false },
+);
 
 export default function OnlineMatchPage() {
   const params = useParams();
@@ -3171,6 +3181,33 @@ export default function OnlineMatchPage() {
     ...(isSpectatorView ? [] : [{ label: "Opponent ready", done: matchReady }]),
   ];
 
+
+  // A rules-engine match does not use the legacy board at all. The server owns the game and
+  // sends this seat its view; the engine screen paints it and posts actions back. The seat is
+  // this player's index in the roster — exactly how the server decides it (engineSeatOf).
+  // Spectators are not served by the engine yet, so they fall through to the ordinary view.
+  //
+  // It takes over only once this player's deck is in. The server cannot start the engine until
+  // it has BOTH decks, and a lobby match sends its deck from the deck selector — which lives in
+  // the ordinary setup view below. Taking over sooner would hide the only way to submit one.
+  // `deckSubmissions` covers a reload: the deck is already on record, so go straight back in.
+  const engineDeckIn = prepared || (match?.deckSubmissions ?? []).includes(myPlayerId ?? "");
+  if (match?.engineMode && !isSpectatorView && myPlayerId && engineDeckIn) {
+    const seat = (match.playerIds ?? []).indexOf(myPlayerId);
+    if (seat === 0 || seat === 1) {
+      return (
+        <EngineOnlineGame
+          matchId={matchId}
+          seat={seat}
+          transport={transport}
+          onExit={() => {
+            leaveMatch();
+            router.push(tournamentId ? `/tournaments/${tournamentId}` : "/online/lobby");
+          }}
+        />
+      );
+    }
+  }
   return (
     <div className="fixed inset-0 w-screen h-[100dvh] select-none">
       {/* Camera controls - left: reset icon + 2D/3D buttons (hidden when uiHidden) */}

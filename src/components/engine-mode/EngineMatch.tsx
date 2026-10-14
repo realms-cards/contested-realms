@@ -286,11 +286,17 @@ export default function EngineMatch() {
   );
 }
 
-function EngineGame({
+/**
+ * The engine board and everything around it. Used for single player (below) and, wrapped in
+ * EngineOnlineMatch, for a match against another player — it never needed to know which, since
+ * the session it reads looks the same either way.
+ */
+export function EngineGame({
   onRestart,
   onExit,
 }: {
-  onRestart: () => void;
+  /** Absent in a player-vs-player match: there is no local game to start again. */
+  onRestart?: () => void;
   onExit: () => void;
 }) {
   const interaction = useEngineInteraction();

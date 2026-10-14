@@ -149,11 +149,11 @@ async function maybeStartEngineMatch(match: AnyRecord | null | undefined): Promi
   const bad = converted.find((result) => !result.ok);
   if (bad && !bad.ok) {
     console.warn(`[Engine] match ${matchId} cannot start: ${bad.error}`);
-    io.to(`match:${matchId}`).emit("error", {
-      message: `This match cannot be played on the rules engine: ${bad.error}`,
-      code: "engine_deck_unsupported",
-      retryable: false,
-    });
+    const reason = `This match cannot be played on the rules engine: ${bad.error}`;
+    io.to(`match:${matchId}`).emit("error", { message: reason, code: "engine_deck_unsupported", retryable: false });
+    // Also on the engine channel: both players are sitting on the "waiting for decks" screen,
+    // which listens there, and would otherwise wait for a match that is never going to start.
+    io.to(`match:${matchId}`).emit("engine:reject", { matchId, reason, rev: 0 });
     return;
   }
 

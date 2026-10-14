@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useEngineSession } from "@/lib/engine-mode/session";
 import type { GameTransport } from "@/lib/net/transport";
+import { EngineGame } from "./EngineMatch";
 import type { Action, PlayerId, PlayerView } from "@sorcery/shared";
 
 /**
@@ -71,4 +72,48 @@ export default function EngineOnlineMatch({
   }, [matchId, seat, transport, joinRemote, applyRemoteView, applyRemoteReject]);
 
   return children;
+}
+
+/**
+ * The whole player-vs-player engine screen: the session wired to the socket, around the same
+ * board single player uses. One component so the online match page can load all of it — the
+ * vendored engine included — only when a match is actually an engine match.
+ */
+export function EngineOnlineGame({
+  matchId,
+  seat,
+  transport,
+  onExit,
+}: {
+  matchId: string;
+  seat: PlayerId;
+  transport: GameTransport | null;
+  onExit: () => void;
+}) {
+  // Nothing to draw until the server starts the match, which it does once BOTH decks are in.
+  const started = useEngineSession((s) => s.game !== null);
+  const error = useEngineSession((s) => s.lastError);
+  return (
+    <EngineOnlineMatch matchId={matchId} seat={seat} transport={transport}>
+      {started ? (
+        <EngineGame onExit={onExit} />
+      ) : (
+        <div className="fixed inset-0 flex items-center justify-center bg-[#0b0b0c] px-4 font-rc-sans text-rc-fg">
+          <div className="w-full max-w-md rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-center shadow-rc-panel">
+            <h2 className="m-0 font-rc-display text-[24px] leading-tight text-rc-fg-strong">Rules engine match</h2>
+            <p className="mt-3 text-sm text-rc-fg-muted">
+              {error ?? "Your deck is in. Waiting for your opponent's deck — the game starts as soon as it arrives."}
+            </p>
+            <button
+              type="button"
+              onClick={onExit}
+              className="mt-5 rounded-rc-md border border-rc-line/30 px-4 py-1.5 text-sm text-rc-fg hover:border-rc-accent/50"
+            >
+              Leave
+            </button>
+          </div>
+        </div>
+      )}
+    </EngineOnlineMatch>
+  );
 }
