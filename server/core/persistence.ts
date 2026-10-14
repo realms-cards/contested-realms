@@ -140,6 +140,10 @@ const createPersistenceLayerInternal = ({
         : null,
       sealedPacks: match.sealedPacks || null,
       game: match.game || null,
+      // Rules-engine matches: the flag and the engine's own GameState (with its revision), in
+      // their own columns — `game` is deep-merged with client patches and must not carry it.
+      engineMode: match.engineMode === true,
+      engineState: match.engineState || null,
       lastTs: BigInt(Number(match.lastTs || Date.now())),
     };
   }
@@ -591,6 +595,10 @@ const createPersistenceLayerInternal = ({
         sealedPacks: row.sealedPacks || null,
         draftState: row.draftState || null,
         game: row.game || {},
+        // Without this a recovered engine match would come back as a LEGACY match: the server
+        // checks match.engineMode, and only the game snapshot used to remember it.
+        engineMode: row.engineMode === true || row.game?.engineMode === true,
+        engineState: row.engineState || null,
         lastTs: Number(row.lastTs || 0) || 0,
         // Timer/tiebreak state (present in Redis session payloads only)
         ...matchTimerSessionFields(row),

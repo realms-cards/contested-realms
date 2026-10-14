@@ -45,6 +45,10 @@ export class EngineMatchService {
     return this.live.get(matchId)?.rev ?? 0;
   }
 
+  isOver(matchId: string): boolean {
+    return this.live.get(matchId)?.over === true;
+  }
+
   async start(
     matchId: string,
     decks: [unknown, unknown],

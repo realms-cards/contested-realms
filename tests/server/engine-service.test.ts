@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createPersistenceLayer } from "../../server/core/persistence";
 import { EnginePool } from "../../server/modules/engine/pool";
 import { EngineMatchService } from "../../server/modules/engine/service";
 import { starterDecks } from "../../vendor/untested-realm/shared/src/index";
@@ -145,5 +146,71 @@ describe("turning a submitted deck into an engine deck", () => {
     expect(result.deck.avatar).toBe("Avatar of Fire");
     expect(result.deck.atlas["Rustic Village"], "duplicates are counted, not repeated").toBe(2);
     expect(result.deck.spellbook["Chain Lightning"]).toBe(1);
+  });
+});
+
+describe("an engine match across a server restart", () => {
+  it("goes through the session row and comes back as the same engine game", async () => {
+    // What the server does after every accepted action: the engine's state, with its rev,
+    // goes onto the match and out through the ordinary session persistence.
+    const before = await opened("persisted");
+    await before.act("persisted", 0, { t: "keepHand" });
+    const handBefore = (await before.viewFor("persisted", 0))?.view;
+    const match = {
+      id: "persisted",
+      playerIds: ["a", "b"],
+      status: "in_progress",
+      matchType: "constructed",
+      engineMode: true,
+      game: {},
+      engineState: { state: await before.snapshot("persisted"), rev: before.revOf("persisted"), over: false },
+    };
+    before.shutdown();
+
+    const rows = new Map<string, Record<string, unknown>>();
+    const prisma = {
+      onlineMatchSession: {
+        upsert: (args: { where: { id: string }; create: Record<string, unknown> }) => {
+          rows.set(args.where.id, args.create);
+          return args;
+        },
+      },
+      onlineMatchAction: { create: (args: unknown) => args },
+      $transaction: async (ops: unknown[]) => ops,
+    };
+    const persistence = createPersistenceLayer({
+      prisma,
+      metricsInc: () => {},
+      metricsObserveMs: () => {},
+      matches: new Map(),
+      hydrateMatchFromDatabase: async () => {},
+      config: { isWriteBehind: false, flushIntervalMs: 0, actionBatchSize: 1, maxWaitMs: 1000, timeoutMs: 1000, redisSessionTtlSec: 60 },
+    });
+    await persistence.persistMatchUpdate(match, null, null, Date.now());
+
+    // The database hands JSON back, not the objects we gave it.
+    const row = JSON.parse(JSON.stringify(rows.get("persisted"), (_k, v) => (typeof v === "bigint" ? Number(v) : v)));
+    const recovered = persistence.rehydrateMatch({ id: "persisted", ...row }) as Record<string, unknown> | null;
+    expect(recovered?.engineMode, "still an engine match, not a legacy one").toBe(true);
+    const saved = recovered?.engineState as { state: unknown; rev: number; over: boolean };
+
+    const after = service();
+    expect(await after.restore("persisted", saved.state, saved.rev, saved.over)).toBe(true);
+    expect(after.revOf("persisted")).toBe(1);
+    expect((await after.viewFor("persisted", 0))?.view, "the same game, not a fresh deal").toEqual(handBefore);
+    after.shutdown();
+  });
+
+  it("remembers engine mode from the game snapshot of a row saved before the column existed", () => {
+    const persistence = createPersistenceLayer({
+      prisma: {},
+      metricsInc: () => {},
+      metricsObserveMs: () => {},
+      matches: new Map(),
+      hydrateMatchFromDatabase: async () => {},
+      config: { isWriteBehind: false, flushIntervalMs: 0, actionBatchSize: 1, maxWaitMs: 1000, timeoutMs: 1000, redisSessionTtlSec: 60 },
+    });
+    const m = persistence.rehydrateMatch({ id: "old", game: { engineMode: true } }) as Record<string, unknown> | null;
+    expect(m?.engineMode).toBe(true);
   });
 });

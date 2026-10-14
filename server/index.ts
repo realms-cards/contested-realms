@@ -129,6 +129,8 @@ function engineService(): import("./modules/engine/service").EngineMatchService 
  */
 async function maybeStartEngineMatch(match: AnyRecord | null | undefined): Promise<void> {
   if (!match || match.engineMode !== true || match._engineStarted) return;
+  // A game that was already dealt before a restart is picked up, never dealt again.
+  if (await restoreEngineMatch(match)) return;
   const engine = engineService();
   const matchId = String(match.id);
   if (!engine || engine.isEngineMatch(matchId)) return;
@@ -176,6 +178,7 @@ async function maybeStartEngineMatch(match: AnyRecord | null | undefined): Promi
     return;
   }
   match._engineStarted = true;
+  await persistEngineState(match);
   // Push each seat its opening board straight away; neither client has one yet.
   for (const seat of [0, 1] as const) {
     const target = players.get(ids[seat]);
@@ -185,6 +188,49 @@ async function maybeStartEngineMatch(match: AnyRecord | null | undefined): Promi
     if (envelope) targetSocket.emit("engine:view", envelope);
   }
   console.log(`[Engine] match ${matchId} started (seat ${first} goes first)`);
+}
+
+/**
+ * Write the engine's full state onto the match so it is persisted with it. Called after the
+ * engine starts and after every action it accepts: the state lives only in a worker thread, so
+ * without this a restart would leave both players in a match with no game behind it.
+ */
+async function persistEngineState(match: AnyRecord): Promise<void> {
+  const engine = engineService();
+  const matchId = String(match.id);
+  if (!engine) return;
+  const state = await engine.snapshot(matchId);
+  if (state === null) return;
+  match.engineState = { state, rev: engine.revOf(matchId), over: engine.isOver(matchId) };
+  try {
+    await persistMatchUpdate(match, null, null, Date.now());
+  } catch (error) {
+    console.warn(`[Engine] could not persist match ${matchId}:`, error);
+  }
+}
+
+/**
+ * Bring an engine match that was persisted before a restart back into a worker, if it is not
+ * already live. True when the match is (now) live. It must run BEFORE maybeStartEngineMatch
+ * gets a chance: that would otherwise see two decks and no live game, and deal a new one.
+ */
+async function restoreEngineMatch(match: AnyRecord | null | undefined): Promise<boolean> {
+  if (!match || match.engineMode !== true) return false;
+  const engine = engineService();
+  const matchId = String(match.id);
+  if (!engine) return false;
+  if (engine.isEngineMatch(matchId)) return true;
+  const saved = match.engineState as { state?: unknown; rev?: unknown; over?: unknown } | null | undefined;
+  if (!saved || saved.state === undefined) return false;
+  const rev = typeof saved.rev === "number" ? saved.rev : 0;
+  const restored = await engine.restore(matchId, saved.state, rev, saved.over === true);
+  if (!restored) {
+    console.error(`[Engine] match ${matchId} could not be restored from its saved state`);
+    return false;
+  }
+  match._engineStarted = true;
+  console.log(`[Engine] match ${matchId} restored at rev ${rev}`);
+  return true;
 }
 
 /** Which engine seat a player holds in a match, or null if they are not in it. */
@@ -3838,8 +3884,10 @@ io.on("connection", async (socket: SocketClient) => {
     // silence; these two have to be named here or the match simply never responds.
     if (type === "engine:action" || type === "engine:resync") {
       const engine = engineService();
-      const match = matches.get(matchId);
-      if (!engine || !engine.isEngineMatch(matchId)) return;
+      // After a restart the match may not be in memory yet, and its game not in a worker:
+      // the first resync from a reconnecting client is what brings both back.
+      const match = await getOrLoadMatch(matchId);
+      if (!engine || !(await restoreEngineMatch(match))) return;
       const seat = engineSeatOf(match, player.id);
       if (seat === null) return; // a spectator has no actions to take
       const pushView = async () => {
@@ -3867,6 +3915,7 @@ io.on("connection", async (socket: SocketClient) => {
         if (envelope) socket.emit("engine:view", envelope);
         return;
       }
+      if (match) await persistEngineState(match);
       await pushView();
       if (outcome.over && match) {
         // The engine decided this, not a client claim — strictly more trustworthy than the
