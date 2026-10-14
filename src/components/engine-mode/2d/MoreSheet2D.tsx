@@ -64,11 +64,30 @@ export default function MoreSheet2D({
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const heading = useRef<HTMLHeadingElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  // rows hidden below the fold: a fade and a hint say there is more to scroll to
+  const [moreBelow, setMoreBelow] = useState(false);
 
   // the sheet takes focus so a keyboard or screen reader lands inside it
   useEffect(() => {
     if (mounted) heading.current?.focus();
   }, [mounted, view]);
+
+  const hasGame = game !== null;
+  const measure = () => {
+    const el = scroller.current;
+    if (el) setMoreBelow(el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+  };
+  // re-measured whenever the sheet or what is in it changes size (a view switch, a window resize)
+  useEffect(() => {
+    const el = scroller.current;
+    if (!mounted || !el) return;
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    for (const child of Array.from(el.children)) observer.observe(child);
+    return () => observer.disconnect();
+  }, [mounted, view, hasGame]);
 
   // disarm the concede confirmation after a moment, as the rail does
   useEffect(() => {
@@ -321,7 +340,7 @@ export default function MoreSheet2D({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[185] flex flex-col justify-end" onContextMenu={(e) => e.preventDefault()}>
+    <div className="fixed inset-0 z-[185] flex flex-col justify-end sm:items-center sm:justify-center sm:p-4" onContextMenu={(e) => e.preventDefault()}>
       <button
         type="button"
         aria-label="Close"
@@ -333,7 +352,9 @@ export default function MoreSheet2D({
         role="dialog"
         aria-modal="true"
         aria-labelledby="engine-more-title"
-        className="thin-scrollbar relative mx-auto flex max-h-[75vh] max-h-[75dvh] w-full max-w-[560px] flex-col overflow-y-auto rounded-t-rc-lg border border-b-0 border-rc-line/18 bg-[rgba(9,13,25,0.97)] px-4 pt-3 font-rc-sans text-rc-fg shadow-rc-panel pb-[max(12px,env(safe-area-inset-bottom))]"
+        ref={scroller}
+        onScroll={measure}
+        className="thin-scrollbar relative mx-auto flex max-h-[75vh] max-h-[75dvh] w-full max-w-[560px] flex-col overflow-y-auto rounded-t-rc-lg border border-b-0 border-rc-line/18 bg-[rgba(9,13,25,0.97)] px-4 pt-3 font-rc-sans text-rc-fg shadow-rc-panel pb-[max(12px,env(safe-area-inset-bottom))] sm:max-h-[calc(100dvh-2rem)] sm:rounded-rc-lg sm:border-b"
       >
         <div className="mb-3 flex items-center gap-2">
           {view !== "menu" && initialView === "menu" && (
@@ -354,6 +375,11 @@ export default function MoreSheet2D({
           </RcButton>
         </div>
         {body}
+        {moreBelow && (
+          <div className="pointer-events-none sticky -bottom-[max(12px,env(safe-area-inset-bottom))] -mx-4 -mb-[max(12px,env(safe-area-inset-bottom))] mt-[-2.5rem] flex h-10 flex-none items-end justify-center bg-gradient-to-t from-[rgba(9,13,25,1)] to-transparent pb-1">
+            <Icon icon="game-icons:plain-arrow" className="h-3.5 w-3.5 text-rc-fg-subtle" aria-hidden />
+          </div>
+        )}
       </div>
     </div>,
     document.body,

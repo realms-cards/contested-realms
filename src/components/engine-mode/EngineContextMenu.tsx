@@ -31,6 +31,7 @@ export default function EngineContextMenu() {
   const arrangement = useEngineSession((s) => s.arrangement);
   const resetArrangement = useEngineSession((s) => s.resetArrangement);
   const [inspect, setInspect] = useState<{ card: CardRef; facts: UnitFacts | null } | null>(null);
+  const inspectSite = /site/i.test(inspect?.card.type ?? "");
   const [browse, setBrowse] = useState<{ title: string; cards: CardRef[] } | null>(null);
 
   // close everything on Escape
@@ -154,11 +155,19 @@ export default function EngineContextMenu() {
       {inspect && (
         <div className="fixed inset-0 z-[220] flex items-center justify-center bg-[rgba(6,10,20,0.7)] p-4" onClick={() => setInspect(null)}>
           <div
-            className="flex max-h-[86vh] w-[min(92vw,640px)] flex-col gap-4 overflow-y-auto rounded-rc-lg sm:flex-row border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-4 font-rc-sans text-rc-fg shadow-rc-panel thin-scrollbar"
+            className={`flex max-h-[86vh] w-[min(92vw,640px)] flex-col gap-4 overflow-y-auto rounded-rc-lg ${inspectSite ? "" : "sm:flex-row"} border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-4 font-rc-sans text-rc-fg shadow-rc-panel thin-scrollbar`}
             onClick={(e) => e.stopPropagation()}
           >
-            {inspect.card.slug ? (
-               
+            {inspect.card.slug && inspectSite ? (
+              // sites are printed sideways: turned a quarter so they read the way they lie on the board
+              <div className="relative aspect-[88/63] w-full max-w-[min(100%,calc(45vh*88/63))] shrink-0 self-center overflow-hidden rounded-rc-md shadow-rc-md ring-1 ring-rc-line/25">
+                <img
+                  src={getCardImageUrl(inspect.card.slug)}
+                  alt={inspect.card.name}
+                  className="absolute left-1/2 top-1/2 h-[calc(100%*88/63)] w-auto max-w-none -translate-x-1/2 -translate-y-1/2 rotate-90"
+                />
+              </div>
+            ) : inspect.card.slug ? (
               <img src={getCardImageUrl(inspect.card.slug)} alt={inspect.card.name} className="max-h-[45vh] w-auto max-w-full shrink-0 self-center rounded-rc-md object-contain shadow-rc-md ring-1 ring-rc-line/25 sm:h-[340px] sm:max-h-none sm:max-w-[60%] sm:self-start" />
             ) : null}
             <div className="flex min-w-0 flex-1 flex-col gap-2">
