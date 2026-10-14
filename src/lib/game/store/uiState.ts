@@ -232,6 +232,7 @@ export type UiSlice = Pick<
   | "dismissEndTurnConfirm"
   | "tutorialActionGate"
   | "boardGesturesLocked"
+  | "boardArrange"
   | "setTutorialActionGate"
   | "setBoardGesturesLocked"
 >;
@@ -265,6 +266,7 @@ type UiStateDefaults = Pick<
   | "showEndTurnConfirm"
   | "tutorialActionGate"
   | "boardGesturesLocked"
+  | "boardArrange"
 >;
 
 export const createInitialUiState = (): UiStateDefaults => ({
@@ -295,6 +297,7 @@ export const createInitialUiState = (): UiStateDefaults => ({
   showEndTurnConfirm: false,
   tutorialActionGate: { active: false, validate: null, onReject: null },
   boardGesturesLocked: false,
+  boardArrange: null,
 });
 
 export const createUiSlice: StateCreator<GameState, [], [], UiSlice> = (

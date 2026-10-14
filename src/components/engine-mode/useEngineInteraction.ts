@@ -1,14 +1,95 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { actionHint, actionPaths, narrow } from "@/lib/engine-mode/actionPaths";
-import { useEngineSession } from "@/lib/engine-mode/session";
+import type { CardPickItem } from "@/components/game/CpuCardPick";
+import { actionHint, actionPaths, narrow, pathAreas } from "@/lib/engine-mode/actionPaths";
 import { auraFootprints } from "@/lib/engine-mode/areaPrompt";
-import { engineCellKey } from "@/lib/engine-mode/coords";
+import { cardRefFor } from "@/lib/engine-mode/cardIndex";
+import { engineCellKey, type ViewerSeat } from "@/lib/engine-mode/coords";
+import { seatKey } from "@/lib/engine-mode/projection";
+import { useEngineSession } from "@/lib/engine-mode/session";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
-import type { Action } from "@sorcery/shared";
+import { handToken } from "@/lib/game/cpu/pickTokens";
+import { canCast, getCard } from "@sorcery/shared";
+import type { Action, GameState as EngineState, PlayerId } from "@sorcery/shared";
 
 const REQUEST_PREFIX = "engine:";
+
+/** One card of the hand we are playing for the opponent (Courtesan Thaïs). */
+export interface PilotHandCard {
+  cardId: string;
+  name: string;
+  /** the card's `hand:p2:<id>` pick token; starts an action only when `playable` */
+  token: string;
+  /** the engine offers at least one legal action that starts with this card */
+  playable: boolean;
+  /** why it can't be played right now (for a tooltip), when it can't */
+  reason: string | null;
+}
+
+/**
+ * The WHOLE hand of the seat we are piloting, in hand order: the cards the engine's legal moves
+ * start from are playable through their existing hand tokens, every other card is listed too —
+ * with the engine's own reason when it has one — so the pilot sees what they are working with,
+ * not just the three cards that happen to be castable.
+ */
+export function pilotHandCards(
+  game: EngineState,
+  seat: PlayerId,
+  startTokens: ReadonlySet<string>,
+  viewer: ViewerSeat = 0,
+): PilotHandCard[] {
+  // The same key actionPaths builds hand tokens with — if these two disagree, `startTokens`
+  // never matches and every card in the piloted hand reads as unplayable.
+  const key = seatKey(seat, viewer);
+  const player = game.players[seat];
+  if (!player) return [];
+  const avatar = game.units[player.avatarUnitId];
+  return player.hand.map((cardId) => {
+    const name = game.cards[cardId]?.name ?? "Card";
+    const token = handToken(key, cardId);
+    const playable = startTokens.has(token);
+    return { cardId, name, token, playable, reason: playable ? null : unplayableReason(game, seat, cardId, name, avatar?.id, avatar?.tapped) };
+  });
+}
+
+/** The piloted hand as pick rows: playable cards by their hand token, the rest inert with the reason. */
+export function pilotPickItems(cards: readonly PilotHandCard[]): CardPickItem[] {
+  return cards.map((c) => ({
+    id: c.token,
+    card: cardRefFor(c.name),
+    disabled: !c.playable,
+    reason: c.reason ?? undefined,
+    badge: c.playable ? undefined : "Not now",
+  }));
+}
+
+function unplayableReason(
+  game: EngineState,
+  seat: PlayerId,
+  cardId: string,
+  name: string,
+  avatarId: string | undefined,
+  avatarTapped: boolean | undefined,
+): string {
+  let type = "";
+  try {
+    type = getCard(name)?.type ?? "";
+  } catch {
+    type = "";
+  }
+  if (type === "Site") return avatarTapped ? "Their avatar has already acted this turn." : "There is nowhere to play this site right now.";
+  if (game.phase !== "main" || game.prompts.length) return "Not while something else is being decided.";
+  if (avatarId) {
+    try {
+      const check = canCast(game, seat, cardId, avatarId);
+      if (!check.ok && check.reason) return check.reason;
+    } catch {
+      // a reason is a courtesy; fall through to the general one
+    }
+  }
+  return "No legal way to play it right now.";
+}
 
 export interface EngineInteraction {
   /** true while the board is offering main-phase choices */
@@ -21,8 +102,10 @@ export interface EngineInteraction {
   endTurn: Action | null;
   /** cards castable from the cemetery right now (driven by the HUD's cemetery panel) */
   cemetery: { token: string; cardId: string; name: string }[];
-  /** the opponent's hand, while we are playing their turn for them (Courtesan Thaïs) */
+  /** the opponent's PLAYABLE hand cards, while we are playing their turn for them (Courtesan Thaïs) */
   pilotHand: { token: string; cardId: string; name: string }[];
+  /** the opponent's WHOLE hand while we play their turn, playable or not (empty otherwise) */
+  pilotFullHand: PilotHandCard[];
   /** start a path from a non-board token (a cemetery card) */
   begin: (token: string) => void;
   cancel: () => void;
@@ -83,6 +166,13 @@ export function useEngineInteraction(): EngineInteraction {
     return [...seen.values()];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paths, game, rev]);
+  const pilotFullHand = useMemo(() => {
+    if (!game || decisionSeat === null || decisionSeat === viewer) return [];
+    const starts = new Set<string>();
+    for (const path of paths) if (path.steps[0]) starts.add(path.steps[0]);
+    return pilotHandCards(game, decisionSeat, starts, viewer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paths, game, rev, decisionSeat, viewer]);
   const active = legal !== null && paths.length > 0;
   const request = `${REQUEST_PREFIX}${rev}:${narrowed.prefix.join(">")}`;
 
@@ -139,7 +229,13 @@ export function useEngineInteraction(): EngineInteraction {
         );
       })
       .map((path) => path.action);
-    picker.setAreas(request, game && placingAura.length ? auraFootprints(game, placingAura, viewer) : {});
+    // A multi-square unit's move is keyed on its new footprint's cell; the footprint itself
+    // lights up the same way an aura's does. Both are board cells, so both need the viewer —
+    // pathAreas reads cells actionPaths already computed for this seat.
+    picker.setAreas(request, {
+      ...(game && placingAura.length ? auraFootprints(game, placingAura, viewer) : {}),
+      ...pathAreas(narrowed.matching, narrowed.prefix.length),
+    });
     // `game` is mutated in place by the engine, so `rev` — carried inside `request` — is what
     // marks a real change; the identity of `game` never does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -186,7 +282,11 @@ export function useEngineInteraction(): EngineInteraction {
     endTurn: legal?.find((a) => a.t === "endTurn") ?? null,
     cemetery,
     pilotHand,
-    begin: (token) => setClicked([token]),
+    pilotFullHand,
+    // only a token some legal action starts from (an inert pilot-hand card does nothing)
+    begin: (token) => {
+      if (paths.some((path) => path.steps[0] === token)) setClicked([token]);
+    },
     cancel: () => setClicked([]),
     confirm: () => {
       if (narrowed.done) dispatch(narrowed.done);

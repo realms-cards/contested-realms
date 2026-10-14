@@ -32,6 +32,11 @@ describe("engine coordinate localization", () => {
     expect(localizeEngineText("dealt (9,9) damage")).toBe("dealt (9,9) damage");
   });
 
+  it("puts Courtesan Thaïs's bargain line in the second person", () => {
+    expect(localizeEngineText("Thaïs's bargain: You plays this turn for Computer!")).toBe("Thaïs's bargain: You play this turn for Computer!");
+    expect(localizeEngineText("Thaïs's bargain: Computer plays this turn for You!")).toBe("Thaïs's bargain: Computer plays this turn for you!");
+  });
+
   it("rewrites the squareLabel form (0-based letter, 1-based number)", () => {
     expect(localizeEngineText("The portents mark a2, c3, e1.")).toBe("The portents mark tile 15, tile 8, tile 16.");
     expect(localizeEngineText("Hillock Basilisk moves to c1.")).toBe("Hillock Basilisk moves to tile 18.");

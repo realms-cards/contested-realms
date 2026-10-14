@@ -186,6 +186,7 @@ export default function Board({
   const { settings: graphicsSettings } = useGraphicsSettings();
   const isSpectator = interactionMode === "spectator";
   const gesturesLocked = useScopedStore((s) => s.boardGesturesLocked);
+  const boardArrange = useScopedStore((s) => s.boardArrange);
   const _controlScheme = useScopedStore((s) => s.controlScheme);
   const boardState = useScopedStore((s) => s.board);
   const fallbackBoard = useMemo(() => createInitialBoard(), []);
@@ -1464,6 +1465,8 @@ export default function Board({
     dragContext: boardDragControls,
     useGhostOnlyBoardDrag: USE_GHOST_ONLY_BOARD_DRAG,
     lastPointerRef,
+    gesturesLocked,
+    boardArrange,
     draggingSite,
     setDraggingSite,
     openPlacementDialog,

@@ -1,4 +1,4 @@
-import { applyAction, createGame, getCard, viewFor } from "@sorcery/shared";
+import { applyAction, createGame, getCard, isDisabled, viewFor } from "@sorcery/shared";
 import type { PlayerId } from "@sorcery/shared";
 import { botAction, botNeedsToAct } from "@untested-realm/bot/bot";
 import { describe, expect, it, vi } from "vitest";
@@ -8,18 +8,24 @@ import { legalActionsWithCasters } from "@shared/engine/casterActions";
 import { engineCellKey } from "./coords";
 import { apiDeckToEngine, enginePrecons, toEngineDeck } from "./decks";
 import {
+  arrangeableCell,
   auraPlacement,
   boardReveal,
+  clampToTile,
   damageSince,
   damageSnapshot,
+  disabledUnits,
   harbingerTiles,
   hiddenLayerCounts,
   layerOf,
   projectView,
+  pruneArrangement,
+  unitCell,
   unitPower,
 } from "./projection";
+import type { Arrangement } from "./projection";
 import { getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
-import { CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
+import { CARD_LONG, CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
 
 const CELL = /^[0-4],[0-3]$/;
 
@@ -44,8 +50,9 @@ function playOut(seed: number, maxActions: number) {
     actions++;
 
     const view = viewFor(game, 0);
-    const projected = projectView(view);
-    const below = projectView(view, "subsurface");
+    const disabled = disabledUnits(game);
+    const projected = projectView(view, "surface", true, {}, disabled);
+    const below = projectView(view, "subsurface", true, {}, disabled);
     for (const key of [...Object.keys(projected.board.sites), ...Object.keys(projected.permanents)]) {
       expect(key).toMatch(CELL);
     }
@@ -61,7 +68,9 @@ function playOut(seed: number, maxActions: number) {
       if (!unit.isAvatar && layerOf(unit.region) !== "surface") continue;
       for (const flag of ["stealth", "ward", "disabled", "silenced"] as const) {
         const token = all.find((p) => p.instanceId === `${unit.id}:${flag}`);
-        expect(Boolean(token?.attachedTo)).toBe(Boolean(unit[flag]));
+        // a disable is shown whether the flag is raw or derived (Babbling Brook, Basilisk…)
+        const on = flag === "disabled" ? Boolean(unit.disabled) || (!unit.isAvatar && isDisabled(game, unit)) : Boolean(unit[flag]);
+        expect(Boolean(token?.attachedTo)).toBe(on);
       }
     }
     // The bot's hand stays hidden; ours is fully named.
@@ -77,7 +86,8 @@ function playOut(seed: number, maxActions: number) {
         // Each minion is solid on its own layer. A SUBSURFACE minion also appears on the
         // surface view as a dimmed hint tucked under the site; a surface minion never leaks
         // down into the subsurface view, which stays a clean view of that layer alone.
-        const key = engineCellKey(unit.x, unit.y);
+        // a multi-square body is drawn on the cell nearest its centre, everything else on its square
+        const key = unitCell(unit);
         const onSurface = layerOf(unit.region) === "surface";
         const [own, other] = onSurface ? [projected, below] : [below, projected];
         const mine = own.permanents[key]?.find((p) => p.instanceId === unit.id);
@@ -372,6 +382,102 @@ describe("subsurface hint", () => {
   });
 });
 
+describe("aura placement on the board", () => {
+  /**
+   * Through projectView, not auraPlacement alone: the tile layout used to run over auras too and
+   * overwrite the centred offset with a rim slot, while a test of auraPlacement kept passing.
+   * The rendered spot is tile + [offX, ownerBaseZ + offZ] (PermanentStack), in TILE units here.
+   */
+  type Sq = { x: number; y: number };
+  const SHAPES: Record<string, Sq[]> = {
+    "2x2 middle": [{ x: 1, y: 1 }, { x: 2, y: 1 }, { x: 1, y: 2 }, { x: 2, y: 2 }],
+    "2x2 corner": [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }],
+    "1x1": [{ x: 3, y: 1 }],
+    "1x3 row": [{ x: 1, y: 1 }, { x: 2, y: 1 }, { x: 3, y: 1 }],
+    "3x3": [0, 1, 2].flatMap((dx) => [0, 1, 2].map((dy) => ({ x: 1 + dx, y: dy }))),
+    cross: [{ x: 2, y: 1 }, { x: 1, y: 1 }, { x: 3, y: 1 }, { x: 2, y: 0 }, { x: 2, y: 2 }],
+  };
+  const freshGame = () => {
+    const deck = toEngineDeck(enginePrecons[0]);
+    return createGame([deck, deck], ["You", "Computer"], 7, 0 as PlayerId);
+  };
+  const addAura = (game: ReturnType<typeof freshGame>, squares: Sq[], controller: PlayerId) => {
+    const id = `rTest${controller}`;
+    game.auras[id] = { id, cardId: Object.keys(game.cards)[0], name: "Test", controller, squares, enteredTurn: -1 };
+    return id;
+  };
+  const rendered = (projected: ReturnType<typeof projectView>, id: string) => {
+    for (const [at, items] of Object.entries(projected.permanents)) {
+      const item = items.find((p) => p.instanceId === id);
+      if (!item) continue;
+      const [ax, ay] = at.split(",").map(Number);
+      const [ox, oz] = item.offset ?? [0, 0];
+      return { at, item, x: ax + ox / TILE_SIZE, y: ay + (getPermanentOwnerBaseZ(item.owner) + oz) / TILE_SIZE };
+    }
+    return null;
+  };
+  const centroid = (squares: Sq[]) => ({
+    x: squares.reduce((sum, sq) => sum + (4 - sq.x), 0) / squares.length,
+    y: squares.reduce((sum, sq) => sum + (3 - sq.y), 0) / squares.length,
+  });
+
+  for (const controller of [0, 1] as PlayerId[]) {
+    for (const [name, squares] of Object.entries(SHAPES)) {
+      it(`centres a ${name} aura over its area (seat ${controller})`, () => {
+        const game = freshGame();
+        const id = addAura(game, squares, controller);
+        const got = rendered(projectView(viewFor(game, 0)), id);
+        const want = centroid(squares);
+        expect(got, "the aura is on the board").not.toBeNull();
+        expect(got!.x).toBeCloseTo(want.x, 3);
+        expect(got!.y).toBeCloseTo(want.y, 3);
+        // smaller than a lone card, so it clears the rows of the tiles it reaches over
+        expect(got!.item.scale).toBeLessThan(0.88);
+      });
+    }
+  }
+
+  it("leaves the anchor tile's own cards exactly where they would be without it", () => {
+    const squares = SHAPES["2x2 middle"];
+    const game = freshGame();
+    const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === 0)!;
+    // the 2x2 middle aura is anchored on board cell 3,2 = engine (1,1)
+    game.units.uAnchor = { ...avatar, id: "uAnchor", isAvatar: false, name: "Anchor", region: "surface", x: 1, y: 1 };
+    const before = rendered(projectView(viewFor(game, 0)), "uAnchor")!;
+    const id = addAura(game, squares, 0);
+    const after = projectView(viewFor(game, 0));
+    const aura = rendered(after, id)!;
+    expect(aura.at, "they share the anchor tile").toBe(before.at);
+    const unit = rendered(after, "uAnchor")!;
+    expect(unit.item.offset).toEqual(before.item.offset);
+    expect(unit.item.scale).toBe(before.item.scale);
+    // the aura is still centred, and drawn above the tile's own cards
+    expect(aura.x).toBeCloseTo(centroid(squares).x, 3);
+    expect(aura.y).toBeCloseTo(centroid(squares).y, 3);
+    const stack = after.permanents[aura.at];
+    expect(stack[stack.length - 1].instanceId).toBe(id);
+  });
+
+  it("centres a 2x2 body over its four squares and keeps its status tokens on it", () => {
+    const game = freshGame();
+    const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === 1)!;
+    // pushed first, so lifting it to the top of its tile has to re-point its Ward token
+    game.units.uBig = { ...avatar, id: "uBig", isAvatar: false, name: "Big", region: "surface", x: 1, y: 1, size: "2x2", ward: true };
+    game.units.uSmall = { ...avatar, id: "uSmall", isAvatar: false, name: "Small", region: "surface", x: 1, y: 1 };
+    const projected = projectView(viewFor(game, 0));
+    const big = rendered(projected, "uBig")!;
+    expect(big.x).toBeCloseTo(centroid(SHAPES["2x2 middle"]).x, 3);
+    expect(big.y).toBeCloseTo(centroid(SHAPES["2x2 middle"]).y, 3);
+    expect(unitCell(game.units.uBig)).toBe(big.at);
+    const stack = projected.permanents[big.at];
+    const token = stack.find((p) => p.instanceId === "uBig:ward")!;
+    expect(stack[token.attachedTo!.index].instanceId).toBe("uBig");
+    expect(stack.filter((p) => !p.attachedTo).map((p) => p.instanceId)).toEqual(["uSmall", "uBig"]);
+    // the 1x1 sharing its corner square is laid out as the tile's only card (a shared tile caps at 0.78)
+    expect(rendered(projected, "uSmall")!.item.scale).toBeGreaterThan(0.78);
+  });
+});
+
 describe("tile layout", () => {
   /**
    * `n` units on one square. They are placed AWAY from the avatar on purpose: the avatar takes
@@ -475,6 +581,121 @@ describe("tile layout", () => {
   });
 });
 
+describe("card arrangement (display only)", () => {
+  /** three of our units on engine (0,2), clear of both avatars */
+  const setup = () => {
+    const deck = toEngineDeck(enginePrecons[0]);
+    const game = createGame([deck, deck], ["You", "Computer"], 23, 0 as PlayerId);
+    const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === 0)!;
+    for (let i = 0; i < 3; i++) {
+      game.units[`uA${i}`] = { ...avatar, id: `uA${i}`, isAvatar: false, name: `Arranged ${i}`, region: "surface", x: 0, y: 2 };
+    }
+    return { game, at: engineCellKey(0, 2), avatar };
+  };
+  const project = (game: ReturnType<typeof setup>["game"], arrangement: Arrangement) =>
+    projectView(viewFor(game, 0), "surface", true, {}, new Set(), arrangement);
+  /** where the card's centre is drawn, from its tile's centre (PermanentStack adds the owner nudge) */
+  const centreOf = (projected: ReturnType<typeof projectView>, at: string, id: string) => {
+    const item = projected.permanents[at].find((p) => p.instanceId === id)!;
+    return { x: item.offset![0], z: getPermanentOwnerBaseZ(item.owner) + item.offset![1], item };
+  };
+  const ids = (projected: ReturnType<typeof projectView>, at: string) =>
+    projected.permanents[at].filter((p) => !p.attachedTo).map((p) => p.instanceId);
+
+  it("clamps an axis so the card stays inside its tile", () => {
+    expect(clampToTile(0.1, 0.2, 0.5)).toBe(0.1);
+    expect(clampToTile(0.9, 0.2, 0.5)).toBeCloseTo(0.3);
+    expect(clampToTile(-0.9, 0.2, 0.5)).toBeCloseTo(-0.3);
+    // a card wider than the tile stays centred
+    expect(clampToTile(0.4, 0.7, 0.5)).toBe(0);
+  });
+
+  it("puts an arranged card where the player left it and leaves its neighbours alone", () => {
+    const { game, at } = setup();
+    const plain = project(game, {});
+    const arranged = project(game, { uA0: { at, x: 0.1, y: -0.05, seq: 1 } });
+    const got = centreOf(arranged, at, "uA0");
+    expect(got.x).toBeCloseTo(0.1 * TILE_SIZE, 5);
+    expect(got.z).toBeCloseTo(-0.05 * TILE_SIZE, 5);
+    for (const id of ["uA1", "uA2"]) {
+      expect(centreOf(arranged, at, id).item.offset).toEqual(centreOf(plain, at, id).item.offset);
+    }
+  });
+
+  it("keeps a card dragged to the tile's edge inside it", () => {
+    const { game, at } = setup();
+    const projected = project(game, { uA1: { at, x: 0.5, y: 0.5, seq: 1 } });
+    const { x, z, item } = centreOf(projected, at, "uA1");
+    const scale = item.scale ?? 1;
+    expect(x + (CARD_SHORT * scale) / 2).toBeLessThanOrEqual(TILE_SIZE / 2 + 1e-9);
+    expect(z + (CARD_LONG * scale) / 2).toBeLessThanOrEqual(TILE_SIZE / 2 + 1e-9);
+    expect(x).toBeGreaterThan(0);
+  });
+
+  it("draws the latest arranged card on top of its tile", () => {
+    const { game, at } = setup();
+    expect(ids(project(game, {}), at)).toEqual(["uA0", "uA1", "uA2"]);
+    const once = project(game, { uA0: { at, x: 0, y: 0, seq: 1 } });
+    expect(ids(once, at)).toEqual(["uA1", "uA2", "uA0"]);
+    const twice = project(game, { uA0: { at, x: 0, y: 0, seq: 3 }, uA1: { at, x: 0, y: 0, seq: 2 } });
+    expect(ids(twice, at)).toEqual(["uA2", "uA1", "uA0"]);
+  });
+
+  it("re-points a lifted card's status tokens at its new stack index", () => {
+    const { game, at } = setup();
+    game.units.uA0.ward = true;
+    const projected = project(game, { uA0: { at, x: 0, y: 0, seq: 1 } });
+    const stack = projected.permanents[at];
+    const ward = stack.find((p) => p.instanceId === "uA0:ward")!;
+    expect(stack[ward.attachedTo!.index].instanceId).toBe("uA0");
+  });
+
+  it("ignores an override from another tile and never moves a pinned card", () => {
+    const { game, at } = setup();
+    const plain = project(game, {});
+    const elsewhere = project(game, { uA0: { at: "0,0", x: 0.3, y: 0.3, seq: 1 } });
+    expect(centreOf(elsewhere, at, "uA0").item.offset).toEqual(centreOf(plain, at, "uA0").item.offset);
+    const owner = Object.values(game.units).find((u) => u.isAvatar && u.owner === 1)!;
+    game.units.uBig = { ...owner, id: "uBig", isAvatar: false, name: "Big", region: "surface", x: 1, y: 1, size: "2x2" };
+    const bigAt = unitCell(game.units.uBig);
+    const before = project(game, {}).permanents[bigAt].find((p) => p.instanceId === "uBig")!;
+    const after = project(game, { uBig: { at: bigAt, x: 0.3, y: 0.3, seq: 1 } }).permanents[bigAt].find((p) => p.instanceId === "uBig")!;
+    expect(after.offset).toEqual(before.offset);
+  });
+
+  it("arranges an avatar too, keyed by its unit id", () => {
+    const { game, avatar } = setup();
+    const at = engineCellKey(avatar.x, avatar.y);
+    const projected = project(game, { [avatar.id]: { at, x: -0.1, y: 0.05, seq: 1 } });
+    expect(projected.avatars.p1.offset![0]).toBeCloseTo(-0.1 * TILE_SIZE, 5);
+    expect(projected.avatars.p1.offset![1]).toBeCloseTo(0.05 * TILE_SIZE, 5);
+  });
+
+  it("drops the override of a card that left its tile, and keeps the rest", () => {
+    const { game, at } = setup();
+    const arrangement: Arrangement = { uA0: { at, x: 0.1, y: 0, seq: 1 }, uA1: { at, x: -0.1, y: 0, seq: 2 } };
+    expect(pruneArrangement(arrangement, game), "nothing moved: the same object").toBe(arrangement);
+    game.units.uA0.x = 1; // moved to the next square
+    delete game.units.uA1; // left the board
+    expect(pruneArrangement(arrangement, game)).toEqual({});
+    game.units.uA0.x = 0;
+    expect(pruneArrangement(arrangement, game)).toEqual({ uA0: arrangement.uA0 });
+  });
+
+  it("only arranges cards that stand on one tile of their own", () => {
+    const { game, at, avatar } = setup();
+    expect(arrangeableCell(game, "uA0")).toBe(at);
+    expect(arrangeableCell(game, avatar.id)).toBe(engineCellKey(avatar.x, avatar.y));
+    expect(arrangeableCell(game, "nope")).toBeNull();
+    game.units.uA2.size = "2x2";
+    expect(arrangeableCell(game, "uA2"), "a multi-square body is pinned").toBeNull();
+    game.artifacts.aX = { id: "aX", cardId: "c", name: "Thing", conjuredBy: 0, x: 0, y: 2, region: "surface", carriedBy: null, tapped: false };
+    expect(arrangeableCell(game, "aX")).toBe(at);
+    game.artifacts.aX.carriedBy = "uA0";
+    expect(arrangeableCell(game, "aX"), "a carried artifact rides on its bearer").toBeNull();
+  });
+});
+
 /**
  * Kept last in the file on purpose: loading the printing index is module-global, and earlier
  * tests assert on refs built WITHOUT it.
@@ -561,7 +782,7 @@ describe("projecting for the seat-1 viewer", () => {
 
   it("seats the viewer at the bottom and the opponent at the top", () => {
     const game = freshGame();
-    const seen = projectView(viewFor(game, 1), "surface", true, {}, 1);
+    const seen = projectView(viewFor(game, 1), "surface", true, {}, new Set(), {}, 1);
     for (const unit of Object.values(game.units)) {
       if (!unit.isAvatar) continue;
       const avatar = seen.avatars[unit.owner === 1 ? "p1" : "p2"];
@@ -574,7 +795,7 @@ describe("projecting for the seat-1 viewer", () => {
 
   it("shows the viewer their own hand and hides the opponent's", () => {
     const game = freshGame();
-    const seen = projectView(viewFor(game, 1), "surface", true, {}, 1);
+    const seen = projectView(viewFor(game, 1), "surface", true, {}, new Set(), {}, 1);
     expect(seen.zones.p1.hand).toHaveLength(game.players[1].hand.length);
     expect(seen.zones.p1.hand.every((c) => c.name !== "Unknown")).toBe(true);
     expect(seen.zones.p2.hand.every((c) => c.name === "Unknown")).toBe(true);
@@ -584,8 +805,8 @@ describe("projecting for the seat-1 viewer", () => {
     const game = freshGame();
     // same engine state, both viewpoints: a square one viewer calls (x,y) the other calls
     // (4-x,3-y) — a left-right mirror would agree on x
-    const mine = projectView(viewFor(game, 0), "surface", true, {}, 0);
-    const theirs = projectView(viewFor(game, 1), "surface", true, {}, 1);
+    const mine = projectView(viewFor(game, 0), "surface", true, {}, new Set(), {}, 0);
+    const theirs = projectView(viewFor(game, 1), "surface", true, {}, new Set(), {}, 1);
     const site = Object.values(game.sites).find((s) => !s.isRubble);
     if (site) {
       expect(mine.board.sites[engineCellKey(site.x, site.y, 0)]).toBeTruthy();
@@ -602,7 +823,7 @@ describe("projecting for the seat-1 viewer", () => {
   it("still defaults to seat 0 when no viewer is given", () => {
     const game = freshGame();
     const view = viewFor(game, 0);
-    expect(projectView(view)).toEqual(projectView(view, "surface", true, {}, 0));
+    expect(projectView(view)).toEqual(projectView(view, "surface", true, {}, new Set(), {}, 0));
     expect(harbingerTiles(view)).toEqual(harbingerTiles(view, 0));
   });
 });

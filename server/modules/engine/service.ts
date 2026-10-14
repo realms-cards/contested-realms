@@ -21,6 +21,8 @@ export type ViewEnvelope = {
   seat: EngineSeat;
   view: unknown;
   power: Record<string, { atk: number; def: number }>;
+  /** Units the engine considers disabled; derived from the full state, so it must be sent. */
+  disabled: string[];
   /** Everything this seat may legally do right now — the client cannot work this out itself. */
   legal: unknown[];
   over: boolean;
@@ -84,7 +86,7 @@ export class EngineMatchService {
     if (!live) return null;
     const reply = await this.pool.view(matchId, seat);
     if (!reply.ok || reply.kind !== "view") return null;
-    return { matchId, rev: live.rev, seat, view: reply.view, power: reply.power, legal: reply.legal, over: live.over };
+    return { matchId, rev: live.rev, seat, view: reply.view, power: reply.power, disabled: reply.disabled, legal: reply.legal, over: live.over };
   }
 
   /** The full state, for persisting across a restart. Never goes to a client. */

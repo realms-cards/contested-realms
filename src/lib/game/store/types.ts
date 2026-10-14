@@ -48,6 +48,11 @@ export type PlayerState = {
 
 export type BoardSize = { w: number; h: number };
 export type CellKey = string; // `${x},${y}`
+
+/** A board card the player can slide within its tile (see GameState.boardArrange). */
+export type BoardArrangeTarget =
+  | { kind: "permanent"; at: CellKey; index: number }
+  | { kind: "avatar"; who: PlayerKey };
 export type SiteTile = {
   owner: 1 | 2;
   cpuNeutral?: boolean;
@@ -553,6 +558,10 @@ export type PermanentItem = EntityBase<CardRef> & {
   /** Per-card size multiplier, so a crowded tile can shrink its cards to fit side by side
    *  instead of stacking them on top of each other. 1 (or absent) is full size. */
   scale?: number;
+  /** Extra height, in stack layers, for a card that reaches over its neighbours (engine mode's
+   *  auras and multi-square bodies, pinned at the crossing of their squares), so it never sits
+   *  level with a crowded neighbouring tile's cards. Absent everywhere else: no lift. */
+  lift?: number;
 };
 
 export type Permanents = Record<CellKey, PermanentItem[]>;
@@ -1987,6 +1996,13 @@ export type GameState = {
    */
   boardGesturesLocked: boolean;
   setBoardGesturesLocked: (locked: boolean) => void;
+  /**
+   * Set only by engine mode, for its display-only card arrangement: while the gestures are
+   * locked, holding Alt (Option) and dragging a board card slides it within its own tile and
+   * hands the card's new centre here — in world units from the tile's centre — instead of
+   * moving it. Null everywhere else, which leaves every other mode's dragging untouched.
+   */
+  boardArrange: ((target: BoardArrangeTarget, centre: [number, number]) => void) | null;
   // Card meta cache (subset) used to detect base power and rarity
   metaByCardId: Record<
     number,

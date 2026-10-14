@@ -27,6 +27,7 @@ import {
   normalizeCubeSummary,
   type CubeSummaryInput,
 } from "@/lib/cubes/normalizers";
+import { useEngineGamesCount } from "@/lib/engine-mode/presence";
 import { useGuestSession } from "@/lib/guest/guestSession";
 import {
   useAvailableSets,
@@ -1540,6 +1541,8 @@ function LobbyPageContent({
     () => visibleLobbyList.filter((l) => l.status === "started").length,
     [visibleLobbyList],
   );
+  // Rules-engine games vs CPU (client-side, not joinable): activity only
+  const engineGamesCount = useEngineGamesCount();
 
   // removed startSealedMatch helper; start is confirmed via modal action
 
@@ -1551,6 +1554,7 @@ function LobbyPageContent({
           matchmaking.status === "searching" ? matchmaking.estimatedWait : null
         }
         liveCount={liveCount}
+        engineCount={engineGamesCount}
       />
       <div className="flex flex-col gap-7">
         {/* Invite link without an account: pick a name or sign in */}

@@ -49,6 +49,7 @@ export default function EngineOnlineMatch({
         seat: envelope.seat as PlayerId,
         view: envelope.view as PlayerView,
         power: envelope.power,
+        disabled: envelope.disabled ?? [],
         legal: (envelope.legal ?? []) as Action[],
         over: envelope.over,
       });

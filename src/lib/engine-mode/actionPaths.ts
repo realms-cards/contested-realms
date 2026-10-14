@@ -1,8 +1,9 @@
 import { dirToken, handToken, optToken, pileToken, unitToken } from "@/lib/game/cpu/pickTokens";
 import { getCard, getScript, grantedAbilities } from "@sorcery/shared";
-import type { Action, GameState as EngineState, PlayerId } from "@sorcery/shared";
+import type { Action, GameState as EngineState, PlayerId, UnitState } from "@sorcery/shared";
+import { footprintAfter } from "@shared/engine/casterActions";
 import { BOARD_DIRECTIONS, ENGINE_DIRECTIONS, type EngineDirection, engineCellKey, type ViewerSeat } from "./coords";
-import { seatKey } from "./projection";
+import { footprintCell, seatKey, unitCell } from "./projection";
 
 /**
  * Turns each legal engine action into the sequence of board clicks that picks it:
@@ -12,6 +13,57 @@ import { seatKey } from "./projection";
 export interface ActionPath {
   action: Action;
   steps: string[];
+  /**
+   * Step token -> the board cells that step stands for, when it is an AREA rather than one
+   * square: a multi-square body's destination is keyed on one cell of its footprint, and the
+   * picker lights the whole footprint (see `pathAreas`).
+   */
+  areas?: Record<string, string[]>;
+  /**
+   * A step index `narrow` must not skip over even when it is the only choice left: the
+   * player sees the labelled option and clicks it. A hand card's ability (Slimy Mutants)
+   * started from the card itself would otherwise fire — and spend its mana — on the very
+   * click that only picked the card.
+   */
+  hold?: number;
+}
+
+/** The hand cards whose `handAbilities` provide this ability key (they surface on the owner's avatar). */
+function handAbilityCards(game: EngineState, avatarId: string, ability: string): string[] {
+  const avatar = game.units[avatarId];
+  if (!avatar?.isAvatar) return [];
+  const owner = avatar.controller;
+  const out: string[] = [];
+  for (const cardId of game.players[owner]?.hand ?? []) {
+    const name = game.cards[cardId]?.name;
+    const provides = name ? getScript(name)?.handAbilities : undefined;
+    if (!provides) continue;
+    try {
+      if (provides(game, cardId, owner).some((a) => a.key === ability)) out.push(cardId);
+    } catch {
+      // a script that cannot describe itself here simply gets no hand path
+    }
+  }
+  return out;
+}
+
+/**
+ * The areas behind the tokens offered at `depth` (the next click) among `matching` paths, ready
+ * for the board picker's `setAreas`: each token lights its footprint under the pointer.
+ */
+export function pathAreas(matching: readonly ActionPath[], depth: number): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const path of matching) {
+    const token = path.steps[depth];
+    const cells = token ? path.areas?.[token] : undefined;
+    if (cells && !out[token]) out[token] = cells;
+  }
+  return out;
+}
+
+/** The minion an Enchantress animated out of this aura, if it is animated right now. */
+function animatedBy(game: EngineState, auraId: string): UnitState | undefined {
+  return Object.values(game.units).find((unit) => unit.counters?.animatedAura !== undefined && String(unit.counters.animatedAura) === auraId);
 }
 
 /** First click of a cast from the cemetery: driven by the HUD's cemetery panel, not a board token. */
@@ -53,7 +105,11 @@ export function tokenForEngineId(game: EngineState, id: string, seat: PlayerId =
     }
     return `unit:perm:${id}`;
   }
-  if (game.auras[id]) return `unit:perm:${id}`;
+  if (game.auras[id]) {
+    // an animated aura is drawn as its minion (the projection shows that card, not the aura)
+    const minion = animatedBy(game, id);
+    return `unit:perm:${minion?.id ?? id}`;
+  }
   if (game.cards[id]) return handToken(seatKey(seat, viewer), id);
   return `unknown:${id}`;
 }
@@ -61,13 +117,13 @@ export function tokenForEngineId(game: EngineState, id: string, seat: PlayerId =
 /** The tile a board object sits on, for anchoring option buttons. */
 function tileOf(game: EngineState, id: string, viewer: ViewerSeat = 0): string {
   const unit = game.units[id];
-  if (unit) return engineCellKey(unit.x, unit.y, viewer);
+  if (unit) return unitCell(unit, viewer);
   const site = game.sites[id];
   if (site) return engineCellKey(site.x, site.y, viewer);
   const artifact = game.artifacts[id];
   if (artifact) {
     const carrier = artifact.carriedBy ? game.units[artifact.carriedBy] : undefined;
-    return carrier ? engineCellKey(carrier.x, carrier.y, viewer) : engineCellKey(artifact.x, artifact.y, viewer);
+    return carrier ? unitCell(carrier, viewer) : engineCellKey(artifact.x, artifact.y, viewer);
   }
   return "2,2";
 }
@@ -146,10 +202,82 @@ export function actionPaths(
   const paths: ActionPath[] = [];
   /** summon click-paths already emitted, so the same clicks never mean two different casters */
   const summonSteps = new Set<string>();
+  /** hand tokens that start a hand card's ability (see the `activate` case) */
+  const handAbilityStarts = new Set<string>();
   const opt = (tile: string, id: string, label: string) => {
     const token = optToken(tile, id);
     labels[token] = label;
     return token;
+  };
+  /**
+   * An animated aura and its minion are one card on the board, so both resolve to the minion's
+   * token. Where ONE card or ability can target either (a dispel that may hit the minion or the
+   * aura), the click alone cannot tell them apart: a labelled option after the card does. Kept
+   * per source, so an unrelated spell that targets only one of them asks nothing extra.
+   */
+  const sourceOf = (action: Action): string | null =>
+    action.t === "castSpell" ? `cast:${action.cardId}` : action.t === "activate" ? `act:${action.sourceId}:${action.ability}` : null;
+  const targetsBySource = new Map<string, Set<string>>();
+  for (const action of actions) {
+    const source = sourceOf(action);
+    if (!source || (action.t !== "castSpell" && action.t !== "activate")) continue;
+    const ids = targetsBySource.get(source) ?? new Set<string>();
+    for (const target of action.targets ?? []) ids.add(target);
+    targetsBySource.set(source, ids);
+  }
+  const twoWayBySource = new Map<string, Set<string>>();
+  for (const [source, ids] of targetsBySource) {
+    const twoWay = new Set<string>();
+    for (const id of ids) {
+      const minion = game.auras[id] ? animatedBy(game, id) : undefined;
+      if (minion && ids.has(minion.id)) twoWay.add(id).add(minion.id);
+    }
+    if (twoWay.size) twoWayBySource.set(source, twoWay);
+  }
+  const targetSteps = (target: string, source: Action): string[] => {
+    const token = tokenForEngineId(game, target, seat, viewer);
+    // "sq:x,y,region" targets a layer of a square: pick the square, then the layer
+    const region = target.startsWith("sq:") ? target.split(",")[2] : undefined;
+    if (region) return [token, opt(token, `region-${region}`, REGION_LABEL[region] ?? region)];
+    const key = sourceOf(source);
+    if (!key || !twoWayBySource.get(key)?.has(target)) return [token];
+    const asAura = Boolean(game.auras[target]);
+    const name = (asAura ? game.auras[target]?.name : game.units[target]?.name) ?? "it";
+    // The option row hangs on a TILE (the board only draws tile-anchored rows): the card's own
+    // cell, which is the minion's for both ids.
+    const minionId = asAura ? (animatedBy(game, target)?.id ?? target) : target;
+    const tile = tileOf(game, minionId, viewer);
+    return [token, opt(tile, `as-${asAura ? "aura" : "minion"}-${target}`, `${name} as ${asAura ? "an aura" : "a minion"}`)];
+  };
+
+  /**
+   * Attacks a unit can make WITHOUT moving (the engine's empty-path moveAttack): an enemy on its
+   * own square, or the site it stands on. The full click path for these runs through the unit's
+   * own tile — which the unit itself covers on the board — so each also gets a labelled option
+   * right after the unit, on the same row as its abilities: "Attack <target>". When two targets
+   * share a name a label cannot tell them apart, so the row says "Attack here" and the target is
+   * then picked on the board.
+   */
+  const attacksHere = new Map<string, { action: Action; target: string; name: string }[]>();
+  for (const action of actions) {
+    if (action.t !== "moveAttack" || !action.attack || action.path.length) continue;
+    const target = "unit" in action.attack ? action.attack.unit : action.attack.site;
+    const name = ("unit" in action.attack ? game.units[target]?.name : game.sites[target]?.name) ?? "it";
+    const list = attacksHere.get(action.unitId) ?? [];
+    if (!list.some((a) => a.target === target)) list.push({ action, target, name });
+    attacksHere.set(action.unitId, list);
+  }
+  const attackHereSteps = (unitId: string, target: string): string[] | null => {
+    const list = attacksHere.get(unitId);
+    const entry = list?.find((a) => a.target === target);
+    if (!list || !entry) return null;
+    const tile = tileOf(game, unitId, viewer);
+    const distinct = new Set(list.map((a) => a.name)).size === list.length;
+    if (distinct) return [tokenForEngineId(game, unitId, seat, viewer), opt(tile, `attack-here-${target}`, `Attack ${entry.name}`)];
+    const here = opt(tile, "attack-here", "Attack here");
+    // a unit is picked by its own card; the site under the attacker by a labelled option
+    const pick = game.units[target] ? tokenForEngineId(game, target, seat, viewer) : opt(tile, `attack-site-${target}`, `Attack ${entry.name}`);
+    return [tokenForEngineId(game, unitId, seat, viewer), here, pick];
   };
 
   for (const action of actions) {
@@ -179,13 +307,7 @@ export function actionPaths(
         const extra = action.extra as { direction?: string; giveTo?: string; origin?: { x: number; y: number } } | undefined;
         // an artifact handed straight to a bearer: pick the unit instead of a square
         if (extra?.giveTo) steps.push(tokenForEngineId(game, extra.giveTo, seat, viewer));
-        for (const target of action.targets ?? []) {
-          const token = tokenForEngineId(game, target, seat, viewer);
-          steps.push(token);
-          // "sq:x,y,region" targets a layer of a square: pick the square, then the layer
-          const region = target.startsWith("sq:") ? target.split(",")[2] : undefined;
-          if (region) steps.push(opt(token, `region-${region}`, REGION_LABEL[region] ?? region));
-        }
+        for (const target of action.targets ?? []) steps.push(...targetSteps(target, action));
         if (extra?.direction) {
           // a projectile flies from the caster; Chaos Twister's blow starts at its origin square
           const from = extra.origin
@@ -209,12 +331,31 @@ export function actionPaths(
         const unit = game.units[action.unitId];
         if (!unit) break;
         const last = action.path[action.path.length - 1] ?? { x: unit.x, y: unit.y, region: unit.region };
-        const tile = engineCellKey(last.x, last.y, viewer);
+
+        // A multi-square body's destination is the AREA it would cover: keyed on that area's cell
+        // nearest its centre (where its card will be drawn) and published as an area, so the
+        // board marks the footprint's centre and lights all of it on hover. A bare corner tile,
+        // often inside the body it is leaving, read as "stay put". The footprint walks the
+        // engine's own step rules, so a growing moeba keeps every square it leaves. Avatars are
+        // drawn on their anchor (see unitCell), so a Racked avatar keeps a plain square.
+        const feet = unit.isAvatar ? [] : footprintAfter(unit, action.path);
+        const body = feet.length > 1 ? feet : null;
+        const tile = (body && footprintCell(body, viewer)) ?? engineCellKey(last.x, last.y, viewer);
         const steps = [tokenForEngineId(game, action.unitId, seat, viewer), tile, opt(tile, `region-${last.region}`, REGION_LABEL[last.region] ?? last.region)];
         if (!action.attack) steps.push(opt(tile, "move", "Move here"));
         else if ("unit" in action.attack) steps.push(tokenForEngineId(game, action.attack.unit, seat, viewer));
-        else steps.push(opt(tile, "attack-site", "Attack the site"));
-        paths.push({ action, steps });
+        else if (!body) steps.push(opt(tile, "attack-site", "Attack the site"));
+        else {
+          // a body over several sites can strike any of them: name the one this is
+          const site = game.sites[action.attack.site];
+          steps.push(opt(tile, `attack-site-${action.attack.site}`, site ? `Attack ${site.name}` : "Attack the site"));
+        }
+        paths.push(body ? { action, steps, areas: { [tile]: body.map((sq) => engineCellKey(sq.x, sq.y, viewer)) } } : { action, steps });
+        if (action.attack && !action.path.length) {
+          const target = "unit" in action.attack ? action.attack.unit : action.attack.site;
+          const here = attackHereSteps(action.unitId, target);
+          if (here) paths.push({ action, steps: here });
+        }
         break;
       }
       case "activate": {
@@ -233,13 +374,22 @@ export function actionPaths(
           source,
           opt(tile, `ability-${action.sourceId}-${action.ability}`, activateLabel(game, action.sourceId, action.ability)),
         ];
-        for (const target of action.targets ?? []) {
-          const token = tokenForEngineId(game, target, seat, viewer);
-          steps.push(token);
-          const region = target.startsWith("sq:") ? target.split(",")[2] : undefined;
-          if (region) steps.push(opt(token, `region-${region}`, REGION_LABEL[region] ?? region));
-        }
+        for (const target of action.targets ?? []) steps.push(...targetSteps(target, action));
         paths.push({ action, steps });
+        // A carried artifact starts on its bearer (see tokenForEngineId); where the board draws it
+        // as a card of its own (the 2D attachments), it can be started from the artifact too,
+        // then the same option, held for a click so the label shows before anything is spent.
+        if (game.artifacts[action.sourceId]?.carriedBy) {
+          paths.push({ action, steps: [`unit:perm:${action.sourceId}`, ...steps.slice(1)], hold: 1 });
+        }
+        // A hand card's ability is surfaced on its owner's avatar; it can be started from the
+        // card itself too, then the same option and targets. The option is held for a click.
+        const avatar = game.units[action.sourceId];
+        for (const cardId of handAbilityCards(game, action.sourceId, action.ability)) {
+          const owner = avatar?.controller === 1 ? "p2" : "p1";
+          paths.push({ action, steps: [handToken(owner, cardId), ...steps.slice(1)], hold: 1 });
+          handAbilityStarts.add(handToken(owner, cardId));
+        }
         break;
       }
       case "pickUp": {
@@ -271,6 +421,22 @@ export function actionPaths(
         break;
     }
   }
+  // A hand card that can be both played and used for its hand ability means two things on one
+  // click. Put a labelled choice right after the card — "Cast …" beside the ability's own label,
+  // on the same row by the avatar — so the player says which before anything else is lit.
+  for (const start of handAbilityStarts) {
+    const cardId = start.slice(start.indexOf(":", "hand:".length) + 1);
+    const plays = paths.filter((p) => p.steps[0] === start && p.hold === undefined);
+    if (!plays.length) continue;
+    const avatarId = game.players[seat]?.avatarUnitId;
+    const tile = avatarId && game.units[avatarId] ? tileOf(game, avatarId, viewer) : "2,2";
+    const name = game.cards[cardId]?.name ?? "it";
+    for (const path of plays) {
+      const label = path.action.t === "avatarSite" ? `Play ${name}` : `Cast ${name}`;
+      const choice = opt(tile, `${path.action.t === "avatarSite" ? "play" : "cast"}-${cardId}`, label);
+      path.steps = [path.steps[0], choice, ...path.steps.slice(1)];
+    }
+  }
   return { paths, labels };
 }
 
@@ -292,7 +458,9 @@ export function narrow(paths: ActionPath[], clicked: string[]): Narrowed {
     const matching = paths.filter((p) => prefix.every((step, i) => p.steps[i] === step));
     const done = matching.find((p) => p.steps.length === prefix.length)?.action ?? null;
     const next = [...new Set(matching.filter((p) => p.steps.length > prefix.length).map((p) => p.steps[prefix.length]))];
-    if (!done && next.length === 1 && prefix.length > 0) {
+    // a held step (see ActionPath.hold) waits for its click even when it is the only choice
+    const held = matching.some((p) => p.hold === prefix.length && p.steps.length > prefix.length);
+    if (!done && next.length === 1 && prefix.length > 0 && !held) {
       prefix.push(next[0]);
       continue;
     }

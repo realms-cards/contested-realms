@@ -308,6 +308,11 @@ export const EngineViewSchema = z.object({
   view: z.unknown(),
   power: z.record(z.string(), z.object({ atk: z.number(), def: z.number() })),
   /**
+   * Units the engine considers disabled. Most disabling is DERIVED from the full state rather
+   * than stored on the unit, so like `power` it cannot be worked out from a view.
+   */
+  disabled: z.array(z.string()),
+  /**
    * The actions this seat may take. Generated server-side because the generator trial-applies
    * candidates against the full state, which no client holds.
    */

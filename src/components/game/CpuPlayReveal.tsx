@@ -47,8 +47,10 @@ function useRulesText(card: CardRef | null): string {
  * `placement` lets a mode put the computer's card where that mode puts everything else it
  * says. Engine mode centres it, so "thinking…", the card, and the narration line all appear
  * in one spot instead of the player watching the middle while the answer lands at the edge.
+ * "top" is the compact card pinned to the very top edge (inside the safe area), for a layout
+ * whose board starts high up and must not be covered (engine mode's phone 2D view).
  */
-export default function CpuPlayReveal({ placement = "edge" }: { placement?: "edge" | "center" } = {}) {
+export default function CpuPlayReveal({ placement = "edge" }: { placement?: "edge" | "center" | "top" } = {}) {
   const entry = useCpuReveals(state => state.queue[0] ?? null);
   const waiting = useCpuReveals(state => Math.max(0,state.queue.length-1));
   const timer = useCpuReveals(state => state.timer);
@@ -56,7 +58,9 @@ export default function CpuPlayReveal({ placement = "edge" }: { placement?: "edg
   const hidden = useCpuReveals(state => state.hidden);
   const hold = useCpuReveals(state => state.hold);
   const dismiss = useCpuReveals(state => state.dismiss);
-  const small = useSmallScreen();
+  const smallScreen = useSmallScreen();
+  /** the compact card: phones always, and the top placement everywhere */
+  const small = smallScreen || placement === "top";
   const rules = useRulesText(entry?.card ?? null);
   // An unmounted reveal can no longer be hovered: never leave it held.
   useEffect(() => () => useCpuReveals.getState().hold(false),[]);
@@ -66,7 +70,9 @@ export default function CpuPlayReveal({ placement = "edge" }: { placement?: "edg
   const {src,landscape} = cardImage(card);
   const imageBox = landscape ? `aspect-[4/3] ${small ? "w-28" : "w-full"}` : `aspect-[3/4] ${small ? "w-20" : "mx-auto w-[min(15rem,34vh)]"}`;
   return (
-    <div className={small
+    <div className={placement === "top"
+      ? "fixed inset-x-3 top-[env(safe-area-inset-top,0px)] z-[95] flex justify-center pointer-events-none"
+      : small
       ? "fixed inset-x-3 top-[calc(env(safe-area-inset-top,0px)+5.75rem)] z-[95] flex justify-center pointer-events-none"
       : placement === "center"
         ? "fixed inset-x-0 top-1/2 z-[95] -translate-y-1/2 flex justify-center pointer-events-none"

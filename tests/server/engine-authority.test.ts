@@ -91,3 +91,17 @@ describe("the server-side engine authority", () => {
     expect(call({ kind: "view", matchId: "ephemeral", seat: 0 }).ok).toBe(false);
   });
 });
+
+describe("the server plays by the same card rules as single player", () => {
+  it("has our script patches applied to the engine it runs", async () => {
+    // shared/engine/scriptPatches.ts fixes vendored card scripts (Waveshaper's untap lock, Break
+    // Stealth, Slimy Mutants) on import, and must be imported WHEREVER the engine runs. In a
+    // player-vs-player match that is the server — so without it, PvP would silently play by the
+    // unpatched vendor rules while single player played by ours.
+    await import("../../server/modules/engine/worker");
+    const { getScript } = await import("../../vendor/untested-realm/shared/src/index");
+    const wave = getScript("Waveshaper")?.conts?.wave as { [key: symbol]: unknown } | undefined;
+    expect(wave, "Waveshaper has a wave continuation to patch").toBeTruthy();
+    expect(wave?.[Symbol.for("realms.engine-mode.scriptPatch")], "and it is our wrapped version").toBe(true);
+  });
+});

@@ -4,6 +4,12 @@ import { useState, useEffect, useCallback } from "react";
 
 export type HandSortOrder = "sitesFirst" | "spellsFirst";
 
+/**
+ * Which board engine mode draws: the 3D table, the flat DOM board, or "auto", which picks
+ * per device (see `resolveBoardView` in src/lib/engine-mode/boardView.ts).
+ */
+export type BoardViewPreference = "auto" | "3d" | "2d";
+
 /** TILE_SIZE / CARD_LONG — the point where a site spans its tile edge to edge. */
 export const SITE_SCALE_MAX = 1.82;
 
@@ -70,6 +76,8 @@ export interface GraphicsSettings {
   /** Show a subtle purple glow on cards that have a custom resolver (automated behavior) */
   showResolverGlow: boolean;
   monochromeMode: boolean;
+  /** Engine-mode board: 3D table, flat 2D board, or "auto" (2D on phones) */
+  boardView: BoardViewPreference;
 }
 
 const STORAGE_KEY = "sorcery-graphics-settings";
@@ -88,6 +96,7 @@ const DEFAULT_SETTINGS: GraphicsSettings = {
   preferRaster: false,
   showResolverGlow: true,
   monochromeMode: false,
+  boardView: "auto",
 };
 
 function loadSettings(): GraphicsSettings {
@@ -249,6 +258,13 @@ export function useGraphicsSettings() {
     setSettings({ monochromeMode: !settings.monochromeMode });
   }, [settings.monochromeMode, setSettings]);
 
+  const setBoardView = useCallback(
+    (boardView: BoardViewPreference) => {
+      setSettings({ boardView });
+    },
+    [setSettings],
+  );
+
   return {
     settings,
     isLoaded,
@@ -266,6 +282,7 @@ export function useGraphicsSettings() {
     togglePreferRaster,
     toggleShowResolverGlow,
     toggleMonochromeMode,
+    setBoardView,
   };
 }
 

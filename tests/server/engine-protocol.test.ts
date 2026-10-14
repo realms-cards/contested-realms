@@ -58,16 +58,19 @@ describe("the engine wire messages", () => {
       seat: 0,
       view: { players: [] },
       power: { u1: { atk: 5, def: 5 } },
+      disabled: ["u2"],
       legal: [{ t: "endTurn" }],
     });
     expect(parsed.power.u1).toEqual({ atk: 5, def: 5 });
+    // disabling is mostly DERIVED (isDisabled) rather than stored on the unit, so it travels too
+    expect(parsed.disabled).toEqual(["u2"]);
     expect(parsed.legal).toHaveLength(1);
   });
 
   it("will not accept a view envelope with no legal list at all", () => {
     // An empty list means "you may do nothing"; a MISSING one means the server forgot to
     // compute it, and silently rendering an unplayable board would be worse than failing.
-    const missing = { matchId: "m1", rev: 1, seat: 0, view: {}, power: {} };
+    const missing = { matchId: "m1", rev: 1, seat: 0, view: {}, power: {}, disabled: [] };
     expect(EngineViewSchema.safeParse(missing).success).toBe(false);
   });
 

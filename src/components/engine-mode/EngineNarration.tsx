@@ -28,8 +28,13 @@ interface Line {
  * The computer's turn, narrated on screen: what it just did, in tile numbers, so the
  * player never has to open the log. Lines stack newest-first and fade out once the
  * computer hands the turn back.
+ *
+ * `docked` is the 2D phone layout's status row: one line in the page flow (no fixed
+ * wrapper, nothing over the board), only the newest, and it stays up during a card
+ * reveal because that reveal is drawn clear of the row there. Renders nothing when there
+ * is nothing to say, so the row can fall back to its own hint.
  */
-export default function EngineNarration() {
+export default function EngineNarration({ docked = false }: { docked?: boolean } = {}) {
   const game = useEngineSession((s) => s.game);
   const narration = useEngineSession((s) => s.narration);
   const botThinking = useEngineSession((s) => s.botThinking);
@@ -63,7 +68,9 @@ export default function EngineNarration() {
     if (!game || game.phase === "over") setLines([]);
   }, [game]);
 
-  if (!game || game.phase === "over" || (!lines.length && !botThinking) || revealUp) return null;
+  if (!game || game.phase === "over" || (!lines.length && !botThinking)) return null;
+  if (docked) return <DockedLine text={lines[0]?.text ?? null} />;
+  if (revealUp) return null;
 
   return (
     // Centre of the screen, which is also the centre of the board (the camera targets
@@ -94,6 +101,25 @@ export default function EngineNarration() {
           <span className={index === 0 ? "text-rc-fg" : "text-rc-fg-muted"}>{line.text}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** The docked single line: newest narration, or "thinking" while the computer has none yet. */
+function DockedLine({ text }: { text: string | null }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex min-w-0 items-center gap-1.5 font-rc-sans text-[12px] leading-tight"
+    >
+      <Icon
+        icon={text ? "game-icons:cpu" : "game-icons:hourglass"}
+        className={`h-3.5 w-3.5 flex-none ${text ? "" : "motion-safe:animate-pulse"}`}
+        style={{ color: PLAYER_COLORS.p2 }}
+        aria-hidden
+      />
+      <span title={text ?? undefined} className={`truncate ${text ? "text-rc-fg" : "text-rc-fg-muted"}`}>{text ?? "The computer is thinking…"}</span>
     </div>
   );
 }

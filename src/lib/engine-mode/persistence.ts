@@ -13,9 +13,10 @@
  * "undo" across a reload is a fair trade for a small, fast write after every action.
  */
 
-import type { GameState as EngineState } from "@sorcery/shared";
+import type { GameState as EngineState, PlayerId } from "@sorcery/shared";
 import upstream from "@untested-realm/upstream";
-import type { BoardLayer } from "./projection";
+import type { EngineFeedNote } from "./narration";
+import type { Arrangement, BoardLayer } from "./projection";
 import type { BotLevel } from "./session";
 
 const KEY = "realms:engineMatch";
@@ -44,12 +45,73 @@ export interface SavedEngineGame {
   layer: BoardLayer;
   /** for the resume card: who is playing whom, and how far in */
   summary: { turn: number; you: string; opponent: string; over: boolean };
+  /**
+   * The session's own record of the match that the engine state does not hold: the turns
+   * played under Courtesan Thaïs (the feed's "played by" labels and second-person wording) and
+   * the feed notes (a toll's discarded card). Optional: older saves simply lack them.
+   */
+  controlTurns?: Record<string, PlayerId>;
+  feedNotes?: EngineFeedNote[];
+  /** where the player slid cards within their tiles (display only). Optional: older saves lack it. */
+  arrangement?: Arrangement;
+}
+
+/** The session extras a save carries beside the engine state. */
+export interface SavedSessionExtras {
+  controlTurns: Record<number, PlayerId>;
+  feedNotes: EngineFeedNote[];
+  arrangement: Arrangement;
+}
+
+const isSeatId = (v: unknown): v is PlayerId => v === 0 || v === 1;
+const isIndex = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0;
+
+/** A saved `controlTurns`, checked entry by entry (anything malformed is dropped). */
+export function readControlTurns(raw: unknown): Record<number, PlayerId> {
+  const out: Record<number, PlayerId> = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [turn, seat] of Object.entries(raw)) {
+    const n = Number(turn);
+    if (isIndex(n) && isSeatId(seat)) out[n] = seat;
+  }
+  return out;
+}
+
+/** Saved feed notes, each checked for the shape the feed reads (anything malformed is dropped). */
+export function readFeedNotes(raw: unknown): EngineFeedNote[] {
+  if (!Array.isArray(raw)) return [];
+  const out: EngineFeedNote[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const { lines, after, seat, kind, text, card, cells } = item as Record<string, unknown>;
+    if (!Array.isArray(lines) || !lines.every(isIndex) || !isIndex(after)) continue;
+    if ((seat !== "p1" && seat !== "p2") || kind !== "discard" || typeof text !== "string") continue;
+    if (card !== null && typeof card !== "string") continue;
+    if (!Array.isArray(cells) || !cells.every((c): c is string => typeof c === "string" && /^\d+,\d+$/.test(c))) continue;
+    out.push({ lines, after, seat, kind, text, card, cells: cells as EngineFeedNote["cells"] });
+  }
+  return out;
+}
+
+/** A saved card arrangement, checked entry by entry (anything malformed is dropped). */
+export function readArrangement(raw: unknown): Arrangement {
+  const out: Arrangement = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  const isUnit = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+  for (const [id, entry] of Object.entries(raw)) {
+    if (!entry || typeof entry !== "object") continue;
+    const { at, x, y, seq } = entry as Record<string, unknown>;
+    if (typeof at !== "string" || !/^\d+,\d+$/.test(at) || !isUnit(x) || !isUnit(y) || !isIndex(seq)) continue;
+    // a tile's centre is at most half a tile from its edge
+    out[id] = { at, x: Math.max(-0.5, Math.min(0.5, x)), y: Math.max(-0.5, Math.min(0.5, y)), seq };
+  }
+  return out;
 }
 
 /** Everything here is best-effort: a match must never fail because storage did. */
 export function saveEngineGame(
   game: EngineState,
-  meta: { botLevel: BotLevel; portalsRevealed: boolean; layer: BoardLayer; matchId: string },
+  meta: { botLevel: BotLevel; portalsRevealed: boolean; layer: BoardLayer; matchId: string } & Partial<SavedSessionExtras>,
 ): void {
   try {
     const record: SavedEngineGame = {
@@ -67,6 +129,9 @@ export function saveEngineGame(
         opponent: game.units[game.players[1]?.avatarUnitId ?? ""]?.name ?? "The computer",
         over: game.phase === "over",
       },
+      ...(meta.controlTurns && Object.keys(meta.controlTurns).length ? { controlTurns: meta.controlTurns } : null),
+      ...(meta.feedNotes?.length ? { feedNotes: meta.feedNotes } : null),
+      ...(meta.arrangement && Object.keys(meta.arrangement).length ? { arrangement: meta.arrangement } : null),
     };
     const text = JSON.stringify(record);
     if (text.length > MAX_BYTES) return;

@@ -16,17 +16,24 @@ import AppShell from "@/components/ui/AppShell";
 import { PageHeader } from "@/components/ui/page-header";
 import { RcButton } from "@/components/ui/rc-button";
 import { GameSoundEffects } from "@/lib/audio/gameSfx";
+import { useResolvedBoardView } from "@/lib/engine-mode/boardView";
 import { enginePrecons, loadEngineDeck } from "@/lib/engine-mode/decks";
 import { loadEngineGame } from "@/lib/engine-mode/persistence";
 import type { SavedEngineGame } from "@/lib/engine-mode/persistence";
-import { useEngineSession } from "@/lib/engine-mode/session";
+import { useEngineGamePresence } from "@/lib/engine-mode/presence";
+import { useEngineSession, watchArrangeModifier } from "@/lib/engine-mode/session";
 import type { BotLevel } from "@/lib/engine-mode/session";
 import { createCardPreviewData } from "@/lib/game/card-preview.types";
 import { useGameStore } from "@/lib/game/store";
 import { getStoredCardPreviewsEnabled } from "@/lib/game/store/uiState";
+import EngineGame2D from "./2d/EngineGame2D";
 import EngineActionRail from "./EngineActionRail";
 import EngineContextMenu from "./EngineContextMenu";
-import EngineDeckPicker, { choiceToSource, RANDOM_PRECON, useDeckLists } from "./EngineDeckPicker";
+import EngineDeckPicker, {
+  choiceToSource,
+  RANDOM_PRECON,
+  useDeckLists,
+} from "./EngineDeckPicker";
 import EngineHud from "./EngineHud";
 import EngineNarration from "./EngineNarration";
 import EnginePromptPanel from "./EnginePromptPanel";
@@ -60,7 +67,9 @@ const DEFAULT_SETUP: Setup = {
 function readSetup(): Setup {
   try {
     const raw = localStorage.getItem(SETUP_KEY);
-    return raw ? { ...DEFAULT_SETUP, ...(JSON.parse(raw) as Partial<Setup>) } : DEFAULT_SETUP;
+    return raw
+      ? { ...DEFAULT_SETUP, ...(JSON.parse(raw) as Partial<Setup>) }
+      : DEFAULT_SETUP;
   } catch {
     return DEFAULT_SETUP;
   }
@@ -73,12 +82,18 @@ export default function EngineMatch() {
   const stop = useEngineSession((s) => s.stop);
   const resume = useEngineSession((s) => s.resume);
   const discardSaved = useEngineSession((s) => s.discardSaved);
+  // the lobby's "games in the Rules Engine" count: only while a game is on the board and undecided
+  useEngineGamePresence(game !== null && game.phase !== "over");
   const lists = useDeckLists();
+  // 2D on phones, 3D elsewhere (or whatever the player chose); null until the device is known
+  const boardView = useResolvedBoardView();
   const [setup, setSetup] = useState<Setup>(DEFAULT_SETUP);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** undefined while we look, null when there is nothing to resume */
-  const [saved, setSaved] = useState<SavedEngineGame | null | undefined>(undefined);
+  const [saved, setSaved] = useState<SavedEngineGame | null | undefined>(
+    undefined,
+  );
 
   useEffect(() => setSetup(readSetup()), []);
   // offer the match the player was in before the reload (storage is synchronous)
@@ -114,7 +129,10 @@ export default function EngineMatch() {
     setStarting(true);
     setError(null);
     try {
-      const [a, b] = await Promise.all([loadEngineDeck(mine), loadEngineDeck(theirs)]);
+      const [a, b] = await Promise.all([
+        loadEngineDeck(mine),
+        loadEngineDeck(theirs),
+      ]);
       if (!aliveRef.current) return;
       if (!a.ok) return setError(`Your deck: ${a.error}`);
       if (!b.ok) return setError(`Opponent's deck: ${b.error}`);
@@ -126,28 +144,34 @@ export default function EngineMatch() {
     }
   };
 
-  if (game)
-    return (
-      <EngineGame
-        onRestart={() => {
-          // back to the setup screen first, so a deck-loading failure is actually visible
-          stop();
-          void begin(setup);
-        }}
-        onExit={() => {
-          // leaving keeps the match: the resume prompt offers it back next time
-          stop();
-          router.push("/");
-        }}
-      />
-    );
+  if (game) {
+    const onRestart = () => {
+      // back to the setup screen first, so a deck-loading failure is actually visible
+      stop();
+      void begin(setup);
+    };
+    const onExit = () => {
+      // leaving keeps the match: the resume prompt offers it back next time
+      stop();
+      router.push("/");
+    };
+    // Neither board until the device is known, so a phone never starts loading the 3D bundle.
+    // Either board reads the same session store, so switching views mid-match keeps the match.
+    if (!boardView)
+      return <div className="fixed inset-0 bg-[#0b0b0c]" aria-busy="true" />;
+    if (boardView === "2d")
+      return <EngineGame2D onRestart={onRestart} onExit={onExit} />;
+    return <EngineGame onRestart={onRestart} onExit={onExit} />;
+  }
 
   if (saved === undefined) {
     return (
       <AppShell width="narrow">
         <PageHeader eyebrow="experimental" title="Rules Engine vs CPU" />
         <section className="rc-panel px-[18px] py-3.5">
-          <div className="rc-hint animate-pulse">Looking for a game in progress…</div>
+          <div className="rc-hint animate-pulse">
+            Looking for a game in progress…
+          </div>
         </section>
       </AppShell>
     );
@@ -161,7 +185,9 @@ export default function EngineMatch() {
         <section className="rc-panel space-y-4 px-[18px] py-3.5">
           <div>
             <div className="font-rc-display text-[26px] leading-none text-rc-fg-strong">
-              {summary.over ? "Your last game is finished" : "You have a game in progress"}
+              {summary.over
+                ? "Your last game is finished"
+                : "You have a game in progress"}
             </div>
             <div className="rc-hint mt-2">
               {summary.you} vs {summary.opponent} — turn {summary.turn}
@@ -201,8 +227,8 @@ export default function EngineMatch() {
       />
       <section className="rc-panel space-y-5 px-[18px] py-3.5">
         <div className="rc-alert" data-tone="info">
-          Powered by the open-source Untested Realm engine by Roberto Fratello. All 1,108 cards are scripted, so any
-          deck works.
+          Powered by the open-source Untested Realm engine by DeliziosoJalapeno.
+          All 1,108 cards are scripted, so any deck works.
         </div>
         <EngineDeckPicker
           label="Your deck"
@@ -240,7 +266,11 @@ export default function EngineMatch() {
           </div>
         </div>
         <label className="rc-check flex text-[13px]">
-          <input type="checkbox" checked={setup.secondSeer} onChange={(e) => update({ secondSeer: e.target.checked })} />
+          <input
+            type="checkbox"
+            checked={setup.secondSeer}
+            onChange={(e) => update({ secondSeer: e.target.checked })}
+          />
           Enable Second Seer (2nd player scries 1)
         </label>
         {error && (
@@ -256,7 +286,13 @@ export default function EngineMatch() {
   );
 }
 
-function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () => void }) {
+function EngineGame({
+  onRestart,
+  onExit,
+}: {
+  onRestart: () => void;
+  onExit: () => void;
+}) {
   const interaction = useEngineInteraction();
   const previewCard = useGameStore((s) => s.previewCard);
   const cardPreviewsEnabled = useGameStore((s) => s.cardPreviewsEnabled);
@@ -266,6 +302,10 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
   const dismissEndTurn = useEngineSession((s) => s.dismissEndTurn);
   const dispatch = useEngineSession((s) => s.dispatch);
   const dragFromHand = useGameStore((s) => s.dragFromHand);
+  // Alt (Option) arranges cards within their tiles: the table holds still while it is held
+  const arrangeHeld = useEngineSession((s) => s.arrangeHeld);
+  const boardDragActive = useGameStore((s) => s.boardDragActive);
+  useEffect(() => watchArrangeModifier(), []);
   // Mulligan over = the board is really in play; this is what turn 1's announcement waits for,
   // exactly as /play waits on mulliganComplete && seerComplete.
   const pastSetup = useGameStore((s) => s.phase !== "Setup");
@@ -289,10 +329,17 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "Space" && e.key !== " " && e.key !== "Spacebar") return;
       const t = e.target as HTMLElement | null;
-      if (t && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(t.tagName))) return;
+      if (
+        t &&
+        (t.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(t.tagName))
+      )
+        return;
       e.preventDefault();
       const store = useGameStore.getState();
-      store.setHandVisibilityMode(store.handVisibilityMode === "visible" ? "hidden" : "visible");
+      store.setHandVisibilityMode(
+        store.handVisibilityMode === "visible" ? "hidden" : "visible",
+      );
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -303,7 +350,12 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "u" && e.key !== "U") return;
       const t = e.target as HTMLElement | null;
-      if (t && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName))) return;
+      if (
+        t &&
+        (t.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName))
+      )
+        return;
       e.preventDefault();
       useGameStore.getState().toggleUiHidden();
     };
@@ -316,7 +368,12 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "p" && e.key !== "P") return;
       const t = e.target as HTMLElement | null;
-      if (t && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName))) return;
+      if (
+        t &&
+        (t.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName))
+      )
+        return;
       e.preventDefault();
       toggleCardPreviews();
     };
@@ -331,61 +388,72 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
       // open the menu, but empty board space and every DOM overlay did not.
       onContextMenu={(e) => e.preventDefault()}
     >
-      <EngineBoard3D controlsRef={controlsRef} cameraLocked={interaction.picking || dragFromHand} />
+      <EngineBoard3D
+        controlsRef={controlsRef}
+        cameraLocked={interaction.picking || dragFromHand || arrangeHeld || boardDragActive}
+      />
       <GameSoundEffects store={useGameStore} />
       {/* Everything from here to the console is chrome, and hides together with U. */}
-      {!uiHidden && <>
-      {/* the engine owns life totals — the familiar counters, read-only */}
-      <OnlineLifeCounters
-        dragFromHand={false}
-        myPlayerKey="p1"
-        playerNames={{ p1: "You", p2: "Computer" }}
-        readOnly
-        spectating={false}
-        showYouLabels
-      />
-      {/* The mana/threshold readout keeps its own centred spot, untouched by the rail. */}
-      <div className="pointer-events-none fixed right-3 top-1/2 z-[150] -translate-y-1/2">
-        <EngineResourcePanels />
-      </div>
+      {!uiHidden && (
+        <>
+          {/* the engine owns life totals — the familiar counters, read-only */}
+          <OnlineLifeCounters
+            dragFromHand={false}
+            myPlayerKey="p1"
+            playerNames={{ p1: "You", p2: "Computer" }}
+            readOnly
+            spectating={false}
+            showYouLabels
+          />
+          {/* The mana/threshold readout keeps its own centred spot, untouched by the rail. */}
+          <div className="pointer-events-none fixed right-3 top-1/2 z-[150] -translate-y-1/2">
+            <EngineResourcePanels />
+          </div>
 
-      {/* The actions sit right in the bottom-right corner as one tight cluster, so they take
+          {/* The actions sit right in the bottom-right corner as one tight cluster, so they take
           the least possible room and never reach toward the middle of the board. */}
-      <div className="pointer-events-none fixed bottom-1 right-1 z-[150]">
-        <EngineActionRail interaction={interaction} onExit={onExit} />
-      </div>
-      {cardPreviewsEnabled && previewCard && (
-        <CardPreview
-          card={createCardPreviewData({ slug: previewCard.slug, name: previewCard.name, type: previewCard.type })}
-          anchor="top-right"
-        />
+          <div className="pointer-events-none fixed bottom-1 right-1 z-[150]">
+            <EngineActionRail interaction={interaction} onExit={onExit} />
+          </div>
+          {cardPreviewsEnabled && previewCard && (
+            <CardPreview
+              card={createCardPreviewData({
+                slug: previewCard.slug,
+                name: previewCard.name,
+                type: previewCard.type,
+              })}
+              anchor="top-right"
+            />
+          )}
+        </>
       )}
-      </>}
       {/* Not gated: a prompt is the game waiting on you, and hiding it would strand the match. */}
       <div className="pointer-events-none fixed inset-x-0 top-16 z-[200] flex justify-center px-4">
         <EnginePromptPanel />
       </div>
-      {!uiHidden && <>
-      {/* the computer's turn, narrated: a line per action and the card it played */}
-      <EngineNarration />
-      {/* The same console the online and replay views use, in the same bottom-left spot, fed
+      {!uiHidden && (
+        <>
+          {/* the computer's turn, narrated: a line per action and the card it played */}
+          <EngineNarration />
+          {/* The same console the online and replay views use, in the same bottom-left spot, fed
           from the engine's own log (projection: `events`). Chat and Leave are hidden: there is
           nobody to chat to, and Leave lives in the action rail. */}
-      <div className="pointer-events-none fixed inset-0 z-[140]">
-        <OnlineConsole
-          dragFromHand={false}
-          chatLog={[]}
-          chatInput=""
-          setChatInput={() => undefined}
-          onSendChat={() => undefined}
-          onLeaveMatch={onExit}
-          connected
-          hideChat
-          hideLeaveButton
-          playerNames={{ p1: "You", p2: "Computer" }}
-        />
-      </div>
-      </>}
+          <div className="pointer-events-none fixed inset-0 z-[140]">
+            <OnlineConsole
+              dragFromHand={false}
+              chatLog={[]}
+              chatInput=""
+              setChatInput={() => undefined}
+              onSendChat={() => undefined}
+              onLeaveMatch={onExit}
+              connected
+              hideChat
+              hideLeaveButton
+              playerNames={{ p1: "You", p2: "Computer" }}
+            />
+          </div>
+        </>
+      )}
 
       {/* Brought back with a click when the interface is hidden. End-turn is not offered on it:
           that button drives the STORE's requestEndTurn, which engine mode does not read — the
@@ -412,7 +480,13 @@ function EngineGame({ onRestart, onExit }: { onRestart: () => void; onExit: () =
       {/* Mood-matched music, same as /play and /online/play. The rail owns play/pause. */}
       <MusicGameSync myPlayerKey="p1" />
       <EngineContextMenu />
-      {!uiHidden && <EngineHud interaction={interaction} onRestart={onRestart} onExit={onExit} />}
+      {!uiHidden && (
+        <EngineHud
+          interaction={interaction}
+          onRestart={onRestart}
+          onExit={onExit}
+        />
+      )}
     </div>
   );
 }

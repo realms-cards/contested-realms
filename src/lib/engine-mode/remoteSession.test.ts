@@ -21,6 +21,7 @@ const envelope = (seat: PlayerId, rev: number, view: PlayerView) => ({
   seat,
   view,
   power: {},
+  disabled: [],
   legal: [],
 });
 

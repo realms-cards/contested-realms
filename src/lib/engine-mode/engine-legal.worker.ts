@@ -2,7 +2,8 @@
 // Enumerates the human's legal actions off the main thread: the move generator
 // trial-applies every candidate on a cloned state, which can take most of a second.
 import type { Action, GameState, PlayerId } from "@sorcery/shared";
-import { legalActionsWithCasters } from "@shared/engine/casterActions";
+import { legalActionsWithCasters, legalGenerationStats } from "@shared/engine/casterActions";
+import "@shared/engine/scriptPatches";
 
 export interface LegalRequest {
   id: number;
@@ -21,6 +22,8 @@ self.onmessage = (e: MessageEvent<LegalRequest>) => {
   let reply: LegalReply;
   try {
     reply = { id, actions: legalActionsWithCasters(JSON.parse(state) as GameState, seat) };
+    // a truncated list makes actions appear/disappear between renders — say so instead of flapping
+    if (legalGenerationStats.dropped) console.warn(`[engine-legal] budget hit, at least ${legalGenerationStats.dropped} candidate(s) skipped`);
   } catch (err) {
     reply = { id, actions: [], error: err instanceof Error ? err.message : String(err) };
   }

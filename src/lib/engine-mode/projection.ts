@@ -15,8 +15,8 @@ import type {
 import { MAX_EVENTS } from "@/lib/game/store/types";
 import { computeAvailableMana } from "@/lib/game/store/utils/resourceHelpers";
 import { TOKEN_BY_NAME, tokenCardId, tokenSlug } from "@/lib/game/tokens";
-import { effAttack, effDefence, getCard } from "@sorcery/shared";
-import type { GameState as EngineState, PlayerId, PlayerView, Region } from "@sorcery/shared";
+import { effAttack, effDefence, getCard, isDisabled, occupiedSquares } from "@sorcery/shared";
+import type { GameState as EngineState, PlayerId, PlayerView, Region, UnitState } from "@sorcery/shared";
 import { cardRefFor } from "./cardIndex";
 import { type ViewerSeat, engineCellKey, engineToBoard, localizeEngineText } from "./coords";
 
@@ -155,7 +155,7 @@ export function damageSince(
       ? before.life - (unit.life ?? 0)
       : (unit.damage ?? 0) - before.damage;
     if (dealt <= 0) continue;
-    const at = engineCellKey(unit.x, unit.y, viewer);
+    const at = unitCell(unit, viewer);
     totals.set(at, (totals.get(at) ?? 0) + dealt);
   }
   return [...totals].map(([at, dmg]) => ({ at, dmg }));
@@ -190,9 +190,11 @@ export function boardReveal(view: PlayerView, sinceSeq: number, viewer: ViewerSe
   const sites = [...new Set((raw.redSites ?? []).map((s) => engineCellKey(s.x, s.y, viewer)))].filter(
     (at) => !damaged.has(at),
   );
-  const source = raw.casterId ? (view.units[raw.casterId] ?? view.sites?.[raw.casterId]) : null;
-  const caster =
-    source && typeof source.x === "number" && typeof source.y === "number"
+  const casterUnit = raw.casterId ? view.units[raw.casterId] : undefined;
+  const source = raw.casterId ? (casterUnit ?? view.sites?.[raw.casterId]) : null;
+  const caster = casterUnit
+    ? unitCell(casterUnit, viewer)
+    : source && typeof source.x === "number" && typeof source.y === "number"
       ? engineCellKey(source.x, source.y, viewer)
       : null;
   const name = raw.name ?? "";
@@ -213,7 +215,7 @@ export function hiddenLayerCounts(
   const out: Record<string, HiddenCounts> = {};
   for (const unit of Object.values(view.units)) {
     if (unit.isAvatar || unit.carriedBy || layerOf(unit.region) === layer) continue;
-    const counts = (out[engineCellKey(unit.x, unit.y, viewer)] ??= { underground: 0, underwater: 0, surface: 0 });
+    const counts = (out[unitCell(unit, viewer)] ??= { underground: 0, underwater: 0, surface: 0 });
     if (unit.region === "underground") counts.underground++;
     else if (unit.region === "underwater") counts.underwater++;
     else counts.surface++;
@@ -232,16 +234,64 @@ export function auraPlacement(
   owner: 1 | 2,
   viewer: ViewerSeat = 0,
 ): { at: string; offset: [number, number] } | null {
-  const cells = squares.map((sq) => engineToBoard(sq.x, sq.y, viewer));
-  if (cells.length === 0) return null;
-  const cx = cells.reduce((sum, c) => sum + c.x, 0) / cells.length;
-  const cy = cells.reduce((sum, c) => sum + c.y, 0) / cells.length;
-  const anchor = cells.reduce((a, b) => (Math.hypot(b.x - cx, b.y - cy) < Math.hypot(a.x - cx, a.y - cy) ? b : a));
+  const centre = footprintCentre(squares, viewer);
+  if (!centre) return null;
+  const { cx, cy, anchor } = centre;
   return {
     at: `${anchor.x},${anchor.y}`,
     offset: [(cx - anchor.x) * TILE_SIZE, (cy - anchor.y) * TILE_SIZE - getPermanentOwnerBaseZ(owner)],
   };
 }
+
+/**
+ * Board-space centre of some ENGINE squares, and the covered cell nearest it (first wins a tie).
+ * "Board space" is per viewer: the same engine squares sit in different board cells for the two
+ * seats, so every caller has to say whose board it means.
+ */
+function footprintCentre(
+  squares: readonly { x: number; y: number }[],
+  viewer: ViewerSeat = 0,
+): { cx: number; cy: number; anchor: { x: number; y: number } } | null {
+  const cells = squares.map((sq) => engineToBoard(sq.x, sq.y, viewer));
+  if (cells.length === 0) return null;
+  const cx = cells.reduce((sum, c) => sum + c.x, 0) / cells.length;
+  const cy = cells.reduce((sum, c) => sum + c.y, 0) / cells.length;
+  const anchor = cells.reduce((a, b) => (Math.hypot(b.x - cx, b.y - cy) < Math.hypot(a.x - cx, a.y - cy) ? b : a));
+  return { cx, cy, anchor };
+}
+
+/** The board cell an area of ENGINE squares is keyed on: the covered cell nearest its centre. */
+export function footprintCell(squares: readonly { x: number; y: number }[], viewer: ViewerSeat = 0): string | null {
+  const centre = footprintCentre(squares, viewer);
+  return centre ? `${centre.anchor.x},${centre.anchor.y}` : null;
+}
+
+/**
+ * The board cell a unit's card is drawn on. A 1x1 unit sits on its own square; a body that covers
+ * more than one (Mountain Giant, an Enchantress aura minion, a moeba, the Rack) is drawn centred
+ * over its footprint, anchored on the covered cell nearest that centre — exactly as auras are.
+ * (A 2x2's four cells tie and its engine anchor wins; a 3-cell or stretched body lands elsewhere.)
+ * Anything that looks for a unit's card by tile should ask this, not the engine anchor.
+ * Avatars are still drawn on their anchor square (projectView), so a Racked avatar answers its
+ * anchor too; drop this check in the same change that centres avatars.
+ */
+export function unitCell(unit: UnitState, viewer: ViewerSeat = 0): string {
+  if (unit.isAvatar) return engineCellKey(unit.x, unit.y, viewer);
+  const body = occupiedSquares(unit);
+  return (body.length > 1 ? footprintCell(body, viewer) : null) ?? engineCellKey(unit.x, unit.y, viewer);
+}
+
+/**
+ * Size of a card pinned over an area (an aura, a multi-square body). It straddles the tiles it
+ * covers, and the cards on those tiles hug their own rims, so it is kept a little smaller than a
+ * lone card: at this size a centred card clears a neighbouring row of up to two cards.
+ */
+export const PINNED_SCALE = 0.78;
+/**
+ * ...and lifted this many stack layers (PermanentItem.lift), so where it reaches over a crowded
+ * neighbouring tile it is drawn above that tile's cards rather than level with them.
+ */
+const PINNED_LIFT = 3;
 
 /** Our P1 is whoever is LOOKING at the board (they sit at the bottom); single-player is seat 0. */
 export const seatKey = (seat: PlayerId, viewer: ViewerSeat = 0): PlayerKey => (seat === viewer ? "p1" : "p2");
@@ -318,8 +368,13 @@ function tokenCard(name: string, instanceId: string, owner: PlayerKey): CardRef 
  * permanent (`getPermanentOwnerBaseZ`), so that is subtracted back out here — otherwise the
  * two biases would compound and push the cards off their own tile.
  */
-function spreadOnTile(items: PermanentItem[], standing: { owner: 1 | 2; avatar: AvatarState }[] = []): void {
-  const loose = items.filter((item) => !item.attachedTo);
+function spreadOnTile(
+  items: PermanentItem[],
+  standing: { owner: 1 | 2; avatar: AvatarState }[] = [],
+  pinned: ReadonlySet<string> = new Set(),
+): void {
+  // pinned cards (auras, multi-square bodies) keep their centred placement and take no slot
+  const loose = items.filter((item) => !item.attachedTo && !pinned.has(item.instanceId ?? ""));
   if (loose.length + standing.length < 1) return;
 
   const sides: Record<1 | 2, { avatars: AvatarState[]; cards: PermanentItem[] }> = {
@@ -408,6 +463,134 @@ function pile(count: number, owner: PlayerKey, kind: "atlas" | "spellbook"): Car
   );
 }
 
+/**
+ * A card the player slid within its tile. Display only: it is never sent to the engine, so it
+ * changes nothing about the rules or the computer's play, and it lasts only while the card stays
+ * on that tile (`pruneArrangement`) — a card that moves falls back to the automatic layout.
+ */
+export interface CardArrangement {
+  /** the board cell it was arranged on */
+  at: string;
+  /** the card's centre from the tile's centre, in tiles: x across, y down the board (toward p1) */
+  x: number;
+  y: number;
+  /** arrangement order: the latest card arranged on a tile is drawn on top of it */
+  seq: number;
+}
+
+/** The player's card arrangement, keyed by engine unit / artifact id. */
+export type Arrangement = Record<string, CardArrangement>;
+
+/** One axis of a card's centre, clamped so a card `half` across stays inside a tile `room` across from its middle. */
+export function clampToTile(centre: number, half: number, room: number): number {
+  const limit = Math.max(0, room - half);
+  return Math.min(limit, Math.max(-limit, centre));
+}
+
+/**
+ * The board cell an engine card can be arranged on, or null when it cannot be: gone, carried
+ * (it is drawn on its bearer), or a multi-square body (pinned over its area, like an aura).
+ */
+export function arrangeableCell(
+  game: Pick<EngineState, "units" | "artifacts">,
+  id: string,
+  viewer: ViewerSeat = 0,
+): string | null {
+  const unit = game.units[id];
+  if (unit) return !unit.isAvatar && occupiedSquares(unit).length > 1 ? null : engineCellKey(unit.x, unit.y, viewer);
+  const artifact = game.artifacts[id];
+  if (artifact) return artifact.carriedBy ? null : engineCellKey(artifact.x, artifact.y, viewer);
+  return null;
+}
+
+/** The arrangement without the cards that left the tile they were arranged on; the same object when none did. */
+export function pruneArrangement(
+  arrangement: Arrangement,
+  game: Pick<EngineState, "units" | "artifacts">,
+  viewer: ViewerSeat = 0,
+): Arrangement {
+  let out: Arrangement | null = null;
+  for (const [id, entry] of Object.entries(arrangement)) {
+    // `entry.at` is a board cell on THIS viewer's board, so it has to be compared to one
+    if (arrangeableCell(game, id, viewer) === entry.at) continue;
+    out ??= { ...arrangement };
+    delete out[id];
+  }
+  return out ?? arrangement;
+}
+
+/** The override for a tile occupant, when it has one that applies here (pinned and attached cards never do). */
+function arrangedHere(item: PermanentItem, at: string, arrangement: Arrangement, pinned: ReadonlySet<string>): CardArrangement | null {
+  const id = item.instanceId ?? "";
+  const entry = id ? arrangement[id] : undefined;
+  if (!entry || entry.at !== at || item.attachedTo || pinned.has(id)) return null;
+  return entry;
+}
+
+/**
+ * Put the player's arranged cards where they left them, over the automatic layout (which still
+ * gives them their slot, so nothing else on the tile shifts). Clamped to the tile at the card's
+ * current size and turn, so a card that has since shrunk or tapped never pokes out of it.
+ */
+function arrangeOnTile(
+  items: PermanentItem[],
+  standing: { owner: 1 | 2; avatar: AvatarState; id: string }[],
+  at: string,
+  arrangement: Arrangement,
+  pinned: ReadonlySet<string>,
+): void {
+  const room = TILE_SIZE / 2;
+  const centre = (entry: CardArrangement, tapped: boolean, scale: number): [number, number] => {
+    const [w, h] = tapped ? [CARD_LONG, CARD_SHORT] : [CARD_SHORT, CARD_LONG];
+    return [clampToTile(entry.x * TILE_SIZE, (w * scale) / 2, room), clampToTile(entry.y * TILE_SIZE, (h * scale) / 2, room)];
+  };
+  for (const item of items) {
+    const entry = arrangedHere(item, at, arrangement, pinned);
+    if (!entry) continue;
+    const [x, z] = centre(entry, Boolean(item.tapped), item.scale ?? 1);
+    // the board adds its per-owner nudge to every permanent; take it back out (see spreadOnTile)
+    item.offset = [x, z - getPermanentOwnerBaseZ(item.owner)];
+  }
+  for (const { avatar, id } of standing) {
+    const entry = arrangement[id];
+    if (entry && entry.at === at) avatar.offset = centre(entry, Boolean(avatar.tapped), 1);
+  }
+}
+
+/**
+ * A tile's stack order, bottom to top (the board lifts later items higher): the laid-out cards,
+ * then the arranged ones with the latest arranged on top — so arranging a buried card brings it
+ * forward — then the pinned cards, which reach over their neighbours. Every attachment on the
+ * tile is re-pointed at its host's new index.
+ */
+function stackOrder(items: PermanentItem[], at: string, pinned: ReadonlySet<string>, arrangement: Arrangement): PermanentItem[] {
+  const rank = (item: PermanentItem): number => {
+    if (pinned.has(item.instanceId ?? "")) return Number.MAX_SAFE_INTEGER;
+    const entry = arrangedHere(item, at, arrangement, pinned);
+    return entry ? 1 + entry.seq : 0;
+  };
+  const ranks = items.map(rank);
+  if (ranks.every((r) => r === 0)) return items;
+  const order = [...items.keys()].sort((a, b) => ranks[a] - ranks[b]);
+  const moved = new Map(order.map((from, to) => [from, to]));
+  return order.map((from) => {
+    const item = items[from];
+    const host = item.attachedTo;
+    if (!host || host.at !== at || host.index < 0) return item;
+    return { ...item, attachedTo: { at, index: moved.get(host.index) ?? host.index } };
+  });
+}
+
+/** Ids of auras an Enchantress has animated: the minion carrying `counters.animatedAura` IS that card. */
+export function animatedAuras(view: Pick<PlayerView, "units">): Set<string> {
+  const out = new Set<string>();
+  for (const unit of Object.values(view.units)) {
+    const aura = unit.counters?.animatedAura;
+    if (aura !== undefined) out.add(String(aura));
+  }
+  return out;
+}
+
 function pushTo(permanents: Permanents, key: string, item: PermanentItem): number {
   (permanents[key] ??= []).push(item);
   return permanents[key].length - 1;
@@ -462,14 +645,36 @@ export function unitPower(game: EngineState): Record<string, { atk: number; def:
 }
 
 /**
+ * Units the engine considers disabled right now, by id.
+ *
+ * Only a few effects set the raw `unit.disabled` flag. Babbling Brook, Basilisk-style
+ * neighbours, disabling auras, Iron Shackles, [X]bound minions off their terrain and the rest
+ * are DERIVED (`isDisabled`) and need the full GameState, so the session works them out and hands
+ * them to the projection, like `unitPower`. Avatars keep the raw-flag path (isDisabled answers
+ * false for most of their cases).
+ */
+export function disabledUnits(game: EngineState): Set<string> {
+  const out = new Set<string>();
+  for (const unit of Object.values(game.units)) {
+    if (!unit.isAvatar && isDisabled(game, unit)) out.add(unit.id);
+  }
+  return out;
+}
+
+/**
  * Project the engine's view onto our store's board model, as seen from `viewer`'s side of the
  * table: that seat becomes our P1 and sits at the bottom, whichever engine seat it is.
+ *
+ * `power` and `disabled` both need the FULL GameState, which a player-vs-player client never
+ * holds; there the server computes them and they arrive in the view envelope.
  */
 export function projectView(
   view: PlayerView,
   layer: BoardLayer = "surface",
   portalsRevealed = true,
   power: Record<string, { atk: number; def: number }> = {},
+  disabled: ReadonlySet<string> = new Set(),
+  arrangement: Arrangement = {},
   viewer: ViewerSeat = 0,
 ): ProjectedState {
   const players = view.players as ViewPlayer[];
@@ -497,10 +702,14 @@ export function projectView(
   /** Drives the shared board's burrowed/submerged placement (it tucks these under the site). */
   const permanentPositions: StoreState["permanentPositions"] = {};
   const unitSlot = new Map<string, { at: string; index: number }>();
+  /** Cards drawn centred over an area rather than laid out in their tile's rows. */
+  const pinned = new Set<string>();
   const avatars: Record<PlayerKey, AvatarState> = {
     p1: { card: null, pos: null, tapped: false, offset: null },
     p2: { card: null, pos: null, tapped: false, offset: null },
   };
+  /** each avatar's engine unit id, which its arrangement is keyed by */
+  const avatarIds: Partial<Record<PlayerKey, string>> = {};
 
   for (const unit of Object.values(view.units)) {
     const owner = seatKey(unit.controller, viewer);
@@ -512,6 +721,7 @@ export function projectView(
         tapped: unit.tapped,
         offset: null,
       };
+      avatarIds[seatKey(unit.owner)] = unit.id;
       unitSlot.set(unit.id, { at: `${p.x},${p.y}`, index: -1 });
       continue;
     }
@@ -521,7 +731,11 @@ export function projectView(
     // hiding it behind a badge. Looking subsurface stays a clean view of that layer alone.
     const below = layerOf(unit.region) !== layer;
     if (below && layer !== "surface") continue;
-    const at = engineCellKey(unit.x, unit.y, viewer);
+    // a multi-square body is drawn centred over everything it covers, like an aura
+    const body = occupiedSquares(unit);
+    const placed = body.length > 1 ? auraPlacement(body, seatOwner(unit.controller, viewer), viewer) : null;
+    const at = placed?.at ?? engineCellKey(unit.x, unit.y, viewer);
+    if (placed) pinned.add(unit.id);
     const index = pushTo(permanents, at, {
       card: cardOf(view, unit.cardId, owner),
       owner: seatOwner(unit.controller, viewer),
@@ -530,7 +744,8 @@ export function projectView(
       damage: unit.damage || null,
       // only present when an effect has moved them off the printed values
       stats: power[unit.id] ?? null,
-      offset: null,
+      offset: placed?.offset ?? null,
+      ...(placed ? { scale: PINNED_SCALE, lift: PINNED_LIFT } : {}),
       isCarried: Boolean(unit.carriedBy),
       enteredOnTurn: unit.enteredTurn,
       summonedThisTurn: unit.enteredTurn === view.turn,
@@ -571,7 +786,10 @@ export function projectView(
     if (!slot) continue;
     const owner = seatKey(unit.controller, viewer);
     for (const { flag, token } of STATUS_TOKENS) {
-      if (!unit[flag]) continue;
+      // Most disables are DERIVED (Babbling Brook, Basilisk, an aura, [X]bound off its terrain)
+      // and never set the raw flag; the session works those out from the full state.
+      const on = flag === "disabled" ? Boolean(unit.disabled) || disabled.has(unit.id) : Boolean(unit[flag]);
+      if (!on) continue;
       const card = tokenCard(token, `${unit.id}:${flag}`, owner);
       if (!card) continue;
       pushTo(permanents, slot.at, {
@@ -597,15 +815,23 @@ export function projectView(
     }
   }
 
+  // An Enchantress-animated aura is ONE card held by two engine records: the aura (whose area
+  // keeps working and follows the minion) and the minion carrying `counters.animatedAura`. The
+  // minion is the card on the board; its area stays tinted by EngineLayerOverlay.
+  const animated = animatedAuras(view);
   for (const aura of layer === "surface" ? Object.values(view.auras) : []) {
+    if (animated.has(aura.id)) continue;
     const placed = auraPlacement(aura.squares, seatOwner(aura.controller, viewer), viewer);
     if (!placed) continue;
+    pinned.add(aura.id);
     pushTo(permanents, placed.at, {
       card: cardOf(view, aura.cardId, seatKey(aura.controller, viewer)),
       owner: seatOwner(aura.controller, viewer),
       instanceId: aura.id,
       tapped: false,
       offset: placed.offset,
+      scale: PINNED_SCALE,
+      lift: PINNED_LIFT,
     });
   }
 
@@ -629,19 +855,27 @@ export function projectView(
   // Every occupant of a square is known by now (units, artifacts, auras, status tokens, the
   // other layer's hints — and the avatars), so give each tile a side-by-side layout. The
   // avatars are grouped by square first so a tile they share is laid out as one block.
-  const standingAt = new Map<string, { owner: 1 | 2; avatar: AvatarState }[]>();
+  const standingAt = new Map<string, { owner: 1 | 2; avatar: AvatarState; id: string }[]>();
   for (const [key, avatar] of Object.entries(avatars) as [PlayerKey, AvatarState][]) {
     if (!avatar.pos) continue;
     const at = `${avatar.pos[0]},${avatar.pos[1]}`;
-    const entry = { owner: (key === "p1" ? 1 : 2) as 1 | 2, avatar };
+    const entry = { owner: (key === "p1" ? 1 : 2) as 1 | 2, avatar, id: avatarIds[key] ?? "" };
     const here = standingAt.get(at);
     if (here) here.push(entry);
     else standingAt.set(at, [entry]);
   }
   for (const [at, avatarsHere] of standingAt) {
-    if (!permanents[at]) spreadOnTile([], avatarsHere); // two avatars sharing a bare square
+    if (permanents[at]) continue;
+    spreadOnTile([], avatarsHere); // an avatar on a bare square (or two sharing one)
+    arrangeOnTile([], avatarsHere, at, arrangement, pinned);
   }
-  for (const [at, items] of Object.entries(permanents)) spreadOnTile(items, standingAt.get(at) ?? []);
+  for (const [at, items] of Object.entries(permanents)) {
+    const standing = standingAt.get(at) ?? [];
+    spreadOnTile(items, standing, pinned);
+    // the player's own arrangement goes over the automatic one (display only: see CardArrangement)
+    arrangeOnTile(items, standing, at, arrangement, pinned);
+    permanents[at] = stackOrder(items, at, pinned, arrangement);
+  }
 
   const zones = {} as Record<PlayerKey, Zones>;
   for (const p of players) {

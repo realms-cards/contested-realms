@@ -10,7 +10,8 @@ import { cardRefFor } from "@/lib/engine-mode/cardIndex";
 import { humanDecisionSeat, useEngineSession } from "@/lib/engine-mode/session";
 import { useGameStore } from "@/lib/game/store";
 import ActionSprite, { type ActionSpriteId } from "./ActionSprite";
-import type { EngineInteraction } from "./useEngineInteraction";
+import BoardViewToggle from "./BoardViewToggle";
+import { pilotPickItems, type EngineInteraction } from "./useEngineInteraction";
 
 /**
  * The vertical action rail: every action the player can take, as a pixel sprite, stacked
@@ -184,11 +185,11 @@ export default function EngineActionRail({
               onClick={() => setCemeteryOpen((o) => !o)}
             />
           )}
-          {interaction.pilotHand.length > 0 && (
+          {interaction.pilotFullHand.length > 0 && (
             <RailButton
               id="collection"
-              label={`Their hand (${interaction.pilotHand.length}) — you are playing their turn`}
-              count={interaction.pilotHand.length}
+              label={`Their hand (${interaction.pilotFullHand.length}, ${interaction.pilotHand.length} playable) — you are playing their turn`}
+              count={interaction.pilotHand.length || interaction.pilotFullHand.length}
               pressed={pilotOpen}
               onClick={() => setPilotOpen((o) => !o)}
             />
@@ -301,6 +302,9 @@ export default function EngineActionRail({
                   Card previews (P)
                 </RcButton>
               </div>
+              <div className="mt-2">
+                <BoardViewToggle />
+              </div>
             </div>
           </div>
         )}
@@ -319,11 +323,11 @@ export default function EngineActionRail({
           </div>
         )}
 
-        {pilotOpen && interaction.pilotHand.length > 0 && (
+        {pilotOpen && interaction.pilotFullHand.length > 0 && (
           <div className="pointer-events-auto fixed bottom-20 left-1/2 z-[160] w-[min(92vw,880px)] -translate-x-1/2">
             <CpuCardPick
-              title="Their hand — you are playing their turn"
-              items={interaction.pilotHand.map((c) => ({ id: c.token, card: cardRefFor(c.name) }))}
+              title={`Their hand — you are playing their turn (${interaction.pilotHand.length} of ${interaction.pilotFullHand.length} playable)`}
+              items={pilotPickItems(interaction.pilotFullHand)}
               onPick={(token) => {
                 interaction.begin(token);
                 setPilotOpen(false);

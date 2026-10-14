@@ -1,7 +1,7 @@
 import { createGame } from "@sorcery/shared";
-import type { GameState as EngineState, PlayerId } from "@sorcery/shared";
+import type { Action, GameState as EngineState, PlayerId } from "@sorcery/shared";
 import { describe, expect, it } from "vitest";
-import { tokenForEngineId } from "./actionPaths";
+import { actionPaths, narrow, tokenForEngineId } from "./actionPaths";
 import { enginePrecons, toEngineDeck } from "./decks";
 
 /**
@@ -58,5 +58,25 @@ describe("carried artifacts are clickable through their bearer", () => {
     const { game } = withCarried(true);
     game.artifacts["a1"] = { ...game.artifacts["a1"], carriedBy: null };
     expect(tokenForEngineId(game, "a1")).toBe("unit:perm:a1");
+  });
+});
+
+describe("a carried artifact drawn as its own card (2D) starts its abilities too", () => {
+  const rummage: Action = { t: "activate", sourceId: "a1", ability: "rummage" };
+
+  it("clicking the artifact offers its ability, held for a click", () => {
+    const { game } = withCarried(true);
+    const { paths, labels } = actionPaths(game, [rummage]);
+    expect(narrow(paths, []).next).toContain("unit:perm:a1");
+    const after = narrow(paths, ["unit:perm:a1"]);
+    expect(after.done).toBeNull();
+    expect(after.next.map((t) => labels[t])).toEqual(["Toolbox: Sacrifice → fetch an Ordinary spell from your collection"]);
+    expect(narrow(paths, ["unit:perm:a1", after.next[0]]).done).toEqual(rummage);
+  });
+
+  it("still starts from the bearer", () => {
+    const { game } = withCarried(true);
+    const { paths } = actionPaths(game, [rummage]);
+    expect(narrow(paths, ["unit:avatar:p1"]).done ?? narrow(paths, ["unit:avatar:p1"]).next.length).toBeTruthy();
   });
 });

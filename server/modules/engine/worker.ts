@@ -23,8 +23,12 @@ import {
   effAttack,
   effDefence,
   getCard,
+  isDisabled,
 } from "../../../vendor/untested-realm/shared/src/index";
 import { legalActionsWithCasters } from "../../../shared/engine/casterActions";
+// Our fixes to vendored card scripts, applied on import. The authority MUST play by the same
+// rules as single player and the bot, or a card behaves differently depending on the mode.
+import "../../../shared/engine/scriptPatches";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the engine's own types are structural
    and cross a postMessage boundary as plain JSON; the narrow shapes we rely on are asserted
@@ -52,6 +56,7 @@ export type EngineReply =
       kind: "view";
       view: unknown;
       power: Record<string, { atk: number; def: number }>;
+      disabled: string[];
       legal: unknown[];
     }
   | { id: number; ok: true; kind: "drop" }
@@ -75,6 +80,20 @@ function unitPower(state: EngineState): Record<string, { atk: number; def: numbe
     if (atk !== (printed?.attack ?? 0) || def !== (printed?.defence ?? printed?.attack ?? 0)) {
       out[unit.id] = { atk, def };
     }
+  }
+  return out;
+}
+
+/**
+ * Units the engine considers disabled. Like power, this needs the FULL state: most disabling
+ * (Babbling Brook, disabling auras, Iron Shackles, [X]bound minions off their terrain) is DERIVED
+ * by `isDisabled` rather than stored on the unit, so a client holding only a view cannot see it.
+ * Avatars keep the raw-flag path, as they do in single player.
+ */
+function disabledUnits(state: EngineState): string[] {
+  const out: string[] = [];
+  for (const unit of Object.values(state.units) as any[]) {
+    if (!unit.isAvatar && isDisabled(state, unit)) out.push(unit.id);
   }
   return out;
 }
@@ -121,6 +140,7 @@ export function handle(request: EngineRequest): EngineReply {
           kind: "view",
           view: viewFor(game, request.seat as never),
           power: unitPower(game),
+          disabled: disabledUnits(game),
           legal,
         };
       }
