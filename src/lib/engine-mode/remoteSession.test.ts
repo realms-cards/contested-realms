@@ -63,6 +63,12 @@ describe("a client in a server-run match", () => {
     expect(state.game, "the view IS the board as far as the components are concerned").not.toBeNull();
   });
 
+  it("never opens the Harbinger roll screen, which needs the full game", () => {
+    useEngineSession.setState({ portalsRevealed: false });
+    useEngineSession.getState().joinRemote("m1", 0 as PlayerId, () => undefined);
+    expect(useEngineSession.getState().portalsRevealed).toBe(true);
+  });
+
   it("ignores a view that arrived out of order", () => {
     const { view } = serverView(0 as PlayerId);
     useEngineSession.getState().joinRemote("m1", 0 as PlayerId, () => undefined);

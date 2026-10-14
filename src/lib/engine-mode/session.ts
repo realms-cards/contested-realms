@@ -1058,6 +1058,10 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         lastError: null,
         outdated: false,
         decisionSeat: null,
+        // The Harbinger roll screen reads the FULL game (viewFor), which a remote client never
+        // has — and the server already fixed the portents. Online the portals simply show; a
+        // value left over from an earlier local game must not open that screen on a view.
+        portalsRevealed: true,
       });
       takeOverBoard();
       send({ type: "engine:resync", matchId });
