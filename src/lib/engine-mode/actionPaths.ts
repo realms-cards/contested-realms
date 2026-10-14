@@ -366,6 +366,12 @@ export function actionPaths(
         ];
         for (const target of action.targets ?? []) steps.push(...targetSteps(target, action));
         paths.push({ action, steps });
+        // A carried artifact starts on its bearer (see tokenForEngineId); where the board draws it
+        // as a card of its own (the 2D attachments), it can be started from the artifact too,
+        // then the same option, held for a click so the label shows before anything is spent.
+        if (game.artifacts[action.sourceId]?.carriedBy) {
+          paths.push({ action, steps: [`unit:perm:${action.sourceId}`, ...steps.slice(1)], hold: 1 });
+        }
         // A hand card's ability is surfaced on its owner's avatar; it can be started from the
         // card itself too, then the same option and targets. The option is held for a click.
         const avatar = game.units[action.sourceId];

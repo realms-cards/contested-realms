@@ -271,6 +271,10 @@ export default function Card2D({ placed, tone, colors, toneOf, onTap, onLongPres
       >
         <CardArt card={card} sizes={`${Math.ceil(w)}px`} rotateLandscape={false} />
       </button>
+      {/* over the host, under its badges (paint order: the badges come later) */}
+      {attachments.length > 0 && h >= ART_ATTACH_MIN_H && (
+        <AttachmentCards placed={placed} toneOf={toneOf} colors={colors} onTap={onTap} onLongPress={onLongPress} onHover={onHover} />
+      )}
 
       <div
         className="pointer-events-none absolute"
@@ -344,7 +348,7 @@ export default function Card2D({ placed, tone, colors, toneOf, onTap, onLongPres
         )}
       </div>
 
-      {attachments.length > 0 && (
+      {attachments.length > 0 && h < ART_ATTACH_MIN_H && (
         <div
           className="absolute left-1/2 flex -translate-x-1/2 flex-col items-center gap-px"
           style={{ top: (h + fh) / 2 + 2 }}
@@ -365,6 +369,106 @@ export default function Card2D({ placed, tone, colors, toneOf, onTap, onLongPres
         </div>
       )}
     </div>
+  );
+}
+
+/** Hosts at least this tall show their attachments as art; smaller ones (phones) keep the name chips. */
+const ART_ATTACH_MIN_H = 64;
+
+/**
+ * Carried artifacts and attached tokens as their own art, laid the way the 3D board lays them
+ * (PermanentStack): at 60% size ON the host, centred 0.4 card-lengths below its middle so they
+ * overhang its foot, fanned sideways by 0.3 card-widths each, and turned like the host.
+ */
+function AttachmentCards({
+  placed,
+  toneOf,
+  colors,
+  onTap,
+  onLongPress,
+  onHover,
+}: {
+  placed: Placed;
+  toneOf: Card2DProps["toneOf"];
+  colors: Record<FieldTone, string>;
+  onTap: Card2DProps["onTap"];
+  onLongPress: Card2DProps["onLongPress"];
+  onHover?: Card2DProps["onHover"];
+}) {
+  const { w, h, attachments } = placed;
+  const mw = w * 0.6;
+  const mh = h * 0.6;
+  const turn = cardTurn(placed);
+  return (
+    <>
+      {attachments.map((a, i) => {
+        const cx = w / 2 + w * 0.3 * (i - (attachments.length - 1) / 2);
+        const cy = h / 2 + h * 0.4;
+        return (
+          <AttachmentArt
+            key={a.key}
+            attachment={a}
+            placed={placed}
+            tone={toneOf?.(a.token) ?? null}
+            colors={colors}
+            box={{ left: cx - mw / 2, top: cy - mh / 2, width: mw, height: mh }}
+            turn={turn}
+            onTap={onTap}
+            onLongPress={onLongPress}
+            onHover={onHover}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+function AttachmentArt({
+  attachment,
+  placed,
+  tone,
+  colors,
+  box,
+  turn,
+  onTap,
+  onLongPress,
+  onHover,
+}: {
+  attachment: Attachment;
+  placed: Placed;
+  tone: FieldTone | null;
+  colors: Record<FieldTone, string>;
+  box: CSSProperties;
+  turn: number;
+  onTap: Card2DProps["onTap"];
+  onLongPress: Card2DProps["onLongPress"];
+  onHover?: Card2DProps["onHover"];
+}) {
+  const press = useLongPress({
+    onTap: (info) => onTap(placed, info, attachment),
+    onLongPress: (info) => onLongPress(placed, info, attachment),
+  });
+  return (
+    <button
+      type="button"
+      {...press}
+      onPointerEnter={(e) => {
+        if (e.pointerType === "mouse") onHover?.(placed, true, attachment);
+      }}
+      onPointerLeave={(e) => {
+        press.onPointerLeave(e);
+        if (e.pointerType === "mouse") onHover?.(placed, false, attachment);
+      }}
+      title={attachment.card.name}
+      aria-label={`${attachment.card.name}, carried by ${placed.card.name}`}
+      className="pointer-events-auto absolute touch-manipulation select-none rounded-[3px] bg-rc-floor shadow-rc-sm [-webkit-touch-callout:none]"
+      style={{ ...box, border: "1px solid rgba(0,0,0,0.55)", transform: turn ? `rotate(${turn}deg)` : undefined }}
+    >
+      <span className="absolute inset-0 overflow-hidden rounded-[3px]">
+        <CardArt card={attachment.card} sizes={`${Math.ceil(Number(box.width) || 0)}px`} rotateLandscape={false} />
+      </span>
+      {tone && <ToneFrame tone={tone} color={colors[tone]} inset={-2} />}
+    </button>
   );
 }
 
