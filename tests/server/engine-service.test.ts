@@ -213,4 +213,18 @@ describe("an engine match across a server restart", () => {
     const m = persistence.rehydrateMatch({ id: "old", game: { engineMode: true } }) as Record<string, unknown> | null;
     expect(m?.engineMode).toBe(true);
   });
+
+  it("leaves the flag unset on a row that is not an engine match", () => {
+    // so a tournament's engine setting, applied later only to an unset flag, still lands
+    const persistence = createPersistenceLayer({
+      prisma: {},
+      metricsInc: () => {},
+      metricsObserveMs: () => {},
+      matches: new Map(),
+      hydrateMatchFromDatabase: async () => {},
+      config: { isWriteBehind: false, flushIntervalMs: 0, actionBatchSize: 1, maxWaitMs: 1000, timeoutMs: 1000, redisSessionTtlSec: 60 },
+    });
+    const m = persistence.rehydrateMatch({ id: "t", engineMode: false, game: {} }) as Record<string, unknown> | null;
+    expect(m?.engineMode).toBeUndefined();
+  });
 });
