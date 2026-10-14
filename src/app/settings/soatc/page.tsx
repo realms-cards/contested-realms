@@ -38,8 +38,15 @@ const HOW_IT_WORKS = [
 ];
 
 export default function SoatcSettingsPage() {
-  const { soatcUuid, soatcAutoDetect, loading, saving, error, updateSettings } =
-    useSoatcSettings();
+  const {
+    soatcUuid,
+    soatcAutoDetect,
+    optedOut,
+    loading,
+    saving,
+    error,
+    updateSettings,
+  } = useSoatcSettings();
 
   const [uuidInput, setUuidInput] = useState("");
   const [autoDetect, setAutoDetect] = useState(false);
@@ -127,7 +134,13 @@ export default function SoatcSettingsPage() {
           to participate in monthly tournaments.
         </>
       }
-      actions={soatcUuid ? <Badge tone="ok">account linked</Badge> : null}
+      actions={
+        optedOut ? (
+          <Badge tone="warn">opted out</Badge>
+        ) : soatcUuid ? (
+          <Badge tone="ok">account linked</Badge>
+        ) : null
+      }
     />
   );
 
@@ -227,6 +240,28 @@ export default function SoatcSettingsPage() {
             </RcButton>
             {saveSuccess && <Badge tone="ok">saved</Badge>}
           </div>
+        </div>
+      </section>
+
+      {/* Opt-out */}
+      <section className="rc-panel">
+        <PanelHeader title="League participation" />
+        <div className="flex flex-wrap items-center gap-4 px-[18px] py-4">
+          <p className="m-0 min-w-0 flex-1 max-w-[68ch] font-rc-sans text-sm leading-relaxed text-rc-fg-muted">
+            {optedOut
+              ? "You have opted out of SATC. Your badge is hidden and none of your matches are flagged as league matches. Your UUID is kept so you can opt back in later."
+              : "Opt out to hide your SATC badge and keep all of your matches out of the league, without unlinking your UUID."}
+          </p>
+          <RcButton
+            variant="outline"
+            size="sm"
+            tone="warning"
+            aria-pressed={optedOut}
+            onClick={() => updateSettings({ optedOut: !optedOut })}
+            disabled={saving}
+          >
+            {optedOut ? "Opt back in" : "Opt out"}
+          </RcButton>
         </div>
       </section>
 

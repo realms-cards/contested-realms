@@ -60,6 +60,7 @@ export async function POST() {
         badgeColor: l.badgeColor,
         iconUrl: l.iconUrl,
         joinedAt: l.joinedAt.toISOString(),
+        optedOut: l.optedOut,
       })),
     });
   } catch (err) {

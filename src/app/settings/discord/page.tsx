@@ -14,6 +14,7 @@ interface LeagueEntry {
   badgeColor: string | null;
   iconUrl: string | null;
   joinedAt: string;
+  optedOut: boolean;
 }
 
 interface AvailableLeague {
@@ -40,6 +41,7 @@ const HOW_IT_WORKS = [
   "Link your Discord account using the button above or via our Discord bot.",
   "Your Discord server memberships are checked against supported leagues. Matching leagues appear automatically.",
   "When you play a match against another member of the same league, the result is automatically reported to that league.",
+  "Opt out of a league to hide its badge and stop reporting your matches to it. You stay in their Discord server.",
 ];
 
 /** Discord brand mark used on the OAuth button. */
@@ -58,6 +60,7 @@ function DiscordSettingsContent() {
   const [linking, setLinking] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [optOutSaving, setOptOutSaving] = useState<string | null>(null);
   const [syncAttempted, setSyncAttempted] = useState(false);
   const [needsRelink, setNeedsRelink] = useState(false);
   const [availableLeagues, setAvailableLeagues] = useState<AvailableLeague[]>(
@@ -224,6 +227,36 @@ function DiscordSettingsContent() {
     }
   };
 
+  const handleOptOut = async (slug: string, optedOut: boolean) => {
+    setOptOutSaving(slug);
+    setError(null);
+    try {
+      const res = await fetch("/api/users/me/discord", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug, optedOut }),
+      });
+      if (!res.ok) {
+        setError("Failed to update league participation");
+        return;
+      }
+      setStatus((prev) =>
+        prev
+          ? {
+              ...prev,
+              leagues: prev.leagues.map((l) =>
+                l.slug === slug ? { ...l, optedOut } : l,
+              ),
+            }
+          : prev,
+      );
+    } catch {
+      setError("Failed to update league participation");
+    } finally {
+      setOptOutSaving(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -360,6 +393,7 @@ function DiscordSettingsContent() {
                   const memberEntry = status.leagues.find(
                     (l) => l.id === league.id,
                   );
+                  const optedOut = memberEntry?.optedOut === true;
 
                   return (
                     <div
@@ -374,7 +408,11 @@ function DiscordSettingsContent() {
                         <p className="m-0 font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
                           {league.name}
                         </p>
-                        {isMember && memberEntry ? (
+                        {isMember && memberEntry && optedOut ? (
+                          <p className="rc-hint m-0 mt-1">
+                            opted out — no badge, matches are not reported
+                          </p>
+                        ) : isMember && memberEntry ? (
                           <p className="rc-hint m-0 mt-1">
                             joined{" "}
                             {new Date(
@@ -387,10 +425,29 @@ function DiscordSettingsContent() {
                           </p>
                         )}
                       </div>
-                      {isMember ? (
+                      {isMember && optedOut ? (
+                        <Badge tone="warn">opted out</Badge>
+                      ) : isMember ? (
                         <Badge tone="ok">member</Badge>
                       ) : (
                         <Badge>not joined</Badge>
+                      )}
+                      {isMember && (
+                        <RcButton
+                          variant="outline"
+                          size="sm"
+                          tone="warning"
+                          aria-pressed={optedOut}
+                          onClick={() =>
+                            handleOptOut(league.slug, !optedOut)
+                          }
+                          disabled={optOutSaving === league.slug}
+                        >
+                          {optOutSaving === league.slug && (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          )}
+                          {optedOut ? "Opt back in" : "Opt out"}
+                        </RcButton>
                       )}
                     </div>
                   );
@@ -415,7 +472,8 @@ function DiscordSettingsContent() {
             <p className="mt-4 max-w-[68ch] font-rc-sans text-xs leading-relaxed text-rc-fg-muted">
               League memberships are detected based on your Discord server
               memberships. Matches against other league members are reported
-              automatically.
+              automatically unless either player has opted out of that
+              league.
             </p>
           </div>
         </section>

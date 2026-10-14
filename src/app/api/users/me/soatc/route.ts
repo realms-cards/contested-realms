@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { SOATC_LEAGUE_SLUG, setLeagueOptOut } from "@/lib/leagues/membership";
 import { prisma } from "@/lib/prisma";
 import { isSoatcEnabled } from "@/lib/soatc";
 
@@ -26,6 +27,7 @@ export async function GET() {
       select: {
         soatcUuid: true,
         soatcAutoDetect: true,
+        leagueOptOuts: true,
       },
     });
 
@@ -36,6 +38,7 @@ export async function GET() {
     return NextResponse.json({
       soatcUuid: user.soatcUuid,
       soatcAutoDetect: user.soatcAutoDetect,
+      optedOut: user.leagueOptOuts.includes(SOATC_LEAGUE_SLUG),
     });
   } catch (error) {
     console.error("Error fetching SOATC settings:", error);
@@ -61,7 +64,14 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { soatcUuid, soatcAutoDetect } = body;
+    const { soatcUuid, soatcAutoDetect, optedOut } = body;
+
+    if (optedOut !== undefined && typeof optedOut !== "boolean") {
+      return NextResponse.json(
+        { error: "optedOut must be a boolean" },
+        { status: 400 }
+      );
+    }
 
     // Validate UUID format if provided
     if (soatcUuid !== null && soatcUuid !== undefined && soatcUuid !== "") {
@@ -89,18 +99,24 @@ export async function PATCH(request: NextRequest) {
       updateData.soatcAutoDetect = Boolean(soatcAutoDetect);
     }
 
+    if (typeof optedOut === "boolean") {
+      await setLeagueOptOut(session.user.id, SOATC_LEAGUE_SLUG, optedOut);
+    }
+
     const user = await prisma.user.update({
       where: { id: session.user.id },
       data: updateData,
       select: {
         soatcUuid: true,
         soatcAutoDetect: true,
+        leagueOptOuts: true,
       },
     });
 
     return NextResponse.json({
       soatcUuid: user.soatcUuid,
       soatcAutoDetect: user.soatcAutoDetect,
+      optedOut: user.leagueOptOuts.includes(SOATC_LEAGUE_SLUG),
     });
   } catch (error) {
     console.error("Error updating SOATC settings:", error);

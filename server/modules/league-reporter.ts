@@ -365,11 +365,11 @@ export function createLeagueReporter({ prisma }: LeagueReporterDeps) {
       const [winner, loser] = await Promise.all([
         prisma.user.findUnique({
           where: { id: winnerId },
-          select: { discordId: true, name: true },
+          select: { discordId: true, name: true, leagueOptOuts: true },
         }),
         prisma.user.findUnique({
           where: { id: loserId },
-          select: { discordId: true, name: true },
+          select: { discordId: true, name: true, leagueOptOuts: true },
         }),
       ]);
 
@@ -404,8 +404,14 @@ export function createLeagueReporter({ prisma }: LeagueReporterDeps) {
       const loserLeagueIds = new Set(
         loserMemberships.map((m: { leagueId: string }) => m.leagueId),
       );
+      // Either player opting out of a league keeps the match away from it
+      const optedOut = new Set([
+        ...winner.leagueOptOuts,
+        ...loser.leagueOptOuts,
+      ]);
       const leaguesToReport = sharedLeagues.filter(
-        (l: { id: string }) => loserLeagueIds.has(l.id),
+        (l: { id: string; slug: string }) =>
+          loserLeagueIds.has(l.id) && !optedOut.has(l.slug),
       );
 
       if (leaguesToReport.length === 0) return;

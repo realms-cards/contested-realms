@@ -24,6 +24,7 @@ const settingsCache: {
   entry: CacheEntry<{
     soatcUuid: string | null;
     soatcAutoDetect: boolean;
+    optedOut: boolean;
   }> | null;
 } = { entry: null };
 const sharedTournamentCache = new Map<
@@ -57,6 +58,8 @@ export interface SoatcStatus {
   soatcAutoDetect: boolean;
   isParticipant: boolean;
   noUuid?: boolean;
+  /** The user opted out of SOATC: no badge, no league matches */
+  optedOut?: boolean;
   tournament?: SoatcTournamentInfo;
   /** All tournaments the player is registered for */
   tournaments?: SoatcTournamentInfo[];
@@ -153,12 +156,14 @@ export function useSoatcStatus(): UseSoatcStatusResult {
 interface UseSoatcSettingsResult {
   soatcUuid: string | null;
   soatcAutoDetect: boolean;
+  optedOut: boolean;
   loading: boolean;
   saving: boolean;
   error: string | null;
   updateSettings: (settings: {
     soatcUuid?: string | null;
     soatcAutoDetect?: boolean;
+    optedOut?: boolean;
   }) => Promise<boolean>;
   refresh: () => Promise<void>;
 }
@@ -172,6 +177,11 @@ export function useSoatcSettings(): UseSoatcSettingsResult {
   const [soatcAutoDetect, setSoatcAutoDetect] = useState(() =>
     isCacheValid(settingsCache.entry, CACHE_TTL_MS)
       ? settingsCache.entry.data.soatcAutoDetect
+      : false
+  );
+  const [optedOut, setOptedOut] = useState(() =>
+    isCacheValid(settingsCache.entry, CACHE_TTL_MS)
+      ? settingsCache.entry.data.optedOut
       : false
   );
   const [loading, setLoading] = useState(
@@ -192,6 +202,7 @@ export function useSoatcSettings(): UseSoatcSettingsResult {
     if (!force && isCacheValid(settingsCache.entry, CACHE_TTL_MS)) {
       setSoatcUuid(settingsCache.entry.data.soatcUuid);
       setSoatcAutoDetect(settingsCache.entry.data.soatcAutoDetect);
+      setOptedOut(settingsCache.entry.data.optedOut);
       setLoading(false);
       return;
     }
@@ -221,11 +232,13 @@ export function useSoatcSettings(): UseSoatcSettingsResult {
         data: {
           soatcUuid: data.soatcUuid,
           soatcAutoDetect: data.soatcAutoDetect,
+          optedOut: data.optedOut === true,
         },
         timestamp: Date.now(),
       };
       setSoatcUuid(data.soatcUuid);
       setSoatcAutoDetect(data.soatcAutoDetect);
+      setOptedOut(data.optedOut === true);
     } catch (err) {
       console.error("Error fetching SOATC settings:", err);
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -239,6 +252,7 @@ export function useSoatcSettings(): UseSoatcSettingsResult {
     async (settings: {
       soatcUuid?: string | null;
       soatcAutoDetect?: boolean;
+      optedOut?: boolean;
     }): Promise<boolean> => {
       setSaving(true);
       setError(null);
@@ -261,13 +275,17 @@ export function useSoatcSettings(): UseSoatcSettingsResult {
           data: {
             soatcUuid: data.soatcUuid,
             soatcAutoDetect: data.soatcAutoDetect,
+            optedOut: data.optedOut === true,
           },
           timestamp: Date.now(),
         };
-        // Also invalidate status cache since settings changed
+        // Also invalidate status, badge and pairing caches since settings changed
         statusCache.entry = null;
+        playersCache.clear();
+        sharedTournamentCache.clear();
         setSoatcUuid(data.soatcUuid);
         setSoatcAutoDetect(data.soatcAutoDetect);
+        setOptedOut(data.optedOut === true);
         return true;
       } catch (err) {
         console.error("Error updating SOATC settings:", err);
@@ -287,6 +305,7 @@ export function useSoatcSettings(): UseSoatcSettingsResult {
   return {
     soatcUuid,
     soatcAutoDetect,
+    optedOut,
     loading,
     saving,
     error,

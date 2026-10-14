@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { SOATC_LEAGUE_SLUG } from "@/lib/leagues/membership";
 import { prisma } from "@/lib/prisma";
 import { isSoatcEnabled, checkTournamentParticipation } from "@/lib/soatc";
 
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
   try {
     const users = await prisma.user.findMany({
       where: { id: { in: userIds } },
-      select: { id: true, soatcUuid: true },
+      select: { id: true, soatcUuid: true, leagueOptOuts: true },
     });
 
     const results: Record<
@@ -46,7 +47,11 @@ export async function GET(request: NextRequest) {
     > = {};
 
     for (const user of users) {
-      if (!user.soatcUuid) {
+      // Opted-out players show no badge
+      if (
+        !user.soatcUuid ||
+        user.leagueOptOuts.includes(SOATC_LEAGUE_SLUG)
+      ) {
         results[user.id] = { soatcUuid: null, isParticipant: false };
         continue;
       }

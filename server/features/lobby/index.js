@@ -59,6 +59,23 @@ function createLobbyFeature(deps) {
   const loadBotClientCtor = deps.loadBotClientCtor;
   const loadBotCardIdMapFn = deps.loadBotCardIdMapFn || null;
   const prisma = deps.prisma || null;
+
+  // A SOATC league match involves every lobby player, so one opted-out player
+  // (User.leagueOptOuts contains "soatc") keeps the match out of the league.
+  async function anySoatcOptOut(playerIds) {
+    if (!prisma) return false;
+    try {
+      const count = await prisma.user.count({
+        where: {
+          id: { in: Array.from(playerIds || []) },
+          leagueOptOuts: { has: "soatc" },
+        },
+      });
+      return count > 0;
+    } catch {
+      return false;
+    }
+  }
   const PORT = deps.port;
   const isCpuPlayerId = deps.isCpuPlayerId;
   const _rtcMigration = deps.rtcMigration || null;
@@ -787,6 +804,10 @@ function createLobbyFeature(deps) {
     console.log(
       `[Match] Timer config: ${timer ? JSON.stringify(timer) : "untimed"}`,
     );
+    const leagueMatch =
+      soatcLeagueMatch && !(await anySoatcOptOut(lobby.playerIds))
+        ? soatcLeagueMatch
+        : null;
     // Second Player Seer: opt-in at match creation (host checkbox for
     // constructed/precon, sealed/draft carry it inside their configs)
     const seerEnabled =
@@ -836,7 +857,7 @@ function createLobbyFeature(deps) {
             }
           : null,
       draftConfig: matchType === "draft" ? draftConfig : null,
-      soatcLeagueMatch: soatcLeagueMatch || null,
+      soatcLeagueMatch: leagueMatch,
       playerDecks: new Map(),
       draftState: null,
       game: {
@@ -1872,7 +1893,11 @@ function createLobbyFeature(deps) {
       if (!lobby) return;
 
       // Update the lobby's SOATC league match status
-      lobby.soatcLeagueMatch = payload?.soatcLeagueMatch || null;
+      const requested = payload?.soatcLeagueMatch || null;
+      lobby.soatcLeagueMatch =
+        requested && !(await anySoatcOptOut(lobby.playerIds))
+          ? requested
+          : null;
       markLobbyActive(lobby);
 
       const info = getLobbyInfo(lobby);

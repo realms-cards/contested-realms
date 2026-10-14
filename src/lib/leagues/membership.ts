@@ -18,6 +18,43 @@ export interface LeagueInfo {
 
 export interface LeagueMembershipInfo extends LeagueInfo {
   joinedAt: Date;
+  /** The user opted out: no badge, no match reporting for this league */
+  optedOut: boolean;
+}
+
+/** Opt-out key for Sorcerers at the Core, which has no League row */
+export const SOATC_LEAGUE_SLUG = "soatc";
+
+/**
+ * Get the league slugs a user has opted out of.
+ */
+export async function getLeagueOptOuts(userId: string): Promise<string[]> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { leagueOptOuts: true },
+  });
+  return user?.leagueOptOuts ?? [];
+}
+
+/**
+ * Opt a user out of (or back into) a league by slug.
+ * Kept separate from membership so it survives Discord resyncs.
+ */
+export async function setLeagueOptOut(
+  userId: string,
+  slug: string,
+  optedOut: boolean,
+): Promise<string[]> {
+  const current = await getLeagueOptOuts(userId);
+  const next = optedOut
+    ? Array.from(new Set([...current, slug]))
+    : current.filter((s) => s !== slug);
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { leagueOptOuts: next },
+    select: { leagueOptOuts: true },
+  });
+  return user.leagueOptOuts;
 }
 
 /**
@@ -75,19 +112,7 @@ export async function syncLeagueMemberships(
   }
 
   // Return the current state
-  const updated = await prisma.leagueMembership.findMany({
-    where: { userId },
-    include: { league: true },
-  });
-
-  return updated.map((m) => ({
-    id: m.league.id,
-    slug: m.league.slug,
-    name: m.league.name,
-    badgeColor: m.league.badgeColor,
-    iconUrl: m.league.iconUrl,
-    joinedAt: m.joinedAt,
-  }));
+  return getUserLeagues(userId);
 }
 
 /**
@@ -96,10 +121,13 @@ export async function syncLeagueMemberships(
 export async function getUserLeagues(
   userId: string,
 ): Promise<LeagueMembershipInfo[]> {
-  const memberships = await prisma.leagueMembership.findMany({
-    where: { userId },
-    include: { league: true },
-  });
+  const [memberships, optOuts] = await Promise.all([
+    prisma.leagueMembership.findMany({
+      where: { userId },
+      include: { league: true },
+    }),
+    getLeagueOptOuts(userId),
+  ]);
 
   return memberships.map((m) => ({
     id: m.league.id,
@@ -108,16 +136,24 @@ export async function getUserLeagues(
     badgeColor: m.league.badgeColor,
     iconUrl: m.league.iconUrl,
     joinedAt: m.joinedAt,
+    optedOut: optOuts.includes(m.league.slug),
   }));
 }
 
 /**
  * Get leagues shared between two users (for match reporting).
+ * Leagues either user opted out of are excluded.
  */
 export async function getSharedLeagues(
   userId1: string,
   userId2: string,
 ): Promise<LeagueInfo[]> {
+  const optOuts = await prisma.user.findMany({
+    where: { id: { in: [userId1, userId2] } },
+    select: { leagueOptOuts: true },
+  });
+  const excluded = new Set(optOuts.flatMap((u) => u.leagueOptOuts));
+
   // Find leagues where both users are members
   const user1Leagues = await prisma.leagueMembership.findMany({
     where: { userId: userId1 },
@@ -136,7 +172,7 @@ export async function getSharedLeagues(
   });
 
   return sharedMemberships
-    .filter((m) => m.league.enabled)
+    .filter((m) => m.league.enabled && !excluded.has(m.league.slug))
     .map((m) => ({
       id: m.league.id,
       slug: m.league.slug,
@@ -154,10 +190,17 @@ export async function getLeaguesForUsers(
 ): Promise<Record<string, LeagueInfo[]>> {
   if (userIds.length === 0) return {};
 
-  const memberships = await prisma.leagueMembership.findMany({
-    where: { userId: { in: userIds } },
-    include: { league: true },
-  });
+  const [memberships, users] = await Promise.all([
+    prisma.leagueMembership.findMany({
+      where: { userId: { in: userIds } },
+      include: { league: true },
+    }),
+    prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, leagueOptOuts: true },
+    }),
+  ]);
+  const optOutsByUser = new Map(users.map((u) => [u.id, u.leagueOptOuts]));
 
   const result: Record<string, LeagueInfo[]> = {};
   for (const uid of userIds) {
@@ -166,6 +209,7 @@ export async function getLeaguesForUsers(
 
   for (const m of memberships) {
     if (!m.league.enabled) continue;
+    if (optOutsByUser.get(m.userId)?.includes(m.league.slug)) continue;
     const entry: LeagueInfo = {
       id: m.league.id,
       slug: m.league.slug,

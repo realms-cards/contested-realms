@@ -1,11 +1,16 @@
 /**
  * GET  /api/users/me/discord — Returns Discord link status + league memberships
+ * PATCH /api/users/me/discord — Opts out of (or back into) a league: { slug, optedOut }
  * DELETE /api/users/me/discord — Unlinks Discord and removes league memberships
  */
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerAuthSession } from "@/lib/auth";
-import { getUserLeagues, removeAllMemberships } from "@/lib/leagues/membership";
+import {
+  getUserLeagues,
+  removeAllMemberships,
+  setLeagueOptOut,
+} from "@/lib/leagues/membership";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -47,12 +52,61 @@ export async function GET() {
         badgeColor: l.badgeColor,
         iconUrl: l.iconUrl,
         joinedAt: l.joinedAt.toISOString(),
+        optedOut: l.optedOut,
       })),
     });
   } catch (err) {
     console.error("[users/me/discord] Error:", err);
     return NextResponse.json(
       { error: "Failed to load Discord status" },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  const session = await getServerAuthSession();
+  if (!session?.user?.id) {
+    return NextResponse.json(
+      { error: "Authentication required" },
+      { status: 401 },
+    );
+  }
+
+  const body = (await request.json().catch(() => null)) as {
+    slug?: unknown;
+    optedOut?: unknown;
+  } | null;
+  if (
+    !body ||
+    typeof body.slug !== "string" ||
+    typeof body.optedOut !== "boolean"
+  ) {
+    return NextResponse.json(
+      { error: "slug (string) and optedOut (boolean) required" },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const league = await prisma.league.findUnique({
+      where: { slug: body.slug },
+      select: { id: true },
+    });
+    if (!league) {
+      return NextResponse.json({ error: "Unknown league" }, { status: 404 });
+    }
+
+    const optOuts = await setLeagueOptOut(
+      session.user.id,
+      body.slug,
+      body.optedOut,
+    );
+    return NextResponse.json({ leagueOptOuts: optOuts });
+  } catch (err) {
+    console.error("[users/me/discord] Opt-out error:", err);
+    return NextResponse.json(
+      { error: "Failed to update league opt-out" },
       { status: 500 },
     );
   }

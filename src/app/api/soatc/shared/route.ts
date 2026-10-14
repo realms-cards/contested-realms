@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { SOATC_LEAGUE_SLUG } from "@/lib/leagues/membership";
 import { prisma } from "@/lib/prisma";
 import { checkSharedTournament, isSoatcEnabled } from "@/lib/soatc";
 
@@ -29,16 +30,23 @@ export async function GET(request: NextRequest) {
     const [currentUser, opponent] = await Promise.all([
       prisma.user.findUnique({
         where: { id: session.user.id },
-        select: { soatcUuid: true, soatcAutoDetect: true },
+        select: { soatcUuid: true, soatcAutoDetect: true, leagueOptOuts: true },
       }),
       prisma.user.findUnique({
         where: { id: opponentId },
-        select: { soatcUuid: true, soatcAutoDetect: true },
+        select: { soatcUuid: true, soatcAutoDetect: true, leagueOptOuts: true },
       }),
     ]);
 
     if (!currentUser || !opponent) {
       return NextResponse.json({ shared: false, reason: "user_not_found" });
+    }
+
+    if (
+      currentUser.leagueOptOuts.includes(SOATC_LEAGUE_SLUG) ||
+      opponent.leagueOptOuts.includes(SOATC_LEAGUE_SLUG)
+    ) {
+      return NextResponse.json({ shared: false, reason: "opted_out" });
     }
 
     if (!currentUser.soatcUuid || !opponent.soatcUuid) {

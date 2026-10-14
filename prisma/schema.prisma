@@ -253,6 +253,8 @@ model User {
   showGrid                Boolean                  @default(true)
   soatcAutoDetect         Boolean                  @default(false)
   soatcUuid               String?
+  /// League slugs (League.slug, or "soatc") the user has opted out of: no badge, no reporting, no league flagging
+  leagueOptOuts           String[]                 @default([])
   discordId               String?                  @unique
   discordUsername         String?
   discordGuildIds         String?
