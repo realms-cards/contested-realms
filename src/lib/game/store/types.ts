@@ -553,6 +553,10 @@ export type PermanentItem = EntityBase<CardRef> & {
   /** Per-card size multiplier, so a crowded tile can shrink its cards to fit side by side
    *  instead of stacking them on top of each other. 1 (or absent) is full size. */
   scale?: number;
+  /** Extra height, in stack layers, for a card that reaches over its neighbours (engine mode's
+   *  auras and multi-square bodies, pinned at the crossing of their squares), so it never sits
+   *  level with a crowded neighbouring tile's cards. Absent everywhere else: no lift. */
+  lift?: number;
 };
 
 export type Permanents = Record<CellKey, PermanentItem[]>;

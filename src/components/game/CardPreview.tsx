@@ -234,9 +234,9 @@ export default function CardPreview({
     }
   })();
 
-  const base = isSite
-    ? "aspect-[4/3] rounded-rc-lg overflow-hidden bg-black/20 backdrop-blur-sm shadow-rc-panel ring-1 ring-rc-line/18"
-    : "aspect-[3/4] rounded-rc-lg overflow-hidden bg-black/20 backdrop-blur-sm shadow-rc-panel ring-1 ring-rc-line/18";
+  // No frame, ring or backing plate: the card's own art is the preview. The box is only the
+  // layout slot; a drop shadow follows the art's edge instead of drawing a rectangle.
+  const base = isSite ? "aspect-[4/3]" : "aspect-[3/4]";
 
   const imageEl = (
     <div className={`relative ${base}`} style={{ width }}>
@@ -248,7 +248,7 @@ export default function CardPreview({
           isSite
             ? "object-contain rotate-90 scale-[1.333] origin-center"
             : "object-contain"
-        } object-center`}
+        } object-center drop-shadow-[0_10px_24px_rgba(0,0,0,0.55)]`}
         sizes={`${Math.round(width)}px`}
         priority
         unoptimized

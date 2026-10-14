@@ -68,12 +68,15 @@ export function engineTileNumber(x: number, y: number): number {
 /** The engine writes every line in the third person ("You plays…"), since "You" is just the
  *  seat's name. Fix the verb when a line is about the player. */
 function fixPerson(text: string): string {
-  return text.replace(/^You ([a-z]+)\b/, (whole, verb: string) => {
-    if (/(?:s|sh|ch|x|z)es$/.test(verb)) return `You ${verb.slice(0, -2)}`; // banishes → banish
-    if (/[^aeiou]ies$/.test(verb)) return `You ${verb.slice(0, -3)}y`; // tries → try
-    if (/s$/.test(verb) && !/ss$/.test(verb)) return `You ${verb.slice(0, -1)}`; // plays → play
-    return whole; // not a third-person verb ("You have…")
-  });
+  // at the start of the line, or after a card's "Name: " ("Thaïs's bargain: You plays this turn…")
+  return text
+    .replace(/(^|: )You ([a-z]+)\b/, (whole, lead: string, verb: string) => {
+      if (/(?:s|sh|ch|x|z)es$/.test(verb)) return `${lead}You ${verb.slice(0, -2)}`; // banishes → banish
+      if (/[^aeiou]ies$/.test(verb)) return `${lead}You ${verb.slice(0, -3)}y`; // tries → try
+      if (/s$/.test(verb) && !/ss$/.test(verb)) return `${lead}You ${verb.slice(0, -1)}`; // plays → play
+      return whole; // not a third-person verb ("You have…")
+    })
+    .replace(/\b(for|to|from|against) You\b/g, "$1 you");
 }
 
 export function localizeEngineText(text: string): string {

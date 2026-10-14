@@ -19,7 +19,6 @@ import CardOutline from "@/lib/game/components/CardOutline";
 import CardPlane from "@/lib/game/components/CardPlane";
 import ResolverOutline from "@/lib/game/components/ResolverOutline";
 import { UnitPickCapture, UnitPickSpread } from "@/lib/game/components/UnitPickTarget";
-import { occupiedCells } from "@/lib/game/cpu/evalScope";
 import {
   CARD_LONG,
   CARD_SHORT,
@@ -30,6 +29,7 @@ import {
   PLAYER_COLORS,
   TILE_SIZE,
 } from "@/lib/game/constants";
+import { occupiedCells } from "@/lib/game/cpu/evalScope";
 import {
   permanentUnitToken,
   tileUnitTokens,
@@ -744,7 +744,9 @@ export function PermanentStack({
           isSelected && !isBurrowed && !tokenSiteReplace
             ? (nonBurrowedCount - nonBurrowedIdx + 1) * layerLift
             : 0;
-        const yPos = baseY + stackLift + selectionLift;
+        // only set by engine mode's pinned cards; every other mode leaves it out
+        const pinnedLift = p.lift ? p.lift * layerLift : 0;
+        const yPos = baseY + stackLift + selectionLift + pinnedLift;
 
         const remotePermanentColor = getRemoteHighlightColor(p.card ?? null, {
           instanceKey: permId,

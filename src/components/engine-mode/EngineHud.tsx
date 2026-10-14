@@ -1,9 +1,11 @@
 "use client";
 
+import { Icon } from "@iconify/react";
 import { useEffect, useRef, useState } from "react";
 import { RcButton } from "@/components/ui/rc-button";
 import { soundManager } from "@/lib/audio/soundManager";
-import { HUMAN_SEAT, useEngineSession } from "@/lib/engine-mode/session";
+import { controlSwap, HUMAN_SEAT, humanDecisionSeat, useEngineSession } from "@/lib/engine-mode/session";
+import { PLAYER_COLORS } from "@/lib/game/constants";
 import type { EngineInteraction } from "./useEngineInteraction";
 
 const BAR =
@@ -17,15 +19,26 @@ const PHASE_LABEL: Record<string, string> = {
   over: "Game over",
 };
 
-/** Turn status and the result. Every action lives in EngineActionRail. */
+/**
+ * Turn status and the result. Every action lives in EngineActionRail.
+ *
+ * The defaults are the 3D table's floating layout. The 2D phone layout, where nothing may
+ * float over the board, opts out of the pieces that would: it draws the turn status in its
+ * own seat bars (`hideStatusPill`) and moves the error toast off the hand strip and action
+ * bar to the top edge (`toastPlacement="top"`).
+ */
 export default function EngineHud({
   interaction,
   onRestart,
   onExit,
+  hideStatusPill = false,
+  toastPlacement = "corner",
 }: {
   interaction: EngineInteraction;
   onRestart: () => void;
   onExit: () => void;
+  hideStatusPill?: boolean;
+  toastPlacement?: "corner" | "top";
 }) {
   const game = useEngineSession((s) => s.game);
   useEngineSession((s) => s.rev);
@@ -59,8 +72,9 @@ export default function EngineHud({
       }
       if (e.key !== "Enter") return;
       const g = s.game;
-      // only on our own main phase with nothing else pending
-      if (!g || g.phase !== "main" || g.activePlayer !== HUMAN_SEAT || g.prompts.length) return;
+      // only on a main phase whose decisions are ours (our own, or the one we pilot under
+      // Courtesan Thaïs — never ours while the computer is playing it) with nothing pending
+      if (!g || g.phase !== "main" || humanDecisionSeat(g) === null || g.prompts.length) return;
       e.preventDefault();
       if (confirmRef.current) return confirmRef.current();
       s.requestEndTurn();
@@ -85,34 +99,64 @@ export default function EngineHud({
 
   if (!game) return null;
   const myTurn = game.activePlayer === HUMAN_SEAT;
-  const myMain = myTurn && game.phase === "main" && game.prompts.length === 0;
+  const myMain = humanDecisionSeat(game) !== null && game.phase === "main" && game.prompts.length === 0;
+  // Courtesan Thaïs: who is really playing this turn, said for the whole of it
+  const swap = controlSwap(game);
+  const swapDecider = swap && (swap.kind === "computer-plays-yours" || swap.kind === "computer-will-play-yours") ? "p2" : "p1";
 
   return (
     <>
-      <div className="pointer-events-none fixed inset-x-0 top-3 z-[150] flex justify-center px-4">
-        <div className={BAR} role="status">
-          <span className="font-rc-mono tabular-nums text-rc-fg-subtle">Turn {Math.max(1, game.turn)}</span>
-          {/* the mulligan is simultaneous — no one's "turn" yet */}
-          {game.phase !== "mulligan" && (
-            <span className={myTurn ? "text-rc-accent-link" : "text-rc-fg-muted"}>
-              {myTurn ? "Your turn" : "Computer's turn"}
+      {!hideStatusPill && (
+        <div className="pointer-events-none fixed inset-x-0 top-3 z-[150] flex justify-center px-4">
+          <div className={BAR} role="status">
+            <span className="font-rc-mono tabular-nums text-rc-fg-subtle">Turn {Math.max(1, game.turn)}</span>
+            {/* the mulligan is simultaneous — no one's "turn" yet */}
+            {game.phase !== "mulligan" && (
+              <span className={myTurn ? "text-rc-accent-link" : "text-rc-fg-muted"}>
+                {myTurn ? "Your turn" : "Computer's turn"}
+              </span>
+            )}
+            <span className="text-rc-fg-subtle">
+              {game.phase === "mulligan" && !portalsRevealed ? "Harbinger setup" : (PHASE_LABEL[game.phase] ?? game.phase)}
             </span>
-          )}
-          <span className="text-rc-fg-subtle">
-            {game.phase === "mulligan" && !portalsRevealed ? "Harbinger setup" : (PHASE_LABEL[game.phase] ?? game.phase)}
-          </span>
-          {layer === "subsurface" && <span className="text-rc-info-ink">Subsurface view</span>}
-          {botThinking && <span className="text-rc-info-ink">thinking…</span>}
-          {myMain && !interaction.picking && (
-            <span className="hidden text-rc-fg-muted md:inline">Click a highlighted card or unit to act.</span>
-          )}
+            {layer === "subsurface" && <span className="text-rc-info-ink">Subsurface view</span>}
+            {botThinking && <span className="text-rc-info-ink">thinking…</span>}
+            {myMain && !interaction.picking && (
+              <span className="hidden text-rc-fg-muted md:inline">Click a highlighted card or unit to act.</span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Errors stay bottom-right; the actions themselves now live in the vertical
-          EngineActionRail under the mana readout. */}
+      {/* Courtesan Thaïs on the 3D table: a second line under the status pill for as long as
+          the swap lasts (the 2D layout mounts ControlBanner2D in its own place instead). */}
+      {!hideStatusPill && swap && (
+        <div className="pointer-events-none fixed inset-x-0 top-14 z-[150] flex justify-center px-4">
+          <div
+            role="status"
+            aria-live="polite"
+            data-control-swap={swap.kind}
+            className={`flex max-w-[min(92vw,560px)] items-center gap-2 rounded-full border px-3 py-1 font-rc-sans shadow-rc-panel ${
+              swap.now ? "border-rc-line/30 bg-[rgba(12,16,30,0.94)] text-sm text-rc-fg" : "border-rc-line/18 bg-[rgba(9,13,25,0.85)] text-xs text-rc-fg-muted"
+            }`}
+            style={{ borderColor: swap.now ? `${PLAYER_COLORS[swapDecider]}99` : undefined }}
+          >
+            <Icon icon="game-icons:puppet" aria-hidden className="h-4 w-4 flex-none" style={{ color: PLAYER_COLORS[swapDecider] }} />
+            <span className="min-w-0 truncate">{swap.text}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Error toast: bottom-right on the 3D table, top edge in the docked 2D layout
+          (toastPlacement="top"). The actions live in EngineActionRail / ActionBar2D. */}
       {errorShown && (
-        <div className="pointer-events-none fixed bottom-4 right-16 z-[150] flex justify-end">
+        <div
+          className={
+            toastPlacement === "top"
+              ? "pointer-events-none fixed inset-x-0 top-[max(0.5rem,env(safe-area-inset-top))] z-[150] flex justify-center px-4"
+              : "pointer-events-none fixed bottom-4 right-16 z-[150] flex justify-end"
+          }
+        >
           <div className="rc-toast max-w-xs text-sm" data-tone="danger" role="alert">
             {errorShown}
           </div>

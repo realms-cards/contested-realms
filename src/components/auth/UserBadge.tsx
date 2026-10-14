@@ -109,6 +109,7 @@ export default function UserBadge({
     toggleGamepadLifeControls,
     togglePreferRaster,
     toggleMonochromeMode,
+    setBoardView,
   } = useGraphicsSettings();
   const contextMenuIcons = useGameStore((s) => s.contextMenuIcons);
   const toggleContextMenuIcons = useGameStore((s) => s.toggleContextMenuIcons);
@@ -862,11 +863,12 @@ export default function UserBadge({
         </div>
       )}
       {/* Settings overlay. Portaled to <body>: the nav header's backdrop blur
-          would otherwise confine this fixed overlay to the header. */}
+          would otherwise confine this fixed overlay to the header. Stacked above
+          the sheets a badge can sit in (the 2D engine board's More sheet, z-185). */}
       {settingsOpen &&
         createPortal(
         <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-[rgba(6,10,20,0.82)] p-4 backdrop-blur-[4px]"
+          className="fixed inset-0 z-[190] flex items-center justify-center bg-[rgba(6,10,20,0.82)] p-4 backdrop-blur-[4px]"
           onMouseDown={(e) => {
             if (e.currentTarget === e.target) handleCloseSettings();
           }}
@@ -1303,6 +1305,40 @@ export default function UserBadge({
                           type="button"
                           aria-pressed={on}
                           onClick={() => setSiteSaturation(step.value)}
+                          className={`flex-1 rounded-rc-md border px-2 py-1 font-rc-mono text-[10px] transition-colors ${
+                            on
+                              ? "border-rc-accent-link/60 bg-rc-accent-link/12 text-rc-fg-strong"
+                              : "border-rc-line/22 text-rc-fg-muted hover:border-rc-accent/45"
+                          }`}
+                        >
+                          {step.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {/* Board View — which board the Rules Engine mode draws; Auto is 2D on phones. */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-rc-mono text-[11px] font-medium text-rc-fg-strong">
+                      Board View
+                    </span>
+                  </div>
+                  <div className="flex gap-1">
+                    {(
+                      [
+                        { label: "Auto", value: "auto" },
+                        { label: "3D", value: "3d" },
+                        { label: "2D", value: "2d" },
+                      ] as const
+                    ).map((step) => {
+                      const on = (graphicsSettings.boardView ?? "auto") === step.value;
+                      return (
+                        <button
+                          key={step.value}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => setBoardView(step.value)}
                           className={`flex-1 rounded-rc-md border px-2 py-1 font-rc-mono text-[10px] transition-colors ${
                             on
                               ? "border-rc-accent-link/60 bg-rc-accent-link/12 text-rc-fg-strong"

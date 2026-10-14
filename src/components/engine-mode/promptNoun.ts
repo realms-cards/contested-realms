@@ -24,5 +24,16 @@ export function pickNoun(tokens: string[]): { one: string; many: string } | null
   }
 }
 
+/**
+ * Where the pick's targets are, for the banner's hint: cards in a hand are not "on the board"
+ * (the first-site and mulligan prompts light the hand). A hand pick for the seat you pilot
+ * under Courtesan Thaïs is "their" hand.
+ */
+export function pickPlace(tokens: string[]): string {
+  const hands = tokens.map((token) => parsePickToken(token)).filter((parsed) => parsed?.kind === "hand");
+  if (!tokens.length || hands.length !== tokens.length) return "on the board";
+  return hands.every((parsed) => parsed && "seat" in parsed && parsed.seat === "p1") ? "in your hand" : "in their hand";
+}
+
 /** Same function, named so a test can reach it without rendering the board. */
 export const pickNounForTest = pickNoun;

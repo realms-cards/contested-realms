@@ -21,13 +21,15 @@ import type { BotReply, BotRequest } from "@untested-realm/bot/bot.worker";
 import { loadCardIndex } from "./cardIndex";
 import { localizeEngineText } from "./coords";
 import type { LegalReply, LegalRequest } from "./engine-legal.worker";
-import { narrate } from "./narration";
-import { clearEngineGame, saveEngineGame } from "./persistence";
+import { narrate, narratePromptAnswer, snapshotPromptAnswer } from "./narration";
+import type { EngineFeedNote, Narration } from "./narration";
+import { clearEngineGame, readControlTurns, readFeedNotes, saveEngineGame } from "./persistence";
 import type { SavedEngineGame } from "./persistence";
 import {
   boardReveal,
   damageSince,
   damageSnapshot,
+  disabledUnits,
   harbingerTiles,
   hiddenLayerCounts,
   projectView,
@@ -35,6 +37,7 @@ import {
   sitesLostSince,
 } from "./projection";
 import type { BoardLayer, BoardReveal, DamageSnapshot, HiddenCounts, ProjectedState } from "./projection";
+import "./scriptPatches";
 
 export const HUMAN_SEAT: PlayerId = 0;
 
@@ -62,6 +65,69 @@ export function isPiloting(game: EngineState): boolean {
   const seat = humanDecisionSeat(game);
   return seat !== null && seat !== HUMAN_SEAT;
 }
+
+const isSeat = (value: unknown): value is PlayerId => value === 0 || value === 1;
+
+/** The seat whose turn is being played by the OTHER seat right now (Courtesan Thaïs), or null. */
+export function thaisActiveSeat(game: EngineState): PlayerId | null {
+  const flow: unknown = game.flow;
+  if (!flow || typeof flow !== "object" || !("thaisActive" in flow)) return null;
+  return isSeat(flow.thaisActive) ? flow.thaisActive : null;
+}
+
+/** The seats whose NEXT turn the other seat will play (Courtesan Thaïs was cast). */
+export function thaisPendingSeats(game: EngineState): PlayerId[] {
+  const flow: unknown = game.flow;
+  if (!flow || typeof flow !== "object" || !("thaisPending" in flow) || !Array.isArray(flow.thaisPending)) return [];
+  return flow.thaisPending.filter(isSeat);
+}
+
+export type ControlSwapKind = "computer-plays-yours" | "you-play-theirs" | "computer-will-play-yours" | "you-will-play-theirs";
+
+export interface ControlSwap {
+  kind: ControlSwapKind;
+  /** true for the turn being played right now; false for the announcement of the next one */
+  now: boolean;
+  text: string;
+}
+
+/**
+ * Who is playing whose turn under Courtesan Thaïs, as one sentence for a banner — the turn in
+ * progress (`flow.thaisActive`) first, else the swap the next turn will bring
+ * (`flow.thaisPending` naming the seat whose turn comes next). Null when control is normal.
+ */
+export function controlSwap(game: EngineState): ControlSwap | null {
+  if (game.phase === "over") return null;
+  const active = thaisActiveSeat(game);
+  if (active === HUMAN_SEAT) {
+    return { kind: "computer-plays-yours", now: true, text: "Courtesan Thaïs: the Computer is playing your turn" };
+  }
+  if (active === BOT_SEAT) {
+    return { kind: "you-play-theirs", now: true, text: "Courtesan Thaïs: you are playing the Computer's turn" };
+  }
+  const next: PlayerId = game.activePlayer === HUMAN_SEAT ? BOT_SEAT : HUMAN_SEAT;
+  if (!thaisPendingSeats(game).includes(next)) return null;
+  return next === HUMAN_SEAT
+    ? { kind: "computer-will-play-yours", now: false, text: "Courtesan Thaïs: the Computer will play your next turn" }
+    : { kind: "you-will-play-theirs", now: false, text: "Courtesan Thaïs: you will play the Computer's next turn" };
+}
+
+/**
+ * Which of the log lines the computer's last action wrote become toasts. Its own seat's lines;
+ * while it is playing the HUMAN's turn (Courtesan Thaïs) the lines it writes on our seat too —
+ * those are its moves, not ours; and Thaïs's own bargain line whichever seat it is tagged with,
+ * since it announces the swap. Our own actions never come through here (see `committed`).
+ */
+export function linesForToast(
+  log: readonly { player: PlayerId | null; msg: string }[],
+  from: number,
+  pilotedUs: boolean,
+): string[] {
+  return log
+    .slice(from)
+    .filter((l) => l.player === BOT_SEAT || (pilotedUs && l.player === HUMAN_SEAT) || /Thaïs's bargain/.test(l.msg))
+    .map((l) => l.msg);
+}
 const UNDO_LIMIT = 80;
 /**
  * How fast the computer plays. Our CPU matches use the same policy (bots/action-pacing.js):
@@ -77,6 +143,8 @@ const BOT_TURN_START_MS = 1100;
 const BOT_HOLD_POLL_MS = 400;
 /** at most this many of the computer's log lines become toasts per action */
 const TOAST_LINES = 2;
+/** feed notes kept per match (the feed only reads the last 200 log lines anyway) */
+const FEED_NOTES_KEPT = 60;
 
 export type BotLevel = "quick" | "thinking";
 const BOT_BUDGET_MS: Record<BotLevel, number> = { quick: 1500, thinking: 20000 };
@@ -87,8 +155,16 @@ interface EngineSession {
   rev: number;
   botLevel: BotLevel;
   botThinking: boolean;
-  /** what the computer just did, in plain language (null on the human's turn) */
-  narration: { text: string; seq: number } | null;
+  /** what the computer just did, in plain language (null on the human's turn); `cells` are the
+   *  board tokens it lit (tiles, units) */
+  narration: { text: string; seq: number; cells?: readonly string[] } | null;
+  /**
+   * Feed entries the engine's log cannot give on its own (the card a toll discarded), keyed to
+   * the log lines they explain. Pruned when an undo rewinds past them.
+   */
+  feedNotes: EngineFeedNote[];
+  /** turns played under Courtesan Thaïs: engine turn → the seat whose turn the OTHER seat played */
+  controlTurns: Record<number, PlayerId>;
   /** identifies this match, so one tab never deletes another tab's saved game */
   matchId: string;
   /** which layer the board shows (Untested Realm's subsurface view) */
@@ -141,6 +217,25 @@ let bannedTurn = -1;
 let lastProjection: ProjectedState | null = null;
 let unsubscribeStore: (() => void) | null = null;
 let toastedLogLength = 0;
+/** Views that already narrate the computer's lines on their own surfaces opt out of the toasts. */
+let botLineToastHolds = 0;
+
+/**
+ * Stop toasting the computer's log lines while the caller is mounted (the 2D view says every
+ * one in its status line and feed, and the toast box would cover the hand or the board).
+ * Returns the release. A counter, so overlapping holders cannot re-enable it for each other.
+ * It has to happen at the source: the toast host listens on `window` itself, where listeners
+ * run in registration order whatever their capture flag, so a later listener cannot swallow it.
+ */
+export function holdBotLineToasts(): () => void {
+  botLineToastHolds += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    botLineToastHolds -= 1;
+  };
+}
 /** The shared store's transport/seat, borrowed for the match and put back on stop(). */
 let borrowed: {
   transport: GameState["transport"];
@@ -196,8 +291,9 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         source,
       );
     }
-    // `unitPower` needs the full engine state, which only this side has — see its docblock.
-    const projection = projectView(view, layer, get().portalsRevealed, unitPower(game));
+    // `unitPower` and `disabledUnits` need the full engine state, which only this side has —
+    // see their docblocks.
+    const projection = projectView(view, layer, get().portalsRevealed, unitPower(game), disabledUnits(game));
     lastProjection = projection;
     // the sound director diffs store updates; tag who caused this one (cosmetic ones stay silent)
     withSfxSource(source, () => useGameStore.setState(projection));
@@ -235,12 +331,13 @@ export const useEngineSession = create<EngineSession>((set, get) => {
    * seats on the tile the thing actually happened on. Toasting your own lines here would
    * narrate actions you just took yourself.
    */
-  function toastNewBotLines(game: EngineState) {
-    const fresh = game.log.slice(toastedLogLength).filter((l) => l.player === BOT_SEAT);
+  function toastNewBotLines(game: EngineState, pilotedUs: boolean) {
+    const fresh = linesForToast(game.log, toastedLogLength, pilotedUs);
     toastedLogLength = game.log.length;
+    if (botLineToastHolds > 0) return;
     for (const line of fresh.slice(-TOAST_LINES)) {
       try {
-        window.dispatchEvent(new CustomEvent("app:toast", { detail: { message: localizeEngineText(line.msg) } }));
+        window.dispatchEvent(new CustomEvent("app:toast", { detail: { message: localizeEngineText(line) } }));
       } catch {
         // toasts are decoration
       }
@@ -252,8 +349,8 @@ export const useEngineSession = create<EngineSession>((set, get) => {
    * disk before the player can reload — no debounce and no flush window to lose actions in.
    */
   function persist() {
-    const { game, botLevel, portalsRevealed, layer, matchId } = get();
-    if (game) saveEngineGame(game, { botLevel, portalsRevealed, layer, matchId });
+    const { game, botLevel, portalsRevealed, layer, matchId, controlTurns, feedNotes } = get();
+    if (game) saveEngineGame(game, { botLevel, portalsRevealed, layer, matchId, controlTurns, feedNotes });
   }
 
   /**
@@ -297,18 +394,27 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     });
   }
 
-  function committed(game: EngineState, source: SfxSource, error: string | null = null) {
-    set((s) => ({
-      rev: s.rev + 1,
-      lastError: error,
-      canUndo: history.length > 0,
-      legal: null,
-      decisionSeat: humanDecisionSeat(game),
-      endTurnConfirm: false,
-    }));
+  function committed(game: EngineState, source: SfxSource, error: string | null = null, pilotedUs = false) {
+    const logLength = game.log.length;
+    const swapped = thaisActiveSeat(game);
+    set((s) => {
+      // an undo rewound the log: notes about lines that no longer exist would attach to new ones
+      const notes = s.feedNotes.filter((n) => n.after < logLength && n.lines.every((l) => l < logLength));
+      const turns = swapped !== null && s.controlTurns[game.turn] !== swapped ? { ...s.controlTurns, [game.turn]: swapped } : s.controlTurns;
+      return {
+        rev: s.rev + 1,
+        lastError: error,
+        canUndo: history.length > 0,
+        legal: null,
+        decisionSeat: humanDecisionSeat(game),
+        endTurnConfirm: false,
+        feedNotes: notes.length === s.feedNotes.length ? s.feedNotes : notes,
+        controlTurns: turns,
+      };
+    });
     persist();
     project(game, source);
-    if (source === "remote") toastNewBotLines(game);
+    if (source === "remote") toastNewBotLines(game, pilotedUs);
     else toastedLogLength = game.log.length;
     requestLegal(game);
     scheduleBot();
@@ -435,16 +541,17 @@ export const useEngineSession = create<EngineSession>((set, get) => {
   }
 
   /** Show what the computer just did, and give its result room to be read. */
-  function publish(story: ReturnType<typeof narrate>) {
+  function publish(story: Narration | null) {
     if (!story) {
       // still pace: an unnarrated action (a prompt answer) should not snap past the eye
       nextBotAt = Date.now() + BOT_GAP_MS;
       return;
     }
-    set({ narration: { text: story.text, seq: ++narrationSeq } });
+    set({ narration: { text: story.text, seq: ++narrationSeq, cells: story.highlight } });
     if (story.reveal) {
       try {
-        useCpuReveals.getState().show({ ...story.reveal, seat: "p2" });
+        // the card's owner, not the actor: under Courtesan Thaïs the computer casts OUR cards
+        useCpuReveals.getState().show({ ...story.reveal, seat: story.revealSeat ?? "p2" });
       } catch {
         // the reveal panel is decoration; never block the game on it
       }
@@ -461,10 +568,17 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     const { game } = get();
     if (!game) return;
     const before = game.phase === "main" && action.t !== "endTurn" ? evaluate(game, BOT_SEAT) : null;
+    // Courtesan Thaïs: the computer is playing OUR turn, so its moves are told as moves of ours
+    const pilotedUs = thaisActiveSeat(game) === HUMAN_SEAT;
+    const pendingBefore = thaisPendingSeats(game);
     // Compose the narration from the PRE-action state (ids still resolve to names and squares),
     // but only publish it once the engine has actually accepted the action — a refused action
     // must never be announced, and a fallback is narrated in its place.
-    const story = narrate(game, action, narrationSeq + 1);
+    let story: Narration | null = narrate(game, action, narrationSeq + 1, { pilotingHuman: pilotedUs });
+    // A prompt answer is told by what it cost (Troll Bridge's toll): the prompt and both hands
+    // have to be read now, before the engine shifts the prompt off and moves the card.
+    const answer = snapshotPromptAnswer(game, action);
+    const logBefore = game.log.length;
     // A card script that throws must not strand the turn: treat it as a refused action and
     // let the fallback chain below hand the turn back.
     const attempt = (candidate: Action): ActionResult => {
@@ -494,10 +608,23 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       // nothing the engine would accept: say so rather than silently looping
       if (!taken) set({ lastError: result.error ?? "The computer could not act." });
     } else {
+      const paid = answer ? narratePromptAnswer(answer, game, narrationSeq + 1) : null;
+      if (paid) {
+        story = paid;
+        const lines: number[] = [];
+        for (let i = logBefore; i < game.log.length; i++) lines.push(i);
+        const card = paid.discarded[0]?.name ?? null;
+        const note: EngineFeedNote = { lines, after: logBefore - 1, seat: "p2", kind: "discard", text: paid.text, card, cells: paid.cells };
+        set((s) => ({ feedNotes: [...s.feedNotes, note].slice(-FEED_NOTES_KEPT) }));
+      }
+      // the computer's Courtesan Thaïs: say now that it will be playing our next turn
+      if (story && !pendingBefore.includes(HUMAN_SEAT) && thaisPendingSeats(game).includes(HUMAN_SEAT) && game.activePlayer === BOT_SEAT) {
+        story = { ...story, text: `${story.text} Courtesan Thaïs: the Computer will play your next turn.`, weighty: true };
+      }
       publish(story);
       if (before !== null && evaluate(game, BOT_SEAT) === before) bannedThisTurn.add(botActionKey(action));
     }
-    committed(game, "remote");
+    committed(game, "remote", null, pilotedUs);
   }
 
   return {
@@ -507,6 +634,8 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     botThinking: false,
     matchId: "",
     narration: null,
+    feedNotes: [],
+    controlTurns: {},
     reveal: null,
     decisionSeat: null,
     endTurnConfirm: false,
@@ -570,6 +699,9 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         portalsRevealed: saved.portalsRevealed,
         layer: saved.layer,
         lastError: null,
+        // the turns played under Courtesan Thaïs and the feed's notes outlive a reload too
+        feedNotes: readFeedNotes(saved.feedNotes).filter((n) => n.after < game.log.length && n.lines.every((l) => l < game.log.length)),
+        controlTurns: readControlTurns(saved.controlTurns),
       });
       watchProjection();
       // a rebuilt or rewound board is not 'damage since last time': start the diff afresh
@@ -613,7 +745,15 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       takeOverBoard();
       // Harbinger portents were rolled in createGame; reveal them before the mulligan
       const hasPortents = Object.keys(harbingerTiles(viewFor(game, HUMAN_SEAT))).length > 0;
-      set({ game, matchId: `m${++matchCounter}`, botLevel, lastError: null, portalsRevealed: !hasPortents });
+      set({
+        game,
+        matchId: `m${++matchCounter}`,
+        botLevel,
+        lastError: null,
+        portalsRevealed: !hasPortents,
+        feedNotes: [],
+        controlTurns: {},
+      });
       watchProjection();
       // a rebuilt or rewound board is not 'damage since last time': start the diff afresh
       lastDamage = null;
@@ -705,7 +845,19 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       legalWorker?.terminate();
       legalWorker = null;
       history = [];
-      set({ game: null, rev: 0, botThinking: false, narration: null, legal: null, lastError: null, canUndo: false, layer: "surface", hidden: {} });
+      set({
+        game: null,
+        rev: 0,
+        botThinking: false,
+        narration: null,
+        legal: null,
+        lastError: null,
+        canUndo: false,
+        layer: "surface",
+        hidden: {},
+        feedNotes: [],
+        controlTurns: {},
+      });
     },
   };
 });

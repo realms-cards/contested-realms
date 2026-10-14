@@ -1,8 +1,9 @@
 "use client";
 
 import { Icon } from "@iconify/react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import CpuCardPick from "@/components/game/CpuCardPick";
 import { cardImage } from "@/components/game/CpuPlayReveal";
 import { RcButton } from "@/components/ui/rc-button";
@@ -25,9 +26,12 @@ import { useGameStore } from "@/lib/game/store";
 import type { Action, GameState as EngineState, Prompt } from "@sorcery/shared";
 import { actingSeatFor, allCards, GRID_H, GRID_W } from "@sorcery/shared";
 import { botAction } from "@untested-realm/bot/bot";
-import EnginePortalScreen from "./EnginePortalScreen";
-import { pickNoun } from "./promptNoun";
 import { Compass, directionKey, PromptBanner, PromptDialog } from "./EnginePromptShell";
+import { pickNoun, pickPlace } from "./promptNoun";
+
+/** Harbinger's portal setup rolls D20s on a WebGL canvas: loaded only when it is on screen, so
+ *  the phone 2D view does not carry three / R3F for a screen most matches never show. */
+const EnginePortalScreen = dynamic(() => import("./EnginePortalScreen"), { ssr: false });
 
 /** Prompt data shapes, per PromptKind (see the engine's pushPrompt callers). */
 export interface PromptData {
@@ -433,12 +437,16 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
   );
 
   switch (prompt.kind) {
-    case "drawDeck":
+    case "drawDeck": {
+      // Courtesan Thaïs: piloting the other seat, the draw goes into ITS piles, so those are
+      // the ones lit (on its seat bar), and the title says whose draw it is
+      const drawSeat = prompt.player === HUMAN_SEAT ? "p1" : "p2";
+      const forName = drawSeat === "p2" ? (game.players[prompt.player]?.name ?? "Computer") : null;
       return (
         <SinglePick
           request={`engine-prompt:${prompt.id}`}
-          title={prompt.title || "Draw from your spellbook or atlas"}
-          tokens={[pileToken("p1", "spellbook"), pileToken("p1", "atlas")]}
+          title={forName ? `Draw for ${forName}: from their spellbook or their atlas?` : prompt.title || "Draw from your spellbook or atlas"}
+          tokens={[pileToken(drawSeat, "spellbook"), pileToken(drawSeat, "atlas")]}
           onPick={(token) => send(token.endsWith("atlas") ? "atlas" : "spellbook")}
         >
           <RcButton variant="outline" size="xs" onClick={() => send("spellbook")}>
@@ -449,6 +457,7 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
           </RcButton>
         </SinglePick>
       );
+    }
     case "firstSite": {
       const ids = data.ids ?? [];
       return (
@@ -465,16 +474,18 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
     case "intercept": {
       const ids = data.candidates ?? [];
       return (
-        <SinglePick
+        <IdSinglePick
           request={`engine-prompt:${prompt.id}`}
           title={prompt.title || "Intercept with a unit?"}
-          tokens={ids.map((id) => tokenForEngineId(game, id))}
-          onPick={(token) => send(ids.find((id) => tokenForEngineId(game, id) === token) ?? null)}
+          ids={ids}
+          tokenOf={(id) => tokenForEngineId(game, id)}
+          labelOf={(id) => twinLabel(game, id)}
+          onPick={send}
         >
           <RcButton variant="outline" size="xs" onClick={() => send(null)}>
             Don&apos;t intercept
           </RcButton>
-        </SinglePick>
+        </IdSinglePick>
       );
     }
     case "chooseSquare": {
@@ -509,6 +520,7 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
           title={prompt.title}
           ids={ids}
           tokenOf={(id) => tokenForEngineId(game, id)}
+          labelOf={(id) => twinLabel(game, id)}
           min={min}
           max={max}
           confirmLabel={(n) => (prompt.kind === "defend" ? (n ? `Defend with ${n}` : "No defenders") : "Confirm")}
@@ -608,6 +620,80 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
   }
 }
 
+/**
+ * An Enchantress-animated aura and its minion are ONE card on the board, so both ids answer to
+ * the same token. When a prompt lists both, a click on the card cannot say which is meant: the
+ * banner then names the two, the way actionPaths' "as an aura / as a minion" options do.
+ */
+function twinLabel(game: EngineState, id: string): string {
+  const aura = game.auras[id];
+  return aura ? `${aura.name} as an aura` : `${game.units[id]?.name ?? "It"} as a minion`;
+}
+
+/** The ids a click on `token` could mean (two for an animated aura listed with its minion). */
+function idsAt(ids: readonly string[], tokenOf: (id: string) => string, token: string): string[] {
+  return ids.filter((id) => tokenOf(id) === token);
+}
+
+/** The buttons that settle which of a card's twin ids a click meant. */
+function TwinChoice({
+  twins,
+  labelOf,
+  pressed,
+  onPick,
+}: {
+  twins: string[] | null;
+  labelOf: (id: string) => string;
+  pressed?: (id: string) => boolean;
+  onPick: (id: string) => void;
+}) {
+  if (!twins || twins.length < 2) return null;
+  return (
+    <>
+      {twins.map((id) => (
+        <RcButton key={id} variant="outline" size="sm" aria-pressed={pressed?.(id) ?? false} onClick={() => onPick(id)}>
+          {labelOf(id)}
+        </RcButton>
+      ))}
+    </>
+  );
+}
+
+/** SinglePick over engine ids, asking which one is meant when two share a card. */
+function IdSinglePick({
+  request,
+  title,
+  ids,
+  tokenOf,
+  labelOf,
+  onPick,
+  children,
+}: {
+  request: string;
+  title: string;
+  ids: string[];
+  tokenOf: (id: string) => string;
+  labelOf: (id: string) => string;
+  onPick: (id: string) => void;
+  children?: React.ReactNode;
+}) {
+  const [twins, setTwins] = useState<string[] | null>(null);
+  return (
+    <SinglePick
+      request={request}
+      title={title}
+      tokens={ids.map(tokenOf)}
+      onPick={(token) => {
+        const matches = idsAt(ids, tokenOf, token);
+        if (matches.length > 1) setTwins(matches);
+        else if (matches[0]) onPick(matches[0]);
+      }}
+    >
+      <TwinChoice twins={twins} labelOf={labelOf} onPick={onPick} />
+      {children}
+    </SinglePick>
+  );
+}
 
 function SinglePick({
   request,
@@ -634,7 +720,7 @@ function SinglePick({
         card
           ? `${card} is waiting on you: click one of the highlighted squares on the board.`
           : noun
-            ? `Click the highlighted ${noun.one} on the board.`
+            ? `Click the highlighted ${noun.one} ${pickPlace(tokens)}.`
             : "Click the highlighted card, unit or tile on the board."
       }
       counter={noun ? `${tokens.length} ${tokens.length === 1 ? noun.one : noun.many}` : null}
@@ -673,6 +759,7 @@ function MultiPick({
   title,
   ids,
   tokenOf,
+  labelOf,
   min,
   max,
   confirmLabel,
@@ -685,6 +772,8 @@ function MultiPick({
   title: string;
   ids: string[];
   tokenOf: (id: string) => string;
+  /** names an id when a click on its card could mean two (an animated aura and its minion) */
+  labelOf: (id: string) => string;
   min: number;
   max: number;
   confirmLabel: (n: number) => string;
@@ -696,18 +785,37 @@ function MultiPick({
   children?: React.ReactNode;
 }) {
   const [chosen, setChosen] = useState<string[]>([]);
+  const [twins, setTwins] = useState<string[] | null>(null);
+  const toggleId = useCallback(
+    (id: string) =>
+      setChosen((cur) => (cur.includes(id) ? cur.filter((c) => c !== id) : cur.length < max ? [...cur, id] : cur)),
+    [max],
+  );
   const toggle = useMemo(
     () => (token: string) => {
-      const id = ids.find((candidate) => tokenOf(candidate) === token);
-      if (!id) return;
-      setChosen((cur) => (cur.includes(id) ? cur.filter((c) => c !== id) : cur.length < max ? [...cur, id] : cur));
+      const matches = idsAt(ids, tokenOf, token);
+      if (matches.length > 1) {
+        setTwins(matches);
+        return;
+      }
+      setTwins(null);
+      if (matches[0]) toggleId(matches[0]);
     },
-    [ids, tokenOf, max],
+    [ids, tokenOf, toggleId],
   );
   useBoardPick(`${request}:${chosen.join(",")}`, ids.map(tokenOf), chosen.map(tokenOf), toggle);
   const ready = chosen.length >= min && chosen.length <= max;
   return (
     <PromptBanner title={title} hint={pickHint(kind, !!declineLabel)} counter={`${chosen.length}/${max}`}>
+      <TwinChoice
+        twins={twins}
+        labelOf={labelOf}
+        pressed={(id) => chosen.includes(id)}
+        onPick={(id) => {
+          setTwins(null);
+          toggleId(id);
+        }}
+      />
       {children}
       {/* An optional pick's decline gets a NAME. `min` is already 0 for these, so pressing
           Confirm at zero always worked — it just looked like the thing you do when you have

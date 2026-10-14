@@ -1,21 +1,18 @@
 "use client";
 
 import { Html } from "@react-three/drei";
-import { engineCellKey } from "@/lib/engine-mode/coords";
+import { auraAreas, disableAreas, layerTints, multiSquareBodies, OVERLAY_COLORS, outlineEdges } from "@/lib/engine-mode/boardOverlays";
 import type { HiddenCounts } from "@/lib/engine-mode/projection";
 import { useEngineSession } from "@/lib/engine-mode/session";
 import { PLAYER_COLORS, TILE_SIZE } from "@/lib/game/constants";
-import { findCard, isWaterSite, occupiedSquares } from "@sorcery/shared";
 
 const GRID_W = 5;
 const GRID_H = 4;
 const OFFSET_X = -((GRID_W - 1) * TILE_SIZE) / 2;
 const OFFSET_Z = -((GRID_H - 1) * TILE_SIZE) / 2;
 const HTML_Z: [number, number] = [20, 0]; // under the DOM HUD and prompt overlays
-const WATER = "#3b82f6";
-const LAND = "#8b5a2b";
+const { water: WATER, land: LAND, disabledArea: DISABLED_AREA } = OVERLAY_COLORS;
 const noRaycast = () => undefined;
-const waterDefs = (name: string) => ({ thresholds: { water: findCard(name)?.thresholds.water ?? 0 } });
 
 function cellPosition(key: string, lift: number): [number, number, number] {
   const [x, y] = key.split(",").map(Number);
@@ -24,21 +21,10 @@ function cellPosition(key: string, lift: number): [number, number, number] {
 
 /** Line segments around the outside of a set of cells: edges not shared with another covered cell. */
 function areaOutline(keys: string[], lift: number): Float32Array {
-  const covered = new Set(keys);
-  const h = TILE_SIZE / 2;
   const points: number[] = [];
-  for (const key of keys) {
-    const [x, y] = key.split(",").map(Number);
-    const [cx, , cz] = cellPosition(key, lift);
-    const edges: [string, number, number, number, number][] = [
-      [`${x},${y - 1}`, cx - h, cz - h, cx + h, cz - h],
-      [`${x},${y + 1}`, cx - h, cz + h, cx + h, cz + h],
-      [`${x - 1},${y}`, cx - h, cz - h, cx - h, cz + h],
-      [`${x + 1},${y}`, cx + h, cz - h, cx + h, cz + h],
-    ];
-    for (const [neighbour, x1, z1, x2, z2] of edges) {
-      if (!covered.has(neighbour)) points.push(x1, lift, z1, x2, lift, z2);
-    }
+  for (const { x1, y1, x2, y2 } of outlineEdges(keys)) {
+    points.push(OFFSET_X + (x1 - 0.5) * TILE_SIZE, lift, OFFSET_Z + (y1 - 0.5) * TILE_SIZE);
+    points.push(OFFSET_X + (x2 - 0.5) * TILE_SIZE, lift, OFFSET_Z + (y2 - 0.5) * TILE_SIZE);
   }
   return new Float32Array(points);
 }
@@ -53,7 +39,7 @@ function badgeText(counts: HiddenCounts, layer: "surface" | "subsurface"): strin
 
 /**
  * Board overlays the engine needs beyond our regular board: each aura's area outlined in its
- * controller's colour, and Untested Realm's subsurface view — in the subsurface view every site
+ * controller's colour, multi-square bodies outlined, Babbling Brook's disabling area, and Untested Realm's subsurface view — in the subsurface view every site
  * glows by terrain (water blue, land brown) under the burrowed / submerged units; in either view a
  * badge on a tile counts the units on the other layer, and clicking it switches layers.
  */
@@ -65,66 +51,60 @@ export default function EngineLayerOverlay() {
   const setLayer = useEngineSession((s) => s.setLayer);
   if (!game) return null;
 
-  const tints =
-    layer === "subsurface"
-      ? Object.values(game.sites)
-          .filter((site) => !site.isRubble)
-          .map((site) => ({ key: engineCellKey(site.x, site.y), water: isWaterSite(game, site, waterDefs) }))
-      : [];
-
-  // Oversized and stretched bodies (Mountain Giant, the Rack…): outline every occupied square,
-  // since the card itself can only sit on its anchor cell.
-  const bodies = Object.values(game.units)
-    .filter((u) => !u.isAvatar && !u.carriedBy && (u.size || u.extraSquares?.length))
-    .map((u) => ({
-      id: u.id,
-      color: PLAYER_COLORS[u.controller === 0 ? "p1" : "p2"],
-      keys: [
-        ...new Set(
-          [...occupiedSquares(u), ...(u.extraSquares ?? [])].map((sq) => engineCellKey(sq.x, sq.y)),
-        ),
-      ],
-    }))
-    .filter((b) => b.keys.length > 1);
-
+  // Shared with the 2D board (boardOverlays.ts) so the two views never disagree on an area.
+  const tints = layerTints(game, layer);
+  // Oversized and stretched bodies (Mountain Giant, the Rack…): outline every occupied square;
+  // the card itself is drawn once, centred over them.
+  const bodies = multiSquareBodies(game);
   // Each aura's whole area, in its controller's colour (the card itself sits at the area's centre).
-  const auras =
-    layer === "surface"
-      ? Object.values(game.auras).map((aura) => ({
-          id: aura.id,
-          color: PLAYER_COLORS[aura.controller === 0 ? "p1" : "p2"],
-          keys: [...new Set(aura.squares.map((sq) => engineCellKey(sq.x, sq.y)))],
-        }))
-      : [];
+  const auras = layer === "surface" ? auraAreas(game) : [];
+  // Babbling Brook's disabling squares, for as long as the effect lasts.
+  const disables = layer === "surface" ? disableAreas(game) : [];
 
   return (
     <>
-      {bodies.map(({ id, color, keys }) => (
-        <lineSegments key={`body-${id}`} raycast={noRaycast} renderOrder={3}>
-          <bufferGeometry>
-            <bufferAttribute attach="attributes-position" args={[areaOutline(keys, 0.045), 3]} />
-          </bufferGeometry>
-          <lineBasicMaterial color={color} transparent opacity={0.65} depthWrite={false} />
-        </lineSegments>
-      ))}
-      {auras.map(({ id, color, keys }) => (
-        <group key={`aura-${id}`}>
-          {keys.map((key) => (
-            <mesh key={key} position={cellPosition(key, 0.025)} rotation-x={-Math.PI / 2} raycast={noRaycast} renderOrder={2}>
+      {disables.map(({ id, cells }) => (
+        <group key={`disable-${id}`}>
+          {cells.map((cell) => (
+            <mesh key={cell} position={cellPosition(cell, 0.02)} rotation-x={-Math.PI / 2} raycast={noRaycast} renderOrder={2}>
               <planeGeometry args={[TILE_SIZE, TILE_SIZE]} />
-              <meshBasicMaterial color={color} transparent opacity={0.12} depthWrite={false} />
+              <meshBasicMaterial color={DISABLED_AREA} transparent opacity={0.1} depthWrite={false} />
             </mesh>
           ))}
           <lineSegments raycast={noRaycast} renderOrder={3}>
             <bufferGeometry>
-              <bufferAttribute attach="attributes-position" args={[areaOutline(keys, 0.04), 3]} />
+              <bufferAttribute attach="attributes-position" args={[areaOutline(cells, 0.035), 3]} />
             </bufferGeometry>
-            <lineBasicMaterial color={color} transparent opacity={0.8} depthWrite={false} />
+            <lineBasicMaterial color={DISABLED_AREA} transparent opacity={0.7} depthWrite={false} />
           </lineSegments>
         </group>
       ))}
-      {tints.map(({ key, water }) => (
-        <mesh key={`tint-${key}`} position={cellPosition(key, 0.03)} rotation-x={-Math.PI / 2} raycast={noRaycast} renderOrder={2}>
+      {bodies.map(({ id, controller, cells }) => (
+        <lineSegments key={`body-${id}`} raycast={noRaycast} renderOrder={3}>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[areaOutline(cells, 0.045), 3]} />
+          </bufferGeometry>
+          <lineBasicMaterial color={PLAYER_COLORS[controller]} transparent opacity={0.65} depthWrite={false} />
+        </lineSegments>
+      ))}
+      {auras.map(({ id, controller, cells }) => (
+        <group key={`aura-${id}`}>
+          {cells.map((cell) => (
+            <mesh key={cell} position={cellPosition(cell, 0.025)} rotation-x={-Math.PI / 2} raycast={noRaycast} renderOrder={2}>
+              <planeGeometry args={[TILE_SIZE, TILE_SIZE]} />
+              <meshBasicMaterial color={PLAYER_COLORS[controller]} transparent opacity={0.12} depthWrite={false} />
+            </mesh>
+          ))}
+          <lineSegments raycast={noRaycast} renderOrder={3}>
+            <bufferGeometry>
+              <bufferAttribute attach="attributes-position" args={[areaOutline(cells, 0.04), 3]} />
+            </bufferGeometry>
+            <lineBasicMaterial color={PLAYER_COLORS[controller]} transparent opacity={0.8} depthWrite={false} />
+          </lineSegments>
+        </group>
+      ))}
+      {tints.map(({ cell, water }) => (
+        <mesh key={`tint-${cell}`} position={cellPosition(cell, 0.03)} rotation-x={-Math.PI / 2} raycast={noRaycast} renderOrder={2}>
           <planeGeometry args={[TILE_SIZE * 0.96, TILE_SIZE * 0.96]} />
           <meshBasicMaterial color={water ? WATER : LAND} transparent opacity={0.28} depthWrite={false} />
         </mesh>

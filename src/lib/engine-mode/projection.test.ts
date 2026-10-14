@@ -1,4 +1,4 @@
-import { applyAction, createGame, getCard, viewFor } from "@sorcery/shared";
+import { applyAction, createGame, getCard, isDisabled, viewFor } from "@sorcery/shared";
 import type { PlayerId } from "@sorcery/shared";
 import { botAction, botNeedsToAct } from "@untested-realm/bot/bot";
 import { describe, expect, it, vi } from "vitest";
@@ -12,10 +12,12 @@ import {
   boardReveal,
   damageSince,
   damageSnapshot,
+  disabledUnits,
   harbingerTiles,
   hiddenLayerCounts,
   layerOf,
   projectView,
+  unitCell,
   unitPower,
 } from "./projection";
 import { getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
@@ -44,8 +46,9 @@ function playOut(seed: number, maxActions: number) {
     actions++;
 
     const view = viewFor(game, 0);
-    const projected = projectView(view);
-    const below = projectView(view, "subsurface");
+    const disabled = disabledUnits(game);
+    const projected = projectView(view, "surface", true, {}, disabled);
+    const below = projectView(view, "subsurface", true, {}, disabled);
     for (const key of [...Object.keys(projected.board.sites), ...Object.keys(projected.permanents)]) {
       expect(key).toMatch(CELL);
     }
@@ -61,7 +64,9 @@ function playOut(seed: number, maxActions: number) {
       if (!unit.isAvatar && layerOf(unit.region) !== "surface") continue;
       for (const flag of ["stealth", "ward", "disabled", "silenced"] as const) {
         const token = all.find((p) => p.instanceId === `${unit.id}:${flag}`);
-        expect(Boolean(token?.attachedTo)).toBe(Boolean(unit[flag]));
+        // a disable is shown whether the flag is raw or derived (Babbling Brook, Basilisk…)
+        const on = flag === "disabled" ? Boolean(unit.disabled) || (!unit.isAvatar && isDisabled(game, unit)) : Boolean(unit[flag]);
+        expect(Boolean(token?.attachedTo)).toBe(on);
       }
     }
     // The bot's hand stays hidden; ours is fully named.
@@ -77,7 +82,8 @@ function playOut(seed: number, maxActions: number) {
         // Each minion is solid on its own layer. A SUBSURFACE minion also appears on the
         // surface view as a dimmed hint tucked under the site; a surface minion never leaks
         // down into the subsurface view, which stays a clean view of that layer alone.
-        const key = engineCellKey(unit.x, unit.y);
+        // a multi-square body is drawn on the cell nearest its centre, everything else on its square
+        const key = unitCell(unit);
         const onSurface = layerOf(unit.region) === "surface";
         const [own, other] = onSurface ? [projected, below] : [below, projected];
         const mine = own.permanents[key]?.find((p) => p.instanceId === unit.id);
@@ -369,6 +375,102 @@ describe("subsurface hint", () => {
     expect(ids).toContain("uSwim");
     // no surface minions leaking upward into the hint slot
     expect(Object.values(projected.permanentPositions)).toHaveLength(0);
+  });
+});
+
+describe("aura placement on the board", () => {
+  /**
+   * Through projectView, not auraPlacement alone: the tile layout used to run over auras too and
+   * overwrite the centred offset with a rim slot, while a test of auraPlacement kept passing.
+   * The rendered spot is tile + [offX, ownerBaseZ + offZ] (PermanentStack), in TILE units here.
+   */
+  type Sq = { x: number; y: number };
+  const SHAPES: Record<string, Sq[]> = {
+    "2x2 middle": [{ x: 1, y: 1 }, { x: 2, y: 1 }, { x: 1, y: 2 }, { x: 2, y: 2 }],
+    "2x2 corner": [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }],
+    "1x1": [{ x: 3, y: 1 }],
+    "1x3 row": [{ x: 1, y: 1 }, { x: 2, y: 1 }, { x: 3, y: 1 }],
+    "3x3": [0, 1, 2].flatMap((dx) => [0, 1, 2].map((dy) => ({ x: 1 + dx, y: dy }))),
+    cross: [{ x: 2, y: 1 }, { x: 1, y: 1 }, { x: 3, y: 1 }, { x: 2, y: 0 }, { x: 2, y: 2 }],
+  };
+  const freshGame = () => {
+    const deck = toEngineDeck(enginePrecons[0]);
+    return createGame([deck, deck], ["You", "Computer"], 7, 0 as PlayerId);
+  };
+  const addAura = (game: ReturnType<typeof freshGame>, squares: Sq[], controller: PlayerId) => {
+    const id = `rTest${controller}`;
+    game.auras[id] = { id, cardId: Object.keys(game.cards)[0], name: "Test", controller, squares, enteredTurn: -1 };
+    return id;
+  };
+  const rendered = (projected: ReturnType<typeof projectView>, id: string) => {
+    for (const [at, items] of Object.entries(projected.permanents)) {
+      const item = items.find((p) => p.instanceId === id);
+      if (!item) continue;
+      const [ax, ay] = at.split(",").map(Number);
+      const [ox, oz] = item.offset ?? [0, 0];
+      return { at, item, x: ax + ox / TILE_SIZE, y: ay + (getPermanentOwnerBaseZ(item.owner) + oz) / TILE_SIZE };
+    }
+    return null;
+  };
+  const centroid = (squares: Sq[]) => ({
+    x: squares.reduce((sum, sq) => sum + (4 - sq.x), 0) / squares.length,
+    y: squares.reduce((sum, sq) => sum + (3 - sq.y), 0) / squares.length,
+  });
+
+  for (const controller of [0, 1] as PlayerId[]) {
+    for (const [name, squares] of Object.entries(SHAPES)) {
+      it(`centres a ${name} aura over its area (seat ${controller})`, () => {
+        const game = freshGame();
+        const id = addAura(game, squares, controller);
+        const got = rendered(projectView(viewFor(game, 0)), id);
+        const want = centroid(squares);
+        expect(got, "the aura is on the board").not.toBeNull();
+        expect(got!.x).toBeCloseTo(want.x, 3);
+        expect(got!.y).toBeCloseTo(want.y, 3);
+        // smaller than a lone card, so it clears the rows of the tiles it reaches over
+        expect(got!.item.scale).toBeLessThan(0.88);
+      });
+    }
+  }
+
+  it("leaves the anchor tile's own cards exactly where they would be without it", () => {
+    const squares = SHAPES["2x2 middle"];
+    const game = freshGame();
+    const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === 0)!;
+    // the 2x2 middle aura is anchored on board cell 3,2 = engine (1,1)
+    game.units.uAnchor = { ...avatar, id: "uAnchor", isAvatar: false, name: "Anchor", region: "surface", x: 1, y: 1 };
+    const before = rendered(projectView(viewFor(game, 0)), "uAnchor")!;
+    const id = addAura(game, squares, 0);
+    const after = projectView(viewFor(game, 0));
+    const aura = rendered(after, id)!;
+    expect(aura.at, "they share the anchor tile").toBe(before.at);
+    const unit = rendered(after, "uAnchor")!;
+    expect(unit.item.offset).toEqual(before.item.offset);
+    expect(unit.item.scale).toBe(before.item.scale);
+    // the aura is still centred, and drawn above the tile's own cards
+    expect(aura.x).toBeCloseTo(centroid(squares).x, 3);
+    expect(aura.y).toBeCloseTo(centroid(squares).y, 3);
+    const stack = after.permanents[aura.at];
+    expect(stack[stack.length - 1].instanceId).toBe(id);
+  });
+
+  it("centres a 2x2 body over its four squares and keeps its status tokens on it", () => {
+    const game = freshGame();
+    const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === 1)!;
+    // pushed first, so lifting it to the top of its tile has to re-point its Ward token
+    game.units.uBig = { ...avatar, id: "uBig", isAvatar: false, name: "Big", region: "surface", x: 1, y: 1, size: "2x2", ward: true };
+    game.units.uSmall = { ...avatar, id: "uSmall", isAvatar: false, name: "Small", region: "surface", x: 1, y: 1 };
+    const projected = projectView(viewFor(game, 0));
+    const big = rendered(projected, "uBig")!;
+    expect(big.x).toBeCloseTo(centroid(SHAPES["2x2 middle"]).x, 3);
+    expect(big.y).toBeCloseTo(centroid(SHAPES["2x2 middle"]).y, 3);
+    expect(unitCell(game.units.uBig)).toBe(big.at);
+    const stack = projected.permanents[big.at];
+    const token = stack.find((p) => p.instanceId === "uBig:ward")!;
+    expect(stack[token.attachedTo!.index].instanceId).toBe("uBig");
+    expect(stack.filter((p) => !p.attachedTo).map((p) => p.instanceId)).toEqual(["uSmall", "uBig"]);
+    // the 1x1 sharing its corner square is laid out as the tile's only card (a shared tile caps at 0.78)
+    expect(rendered(projected, "uSmall")!.item.scale).toBeGreaterThan(0.78);
   });
 });
 

@@ -13,8 +13,12 @@ import {
   GRID_H,
   GRID_W,
   legalActions,
+  occupiedSquares,
+  occupies,
   orthAdjacentWrapped,
+  reachableWithPaths,
   resolveCaster,
+  siteAt,
   validateSummonAt,
   validateTarget,
 } from "@sorcery/shared";
@@ -33,6 +37,7 @@ import type { Action, CardDef, GameState, PlayerId, Region, UnitState } from "@s
  *  - ability activations WITH their targets (the engine takes them up front, no follow-up prompt)
  *  - Ranged projectile shots (the built-in 'ranged' ability)
  *  - carrying units (pickUp/drop with unitIds), multi-artifact pickups, partial drops
+ *  - attacks by or on multi-square bodies beyond the anchor square (see oversizedAttacks)
  * Kept in our code so the vendored engine stays pristine.
  */
 const REGIONS: Region[] = ["surface", "underground", "underwater"];
@@ -135,6 +140,79 @@ function targetCombos(state: GameState, me: PlayerId, specs: TargetSpecLike[], a
   return combos;
 }
 
+type Square = { x: number; y: number; region: Region };
+type Step = Square;
+
+/** A body covering more than one square (2x2, a rigid or grown body, the Rack). */
+export const isMultiSquare = (u: UnitState): boolean => u.size === "2x2" || (u.extraSquares?.length ?? 0) > 0;
+
+/** The squares `u` covers after walking `path`, each with its region — the engine's own step rules
+ *  (movement.ts moveUnit): a growing body keeps every square it left, a rigid one shifts with the
+ *  anchor, a 2x2 is re-derived from the new anchor. */
+export function footprintAfter(u: UnitState, path: readonly Step[]): Square[] {
+  const growing = !!getScript(u.name)?.occupiesAllVisited && !u.silenced;
+  const body: UnitState = { ...u, extraSquares: u.extraSquares?.map((s) => ({ ...s })) };
+  for (const step of path) {
+    if (growing) {
+      const extra = (body.extraSquares = body.extraSquares ?? []);
+      if (!extra.some((s) => s.x === body.x && s.y === body.y)) extra.push({ x: body.x, y: body.y, region: body.region });
+    } else if (body.extraSquares?.length) {
+      const dx = step.x - body.x;
+      const dy = step.y - body.y;
+      body.extraSquares = body.extraSquares.map((s) => ({ ...s, x: s.x + dx, y: s.y + dy }));
+    }
+    body.x = step.x;
+    body.y = step.y;
+    body.region = step.region;
+  }
+  return occupiedSquares(body).map((sq) => {
+    const extra = body.extraSquares?.find((s) => s.x === sq.x && s.y === sq.y);
+    return { ...sq, region: extra?.region ?? body.region };
+  });
+}
+
+/**
+ * WORKAROUND for vendor bot/moves.ts:265-272 (expandActions): attack candidates there are
+ * anchor-on-anchor only, while combat.ts accepts any overlap of the two bodies. So a 2x2 / rigid /
+ * growing body never attacks an enemy (or site) under its other squares, and nobody attacks an
+ * oversized enemy on its non-anchor squares. Same shape as upstream's (`{t, unitId, path, attack}`)
+ * so the JSON-key dedupe drops what it already offers. Bounded: only multi-square attackers, plus
+ * any attacker when some enemy is multi-square (then only against those), so a normal board pays
+ * nothing. Footprints for moves of 2+ may disagree with the BFS (vendor movement.ts:135, V5) —
+ * the caller's trial apply settles it.
+ */
+function oversizedAttacks(state: GameState, me: PlayerId, myUnits: UnitState[]): Action[] {
+  const enemies = Object.values(state.units).filter((e) => e.controller !== me && !e.carriedBy);
+  const bigEnemies = enemies.filter(isMultiSquare);
+  const out: Action[] = [];
+  for (const u of myUnits) {
+    if (u.tapped) continue;
+    const big = isMultiSquare(u);
+    if (!big && !bigEnemies.length) continue;
+    const targets = big ? enemies : bigEnemies;
+    const options: { dest: Step; path: Step[] }[] = [
+      { dest: { x: u.x, y: u.y, region: u.region }, path: [] },
+      ...reachableWithPaths(state, u),
+    ];
+    for (const { path } of options) {
+      const feet = big ? footprintAfter(u, path) : [path.length ? path[path.length - 1] : { x: u.x, y: u.y, region: u.region }];
+      for (const e of targets) {
+        if (feet.some((f) => occupies(e, f.x, f.y, f.region))) out.push({ t: "moveAttack", unitId: u.id, path, attack: { unit: e.id } });
+      }
+      if (!big) continue; // a 1x1 attacker's site is the anchor one upstream already offers
+      const sites = new Set<string>();
+      for (const f of feet) {
+        if (f.region !== "surface") continue;
+        const site = siteAt(state, f.x, f.y);
+        if (!site || site.controller === null || site.controller === me || site.isRubble || sites.has(site.id)) continue;
+        sites.add(site.id);
+        out.push({ t: "moveAttack", unitId: u.id, path, attack: { site: site.id } });
+      }
+    }
+  }
+  return out;
+}
+
 /** Cast candidates for one card and caster. `fromCemetery` only changes where the card sits. */
 function castCandidates(
   state: GameState,
@@ -227,7 +305,11 @@ function castCandidates(
 }
 
 /** Every legal action for `me`: upstream's list plus everything a human can do that it skips. */
+/** Candidates the last call skipped because the budget ran out (logged by the legal worker). */
+export const legalGenerationStats = { dropped: 0 };
+
 export function legalActionsWithCasters(state: GameState, me: PlayerId): Action[] {
+  legalGenerationStats.dropped = 0;
   const base = legalActions(state, me);
   if (state.phase !== "main" || state.prompts.length || actingSeatFor(state, state.activePlayer) !== me) return base;
 
@@ -243,7 +325,10 @@ export function legalActionsWithCasters(state: GameState, me: PlayerId): Action[
   /** `trusted` skips the trial apply: the cheap validators already passed, and a stray
    *  reject at dispatch is harmless (the engine refuses without consuming anything). */
   const offer = (action: Action, trusted = false) => {
-    if (timeUp()) return;
+    if (timeUp()) {
+      legalGenerationStats.dropped++;
+      return;
+    }
     const key = JSON.stringify(action);
     if (seen.has(key)) return;
     if (trusted || accepted(state, me, action)) {
@@ -262,6 +347,9 @@ export function legalActionsWithCasters(state: GameState, me: PlayerId): Action[
       .map((a) => a.id),
     ...Object.values(state.sites).filter((s) => s.controller === me && !s.isRubble).map((s) => s.id),
   ];
+
+  // ── attacks by / on multi-square bodies (first: cheap, bounded, and must not flap with the budget) ──
+  for (const action of oversizedAttacks(state, me, myUnits)) offer(action);
 
   // ── casts: hand and cemetery, by every legal caster ──
   const castable: { cardId: string; def: CardDef }[] = [];

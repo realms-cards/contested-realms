@@ -7,6 +7,7 @@ import { HUMAN_SEAT, useEngineSession } from "@/lib/engine-mode/session";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef, PlayerKey } from "@/lib/game/store/types";
 import { getCardImageUrl } from "@/lib/utils/cdnUrl";
+import { isDisabled } from "@sorcery/shared";
 
 const MENU =
   "pointer-events-auto fixed z-[220] flex min-w-[180px] flex-col gap-1 rounded-rc-md border border-rc-line/22 bg-[rgba(7,10,20,0.95)] p-2 font-rc-sans text-sm text-rc-fg shadow-rc-panel";
@@ -60,7 +61,10 @@ export default function EngineContextMenu() {
           ? {
               damage: unit.damage || undefined,
               tapped: unit.tapped,
-              statuses: (["stealth", "ward", "disabled", "silenced"] as const).filter((f) => unit[f]),
+              // most disables are derived (Babbling Brook, Basilisk, auras…) and never set the flag
+              statuses: (["stealth", "ward", "disabled", "silenced"] as const).filter((f) =>
+                f === "disabled" ? Boolean(unit.disabled) || isDisabled(game, unit) : Boolean(unit[f]),
+              ),
             }
           : null,
       };
@@ -130,12 +134,12 @@ export default function EngineContextMenu() {
       {inspect && (
         <div className="fixed inset-0 z-[220] flex items-center justify-center bg-[rgba(6,10,20,0.7)] p-4" onClick={() => setInspect(null)}>
           <div
-            className="flex max-h-[86vh] w-[min(92vw,640px)] gap-4 overflow-y-auto rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-4 font-rc-sans text-rc-fg shadow-rc-panel thin-scrollbar"
+            className="flex max-h-[86vh] w-[min(92vw,640px)] flex-col gap-4 overflow-y-auto rounded-rc-lg sm:flex-row border border-rc-line/18 bg-[rgba(9,13,25,0.95)] p-4 font-rc-sans text-rc-fg shadow-rc-panel thin-scrollbar"
             onClick={(e) => e.stopPropagation()}
           >
             {inspect.card.slug ? (
                
-              <img src={getCardImageUrl(inspect.card.slug)} alt={inspect.card.name} className="h-[340px] w-auto rounded-rc-md shadow-rc-md ring-1 ring-rc-line/25" />
+              <img src={getCardImageUrl(inspect.card.slug)} alt={inspect.card.name} className="max-h-[45vh] w-auto max-w-full shrink-0 self-center rounded-rc-md object-contain shadow-rc-md ring-1 ring-rc-line/25 sm:h-[340px] sm:max-h-none sm:max-w-[60%] sm:self-start" />
             ) : null}
             <div className="flex min-w-0 flex-1 flex-col gap-2">
               <div className="font-rc-display text-[22px] leading-tight text-rc-fg-strong">{inspect.card.name}</div>

@@ -1,10 +1,12 @@
 "use client";
 
 import { Html } from "@react-three/drei";
-import { engineCellKey } from "@/lib/engine-mode/coords";
+import { auraPlacement, PINNED_SCALE, unitCell } from "@/lib/engine-mode/projection";
 import { HUMAN_SEAT, useEngineSession } from "@/lib/engine-mode/session";
+import { getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
 import { TILE_SIZE } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
+import { occupiedSquares } from "@sorcery/shared";
 
 /**
  * A standing mark on every minion carrying damage.
@@ -50,16 +52,31 @@ export default function EngineDamageMarks() {
   return (
     <group>
       {marks.map((unit) => {
-        const [bx, by] = engineCellKey(unit.x, unit.y).split(",").map(Number);
+        // A multi-square body is drawn pinned at its footprint's centre, smaller (projectView's
+        // auraPlacement + PINNED_SCALE), with the owner nudge cancelled: ride on THAT card.
+        const owner = unit.controller === HUMAN_SEAT ? 1 : 2;
+        const body = occupiedSquares(unit);
+        const placed = body.length > 1 ? auraPlacement(body, owner) : null;
+        const [bx, by] = (placed?.at ?? unitCell(unit)).split(",").map(Number);
         // engine seat 0 is our p1, who sits at the near edge; its cards shift toward it
-        const toward = unit.controller === HUMAN_SEAT ? OWNER_SHIFT : -OWNER_SHIFT;
+        const toward = placed
+          ? placed.offset[1] + getPermanentOwnerBaseZ(owner)
+          : unit.controller === HUMAN_SEAT
+            ? OWNER_SHIFT
+            : -OWNER_SHIFT;
+        const sideX = placed ? placed.offset[0] : 0;
+        const corner = placed ? PINNED_SCALE : 1;
         return (
           <Html
             key={unit.id}
             center
             zIndexRange={HTML_Z}
             style={{ pointerEvents: "none" }}
-            position={[offsetX + bx * TILE_SIZE + CORNER_X, 0.12, offsetY + by * TILE_SIZE + toward - CORNER_Z]}
+            position={[
+              offsetX + bx * TILE_SIZE + sideX + CORNER_X * corner,
+              0.12,
+              offsetY + by * TILE_SIZE + toward - CORNER_Z * corner,
+            ]}
           >
             <span
               title={`${unit.name} has taken ${unit.damage} damage this turn`}

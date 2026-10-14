@@ -1,7 +1,9 @@
 import { dirToken, handToken, optToken, pileToken, unitToken } from "@/lib/game/cpu/pickTokens";
 import { getCard, getScript, grantedAbilities } from "@sorcery/shared";
-import type { Action, GameState as EngineState, PlayerId } from "@sorcery/shared";
+import type { Action, GameState as EngineState, PlayerId, UnitState } from "@sorcery/shared";
+import { footprintAfter } from "./casterActions";
 import { engineCellKey } from "./coords";
+import { footprintCell, unitCell } from "./projection";
 
 /**
  * Turns each legal engine action into the sequence of board clicks that picks it:
@@ -11,6 +13,31 @@ import { engineCellKey } from "./coords";
 export interface ActionPath {
   action: Action;
   steps: string[];
+  /**
+   * Step token -> the board cells that step stands for, when it is an AREA rather than one
+   * square: a multi-square body's destination is keyed on one cell of its footprint, and the
+   * picker lights the whole footprint (see `pathAreas`).
+   */
+  areas?: Record<string, string[]>;
+}
+
+/**
+ * The areas behind the tokens offered at `depth` (the next click) among `matching` paths, ready
+ * for the board picker's `setAreas`: each token lights its footprint under the pointer.
+ */
+export function pathAreas(matching: readonly ActionPath[], depth: number): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const path of matching) {
+    const token = path.steps[depth];
+    const cells = token ? path.areas?.[token] : undefined;
+    if (cells && !out[token]) out[token] = cells;
+  }
+  return out;
+}
+
+/** The minion an Enchantress animated out of this aura, if it is animated right now. */
+function animatedBy(game: EngineState, auraId: string): UnitState | undefined {
+  return Object.values(game.units).find((unit) => unit.counters?.animatedAura !== undefined && String(unit.counters.animatedAura) === auraId);
 }
 
 /** First click of a cast from the cemetery: driven by the HUD's cemetery panel, not a board token. */
@@ -46,7 +73,11 @@ export function tokenForEngineId(game: EngineState, id: string, seat: PlayerId =
     }
     return `unit:perm:${id}`;
   }
-  if (game.auras[id]) return `unit:perm:${id}`;
+  if (game.auras[id]) {
+    // an animated aura is drawn as its minion (the projection shows that card, not the aura)
+    const minion = animatedBy(game, id);
+    return `unit:perm:${minion?.id ?? id}`;
+  }
   if (game.cards[id]) return handToken(seat === 0 ? "p1" : "p2", id);
   return `unknown:${id}`;
 }
@@ -54,13 +85,13 @@ export function tokenForEngineId(game: EngineState, id: string, seat: PlayerId =
 /** The tile a board object sits on, for anchoring option buttons. */
 function tileOf(game: EngineState, id: string): string {
   const unit = game.units[id];
-  if (unit) return engineCellKey(unit.x, unit.y);
+  if (unit) return unitCell(unit);
   const site = game.sites[id];
   if (site) return engineCellKey(site.x, site.y);
   const artifact = game.artifacts[id];
   if (artifact) {
     const carrier = artifact.carriedBy ? game.units[artifact.carriedBy] : undefined;
-    return carrier ? engineCellKey(carrier.x, carrier.y) : engineCellKey(artifact.x, artifact.y);
+    return carrier ? unitCell(carrier) : engineCellKey(artifact.x, artifact.y);
   }
   return "2,2";
 }
@@ -143,6 +174,46 @@ export function actionPaths(
     labels[token] = label;
     return token;
   };
+  /**
+   * An animated aura and its minion are one card on the board, so both resolve to the minion's
+   * token. Where ONE card or ability can target either (a dispel that may hit the minion or the
+   * aura), the click alone cannot tell them apart: a labelled option after the card does. Kept
+   * per source, so an unrelated spell that targets only one of them asks nothing extra.
+   */
+  const sourceOf = (action: Action): string | null =>
+    action.t === "castSpell" ? `cast:${action.cardId}` : action.t === "activate" ? `act:${action.sourceId}:${action.ability}` : null;
+  const targetsBySource = new Map<string, Set<string>>();
+  for (const action of actions) {
+    const source = sourceOf(action);
+    if (!source || (action.t !== "castSpell" && action.t !== "activate")) continue;
+    const ids = targetsBySource.get(source) ?? new Set<string>();
+    for (const target of action.targets ?? []) ids.add(target);
+    targetsBySource.set(source, ids);
+  }
+  const twoWayBySource = new Map<string, Set<string>>();
+  for (const [source, ids] of targetsBySource) {
+    const twoWay = new Set<string>();
+    for (const id of ids) {
+      const minion = game.auras[id] ? animatedBy(game, id) : undefined;
+      if (minion && ids.has(minion.id)) twoWay.add(id).add(minion.id);
+    }
+    if (twoWay.size) twoWayBySource.set(source, twoWay);
+  }
+  const targetSteps = (target: string, source: Action): string[] => {
+    const token = tokenForEngineId(game, target);
+    // "sq:x,y,region" targets a layer of a square: pick the square, then the layer
+    const region = target.startsWith("sq:") ? target.split(",")[2] : undefined;
+    if (region) return [token, opt(token, `region-${region}`, REGION_LABEL[region] ?? region)];
+    const key = sourceOf(source);
+    if (!key || !twoWayBySource.get(key)?.has(target)) return [token];
+    const asAura = Boolean(game.auras[target]);
+    const name = (asAura ? game.auras[target]?.name : game.units[target]?.name) ?? "it";
+    // The option row hangs on a TILE (the board only draws tile-anchored rows): the card's own
+    // cell, which is the minion's for both ids.
+    const minionId = asAura ? (animatedBy(game, target)?.id ?? target) : target;
+    const tile = tileOf(game, minionId);
+    return [token, opt(tile, `as-${asAura ? "aura" : "minion"}-${target}`, `${name} as ${asAura ? "an aura" : "a minion"}`)];
+  };
 
   for (const action of actions) {
     switch (action.t) {
@@ -171,13 +242,7 @@ export function actionPaths(
         const extra = action.extra as { direction?: string; giveTo?: string; origin?: { x: number; y: number } } | undefined;
         // an artifact handed straight to a bearer: pick the unit instead of a square
         if (extra?.giveTo) steps.push(tokenForEngineId(game, extra.giveTo));
-        for (const target of action.targets ?? []) {
-          const token = tokenForEngineId(game, target);
-          steps.push(token);
-          // "sq:x,y,region" targets a layer of a square: pick the square, then the layer
-          const region = target.startsWith("sq:") ? target.split(",")[2] : undefined;
-          if (region) steps.push(opt(token, `region-${region}`, REGION_LABEL[region] ?? region));
-        }
+        for (const target of action.targets ?? []) steps.push(...targetSteps(target, action));
         if (extra?.direction) {
           // a projectile flies from the caster; Chaos Twister's blow starts at its origin square
           const from = extra.origin ? engineCellKey(extra.origin.x, extra.origin.y) : tileOf(game, action.casterId);
@@ -199,12 +264,25 @@ export function actionPaths(
         const unit = game.units[action.unitId];
         if (!unit) break;
         const last = action.path[action.path.length - 1] ?? { x: unit.x, y: unit.y, region: unit.region };
-        const tile = engineCellKey(last.x, last.y);
+        // A multi-square body's destination is the AREA it would cover: keyed on that area's cell
+        // nearest its centre (where its card will be drawn) and published as an area, so the
+        // board marks the footprint's centre and lights all of it on hover. A bare corner tile,
+        // often inside the body it is leaving, read as "stay put". The footprint walks the
+        // engine's own step rules, so a growing moeba keeps every square it leaves. Avatars are
+        // drawn on their anchor (see unitCell), so a Racked avatar keeps a plain square.
+        const feet = unit.isAvatar ? [] : footprintAfter(unit, action.path);
+        const body = feet.length > 1 ? feet : null;
+        const tile = (body && footprintCell(body)) ?? engineCellKey(last.x, last.y);
         const steps = [tokenForEngineId(game, action.unitId), tile, opt(tile, `region-${last.region}`, REGION_LABEL[last.region] ?? last.region)];
         if (!action.attack) steps.push(opt(tile, "move", "Move here"));
         else if ("unit" in action.attack) steps.push(tokenForEngineId(game, action.attack.unit));
-        else steps.push(opt(tile, "attack-site", "Attack the site"));
-        paths.push({ action, steps });
+        else if (!body) steps.push(opt(tile, "attack-site", "Attack the site"));
+        else {
+          // a body over several sites can strike any of them: name the one this is
+          const site = game.sites[action.attack.site];
+          steps.push(opt(tile, `attack-site-${action.attack.site}`, site ? `Attack ${site.name}` : "Attack the site"));
+        }
+        paths.push(body ? { action, steps, areas: { [tile]: body.map((sq) => engineCellKey(sq.x, sq.y)) } } : { action, steps });
         break;
       }
       case "activate": {
@@ -223,12 +301,7 @@ export function actionPaths(
           source,
           opt(tile, `ability-${action.sourceId}-${action.ability}`, activateLabel(game, action.sourceId, action.ability)),
         ];
-        for (const target of action.targets ?? []) {
-          const token = tokenForEngineId(game, target);
-          steps.push(token);
-          const region = target.startsWith("sq:") ? target.split(",")[2] : undefined;
-          if (region) steps.push(opt(token, `region-${region}`, REGION_LABEL[region] ?? region));
-        }
+        for (const target of action.targets ?? []) steps.push(...targetSteps(target, action));
         paths.push({ action, steps });
         break;
       }

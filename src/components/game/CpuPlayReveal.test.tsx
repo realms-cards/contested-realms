@@ -54,6 +54,17 @@ describe("CPU play reveal", () => {
     expect(screen.queryByRole("status",{name:"CPU play"})).toBeNull();
   });
 
+  it("top placement: the compact card pinned to the top edge, on any screen", () => {
+    act(() => { reveals().show({id:"giant",seat:"p2",card:card("Mountain Giant"),kind:"permanent",action:"summons at Tile #8"}); });
+    render(<CpuPlayReveal placement="top" />);
+    const panel = screen.getByRole("status",{name:"CPU play"});
+    expect(panel.parentElement?.className).toContain("top-[env(safe-area-inset-top,0px)]");
+    expect(panel.parentElement?.className).not.toContain("-translate-y-1/2");
+    // the compact row layout, rules clamped to three lines
+    expect(panel.className).toContain("max-w-md");
+    expect(screen.getByText(cards["Mountain Giant"].rulesText).className).toContain("line-clamp-3");
+  });
+
   it("releases a hover hold when unmounted", () => {
     act(() => { reveals().show({id:"goons",seat:"p2",card:card("Ogre Goons"),kind:"permanent",action:"summons at Tile #8"}); });
     const view = render(<CpuPlayReveal />);

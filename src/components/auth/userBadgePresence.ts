@@ -31,6 +31,15 @@ export function registerUserBadge(): () => void {
   };
 }
 
+/**
+ * For a full-screen surface that has no room for the floating badge in its corner and offers
+ * the account controls somewhere of its own (the 2D engine board's More sheet). It stands the
+ * global badge down exactly as a mounted badge does; call the returned function on unmount.
+ */
+export function suppressGlobalUserBadge(): () => void {
+  return registerUserBadge();
+}
+
 export function subscribeToUserBadges(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
