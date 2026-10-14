@@ -28,6 +28,8 @@ export default function EngineContextMenu() {
   const closeContextMenu = useGameStore((s) => s.closeContextMenu);
   const game = useEngineSession((s) => s.game);
   useEngineSession((s) => s.rev);
+  const arrangement = useEngineSession((s) => s.arrangement);
+  const resetArrangement = useEngineSession((s) => s.resetArrangement);
   const [inspect, setInspect] = useState<{ card: CardRef; facts: UnitFacts | null } | null>(null);
   const [browse, setBrowse] = useState<{ title: string; cards: CardRef[] } | null>(null);
 
@@ -90,6 +92,19 @@ export default function EngineContextMenu() {
     closeContextMenu();
   };
 
+  /** The tile the menu was opened on, for "Reset layout" (the player's own card arrangement there). */
+  const tileOf = (): string | null => {
+    if (target?.kind === "permanent") return target.at;
+    if (target?.kind === "site") return `${target.x},${target.y}`;
+    if (target?.kind === "avatar") {
+      const pos = store.avatars[target.who]?.pos;
+      return pos ? `${pos[0]},${pos[1]}` : null;
+    }
+    return null;
+  };
+  const tile = tileOf();
+  const arrangedHere = tile !== null && Object.values(arrangement).some((e) => e.at === tile);
+
   const resolved = target && target.kind !== "pile" && target.kind !== "tokenpile" && target.kind !== "gemToken" ? resolve() : null;
   const screen = contextMenu?.screen ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
   const style = {
@@ -123,6 +138,11 @@ export default function EngineContextMenu() {
               <div className="px-1 py-0.5 text-xs text-rc-fg-muted">
                 {pileOf(target.who, target.from).length} cards, face down
               </div>
+            )}
+            {arrangedHere && tile && (
+              <RcButton variant="ghost" size="xs" onClick={() => { resetArrangement(tile); closeContextMenu(); }}>
+                Reset layout
+              </RcButton>
             )}
             {!resolved && target && target.kind !== "pile" && (
               <div className="px-1 py-0.5 text-xs text-rc-fg-muted">Nothing to inspect here.</div>

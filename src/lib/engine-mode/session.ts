@@ -2,10 +2,11 @@ import { create } from "zustand";
 import { setSiteCardScaleFallback } from "@/hooks/useGraphicsSettings";
 import { withSfxSource } from "@/lib/audio/gameSfx";
 import type { SfxSource } from "@/lib/audio/gameSfx";
+import { TILE_SIZE } from "@/lib/game/constants";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import { CPU_SPELL_REVEAL_READ_MS, cpuRevealsPending, useCpuReveals } from "@/lib/game/cpu/revealQueue";
 import { useGameStore } from "@/lib/game/store";
-import type { GameState } from "@/lib/game/store/types";
+import type { BoardArrangeTarget, GameState } from "@/lib/game/store/types";
 import {
   actingSeatFor,
   applyAchievements,
@@ -23,9 +24,10 @@ import { localizeEngineText } from "./coords";
 import type { LegalReply, LegalRequest } from "./engine-legal.worker";
 import { narrate, narratePromptAnswer, snapshotPromptAnswer } from "./narration";
 import type { EngineFeedNote, Narration } from "./narration";
-import { clearEngineGame, readControlTurns, readFeedNotes, saveEngineGame } from "./persistence";
+import { clearEngineGame, readArrangement, readControlTurns, readFeedNotes, saveEngineGame } from "./persistence";
 import type { SavedEngineGame } from "./persistence";
 import {
+  arrangeableCell,
   boardReveal,
   damageSince,
   damageSnapshot,
@@ -33,10 +35,11 @@ import {
   harbingerTiles,
   hiddenLayerCounts,
   projectView,
+  pruneArrangement,
   unitPower,
   sitesLostSince,
 } from "./projection";
-import type { BoardLayer, BoardReveal, DamageSnapshot, HiddenCounts, ProjectedState } from "./projection";
+import type { Arrangement, BoardLayer, BoardReveal, DamageSnapshot, HiddenCounts, ProjectedState } from "./projection";
 import "./scriptPatches";
 
 export const HUMAN_SEAT: PlayerId = 0;
@@ -203,6 +206,21 @@ interface EngineSession {
   setLayer: (layer: BoardLayer) => void;
   /** switch layers when every unit among these pick tokens is on the hidden one */
   revealTokens: (tokens: string[]) => void;
+  /**
+   * Where the player has slid cards within their tiles, by engine unit / artifact id. Display
+   * only: never sent to the engine, so the rules and the computer never see it. Saved with the
+   * match; a card that leaves its tile drops its entry (see CardArrangement).
+   */
+  arrangement: Arrangement;
+  /** Phones: dragging a card arranges it instead of tapping it (the More sheet's toggle). */
+  arrangeMode: boolean;
+  /** The arrange modifier (Alt / Option) is held: desktop drags arrange (watchArrangeModifier). */
+  arrangeHeld: boolean;
+  /** Slide a card within its tile; `centre` is its centre from the tile's centre, in tiles. */
+  arrange: (id: string, at: string, centre: [number, number]) => void;
+  /** Back to the automatic layout: one tile's cards, or the whole board's. */
+  resetArrangement: (at?: string) => void;
+  setArrangeMode: (on: boolean) => void;
 }
 
 let history: string[] = [];
@@ -219,6 +237,8 @@ let unsubscribeStore: (() => void) | null = null;
 let toastedLogLength = 0;
 /** Views that already narrate the computer's lines on their own surfaces opt out of the toasts. */
 let botLineToastHolds = 0;
+let arrangeWatchers = 0;
+let unwatchArrangeKeys: (() => void) | null = null;
 
 /**
  * Stop toasting the computer's log lines while the caller is mounted (the 2D view says every
@@ -236,6 +256,49 @@ export function holdBotLineToasts(): () => void {
     botLineToastHolds -= 1;
   };
 }
+/**
+ * Keep `arrangeHeld` in step with the arrange modifier while the caller is mounted: Alt, which
+ * is Option on a Mac (nothing in engine mode or the camera controls binds it — OrbitControls
+ * takes Ctrl/Meta/Shift for panning). Pointer events re-read it too, so a key pressed while the
+ * window was unfocused still counts. Returns the release; a counter, like holdBotLineToasts.
+ */
+export function watchArrangeModifier(): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  arrangeWatchers += 1;
+  if (!unwatchArrangeKeys) {
+    const sync = (held: boolean) => {
+      if (useEngineSession.getState().arrangeHeld !== held) useEngineSession.setState({ arrangeHeld: held });
+    };
+    const onInput = (e: KeyboardEvent | PointerEvent) => sync(e.altKey);
+    // a key released while the window is unfocused never reports its key-up
+    const release = () => sync(false);
+    window.addEventListener("keydown", onInput);
+    window.addEventListener("keyup", onInput);
+    window.addEventListener("pointerdown", onInput, true);
+    window.addEventListener("pointermove", onInput, true);
+    window.addEventListener("blur", release);
+    document.addEventListener("visibilitychange", release);
+    unwatchArrangeKeys = () => {
+      window.removeEventListener("keydown", onInput);
+      window.removeEventListener("keyup", onInput);
+      window.removeEventListener("pointerdown", onInput, true);
+      window.removeEventListener("pointermove", onInput, true);
+      window.removeEventListener("blur", release);
+      document.removeEventListener("visibilitychange", release);
+      release();
+    };
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    arrangeWatchers -= 1;
+    if (arrangeWatchers > 0) return;
+    unwatchArrangeKeys?.();
+    unwatchArrangeKeys = null;
+  };
+}
+
 /** The shared store's transport/seat, borrowed for the match and put back on stop(). */
 let borrowed: {
   transport: GameState["transport"];
@@ -293,7 +356,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     }
     // `unitPower` and `disabledUnits` need the full engine state, which only this side has —
     // see their docblocks.
-    const projection = projectView(view, layer, get().portalsRevealed, unitPower(game), disabledUnits(game));
+    const projection = projectView(view, layer, get().portalsRevealed, unitPower(game), disabledUnits(game), get().arrangement);
     lastProjection = projection;
     // the sound director diffs store updates; tag who caused this one (cosmetic ones stay silent)
     withSfxSource(source, () => useGameStore.setState(projection));
@@ -349,8 +412,8 @@ export const useEngineSession = create<EngineSession>((set, get) => {
    * disk before the player can reload — no debounce and no flush window to lose actions in.
    */
   function persist() {
-    const { game, botLevel, portalsRevealed, layer, matchId, controlTurns, feedNotes } = get();
-    if (game) saveEngineGame(game, { botLevel, portalsRevealed, layer, matchId, controlTurns, feedNotes });
+    const { game, botLevel, portalsRevealed, layer, matchId, controlTurns, feedNotes, arrangement } = get();
+    if (game) saveEngineGame(game, { botLevel, portalsRevealed, layer, matchId, controlTurns, feedNotes, arrangement });
   }
 
   /**
@@ -366,11 +429,38 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     // none of OUR card resolvers run. Leaving it false made Hand3D/PermanentStack paint the
     // purple "this card is automated" outline (hasCustomResolver) over cards whose automation
     // belongs to a different engine entirely — a promise engine mode cannot keep.
-    useGameStore.setState({ transport: null, actorKey: null, boardGesturesLocked: true, resolversDisabled: true });
+    useGameStore.setState({
+      transport: null,
+      actorKey: null,
+      boardGesturesLocked: true,
+      resolversDisabled: true,
+      // the board's one free gesture here: sliding a card within its tile (display only)
+      boardArrange: arrangeFromBoard,
+    });
     // This board is read far more than it is dragged on, so sites want to be bigger here than
     // the printed fifth-of-a-tile. It is only a FALLBACK: the moment the player sets the slider
     // themselves, their number wins here and everywhere else. Put back on stop().
     setSiteCardScaleFallback(ENGINE_SITE_SCALE);
+  }
+
+  /** A board drag (Alt in 3D) onto the session's arrangement: the store's card, in tiles. */
+  function arrangeFromBoard(target: BoardArrangeTarget, centre: [number, number]) {
+    const { game } = get();
+    if (!game) return;
+    const store = useGameStore.getState();
+    let id: string | undefined;
+    let at: string | null = null;
+    if (target.kind === "avatar") {
+      const pos = store.avatars[target.who]?.pos;
+      id = game.players[target.who === "p1" ? 0 : 1]?.avatarUnitId;
+      at = pos ? `${pos[0]},${pos[1]}` : null;
+    } else {
+      const item = store.permanents[target.at]?.[target.index];
+      // pinned (lifted) and attached cards keep their automatic placement
+      if (item && !item.attachedTo && !item.lift) id = item.instanceId ?? undefined;
+      at = target.at;
+    }
+    if (id && at) get().arrange(id, at, [centre[0] / TILE_SIZE, centre[1] / TILE_SIZE]);
   }
 
   /** If anything else writes the projected slice (a stray drag, a hotkey), put the engine's picture back. */
@@ -410,6 +500,8 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         endTurnConfirm: false,
         feedNotes: notes.length === s.feedNotes.length ? s.feedNotes : notes,
         controlTurns: turns,
+        // a card that left the tile it was arranged on goes back to the automatic layout
+        arrangement: pruneArrangement(s.arrangement, game),
       };
     });
     persist();
@@ -645,6 +737,30 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     layer: "surface",
     hidden: {},
     portalsRevealed: true,
+    arrangement: {},
+    arrangeMode: false,
+    arrangeHeld: false,
+
+    arrange: (id, at, [x, y]) => {
+      const { game, arrangement } = get();
+      if (!game || arrangeableCell(game, id) !== at) return;
+      const seq = Math.max(0, ...Object.values(arrangement).map((e) => e.seq)) + 1;
+      const clamp = (v: number) => (Number.isFinite(v) ? Math.max(-0.5, Math.min(0.5, v)) : 0);
+      set({ arrangement: { ...arrangement, [id]: { at, x: clamp(x), y: clamp(y), seq } } });
+      project(game);
+      persist();
+    },
+
+    resetArrangement: (at) => {
+      const { game, arrangement } = get();
+      const kept = at ? Object.fromEntries(Object.entries(arrangement).filter(([, e]) => e.at !== at)) : {};
+      if (Object.keys(kept).length === Object.keys(arrangement).length) return;
+      set({ arrangement: kept });
+      if (game) project(game);
+      persist();
+    },
+
+    setArrangeMode: (on) => set({ arrangeMode: on }),
 
     revealPortals: () => {
       set({ portalsRevealed: true });
@@ -702,6 +818,8 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         // the turns played under Courtesan Thaïs and the feed's notes outlive a reload too
         feedNotes: readFeedNotes(saved.feedNotes).filter((n) => n.after < game.log.length && n.lines.every((l) => l < game.log.length)),
         controlTurns: readControlTurns(saved.controlTurns),
+        // committed() drops any card that is no longer where it was arranged
+        arrangement: readArrangement(saved.arrangement),
       });
       watchProjection();
       // a rebuilt or rewound board is not 'damage since last time': start the diff afresh
@@ -753,6 +871,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         portalsRevealed: !hasPortents,
         feedNotes: [],
         controlTurns: {},
+        arrangement: {},
       });
       watchProjection();
       // a rebuilt or rewound board is not 'damage since last time': start the diff afresh
@@ -833,7 +952,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       lastBotTurn = -1;
       useCpuReveals.getState().reset();
       setSiteCardScaleFallback(1);
-      useGameStore.setState({ boardGesturesLocked: false, ...(borrowed ?? {}) });
+      useGameStore.setState({ boardGesturesLocked: false, boardArrange: null, ...(borrowed ?? {}) });
       borrowed = null;
       {
         const picker = useCpuBoardPicker.getState();
@@ -857,6 +976,8 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         hidden: {},
         feedNotes: [],
         controlTurns: {},
+        arrangement: {},
+        arrangeMode: false,
       });
     },
   };

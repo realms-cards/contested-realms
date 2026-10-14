@@ -1,9 +1,9 @@
-import { applyAction, createGame, getScript, viewFor } from "@sorcery/shared";
+import { applyAction, createGame, getScript, legalActions, viewFor } from "@sorcery/shared";
 import type { GameState as EngineState, PlayerId } from "@sorcery/shared";
 import { describe, expect, it } from "vitest";
 import { engineCellKey } from "./coords";
 import { enginePrecons, toEngineDeck } from "./decks";
-import { projectView } from "./projection";
+import { disabledUnits, projectView } from "./projection";
 import { applyScriptPatches } from "./scriptPatches";
 
 /**
@@ -151,5 +151,58 @@ describe("Waveshaper keeps minions tapped down (scriptPatches)", () => {
     wave(g, avatarId, 2, 1);
     expect(foeAvatar.tapped).toBe(false);
     expect(foeAvatar.counters?.skipUntap).toBeUndefined();
+  });
+});
+
+/**
+ * Break Stealth → … : the engine strips Stealth on activation before the effect runs, so Frozen
+ * Horror and Asmodeus fizzled with "No Stealth to break.". Guards the scriptPatches.ts workaround.
+ */
+describe("Break Stealth abilities resolve (scriptPatches)", () => {
+  const hide = (g: EngineState, id: string, name: string, x: number, y: number, stealth: boolean) => {
+    g.units[id] = { ...g.units["mine"], id, name, cardId: `card_${id}`, x, y, stealth, modifiers: [] } as unknown as Unit;
+  };
+  const offers = (g: EngineState, id: string) =>
+    legalActions(g, 0 as PlayerId).filter((a) => a.t === "activate" && a.sourceId === id);
+
+  it("Frozen Horror disables the other nearby minions", () => {
+    const { g } = setup({ enemyTapped: false });
+    hide(g, "horror", "Frozen Horror", 2, 2, true);
+    const [terror] = offers(g, "horror");
+    expect(terror).toBeTruthy();
+    expect(applyAction(g, 0 as PlayerId, terror)).toEqual({ ok: true });
+    expect(g.units["horror"].stealth).toBe(false);
+    expect([...disabledUnits(g)].sort()).toEqual(["enemy", "mine"]);
+  });
+
+  it("Asmodeus destroys everything else at its location", () => {
+    const { g } = setup({ enemyTapped: false });
+    hide(g, "asmodeus", "Asmodeus", 2, 1, true);
+    const [immolate] = offers(g, "asmodeus");
+    expect(immolate).toBeTruthy();
+    expect(applyAction(g, 0 as PlayerId, immolate)).toEqual({ ok: true });
+    expect(g.units["enemy"]).toBeUndefined();
+    expect(g.sites["dry"]).toBeUndefined();
+  });
+
+  it("is not offered once Stealth is gone", () => {
+    const { g } = setup({ enemyTapped: false });
+    hide(g, "horror", "Frozen Horror", 2, 2, false);
+    expect(offers(g, "horror")).toEqual([]);
+  });
+});
+
+describe("Slimy Mutants is only offered with a submerging ally (scriptPatches)", () => {
+  const slimy = (g: EngineState) =>
+    legalActions(g, 0 as PlayerId).filter((a) => a.t === "activate" && String(a.ability).startsWith("slime:"));
+
+  it("needs an ally with Submerge", () => {
+    const { g } = setup({ enemyTapped: false });
+    g.cards["c_slime"] = { id: "c_slime", name: "Slimy Mutants", owner: 0 } as unknown as EngineState["cards"][string];
+    g.players[0].hand.push("c_slime");
+    g.players[0].mana = 9;
+    expect(slimy(g)).toEqual([]);
+    g.units["mine"] = { ...g.units["mine"], name: "Coy Nixie", modifiers: [] } as unknown as Unit;
+    expect(slimy(g)).toHaveLength(1);
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { Icon } from "@iconify/react";
+import { RcButton } from "@/components/ui/rc-button";
 import { controlSwap, useEngineSession } from "@/lib/engine-mode/session";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 
@@ -49,4 +50,32 @@ export default function ControlBanner2D() {
 function splitTitle(text: string): [string, string] {
   const at = text.indexOf(": ");
   return at < 0 ? [text, ""] : [text.slice(0, at), text.slice(at + 2)];
+}
+
+/**
+ * Arrange mode (the More sheet's "Arrange cards"), said for as long as it is on: a card press
+ * now slides the card instead of acting, so the player has to be able to see that — and to get
+ * out of it — without opening the sheet again. Renders nothing while it is off.
+ */
+export function ArrangeBanner2D() {
+  const on = useEngineSession((s) => s.arrangeMode);
+  const setArrangeMode = useEngineSession((s) => s.setArrangeMode);
+  if (!on) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      data-arrange-mode=""
+      className="pointer-events-auto relative flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-rc-md border border-rc-line/30 bg-[rgba(12,16,30,0.94)] py-1 pl-2.5 pr-1 font-rc-sans text-[12px] leading-tight text-rc-fg shadow-rc-panel"
+    >
+      <Icon icon="game-icons:move" aria-hidden className="h-4 w-4 flex-none text-rc-moonlight" />
+      <span className="min-w-0 flex-1 break-words">
+        <span className="text-rc-fg-strong">Arranging cards</span>
+        <span className="text-rc-fg-muted">: drag a card to move it within its tile</span>
+      </span>
+      <RcButton variant="outline" size="xs" className="flex-none" onClick={() => setArrangeMode(false)}>
+        Done
+      </RcButton>
+    </div>
+  );
 }

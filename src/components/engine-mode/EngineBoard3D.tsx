@@ -10,7 +10,7 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { invalidate, useThree } from "@react-three/fiber";
-import { Suspense, useCallback, useEffect, useMemo, useRef } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { ClientCanvas } from "@/components/game/ClientCanvas";
@@ -23,6 +23,7 @@ import {
 import TrackpadOrbitAdapter from "@/lib/controls/TrackpadOrbitAdapter";
 import { useEngineSession } from "@/lib/engine-mode/session";
 import { computeTopdownFitDistance } from "@/lib/game/cameraFit";
+import CardOutline from "@/lib/game/components/CardOutline";
 import TextureCache from "@/lib/game/components/TextureCache";
 import { MAT_PIXEL_W, MAT_PIXEL_H, BASE_TILE_SIZE, MAT_RATIO, TILE_SIZE } from "@/lib/game/constants";
 import { Physics } from "@/lib/game/physics";
@@ -236,6 +237,7 @@ export default function EngineBoard3D({
 
         <TextureCache />
         <EngineLayerOverlay />
+        <ArrangeTileOutline />
       </Suspense>
 
       {/* Outside the Suspense boundary on purpose: this layer loads nothing, and a sibling
@@ -305,6 +307,73 @@ function CameraBaseline({ dist, tilt }: { dist: number; tilt: number }) {
   }, [controls, camera, dist, tilt]);
 
   return null;
+}
+
+/**
+ * While the arrange modifier (Alt / Option) is held: a grab cursor and a faint outline of the
+ * tile under the pointer — the one a card can be slid around in. During the drag itself the
+ * outline stays on the tile the card was picked up from, and the cursor closes its hand.
+ */
+function ArrangeTileOutline() {
+  const held = useEngineSession((s) => s.arrangeHeld);
+  const dragging = useGameStore((s) => s.boardDragActive);
+  const size = useGameStore((s) => s.board.size);
+  const camera = useThree((state) => state.camera);
+  const canvas = useThree((state) => state.gl.domElement);
+  const [cell, setCell] = useState<[number, number] | null>(null);
+  const active = held || dragging;
+
+  useEffect(() => {
+    if (!active) {
+      setCell(null);
+      return;
+    }
+    const previous = canvas.style.cursor;
+    canvas.style.cursor = dragging ? "grabbing" : "grab";
+    const ray = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const hit = new THREE.Vector3();
+    const onMove = (e: PointerEvent) => {
+      if (dragging) return; // hold the tile the card came from
+      const rect = canvas.getBoundingClientRect();
+      ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      let next: [number, number] | null = null;
+      if (ray.ray.intersectPlane(ground, hit)) {
+        // the board is centred on the origin, a tile per TILE_SIZE (Board's offsetX/offsetY)
+        const x = Math.round(hit.x / TILE_SIZE + (size.w - 1) / 2);
+        const y = Math.round(hit.z / TILE_SIZE + (size.h - 1) / 2);
+        if (x >= 0 && x < size.w && y >= 0 && y < size.h) next = [x, y];
+      }
+      setCell((prev) => (prev?.[0] === next?.[0] && prev?.[1] === next?.[1] ? prev : next));
+    };
+    canvas.addEventListener("pointermove", onMove);
+    invalidate();
+    return () => {
+      canvas.removeEventListener("pointermove", onMove);
+      canvas.style.cursor = previous;
+    };
+  }, [active, dragging, camera, canvas, size.w, size.h]);
+
+  useEffect(() => {
+    invalidate();
+  }, [cell]);
+
+  if (!active || !cell) return null;
+  return (
+    <group position={[(cell[0] - (size.w - 1) / 2) * TILE_SIZE, 0, (cell[1] - (size.h - 1) / 2) * TILE_SIZE]}>
+      <CardOutline
+        width={TILE_SIZE * 0.97}
+        height={TILE_SIZE * 0.97}
+        elevation={0.02}
+        color="#d7dbe6"
+        opacity={0.4}
+        renderOrder={1600}
+        depthTest={false}
+      />
+    </group>
+  );
 }
 
 function KeyboardPanControls() {

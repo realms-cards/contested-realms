@@ -16,7 +16,7 @@
 import type { GameState as EngineState, PlayerId } from "@sorcery/shared";
 import upstream from "@untested-realm/upstream";
 import type { EngineFeedNote } from "./narration";
-import type { BoardLayer } from "./projection";
+import type { Arrangement, BoardLayer } from "./projection";
 import type { BotLevel } from "./session";
 
 const KEY = "realms:engineMatch";
@@ -52,12 +52,15 @@ export interface SavedEngineGame {
    */
   controlTurns?: Record<string, PlayerId>;
   feedNotes?: EngineFeedNote[];
+  /** where the player slid cards within their tiles (display only). Optional: older saves lack it. */
+  arrangement?: Arrangement;
 }
 
 /** The session extras a save carries beside the engine state. */
 export interface SavedSessionExtras {
   controlTurns: Record<number, PlayerId>;
   feedNotes: EngineFeedNote[];
+  arrangement: Arrangement;
 }
 
 const isSeatId = (v: unknown): v is PlayerId => v === 0 || v === 1;
@@ -90,6 +93,21 @@ export function readFeedNotes(raw: unknown): EngineFeedNote[] {
   return out;
 }
 
+/** A saved card arrangement, checked entry by entry (anything malformed is dropped). */
+export function readArrangement(raw: unknown): Arrangement {
+  const out: Arrangement = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  const isUnit = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+  for (const [id, entry] of Object.entries(raw)) {
+    if (!entry || typeof entry !== "object") continue;
+    const { at, x, y, seq } = entry as Record<string, unknown>;
+    if (typeof at !== "string" || !/^\d+,\d+$/.test(at) || !isUnit(x) || !isUnit(y) || !isIndex(seq)) continue;
+    // a tile's centre is at most half a tile from its edge
+    out[id] = { at, x: Math.max(-0.5, Math.min(0.5, x)), y: Math.max(-0.5, Math.min(0.5, y)), seq };
+  }
+  return out;
+}
+
 /** Everything here is best-effort: a match must never fail because storage did. */
 export function saveEngineGame(
   game: EngineState,
@@ -113,6 +131,7 @@ export function saveEngineGame(
       },
       ...(meta.controlTurns && Object.keys(meta.controlTurns).length ? { controlTurns: meta.controlTurns } : null),
       ...(meta.feedNotes?.length ? { feedNotes: meta.feedNotes } : null),
+      ...(meta.arrangement && Object.keys(meta.arrangement).length ? { arrangement: meta.arrangement } : null),
     };
     const text = JSON.stringify(record);
     if (text.length > MAX_BYTES) return;

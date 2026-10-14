@@ -2,7 +2,7 @@ import { applyAction, cloneState, createGame, getCard, legalActions, occupiedSqu
 import type { Action, GameState, PlayerId, Region, UnitState } from "@sorcery/shared";
 import { botAction, botNeedsToAct } from "@untested-realm/bot/bot";
 import { describe, expect, it } from "vitest";
-import { actionPaths } from "./actionPaths";
+import { actionPaths, narrow } from "./actionPaths";
 import { legalActionsWithCasters } from "./casterActions";
 import { engineCellKey } from "./coords";
 import { enginePrecons, toEngineDeck } from "./decks";
@@ -332,4 +332,66 @@ describe("a growing body's move preview (Megamoeba)", () => {
     expect(covered).toHaveLength(2);
     expect([...(path.areas?.[path.steps[1]] ?? [])].sort()).toEqual([...covered].sort());
   });
+});
+
+// ── hand abilities (Slimy Mutants): surfaced on the avatar, startable from the hand card too ──
+
+describe("actionPaths hand abilities", () => {
+  /** Slimy Mutants in hand, a Coy Nixie (Submerge) on the board, `mana` to spend. */
+  function slimyBoard(mana: number): { g: GameState; slimy: string } {
+    const g = bareBoard();
+    minion(g, "ms_nixie", "Coy Nixie", P0, 1, 1);
+    const slimy = card(g, "Slimy Mutants", P0);
+    g.players[0].hand.push(slimy);
+    g.players[0].mana = mana;
+    g.flow = { ...(g.flow ?? {}), tempThresh: { 0: { air: 9, earth: 9, fire: 9, water: 9 } } };
+    return { g, slimy };
+  }
+  const isSlime = (a: Action, slimy: string) => a.t === "activate" && a.ability === `slime:${slimy}`;
+
+  it("offers the ability from the hand card, held for an explicit click, and keeps the avatar path", () => {
+    const { g, slimy } = slimyBoard(3); // the ability costs 3; summoning it costs 5
+    const legal = legalActionsWithCasters(g, P0);
+    expect(legal.some((a) => isSlime(a, slimy))).toBe(true);
+    expect(legal.some((a) => a.t === "castSpell" && a.cardId === slimy)).toBe(false);
+    const { paths, labels } = actionPaths(g, legal, P0);
+    const hand = `hand:p1:${slimy}`;
+
+    const fromHand = narrow(paths, [hand]);
+    expect(fromHand.done).toBeNull();
+    expect(fromHand.next).toHaveLength(1);
+    expect(labels[fromHand.next[0]]).toContain("Slimy Mutants");
+    const fired = narrow(paths, [hand, fromHand.next[0]]);
+    expect(fired.next).toEqual([]);
+    expect(fired.done && isSlime(fired.done, slimy)).toBe(true);
+
+    // the avatar still offers it, through the same option (taken at once when it is the avatar's only move)
+    const fromAvatar = narrow(paths, ["unit:avatar:p1"]);
+    expect([...fromAvatar.prefix, ...fromAvatar.next]).toContain(fromHand.next[0]);
+  }, 120_000);
+
+  it("asks Cast or the ability when the card can do both", () => {
+    const { g, slimy } = slimyBoard(10);
+    const legal = legalActionsWithCasters(g, P0);
+    expect(legal.some((a) => isSlime(a, slimy))).toBe(true);
+    expect(legal.some((a) => a.t === "castSpell" && a.cardId === slimy)).toBe(true);
+    const { paths, labels } = actionPaths(g, legal, P0);
+    const hand = `hand:p1:${slimy}`;
+
+    const first = narrow(paths, [hand]);
+    expect(first.done).toBeNull();
+    const words = first.next.map((t) => labels[t]);
+    expect(first.next.every((t) => t.startsWith("opt:"))).toBe(true);
+    expect(words).toContain("Cast Slimy Mutants");
+    expect(words.some((w) => w?.startsWith("③"))).toBe(true);
+    expect(words).toHaveLength(2);
+
+    // "Cast" leads on to the summon squares, and every completed path is still a summon
+    const cast = first.next.find((t) => labels[t] === "Cast Slimy Mutants")!;
+    const summon = narrow(paths, [hand, cast]);
+    expect(summon.next.length).toBeGreaterThan(0);
+    expect(summon.matching.every((p) => p.action.t === "castSpell" && p.action.cardId === slimy)).toBe(true);
+    const ability = first.next.find((t) => t !== cast)!;
+    expect(narrow(paths, [hand, ability]).done).toEqual(legal.find((a) => isSlime(a, slimy)));
+  }, 120_000);
 });

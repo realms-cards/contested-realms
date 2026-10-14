@@ -8,8 +8,10 @@ import { legalActionsWithCasters } from "./casterActions";
 import { engineCellKey } from "./coords";
 import { apiDeckToEngine, enginePrecons, toEngineDeck } from "./decks";
 import {
+  arrangeableCell,
   auraPlacement,
   boardReveal,
+  clampToTile,
   damageSince,
   damageSnapshot,
   disabledUnits,
@@ -17,11 +19,13 @@ import {
   hiddenLayerCounts,
   layerOf,
   projectView,
+  pruneArrangement,
   unitCell,
   unitPower,
 } from "./projection";
+import type { Arrangement } from "./projection";
 import { getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
-import { CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
+import { CARD_LONG, CARD_SHORT, TILE_SIZE } from "@/lib/game/constants";
 
 const CELL = /^[0-4],[0-3]$/;
 
@@ -574,6 +578,121 @@ describe("tile layout", () => {
     expect(scale).toBeGreaterThan(0.3);
     const widest = Math.max(...items.map((p) => Math.abs(p.offset?.[0] ?? 0)));
     expect(widest + (CARD_SHORT * scale) / 2).toBeLessThanOrEqual(TILE_SIZE / 2);
+  });
+});
+
+describe("card arrangement (display only)", () => {
+  /** three of our units on engine (0,2), clear of both avatars */
+  const setup = () => {
+    const deck = toEngineDeck(enginePrecons[0]);
+    const game = createGame([deck, deck], ["You", "Computer"], 23, 0 as PlayerId);
+    const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === 0)!;
+    for (let i = 0; i < 3; i++) {
+      game.units[`uA${i}`] = { ...avatar, id: `uA${i}`, isAvatar: false, name: `Arranged ${i}`, region: "surface", x: 0, y: 2 };
+    }
+    return { game, at: engineCellKey(0, 2), avatar };
+  };
+  const project = (game: ReturnType<typeof setup>["game"], arrangement: Arrangement) =>
+    projectView(viewFor(game, 0), "surface", true, {}, new Set(), arrangement);
+  /** where the card's centre is drawn, from its tile's centre (PermanentStack adds the owner nudge) */
+  const centreOf = (projected: ReturnType<typeof projectView>, at: string, id: string) => {
+    const item = projected.permanents[at].find((p) => p.instanceId === id)!;
+    return { x: item.offset![0], z: getPermanentOwnerBaseZ(item.owner) + item.offset![1], item };
+  };
+  const ids = (projected: ReturnType<typeof projectView>, at: string) =>
+    projected.permanents[at].filter((p) => !p.attachedTo).map((p) => p.instanceId);
+
+  it("clamps an axis so the card stays inside its tile", () => {
+    expect(clampToTile(0.1, 0.2, 0.5)).toBe(0.1);
+    expect(clampToTile(0.9, 0.2, 0.5)).toBeCloseTo(0.3);
+    expect(clampToTile(-0.9, 0.2, 0.5)).toBeCloseTo(-0.3);
+    // a card wider than the tile stays centred
+    expect(clampToTile(0.4, 0.7, 0.5)).toBe(0);
+  });
+
+  it("puts an arranged card where the player left it and leaves its neighbours alone", () => {
+    const { game, at } = setup();
+    const plain = project(game, {});
+    const arranged = project(game, { uA0: { at, x: 0.1, y: -0.05, seq: 1 } });
+    const got = centreOf(arranged, at, "uA0");
+    expect(got.x).toBeCloseTo(0.1 * TILE_SIZE, 5);
+    expect(got.z).toBeCloseTo(-0.05 * TILE_SIZE, 5);
+    for (const id of ["uA1", "uA2"]) {
+      expect(centreOf(arranged, at, id).item.offset).toEqual(centreOf(plain, at, id).item.offset);
+    }
+  });
+
+  it("keeps a card dragged to the tile's edge inside it", () => {
+    const { game, at } = setup();
+    const projected = project(game, { uA1: { at, x: 0.5, y: 0.5, seq: 1 } });
+    const { x, z, item } = centreOf(projected, at, "uA1");
+    const scale = item.scale ?? 1;
+    expect(x + (CARD_SHORT * scale) / 2).toBeLessThanOrEqual(TILE_SIZE / 2 + 1e-9);
+    expect(z + (CARD_LONG * scale) / 2).toBeLessThanOrEqual(TILE_SIZE / 2 + 1e-9);
+    expect(x).toBeGreaterThan(0);
+  });
+
+  it("draws the latest arranged card on top of its tile", () => {
+    const { game, at } = setup();
+    expect(ids(project(game, {}), at)).toEqual(["uA0", "uA1", "uA2"]);
+    const once = project(game, { uA0: { at, x: 0, y: 0, seq: 1 } });
+    expect(ids(once, at)).toEqual(["uA1", "uA2", "uA0"]);
+    const twice = project(game, { uA0: { at, x: 0, y: 0, seq: 3 }, uA1: { at, x: 0, y: 0, seq: 2 } });
+    expect(ids(twice, at)).toEqual(["uA2", "uA1", "uA0"]);
+  });
+
+  it("re-points a lifted card's status tokens at its new stack index", () => {
+    const { game, at } = setup();
+    game.units.uA0.ward = true;
+    const projected = project(game, { uA0: { at, x: 0, y: 0, seq: 1 } });
+    const stack = projected.permanents[at];
+    const ward = stack.find((p) => p.instanceId === "uA0:ward")!;
+    expect(stack[ward.attachedTo!.index].instanceId).toBe("uA0");
+  });
+
+  it("ignores an override from another tile and never moves a pinned card", () => {
+    const { game, at } = setup();
+    const plain = project(game, {});
+    const elsewhere = project(game, { uA0: { at: "0,0", x: 0.3, y: 0.3, seq: 1 } });
+    expect(centreOf(elsewhere, at, "uA0").item.offset).toEqual(centreOf(plain, at, "uA0").item.offset);
+    const owner = Object.values(game.units).find((u) => u.isAvatar && u.owner === 1)!;
+    game.units.uBig = { ...owner, id: "uBig", isAvatar: false, name: "Big", region: "surface", x: 1, y: 1, size: "2x2" };
+    const bigAt = unitCell(game.units.uBig);
+    const before = project(game, {}).permanents[bigAt].find((p) => p.instanceId === "uBig")!;
+    const after = project(game, { uBig: { at: bigAt, x: 0.3, y: 0.3, seq: 1 } }).permanents[bigAt].find((p) => p.instanceId === "uBig")!;
+    expect(after.offset).toEqual(before.offset);
+  });
+
+  it("arranges an avatar too, keyed by its unit id", () => {
+    const { game, avatar } = setup();
+    const at = engineCellKey(avatar.x, avatar.y);
+    const projected = project(game, { [avatar.id]: { at, x: -0.1, y: 0.05, seq: 1 } });
+    expect(projected.avatars.p1.offset![0]).toBeCloseTo(-0.1 * TILE_SIZE, 5);
+    expect(projected.avatars.p1.offset![1]).toBeCloseTo(0.05 * TILE_SIZE, 5);
+  });
+
+  it("drops the override of a card that left its tile, and keeps the rest", () => {
+    const { game, at } = setup();
+    const arrangement: Arrangement = { uA0: { at, x: 0.1, y: 0, seq: 1 }, uA1: { at, x: -0.1, y: 0, seq: 2 } };
+    expect(pruneArrangement(arrangement, game), "nothing moved: the same object").toBe(arrangement);
+    game.units.uA0.x = 1; // moved to the next square
+    delete game.units.uA1; // left the board
+    expect(pruneArrangement(arrangement, game)).toEqual({});
+    game.units.uA0.x = 0;
+    expect(pruneArrangement(arrangement, game)).toEqual({ uA0: arrangement.uA0 });
+  });
+
+  it("only arranges cards that stand on one tile of their own", () => {
+    const { game, at, avatar } = setup();
+    expect(arrangeableCell(game, "uA0")).toBe(at);
+    expect(arrangeableCell(game, avatar.id)).toBe(engineCellKey(avatar.x, avatar.y));
+    expect(arrangeableCell(game, "nope")).toBeNull();
+    game.units.uA2.size = "2x2";
+    expect(arrangeableCell(game, "uA2"), "a multi-square body is pinned").toBeNull();
+    game.artifacts.aX = { id: "aX", cardId: "c", name: "Thing", conjuredBy: 0, x: 0, y: 2, region: "surface", carriedBy: null, tapped: false };
+    expect(arrangeableCell(game, "aX")).toBe(at);
+    game.artifacts.aX.carriedBy = "uA0";
+    expect(arrangeableCell(game, "aX"), "a carried artifact rides on its bearer").toBeNull();
   });
 });
 

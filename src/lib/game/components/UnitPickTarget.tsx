@@ -15,6 +15,7 @@ import {
   type UnitPickOffset,
   type UnitPickState,
 } from "@/lib/game/cpu/usePickUnit";
+import { useGameStore } from "@/lib/game/store";
 
 const SETTLED = 0.0005;
 
@@ -60,6 +61,12 @@ function priorityRaycast(this: Mesh, raycaster: Raycaster, intersects: Intersect
 }
 const noRaycast = () => undefined;
 const stop = (event: ThreeEvent<PointerEvent | MouseEvent>) => event.stopPropagation();
+/** Alt with engine mode's arrangement on (GameState.boardArrange): the press is the card's to drag, not a pick. */
+const arranging = (event: ThreeEvent<PointerEvent | MouseEvent>) =>
+  event.nativeEvent.altKey && Boolean(useGameStore.getState().boardArrange);
+const stopUnlessArranging = (event: ThreeEvent<PointerEvent>) => {
+  if (!arranging(event)) event.stopPropagation();
+};
 
 /** The tone outline on a board card, plus, for a candidate, a pulsing fill and the click plane that commits the pick.
  * The pick lands on click, not on press (R3F delivers the click to everything hit at pointerdown); press, release, double
@@ -78,9 +85,9 @@ export function UnitPickCapture({token,state,width,height,rotationZ,elevation = 
     <CardOutline width={width} height={height} rotationZ={rotationZ} elevation={elevation} color={color} renderOrder={1700} opacity={0.95} depthTest={false} />
     {state === "candidate" && <PulsingFill width={width} height={height} rotationZ={rotationZ} elevation={elevation} color={color} />}
     {isPickable(state) && <mesh name={`unit-pick:${token}`} rotation-x={-Math.PI/2} rotation-z={rotationZ} position={[0,elevation+0.001,0]}
-      raycast={priorityRaycast} onPointerDown={stop} onPointerUp={stop} onDoubleClick={stop}
+      raycast={priorityRaycast} onPointerDown={stopUnlessArranging} onPointerUp={stopUnlessArranging} onDoubleClick={stop}
       onContextMenu={(event: ThreeEvent<MouseEvent>) => { event.stopPropagation(); event.nativeEvent.preventDefault(); }}
-      onClick={(event: ThreeEvent<MouseEvent>) => { event.stopPropagation(); pickUnit(token); }}>
+      onClick={(event: ThreeEvent<MouseEvent>) => { event.stopPropagation(); if (!arranging(event)) pickUnit(token); }}>
       <planeGeometry args={[width,height]} />
       <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
     </mesh>}

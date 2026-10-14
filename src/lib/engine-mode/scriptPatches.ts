@@ -1,4 +1,4 @@
-import { getKeywords, getScript, siteAt, unitsAt } from "@sorcery/shared";
+import { effKeywords, getKeywords, getScript, siteAt, unitsAt } from "@sorcery/shared";
 import type { CardScript, EffectAPI, UnitState } from "@sorcery/shared";
 
 /**
@@ -55,9 +55,63 @@ const waveshaperWave = (original: ContFn): ContFn => (ctx: EffectAPI, contCtx: u
   }
 };
 
+/*
+ * Break Stealth → … — WORKAROUND for vendor engine/game.ts (activate): activating ANY minion
+ * ability strips its Stealth before the effect runs, so Frozen Horror and Asmodeus, whose effects
+ * open with `if (!self.stealth) return`, always fizzle ("No Stealth to break."). The patch offers
+ * the ability only while the minion is stealthed and hands the effect back the Stealth the engine
+ * just took, so the original breaks it itself and resolves. DELETE once fixed upstream.
+ */
+type Ability = NonNullable<CardScript["abilities"]>[number];
+type MarkedAbility = Ability & { [PATCHED]?: true };
+
+function wrapBreakStealth(name: string, key: string): boolean {
+  const abilities = getScript(name)?.abilities;
+  const index = abilities?.findIndex((a) => a.key === key) ?? -1;
+  const original = abilities?.[index] as MarkedAbility | undefined;
+  if (!abilities || !original || original[PATCHED]) return false;
+  const patched: MarkedAbility = {
+    ...original,
+    available: (state, sourceId) =>
+      state.units[sourceId]?.stealth === true && (original.available?.(state, sourceId) ?? true),
+    effect: (ctx) => {
+      const self = ctx.state.units[ctx.sourceId];
+      if (self) self.stealth = true;
+      return original.effect(ctx);
+    },
+  };
+  patched[PATCHED] = true;
+  abilities[index] = patched;
+  return true;
+}
+
+/*
+ * Slimy Mutants — WORKAROUND for vendor cards/scripts/gen/slimy-mutants.ts: the hand ability is
+ * offered whenever ③ is affordable, even with no submerging ally to transform, and then spends the
+ * mana for nothing ("No submerging ally to mutate."). Offer it only while such an ally exists.
+ * DELETE once fixed upstream.
+ */
+type HandAbilities = NonNullable<CardScript["handAbilities"]> & { [PATCHED]?: true };
+
+function gateSlimyMutants(): boolean {
+  const script = getScript("Slimy Mutants");
+  const original = script?.handAbilities as HandAbilities | undefined;
+  if (!script || !original || original[PATCHED]) return false;
+  const patched: HandAbilities = (state, cardId, owner) =>
+    Object.values(state.units).some((u) => u.controller === owner && !u.isAvatar && effKeywords(state, u).submerge)
+      ? original(state, cardId, owner)
+      : [];
+  patched[PATCHED] = true;
+  script.handAbilities = patched;
+  return true;
+}
+
 /** Applies every patch; idempotent (import side effect, exported for tests). */
 export function applyScriptPatches(): void {
   wrapCont("Waveshaper", "wave", waveshaperWave);
+  wrapBreakStealth("Frozen Horror", "terror");
+  wrapBreakStealth("Asmodeus", "immolate");
+  gateSlimyMutants();
 }
 
 applyScriptPatches();

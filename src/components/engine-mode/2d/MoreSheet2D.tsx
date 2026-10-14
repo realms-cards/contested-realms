@@ -23,12 +23,11 @@ const ITEM = "h-10 w-full justify-start gap-2.5 px-3 text-[13px]";
 const COUNT = "ml-auto font-rc-mono text-xs tabular-nums text-rc-fg-subtle";
 
 /**
- * Everything the 2D view's action bar has no room for, as one bottom sheet: audio first (sound
- * and music on/off and their volumes, the same settings the other modes' AudioControls
- * change), then the card panels
+ * Everything the 2D view's action bar has no room for, as one bottom sheet: the board-view
+ * choice first (Auto / 3D / 2D), then audio (sound and music on/off and their volumes, the
+ * same settings the other modes' AudioControls change), then the card panels
  * the 3D rail opens (cemetery casts, the piloted hand, the collection — the same CpuCardPick
- * panels wired to the same `interaction.begin`), the table tools, the board-view
- * choice, the log, the account (the floating badge stands down on the 2D page, so sign-in and
+ * panels wired to the same `interaction.begin`), the table tools, the log, the account (the floating badge stands down on the 2D page, so sign-in and
  * the user settings live here) and the two ways out.
  *
  * It is a sheet over the bottom of the screen rather than a popover so every target is a full
@@ -52,6 +51,10 @@ export default function MoreSheet2D({
   const events = useGameStore((s) => s.events);
   const cardPreviews = useGameStore((s) => s.cardPreviewsEnabled);
   const toggleCardPreviews = useGameStore((s) => s.toggleCardPreviews);
+  const arrangeMode = useEngineSession((s) => s.arrangeMode);
+  const setArrangeMode = useEngineSession((s) => s.setArrangeMode);
+  const arranged = useEngineSession((s) => Object.keys(s.arrangement).length);
+  const resetArrangement = useEngineSession((s) => s.resetArrangement);
 
   const [view, setView] = useState<MoreView>(initialView);
   const [concedeArmed, setConcedeArmed] = useState(false);
@@ -196,10 +199,13 @@ export default function MoreSheet2D({
   } else {
     body = (
       <div className="flex flex-col gap-3">
-        {/* the account near the top, so the badge's menu drops down over the sheet rather
-            than past its end; right-aligned, as the menu opens leftwards from the badge */}
+        {/* the board view first: switching to 3D (or back) is the most-wanted thing in here */}
+        <BoardViewToggle />
+
         <AudioSection />
 
+        {/* the account near the top, so the badge's menu drops down over the sheet rather
+            than past its end; right-aligned, as the menu opens leftwards from the badge */}
         <Section label="Account">
           <div className="flex min-h-10 items-center justify-end">
             <UserBadge showPresence={false} />
@@ -254,9 +260,35 @@ export default function MoreSheet2D({
             Card previews
             <span className={COUNT}>{cardPreviews ? "On" : "Off"}</span>
           </RcButton>
+          {/* display only: slide cards within their tiles (Alt-drag does the same on a desktop) */}
+          <RcButton
+            variant="quiet"
+            size="sm"
+            tone="moonlight"
+            className={ITEM}
+            aria-pressed={arrangeMode}
+            onClick={() => {
+              setArrangeMode(!arrangeMode);
+              // turning it on is for dragging cards: get the sheet out of the way
+              if (!arrangeMode) onClose();
+            }}
+          >
+            <Icon icon="game-icons:move" className="h-4 w-4" aria-hidden />
+            Arrange cards
+            <span className={COUNT}>{arrangeMode ? "On" : "Off"}</span>
+          </RcButton>
+          <RcButton
+            variant="quiet"
+            size="sm"
+            className={ITEM}
+            disabled={arranged === 0}
+            onClick={() => resetArrangement()}
+          >
+            <Icon icon="game-icons:anticlockwise-rotation" className="h-4 w-4" aria-hidden />
+            Reset layout
+            {arranged > 0 && <span className={COUNT}>{arranged}</span>}
+          </RcButton>
         </Section>
-
-        <BoardViewToggle />
 
         <Section label="Leaving">
           <div className="grid grid-cols-2 gap-1.5">

@@ -56,6 +56,7 @@ vi.mock("@/contexts/RealtimeTournamentContext", () => ({
 }));
 vi.mock("@/lib/config/features", () => ({
   tournamentFeatures: { isEnabled: () => false },
+  FEATURE_ENGINE_MODE: false,
 }));
 vi.mock("@/lib/guest/guestSession", () => ({
   useGuestSession: () => ({ status: "ready", guest: null }),

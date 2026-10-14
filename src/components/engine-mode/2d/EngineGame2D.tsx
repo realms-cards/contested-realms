@@ -6,7 +6,7 @@ import { suppressGlobalUserBadge } from "@/components/auth/userBadgePresence";
 import { EndTurnConfirmDialog } from "@/components/game/EndTurnConfirmDialog";
 import MusicGameSync from "@/components/game/MusicGameSync";
 import { GameSoundEffects } from "@/lib/audio/gameSfx";
-import { holdBotLineToasts, useEngineSession } from "@/lib/engine-mode/session";
+import { holdBotLineToasts, useEngineSession, watchArrangeModifier } from "@/lib/engine-mode/session";
 import { useGameStore } from "@/lib/game/store";
 import { getStoredCardPreviewsEnabled } from "@/lib/game/store/uiState";
 import EngineContextMenu from "../EngineContextMenu";
@@ -16,7 +16,7 @@ import { PromptPlacementContext } from "../EnginePromptShell";
 import { useEngineInteraction } from "../useEngineInteraction";
 import ActionBar2D, { PILOT_HAND_ID } from "./ActionBar2D";
 import Board2D from "./Board2D";
-import ControlBanner2D from "./ControlBanner2D";
+import ControlBanner2D, { ArrangeBanner2D } from "./ControlBanner2D";
 import EventFx2D from "./EventFx2D";
 import { PROMPT_DOCK_ID } from "./FieldTargets2D";
 import Hand2D from "./Hand2D";
@@ -106,6 +106,9 @@ export default function EngineGame2D({ onRestart, onExit }: { onRestart: () => v
   // run in registration order and the host's came first.)
   useEffect(() => holdBotLineToasts(), []);
 
+  // Alt (Option) + drag slides a card within its tile, as on the 3D table
+  useEffect(() => watchArrangeModifier(), []);
+
   // the remembered card-preview setting, as the 3D table honours it
   useEffect(() => {
     const stored = getStoredCardPreviewsEnabled();
@@ -183,10 +186,12 @@ export default function EngineGame2D({ onRestart, onExit }: { onRestart: () => v
               dock={!portalSetup && <PromptDock compact={sizing.layout !== "wide"} flat={!portrait} />}
               status={
                 <>
-                  {/* whose turn you are playing (Courtesan Thaïs), over the status line; both
-                      collapse while silent */}
-                  <div data-control-banner="" className="empty:hidden">
+                  {/* whose turn you are playing (Courtesan Thaïs) and arrange mode, over the
+                      status line; all collapse while silent */}
+                  <div data-control-banner="" className="flex flex-col gap-1 empty:hidden">
                     <ControlBanner2D />
+                    {/* arrange mode is on: cards slide instead of acting, until "Done" */}
+                    <ArrangeBanner2D />
                   </div>
                   <StatusLine2D large={sizing.layout === "wide"} />
                 </>

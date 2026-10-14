@@ -1,4 +1,5 @@
 import type { SpanEntity } from "@/lib/engine-mode/boardOverlays";
+import { clampToTile, type Arrangement } from "@/lib/engine-mode/projection";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import type { FieldTone } from "@/lib/game/cpu/fieldTargets";
 import { avatarUnitToken, permanentUnitToken, unitPickState } from "@/lib/game/cpu/unitTokens";
@@ -50,6 +51,8 @@ const BODY_FILL = 0.62;
 const Z_FADED = 4;
 const Z_AURA = 6;
 const Z_CARD = 10;
+/** cards the player arranged sit over the laid-out rows, the latest arranged highest */
+const Z_ARRANGED = 20;
 const Z_BODY = 40;
 export const Z_PICK = 60;
 
@@ -101,6 +104,8 @@ export interface Placed {
   statuses: Attachment[];
   badges: Badges;
   faded: boolean;
+  /** the engine id the player can arrange this card by (null: a span, it keeps its place) */
+  arrangeId: string | null;
 }
 
 /**
@@ -140,6 +145,10 @@ export interface Layout2DInput {
   spans: readonly SpanEntity[];
   positions?: StoreState["permanentPositions"];
   tile: TileSize;
+  /** where the player slid cards within their tiles (the session's, display only) */
+  arrangement?: Arrangement;
+  /** each avatar's engine unit id, which its arrangement is keyed by */
+  avatarIds?: Partial<Record<PlayerKey, string>>;
 }
 
 interface Occupant {
@@ -151,6 +160,7 @@ interface Occupant {
   tapped: boolean;
   faded: boolean;
   item: PermanentItem | null;
+  arrangeId: string | null;
 }
 
 const seatOf = (owner: 1 | 2 | undefined): PlayerKey => (owner === 2 ? "p2" : "p1");
@@ -231,6 +241,7 @@ function placeRow(
       statuses: [],
       badges: badgesOf(o.item, positions),
       faded: o.faded,
+      arrangeId: o.arrangeId,
     });
     cursor += span + step;
   });
@@ -251,7 +262,56 @@ function spanSize(span: SpanEntity, tile: TileSize): number {
   return Math.min(BODY_FILL * bh * tile.h, (BODY_FILL * bw * tile.w) / CARD_ASPECT);
 }
 
-export function layoutBoard2D({ permanents, avatars, spans, positions, tile }: Layout2DInput): Placed[] {
+/** A card's centre for an arrangement, clamped so the whole card (as turned) stays on its tile. */
+export function arrangedCentre(
+  cell: CellKey,
+  offset: { x: number; y: number },
+  card: { w: number; h: number; rotate: 0 | 90 },
+  tile: TileSize,
+): { x: number; y: number } {
+  const origin = cellOrigin(cell, tile);
+  const [fw, fh] = card.rotate === 90 ? [card.h, card.w] : [card.w, card.h];
+  return {
+    x: origin.x + tile.w / 2 + clampToTile(offset.x * tile.w, fw / 2, tile.w / 2),
+    y: origin.y + tile.h / 2 + clampToTile(offset.y * tile.h, fh / 2, tile.h / 2),
+  };
+}
+
+/**
+ * Where an arranging drag of `dx`/`dy` px puts a card: its centre, clamped to its own tile, and
+ * that centre as the session's arrangement offset (tiles from the tile's centre).
+ */
+export function arrangeDrop(
+  placed: Pick<Placed, "cell" | "x" | "y" | "w" | "h" | "rotate">,
+  dx: number,
+  dy: number,
+  tile: TileSize,
+): { x: number; y: number; offset: [number, number] } {
+  const origin = cellOrigin(placed.cell, tile);
+  const cx = origin.x + tile.w / 2;
+  const cy = origin.y + tile.h / 2;
+  const centre = arrangedCentre(placed.cell, { x: (placed.x + dx - cx) / tile.w, y: (placed.y + dy - cy) / tile.h }, placed, tile);
+  return { ...centre, offset: [(centre.x - cx) / tile.w, (centre.y - cy) / tile.h] };
+}
+
+/**
+ * Put the player's arranged cards where they left them. They keep their slot in the row, so
+ * nothing else on the tile shifts, and rise over it in arrangement order (latest on top).
+ */
+function applyArrangement(out: Placed[], arrangement: Arrangement, tile: TileSize): void {
+  const arranged = out
+    .map((placed) => ({ placed, entry: placed.arrangeId ? arrangement[placed.arrangeId] : undefined }))
+    .filter((a): a is { placed: Placed; entry: Arrangement[string] } => Boolean(a.entry) && a.entry?.at === a.placed.cell)
+    .sort((a, b) => a.entry.seq - b.entry.seq);
+  arranged.forEach(({ placed, entry }, rank) => {
+    const centre = arrangedCentre(placed.cell, entry, placed, tile);
+    placed.x = centre.x;
+    placed.y = centre.y;
+    if (!placed.faded) placed.z = Z_ARRANGED + rank;
+  });
+}
+
+export function layoutBoard2D({ permanents, avatars, spans, positions, tile, arrangement, avatarIds }: Layout2DInput): Placed[] {
   const spanById = new Map(spans.map((s) => [s.instanceId, s]));
   const loose = new Map<CellKey, Occupant[]>();
   const spanned: { span: SpanEntity; occupant: Occupant; at: CellKey }[] = [];
@@ -276,6 +336,7 @@ export function layoutBoard2D({ permanents, avatars, spans, positions, tile }: L
       tapped: Boolean(avatar.tapped),
       faded: false,
       item: null,
+      arrangeId: avatarIds?.[who] ?? null,
     });
   }
 
@@ -304,6 +365,8 @@ export function layoutBoard2D({ permanents, avatars, spans, positions, tile }: L
         tapped: Boolean(item.tapped),
         faded: Boolean(item.faded),
         item,
+        // tile markers stay put; a pinned card is drawn as a span below and keeps its place
+        arrangeId: id || null,
       };
       const span = id ? spanById.get(id) : undefined;
       if (span) spanned.push({ span, occupant, at });
@@ -325,6 +388,7 @@ export function layoutBoard2D({ permanents, avatars, spans, positions, tile }: L
       placeRow(row, origin.x, origin.y + centre * tile.h, shared ? SHARED_ROW_H : SOLO_ROW_H, tile, out, positions, at);
     }
   }
+  if (arrangement) applyArrangement(out, arrangement, tile);
 
   for (const { span, occupant, at } of spanned) {
     const h = spanSize(span, tile);
@@ -346,6 +410,7 @@ export function layoutBoard2D({ permanents, avatars, spans, positions, tile }: L
       statuses: [],
       badges: badgesOf(occupant.item, positions),
       faded: occupant.faded,
+      arrangeId: null,
     });
   }
 

@@ -20,7 +20,8 @@ import { useResolvedBoardView } from "@/lib/engine-mode/boardView";
 import { enginePrecons, loadEngineDeck } from "@/lib/engine-mode/decks";
 import { loadEngineGame } from "@/lib/engine-mode/persistence";
 import type { SavedEngineGame } from "@/lib/engine-mode/persistence";
-import { useEngineSession } from "@/lib/engine-mode/session";
+import { useEngineGamePresence } from "@/lib/engine-mode/presence";
+import { useEngineSession, watchArrangeModifier } from "@/lib/engine-mode/session";
 import type { BotLevel } from "@/lib/engine-mode/session";
 import { createCardPreviewData } from "@/lib/game/card-preview.types";
 import { useGameStore } from "@/lib/game/store";
@@ -81,6 +82,8 @@ export default function EngineMatch() {
   const stop = useEngineSession((s) => s.stop);
   const resume = useEngineSession((s) => s.resume);
   const discardSaved = useEngineSession((s) => s.discardSaved);
+  // the lobby's "games in the Rules Engine" count: only while a game is on the board and undecided
+  useEngineGamePresence(game !== null && game.phase !== "over");
   const lists = useDeckLists();
   // 2D on phones, 3D elsewhere (or whatever the player chose); null until the device is known
   const boardView = useResolvedBoardView();
@@ -299,6 +302,10 @@ function EngineGame({
   const dismissEndTurn = useEngineSession((s) => s.dismissEndTurn);
   const dispatch = useEngineSession((s) => s.dispatch);
   const dragFromHand = useGameStore((s) => s.dragFromHand);
+  // Alt (Option) arranges cards within their tiles: the table holds still while it is held
+  const arrangeHeld = useEngineSession((s) => s.arrangeHeld);
+  const boardDragActive = useGameStore((s) => s.boardDragActive);
+  useEffect(() => watchArrangeModifier(), []);
   // Mulligan over = the board is really in play; this is what turn 1's announcement waits for,
   // exactly as /play waits on mulliganComplete && seerComplete.
   const pastSetup = useGameStore((s) => s.phase !== "Setup");
@@ -383,7 +390,7 @@ function EngineGame({
     >
       <EngineBoard3D
         controlsRef={controlsRef}
-        cameraLocked={interaction.picking || dragFromHand}
+        cameraLocked={interaction.picking || dragFromHand || arrangeHeld || boardDragActive}
       />
       <GameSoundEffects store={useGameStore} />
       {/* Everything from here to the console is chrome, and hides together with U. */}

@@ -259,6 +259,7 @@ export function AvatarCard({
     : [];
   const unitPicks = useUnitPicks(pickTokens);
   const gesturesLocked = useGameStore((state) => state.boardGesturesLocked);
+  const boardArrange = useGameStore((state) => state.boardArrange);
   if (!avatar.pos) return null;
   const pickToken = avatarUnitToken(seat);
   const unitPick = isSpectator ? null : (unitPicks.get(pickToken) ?? null);
@@ -490,6 +491,15 @@ export function AvatarCard({
     // a rules-enforced mode owns the board: no free dragging (picking still works)
     if (gesturesLocked) {
       e.stopPropagation();
+      // ...but for engine mode's display-only arrangement: Alt-drag slides the avatar within
+      // its tile. The usual drag below picks it up; useBoardDropManager puts it down.
+      if (boardArrange && e.button === 0 && e.nativeEvent.altKey && !dragAvatar && !draggingPermanent) {
+        avatarDragStartRef.current = {
+          who: seat,
+          start: [e.point.x, e.point.z],
+          time: Date.now() - DRAG_HOLD_MS,
+        };
+      }
       return;
     }
     if (draggingPermanent || dragFromHand || dragFromPile) return;
@@ -688,6 +698,11 @@ export function AvatarCard({
     }
     if (isSpectator) {
       e.stopPropagation();
+      return;
+    }
+    if (gesturesLocked) {
+      // an arrange drag ends in useBoardDropManager, wherever it is let go
+      if (dragAvatar !== seat) avatarDragStartRef.current = null;
       return;
     }
     if (dragAvatar === seat) {
@@ -895,7 +910,10 @@ export function AvatarCard({
           />
         </group>
         {renderCounters()}
-        {renderAttachedItems()}
+        {/* An arrange drag (engine mode) carries the attachments on the drag ghost, as a dragged
+            permanent's are (BoardDragGhost); hide them here meanwhile, or a copy stays behind
+            at the avatar's old place until the drop. */}
+        <group visible={!(hideAvatar && boardArrange)}>{renderAttachedItems()}</group>
         </UnitPickSpread>
       </RigidBody>
     </group>

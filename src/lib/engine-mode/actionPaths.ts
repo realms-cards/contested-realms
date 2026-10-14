@@ -19,6 +19,32 @@ export interface ActionPath {
    * picker lights the whole footprint (see `pathAreas`).
    */
   areas?: Record<string, string[]>;
+  /**
+   * A step index `narrow` must not skip over even when it is the only choice left: the
+   * player sees the labelled option and clicks it. A hand card's ability (Slimy Mutants)
+   * started from the card itself would otherwise fire — and spend its mana — on the very
+   * click that only picked the card.
+   */
+  hold?: number;
+}
+
+/** The hand cards whose `handAbilities` provide this ability key (they surface on the owner's avatar). */
+function handAbilityCards(game: EngineState, avatarId: string, ability: string): string[] {
+  const avatar = game.units[avatarId];
+  if (!avatar?.isAvatar) return [];
+  const owner = avatar.controller;
+  const out: string[] = [];
+  for (const cardId of game.players[owner]?.hand ?? []) {
+    const name = game.cards[cardId]?.name;
+    const provides = name ? getScript(name)?.handAbilities : undefined;
+    if (!provides) continue;
+    try {
+      if (provides(game, cardId, owner).some((a) => a.key === ability)) out.push(cardId);
+    } catch {
+      // a script that cannot describe itself here simply gets no hand path
+    }
+  }
+  return out;
 }
 
 /**
@@ -169,6 +195,8 @@ export function actionPaths(
   const paths: ActionPath[] = [];
   /** summon click-paths already emitted, so the same clicks never mean two different casters */
   const summonSteps = new Set<string>();
+  /** hand tokens that start a hand card's ability (see the `activate` case) */
+  const handAbilityStarts = new Set<string>();
   const opt = (tile: string, id: string, label: string) => {
     const token = optToken(tile, id);
     labels[token] = label;
@@ -303,6 +331,14 @@ export function actionPaths(
         ];
         for (const target of action.targets ?? []) steps.push(...targetSteps(target, action));
         paths.push({ action, steps });
+        // A hand card's ability is surfaced on its owner's avatar; it can be started from the
+        // card itself too, then the same option and targets. The option is held for a click.
+        const avatar = game.units[action.sourceId];
+        for (const cardId of handAbilityCards(game, action.sourceId, action.ability)) {
+          const owner = avatar?.controller === 1 ? "p2" : "p1";
+          paths.push({ action, steps: [handToken(owner, cardId), ...steps.slice(1)], hold: 1 });
+          handAbilityStarts.add(handToken(owner, cardId));
+        }
         break;
       }
       case "pickUp": {
@@ -334,6 +370,22 @@ export function actionPaths(
         break;
     }
   }
+  // A hand card that can be both played and used for its hand ability means two things on one
+  // click. Put a labelled choice right after the card — "Cast …" beside the ability's own label,
+  // on the same row by the avatar — so the player says which before anything else is lit.
+  for (const start of handAbilityStarts) {
+    const cardId = start.slice(start.indexOf(":", "hand:".length) + 1);
+    const plays = paths.filter((p) => p.steps[0] === start && p.hold === undefined);
+    if (!plays.length) continue;
+    const avatarId = game.players[seat]?.avatarUnitId;
+    const tile = avatarId && game.units[avatarId] ? tileOf(game, avatarId) : "2,2";
+    const name = game.cards[cardId]?.name ?? "it";
+    for (const path of plays) {
+      const label = path.action.t === "avatarSite" ? `Play ${name}` : `Cast ${name}`;
+      const choice = opt(tile, `${path.action.t === "avatarSite" ? "play" : "cast"}-${cardId}`, label);
+      path.steps = [path.steps[0], choice, ...path.steps.slice(1)];
+    }
+  }
   return { paths, labels };
 }
 
@@ -355,7 +407,9 @@ export function narrow(paths: ActionPath[], clicked: string[]): Narrowed {
     const matching = paths.filter((p) => prefix.every((step, i) => p.steps[i] === step));
     const done = matching.find((p) => p.steps.length === prefix.length)?.action ?? null;
     const next = [...new Set(matching.filter((p) => p.steps.length > prefix.length).map((p) => p.steps[prefix.length]))];
-    if (!done && next.length === 1 && prefix.length > 0) {
+    // a held step (see ActionPath.hold) waits for its click even when it is the only choice
+    const held = matching.some((p) => p.hold === prefix.length && p.steps.length > prefix.length);
+    if (!done && next.length === 1 && prefix.length > 0 && !held) {
       prefix.push(next[0]);
       continue;
     }

@@ -446,13 +446,105 @@ function pile(count: number, owner: PlayerKey, kind: "atlas" | "spellbook"): Car
 }
 
 /**
- * Move a tile's pinned cards to the end of its stack (the board lifts later items higher), and
- * re-point every attachment on that tile at its host's new index.
+ * A card the player slid within its tile. Display only: it is never sent to the engine, so it
+ * changes nothing about the rules or the computer's play, and it lasts only while the card stays
+ * on that tile (`pruneArrangement`) — a card that moves falls back to the automatic layout.
  */
-function pinnedLast(items: PermanentItem[], at: string, pinned: ReadonlySet<string>): PermanentItem[] {
-  const isPinned = (item: PermanentItem) => pinned.has(item.instanceId ?? "");
-  if (!items.some(isPinned)) return items;
-  const order = [...items.keys()].sort((a, b) => Number(isPinned(items[a])) - Number(isPinned(items[b])));
+export interface CardArrangement {
+  /** the board cell it was arranged on */
+  at: string;
+  /** the card's centre from the tile's centre, in tiles: x across, y down the board (toward p1) */
+  x: number;
+  y: number;
+  /** arrangement order: the latest card arranged on a tile is drawn on top of it */
+  seq: number;
+}
+
+/** The player's card arrangement, keyed by engine unit / artifact id. */
+export type Arrangement = Record<string, CardArrangement>;
+
+/** One axis of a card's centre, clamped so a card `half` across stays inside a tile `room` across from its middle. */
+export function clampToTile(centre: number, half: number, room: number): number {
+  const limit = Math.max(0, room - half);
+  return Math.min(limit, Math.max(-limit, centre));
+}
+
+/**
+ * The board cell an engine card can be arranged on, or null when it cannot be: gone, carried
+ * (it is drawn on its bearer), or a multi-square body (pinned over its area, like an aura).
+ */
+export function arrangeableCell(game: Pick<EngineState, "units" | "artifacts">, id: string): string | null {
+  const unit = game.units[id];
+  if (unit) return !unit.isAvatar && occupiedSquares(unit).length > 1 ? null : engineCellKey(unit.x, unit.y);
+  const artifact = game.artifacts[id];
+  if (artifact) return artifact.carriedBy ? null : engineCellKey(artifact.x, artifact.y);
+  return null;
+}
+
+/** The arrangement without the cards that left the tile they were arranged on; the same object when none did. */
+export function pruneArrangement(arrangement: Arrangement, game: Pick<EngineState, "units" | "artifacts">): Arrangement {
+  let out: Arrangement | null = null;
+  for (const [id, entry] of Object.entries(arrangement)) {
+    if (arrangeableCell(game, id) === entry.at) continue;
+    out ??= { ...arrangement };
+    delete out[id];
+  }
+  return out ?? arrangement;
+}
+
+/** The override for a tile occupant, when it has one that applies here (pinned and attached cards never do). */
+function arrangedHere(item: PermanentItem, at: string, arrangement: Arrangement, pinned: ReadonlySet<string>): CardArrangement | null {
+  const id = item.instanceId ?? "";
+  const entry = id ? arrangement[id] : undefined;
+  if (!entry || entry.at !== at || item.attachedTo || pinned.has(id)) return null;
+  return entry;
+}
+
+/**
+ * Put the player's arranged cards where they left them, over the automatic layout (which still
+ * gives them their slot, so nothing else on the tile shifts). Clamped to the tile at the card's
+ * current size and turn, so a card that has since shrunk or tapped never pokes out of it.
+ */
+function arrangeOnTile(
+  items: PermanentItem[],
+  standing: { owner: 1 | 2; avatar: AvatarState; id: string }[],
+  at: string,
+  arrangement: Arrangement,
+  pinned: ReadonlySet<string>,
+): void {
+  const room = TILE_SIZE / 2;
+  const centre = (entry: CardArrangement, tapped: boolean, scale: number): [number, number] => {
+    const [w, h] = tapped ? [CARD_LONG, CARD_SHORT] : [CARD_SHORT, CARD_LONG];
+    return [clampToTile(entry.x * TILE_SIZE, (w * scale) / 2, room), clampToTile(entry.y * TILE_SIZE, (h * scale) / 2, room)];
+  };
+  for (const item of items) {
+    const entry = arrangedHere(item, at, arrangement, pinned);
+    if (!entry) continue;
+    const [x, z] = centre(entry, Boolean(item.tapped), item.scale ?? 1);
+    // the board adds its per-owner nudge to every permanent; take it back out (see spreadOnTile)
+    item.offset = [x, z - getPermanentOwnerBaseZ(item.owner)];
+  }
+  for (const { avatar, id } of standing) {
+    const entry = arrangement[id];
+    if (entry && entry.at === at) avatar.offset = centre(entry, Boolean(avatar.tapped), 1);
+  }
+}
+
+/**
+ * A tile's stack order, bottom to top (the board lifts later items higher): the laid-out cards,
+ * then the arranged ones with the latest arranged on top — so arranging a buried card brings it
+ * forward — then the pinned cards, which reach over their neighbours. Every attachment on the
+ * tile is re-pointed at its host's new index.
+ */
+function stackOrder(items: PermanentItem[], at: string, pinned: ReadonlySet<string>, arrangement: Arrangement): PermanentItem[] {
+  const rank = (item: PermanentItem): number => {
+    if (pinned.has(item.instanceId ?? "")) return Number.MAX_SAFE_INTEGER;
+    const entry = arrangedHere(item, at, arrangement, pinned);
+    return entry ? 1 + entry.seq : 0;
+  };
+  const ranks = items.map(rank);
+  if (ranks.every((r) => r === 0)) return items;
+  const order = [...items.keys()].sort((a, b) => ranks[a] - ranks[b]);
   const moved = new Map(order.map((from, to) => [from, to]));
   return order.map((from) => {
     const item = items[from];
@@ -549,6 +641,7 @@ export function projectView(
   portalsRevealed = true,
   power: Record<string, { atk: number; def: number }> = {},
   disabled: ReadonlySet<string> = new Set(),
+  arrangement: Arrangement = {},
 ): ProjectedState {
   const players = view.players as ViewPlayer[];
 
@@ -581,6 +674,8 @@ export function projectView(
     p1: { card: null, pos: null, tapped: false, offset: null },
     p2: { card: null, pos: null, tapped: false, offset: null },
   };
+  /** each avatar's engine unit id, which its arrangement is keyed by */
+  const avatarIds: Partial<Record<PlayerKey, string>> = {};
 
   for (const unit of Object.values(view.units)) {
     const owner = seatKey(unit.controller);
@@ -592,6 +687,7 @@ export function projectView(
         tapped: unit.tapped,
         offset: null,
       };
+      avatarIds[seatKey(unit.owner)] = unit.id;
       unitSlot.set(unit.id, { at: `${p.x},${p.y}`, index: -1 });
       continue;
     }
@@ -725,22 +821,26 @@ export function projectView(
   // Every occupant of a square is known by now (units, artifacts, auras, status tokens, the
   // other layer's hints — and the avatars), so give each tile a side-by-side layout. The
   // avatars are grouped by square first so a tile they share is laid out as one block.
-  const standingAt = new Map<string, { owner: 1 | 2; avatar: AvatarState }[]>();
+  const standingAt = new Map<string, { owner: 1 | 2; avatar: AvatarState; id: string }[]>();
   for (const [key, avatar] of Object.entries(avatars) as [PlayerKey, AvatarState][]) {
     if (!avatar.pos) continue;
     const at = `${avatar.pos[0]},${avatar.pos[1]}`;
-    const entry = { owner: (key === "p1" ? 1 : 2) as 1 | 2, avatar };
+    const entry = { owner: (key === "p1" ? 1 : 2) as 1 | 2, avatar, id: avatarIds[key] ?? "" };
     const here = standingAt.get(at);
     if (here) here.push(entry);
     else standingAt.set(at, [entry]);
   }
   for (const [at, avatarsHere] of standingAt) {
-    if (!permanents[at]) spreadOnTile([], avatarsHere); // two avatars sharing a bare square
+    if (permanents[at]) continue;
+    spreadOnTile([], avatarsHere); // an avatar on a bare square (or two sharing one)
+    arrangeOnTile([], avatarsHere, at, arrangement, pinned);
   }
   for (const [at, items] of Object.entries(permanents)) {
-    spreadOnTile(items, standingAt.get(at) ?? [], pinned);
-    // A pinned card reaches over its neighbours, so it goes to the top of its own tile's stack.
-    permanents[at] = pinnedLast(items, at, pinned);
+    const standing = standingAt.get(at) ?? [];
+    spreadOnTile(items, standing, pinned);
+    // the player's own arrangement goes over the automatic one (display only: see CardArrangement)
+    arrangeOnTile(items, standing, at, arrangement, pinned);
+    permanents[at] = stackOrder(items, at, pinned, arrangement);
   }
 
   const zones = {} as Record<PlayerKey, Zones>;

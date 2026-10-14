@@ -188,6 +188,7 @@ const placedOf = (s: BoardSnap, edge: number): Placed =>
     statuses: [],
     badges: { damage: s.damage, stats: null, counters: 0, layerState: null, carried: false },
     faded: false,
+    arrangeId: null,
   }) satisfies Placed;
 
 describe("BoardMotion2D", () => {

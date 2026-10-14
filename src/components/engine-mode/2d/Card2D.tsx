@@ -2,8 +2,8 @@
 
 import { Icon } from "@iconify/react";
 import Image from "next/image";
-import { useState } from "react";
-import type { CSSProperties } from "react";
+import { useRef, useState } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { cardImage } from "@/components/game/CpuPlayReveal";
 import type { FieldTone } from "@/lib/game/cpu/fieldTargets";
 import type { CardRef } from "@/lib/game/store/types";
@@ -121,6 +121,12 @@ function ToneFrame({ tone, color, inset = -3 }: { tone: FieldTone; color: string
   );
 }
 
+/** What an arranging press reports: the pointer's travel in px; "cancel" when it never moved. */
+export type ArrangeDrag = (placed: Placed, phase: "move" | "end" | "cancel", dx: number, dy: number) => void;
+
+/** px a pointer travels before an arranging press counts as a drag */
+const ARRANGE_SLOP = 4;
+
 export interface Card2DProps {
   placed: Placed;
   tone: FieldTone | null;
@@ -134,6 +140,12 @@ export interface Card2DProps {
   onHover?: (placed: Placed, entering: boolean, attachment?: Attachment) => void;
   /** the board's size in px: keeps the pick frame from reaching past the board's edge */
   bounds?: { w: number; h: number };
+  /**
+   * Arranging (display only): a press that drags the card slides it within its tile instead of
+   * tapping it — with Alt (Option) held, or every press while the phones' arrange mode is on,
+   * when a tap does nothing at all. Absent for a card that keeps its place (an aura, a body).
+   */
+  arrange?: { mode: boolean; held: boolean; dragging: boolean; onDrag: ArrangeDrag };
 }
 
 const BADGE = "flex items-center justify-center gap-px rounded-full border font-rc-mono tabular-nums leading-none shadow-rc-sm";
@@ -145,12 +157,74 @@ const BADGE = "flex items-center justify-center gap-px rounded-full border font-
  * Status tokens are icon badges and carried artifacts chips under the card, both outside the
  * rotation so they always read upright.
  */
-export default function Card2D({ placed, tone, colors, toneOf, onTap, onLongPress, onHover, bounds }: Card2DProps) {
+export default function Card2D({ placed, tone, colors, toneOf, onTap, onLongPress, onHover, bounds, arrange }: Card2DProps) {
   const { card, owner, x, y, w, h, rotate, z, faded, badges, statuses, attachments } = placed;
   const press = useLongPress({
     onTap: (info) => onTap(placed, info),
     onLongPress: (info) => onLongPress(placed, info),
   });
+  // an arranging press: captured, so the card follows the pointer even off its own box
+  const drag = useRef<{ pointer: number; x: number; y: number; moved: boolean } | null>(null);
+  const swallowClick = useRef(false);
+  const endDrag = (e: ReactPointerEvent, cancelled: boolean) => {
+    const d = drag.current;
+    if (!d || d.pointer !== e.pointerId) return false;
+    drag.current = null;
+    arrange?.onDrag(placed, d.moved && !cancelled ? "end" : "cancel", e.clientX - d.x, e.clientY - d.y);
+    return true;
+  };
+  const handlers = {
+    ...press,
+    onPointerDown: (e: ReactPointerEvent) => {
+      swallowClick.current = false;
+      if (arrange && e.button === 0 && e.isPrimary && (arrange.mode || e.altKey)) {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // capture is a nicety: without it the drag still ends on the card
+        }
+        drag.current = { pointer: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
+        swallowClick.current = true;
+        return;
+      }
+      press.onPointerDown(e);
+    },
+    onPointerMove: (e: ReactPointerEvent) => {
+      const d = drag.current;
+      if (!d || d.pointer !== e.pointerId) return press.onPointerMove(e);
+      const dx = e.clientX - d.x;
+      const dy = e.clientY - d.y;
+      if (!d.moved && Math.hypot(dx, dy) < ARRANGE_SLOP) return;
+      d.moved = true;
+      arrange?.onDrag(placed, "move", dx, dy);
+    },
+    onPointerUp: (e: ReactPointerEvent) => {
+      if (!endDrag(e, false)) press.onPointerUp(e);
+    },
+    onPointerCancel: (e: ReactPointerEvent) => {
+      if (!endDrag(e, true)) press.onPointerCancel(e);
+    },
+    onContextMenu: (e: ReactMouseEvent) => {
+      // arrange mode owns every press, a finger's long press included
+      if (arrange?.mode || drag.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      press.onContextMenu(e);
+    },
+    onClick: (e: ReactMouseEvent) => {
+      if (swallowClick.current) {
+        swallowClick.current = false;
+        e.stopPropagation();
+        return;
+      }
+      press.onClick(e);
+    },
+  };
+  const grab = arrange ? (arrange.dragging ? "grabbing" : arrange.mode || arrange.held ? "grab" : undefined) : undefined;
   const turned = rotate === 90;
   // the rotated card's on-screen box, centred in the w x h slot
   const fw = turned ? h : w;
@@ -173,18 +247,19 @@ export default function Card2D({ placed, tone, colors, toneOf, onTap, onLongPres
     <div className="pointer-events-none absolute" style={{ left: x - w / 2, top: y - h / 2, width: w, height: h, zIndex: z }}>
       <button
         type="button"
-        {...press}
+        {...handlers}
         onPointerEnter={(e) => {
           if (e.pointerType === "mouse") onHover?.(placed, true);
         }}
         onPointerLeave={(e) => {
-          press.onPointerLeave(e);
+          if (!drag.current) press.onPointerLeave(e);
           if (e.pointerType === "mouse") onHover?.(placed, false);
         }}
         aria-label={label}
         title={card.name}
-        className="pointer-events-auto absolute inset-0 touch-manipulation select-none overflow-hidden rounded-[4px] bg-rc-floor transition-transform duration-200 [-webkit-touch-callout:none] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rc-accent motion-reduce:transition-none"
+        className={`pointer-events-auto absolute inset-0 ${arrange?.mode ? "touch-none" : "touch-manipulation"} select-none overflow-hidden rounded-[4px] bg-rc-floor transition-transform duration-200 [-webkit-touch-callout:none] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rc-accent motion-reduce:transition-none`}
         style={{
+          cursor: grab,
           transform: turn ? `rotate(${turn}deg)` : undefined,
           opacity: faded ? 0.45 : 1,
           // a neutral hairline keeps the card's edge off the site art; owner is the facing (+ glow), not a line

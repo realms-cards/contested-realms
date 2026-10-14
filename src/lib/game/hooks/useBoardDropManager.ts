@@ -40,6 +40,10 @@ type UseBoardDropManagerOptions = {
   dragContext: BoardDragControls;
   useGhostOnlyBoardDrag: boolean;
   lastPointerRef: MutableRefObject<{ x: number; z: number } | null>;
+  /** Engine mode's display-only arrangement (GameState.boardArrange): with the gestures locked,
+   *  a board drag is only ever a card sliding within its own tile, and it ends here. */
+  gesturesLocked?: boolean;
+  boardArrange?: GameState["boardArrange"];
   // Site dragging
   draggingSite: GameState["draggingSite"];
   setDraggingSite: GameState["setDraggingSite"];
@@ -75,6 +79,8 @@ export function useBoardDropManager({
   dragContext,
   useGhostOnlyBoardDrag,
   lastPointerRef,
+  gesturesLocked = false,
+  boardArrange = null,
   draggingSite,
   setDraggingSite,
 }: UseBoardDropManagerOptions) {
@@ -82,6 +88,9 @@ export function useBoardDropManager({
     draggingRef,
     lastDropAt,
     setDragging,
+    setDragAvatar,
+    dragStartRef,
+    avatarDragStartRef,
     setGhost,
     dragTarget,
     draggedBody,
@@ -92,6 +101,30 @@ export function useBoardDropManager({
   useEffect(() => {
     const onGlobalPointerUp = () => {
       if (Date.now() - lastDropAt.current < 32) return;
+      // A rules-enforced mode (engine mode): the only board drag is arranging a card within its
+      // tile. Every such drop lands here — the card and tile handlers stand aside for it — and
+      // it never moves the card anywhere: the card's new centre is measured from its own tile.
+      if (gesturesLocked) {
+        const d = draggingRef.current;
+        if (!d && !dragAvatar) return;
+        const p = lastPointerRef.current;
+        const pos = dragAvatar ? avatars[dragAvatar]?.pos : null;
+        const from = d ? d.from : pos ? `${pos[0]},${pos[1]}` : null;
+        if (p && from && boardArrange) {
+          const [fx, fy] = from.split(",").map(Number);
+          const centre: [number, number] = [p.x - (offsetX + fx * TILE_SIZE), p.z - (offsetY + fy * TILE_SIZE)];
+          boardArrange(d ? { kind: "permanent", at: d.from, index: d.index } : { kind: "avatar", who: dragAvatar ?? "p1" }, centre);
+        }
+        setDragging(null);
+        setDragAvatar(null);
+        setGhost(null);
+        dragStartRef.current = null;
+        avatarDragStartRef.current = null;
+        dragTarget.current = null;
+        draggedBody.current = null;
+        lastDropAt.current = Date.now();
+        return;
+      }
       // Cancel site drag if released outside a tile
       if (draggingSite) {
         setDraggingSite(null);
@@ -373,7 +406,9 @@ export function useBoardDropManager({
   }, [
     actorKey,
     avatars,
+    avatarDragStartRef,
     board,
+    boardArrange,
     boardOffset.x,
     boardOffset.y,
     currentPlayer,
@@ -381,10 +416,12 @@ export function useBoardDropManager({
     dragContext,
     dragFromHand,
     dragFromPile,
+    dragStartRef,
     dragTarget,
     draggedBody,
     draggingRef,
     fetchCardMeta,
+    gesturesLocked,
     interactionGuides,
     isSpectator,
     lastDropAt,
@@ -397,6 +434,7 @@ export function useBoardDropManager({
     playCardFlip,
     snapBodyTo,
     setAttackChoice,
+    setDragAvatar,
     setDragFromHand,
     setPermanentOffset,
     setDragging,

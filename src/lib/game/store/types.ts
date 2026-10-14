@@ -48,6 +48,11 @@ export type PlayerState = {
 
 export type BoardSize = { w: number; h: number };
 export type CellKey = string; // `${x},${y}`
+
+/** A board card the player can slide within its tile (see GameState.boardArrange). */
+export type BoardArrangeTarget =
+  | { kind: "permanent"; at: CellKey; index: number }
+  | { kind: "avatar"; who: PlayerKey };
 export type SiteTile = {
   owner: 1 | 2;
   cpuNeutral?: boolean;
@@ -1991,6 +1996,13 @@ export type GameState = {
    */
   boardGesturesLocked: boolean;
   setBoardGesturesLocked: (locked: boolean) => void;
+  /**
+   * Set only by engine mode, for its display-only card arrangement: while the gestures are
+   * locked, holding Alt (Option) and dragging a board card slides it within its own tile and
+   * hands the card's new centre here — in world units from the tile's centre — instead of
+   * moving it. Null everywhere else, which leaves every other mode's dragging untouched.
+   */
+  boardArrange: ((target: BoardArrangeTarget, centre: [number, number]) => void) | null;
   // Card meta cache (subset) used to detect base power and rarity
   metaByCardId: Record<
     number,

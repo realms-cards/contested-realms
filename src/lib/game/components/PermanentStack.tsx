@@ -520,6 +520,7 @@ export function PermanentStack({
   // CPU board picks on this tile's cards: subscribes to their tones only, so other stacks stay put.
   const unitTokens = tileUnitTokens(tileKey, items, magicContext.avatars);
   const gesturesLocked = useGameStore((s) => s.boardGesturesLocked);
+  const boardArrange = useGameStore((s) => s.boardArrange);
   const unitPicks = useUnitPicks(unitTokens);
   const pickLayout = unitPickLayout(unitTokens, unitPicks);
 
@@ -982,6 +983,28 @@ export function PermanentStack({
                 // a rules-enforced mode owns the board: no free dragging (picking still works)
                 if (gesturesLocked) {
                   e.stopPropagation();
+                  // ...but for engine mode's display-only arrangement: Alt-drag slides a card
+                  // within its tile (pinned cards keep their place). The usual drag below picks
+                  // it up; useBoardDropManager puts it down.
+                  if (
+                    boardArrange &&
+                    e.button === 0 &&
+                    e.nativeEvent.altKey &&
+                    !p.attachedTo &&
+                    !p.lift &&
+                    !tokenSiteReplace &&
+                    !dragging &&
+                    !dragAvatar
+                  ) {
+                    clearHoverPreview(hoverKey);
+                    // armed at once: the held modifier already says this press is a drag
+                    dragStartRef.current = {
+                      at: key,
+                      index: idx,
+                      start: [e.point.x, e.point.z],
+                      time: Date.now() - DRAG_HOLD_MS,
+                    };
+                  }
                   return;
                 }
                 if (dragging || dragAvatar || dragFromHand || dragFromPile)
@@ -1489,6 +1512,11 @@ export function PermanentStack({
                 }
                 e.stopPropagation();
                 clearTouchTimers();
+                if (gesturesLocked) {
+                  // an arrange drag ends in useBoardDropManager, wherever it is let go
+                  if (!dragging) dragStartRef.current = null;
+                  return;
+                }
                 if (dragging) {
                   const wx = e.point.x;
                   const wz = e.point.z;

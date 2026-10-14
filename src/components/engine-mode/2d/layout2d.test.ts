@@ -6,7 +6,7 @@ import { projectView } from "@/lib/engine-mode/projection";
 import type { AvatarState, CardRef, PermanentItem, Permanents, PlayerKey } from "@/lib/game/store/types";
 import { createGame, viewFor } from "@sorcery/shared";
 import type { GameState as EngineState, PlayerId } from "@sorcery/shared";
-import { CARD_ASPECT, cardTone, cardTurn, layoutBoard2D, ownerGlow, resolveTap, siteOwnerGlow, spanTapCell, tileMarks } from "./layout2d";
+import { arrangeDrop, CARD_ASPECT, cardTone, cardTurn, layoutBoard2D, ownerGlow, resolveTap, siteOwnerGlow, spanTapCell, tileMarks } from "./layout2d";
 import type { Placed } from "./layout2d";
 
 const T = 100;
@@ -294,5 +294,65 @@ describe("owner look: facing, not outlines", () => {
     expect(siteOwnerGlow("p1", 100)).toBeUndefined();
     expect(siteOwnerGlow(null, 100)).toBeUndefined();
     expect(siteOwnerGlow("p2", 100)).toMatch(/^inset 0 0 \d+px #fca5a5[0-9a-f]{2}$/);
+  });
+});
+
+describe("layoutBoard2D: the player's arrangement", () => {
+  const tile = { w: 120, h: 90 };
+  const three = () => ({ "2,1": [item("u1", 1), item("u2", 1), item("u3", 1)] });
+  const arranged = (arrangement: Parameters<typeof layoutBoard2D>[0]["arrangement"], avatars = noAvatars(), avatarIds = {}) =>
+    layoutBoard2D({ permanents: three(), avatars, spans: [], tile, arrangement, avatarIds });
+
+  it("puts an arranged card at its offset from the tile's centre, leaving the row as it was", () => {
+    const plain = arranged({});
+    const moved = arranged({ u2: { at: "2,1", x: 0.1, y: -0.1, seq: 1 } });
+    expect(byKey(moved, "perm:u2").x).toBeCloseTo(2.5 * tile.w + 0.1 * tile.w);
+    expect(byKey(moved, "perm:u2").y).toBeCloseTo(1.5 * tile.h - 0.1 * tile.h);
+    for (const key of ["perm:u1", "perm:u3"]) expect(byKey(moved, key)).toEqual(byKey(plain, key));
+  });
+
+  it("keeps it inside its tile, turned or not, and on top of the row, latest arranged highest", () => {
+    const placed = arranged({ u1: { at: "2,1", x: 0.5, y: 0.5, seq: 2 }, u3: { at: "2,1", x: -0.5, y: -0.5, seq: 1 } });
+    for (const key of ["perm:u1", "perm:u3"]) {
+      const b = box(byKey(placed, key));
+      expect(b.left).toBeGreaterThanOrEqual(2 * tile.w - 1e-9);
+      expect(b.right).toBeLessThanOrEqual(3 * tile.w + 1e-9);
+      expect(b.top).toBeGreaterThanOrEqual(tile.h - 1e-9);
+      expect(b.bottom).toBeLessThanOrEqual(2 * tile.h + 1e-9);
+    }
+    const [u1, u2, u3] = ["perm:u1", "perm:u2", "perm:u3"].map((k) => byKey(placed, k).z);
+    expect(u3).toBeGreaterThan(u2);
+    expect(u1).toBeGreaterThan(u3);
+  });
+
+  it("ignores an override from another tile, and arranges an avatar by its unit id", () => {
+    const plain = arranged({});
+    expect(byKey(arranged({ u1: { at: "0,0", x: 0.4, y: 0, seq: 1 } }), "perm:u1")).toEqual(byKey(plain, "perm:u1"));
+    const avatars = noAvatars();
+    avatars.p1 = { card: card("Sorcerer", "av"), pos: [0, 3], tapped: false, offset: null };
+    const placed = arranged({ uAv: { at: "0,3", x: -0.2, y: 0, seq: 1 } }, avatars, { p1: "uAv" });
+    const avatar = byKey(placed, "avatar:p1");
+    expect(avatar.arrangeId).toBe("uAv");
+    expect(avatar.x).toBeCloseTo(0.5 * tile.w - 0.2 * tile.w);
+  });
+
+  it("gives a span card no arrange id: it keeps its place", () => {
+    const span: SpanEntity = { kind: "aura", instanceId: "u1", controller: "p1", cells: ["2,1", "3,1"], anchor: "2,1", centre: { x: 2.5, y: 1 } };
+    const placed = layoutBoard2D({ permanents: three(), avatars: noAvatars(), spans: [span], tile, arrangement: {} });
+    expect(byKey(placed, "perm:u1").arrangeId).toBeNull();
+    expect(byKey(placed, "perm:u2").arrangeId).toBe("u2");
+  });
+
+  it("turns a drag into a clamped spot and the offset the session saves", () => {
+    const base = byKey(arranged({}), "perm:u2");
+    const drop = arrangeDrop(base, 10, -5, tile);
+    expect(drop.x).toBeCloseTo(base.x + 10);
+    expect(drop.y).toBeCloseTo(base.y - 5);
+    expect(drop.offset[0]).toBeCloseTo((base.x + 10 - 2.5 * tile.w) / tile.w);
+    expect(drop.offset[1]).toBeCloseTo((base.y - 5 - 1.5 * tile.h) / tile.h);
+    // far off the tile: pulled back to its edge
+    const far = arrangeDrop(base, 1000, 0, tile);
+    expect(far.x + base.w / 2).toBeCloseTo(3 * tile.w);
+    expect(far.offset[0]).toBeLessThan(0.5);
   });
 });

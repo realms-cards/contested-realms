@@ -1,7 +1,7 @@
 "use client";
 
 import { Icon } from "@iconify/react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useGraphicsSettings, useVisualAid } from "@/hooks/useGraphicsSettings";
@@ -13,13 +13,13 @@ import { useGameStore } from "@/lib/game/store";
 import type { CardRef, CellKey, ContextMenuTarget, PlayerKey } from "@/lib/game/store/types";
 import AreaLayer2D from "./AreaLayer2D";
 import BoardMotion2D from "./BoardMotion2D";
-import Card2D from "./Card2D";
+import Card2D, { type ArrangeDrag } from "./Card2D";
 import FieldTargets2D from "./FieldTargets2D";
 import Tile2D, { LayerBadge2D } from "./Tile2D";
 import { fateOf as fateOfCard } from "./boardDiff";
-import { cardTone, isClickableTone, layoutBoard2D, resolveTap, spanTapCell, tileMarks, Z_PICK } from "./layout2d";
+import { arrangeDrop, cardTone, isClickableTone, layoutBoard2D, resolveTap, spanTapCell, tileMarks, Z_PICK } from "./layout2d";
 import type { Attachment, Placed, TapOutcome } from "./layout2d";
-import { BOARD_COLS, BOARD_ROWS, tileMin, tileNumber } from "./picks2d";
+import { BOARD_COLS, BOARD_ROWS, cellBox, tileMin, tileNumber } from "./picks2d";
 import type { PressInfo } from "./useLongPress";
 
 export interface Board2DProps {
@@ -55,6 +55,13 @@ export default function Board2D({ tileW, tileH, docked = false, children }: Boar
   const hidden = useEngineSession((s) => s.hidden);
   const setLayer = useEngineSession((s) => s.setLayer);
   const matchId = useEngineSession((s) => s.matchId);
+  const arrangement = useEngineSession((s) => s.arrangement);
+  const arrangeMode = useEngineSession((s) => s.arrangeMode);
+  const arrangeHeld = useEngineSession((s) => s.arrangeHeld);
+  /** the card being arranged and how far the pointer has taken it, in px */
+  const [arrangeDrag, setArrangeDrag] = useState<{ key: string; dx: number; dy: number } | null>(null);
+  /** the tile under the mouse, outlined while the arrange modifier is held */
+  const [hoverCell, setHoverCell] = useState<CellKey | null>(null);
   const { board, permanents, avatars, positions, portalState } = useGameStore(
     useShallow((s) => ({
       board: s.board,
@@ -83,9 +90,32 @@ export default function Board2D({ tileW, tileH, docked = false, children }: Boar
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game, rev, layer]);
 
+  // arrangements are keyed by engine id; an avatar's is its unit's (fixed for the match)
+  const avatarIds = useMemo(
+    () => (game ? { p1: game.players[0]?.avatarUnitId, p2: game.players[1]?.avatarUnitId } : undefined),
+    [game],
+  );
   const placed = useMemo(
-    () => layoutBoard2D({ permanents, avatars, spans: overlays.spans, positions, tile }),
-    [permanents, avatars, overlays.spans, positions, tile],
+    () => layoutBoard2D({ permanents, avatars, spans: overlays.spans, positions, tile, arrangement, avatarIds }),
+    [permanents, avatars, overlays.spans, positions, tile, arrangement, avatarIds],
+  );
+  const placedByKey = useRef(new Map<string, (typeof placed)[number]>());
+  placedByKey.current = new Map(placed.map((p) => [p.key, p]));
+
+  /** An arranging drag (Alt-drag, or any drag in arrange mode): follow the pointer, then save where it was let go. */
+  const onArrangeDrag = useCallback<ArrangeDrag>(
+    (target, phase, dx, dy) => {
+      if (phase === "move") {
+        setArrangeDrag({ key: target.key, dx, dy });
+        return;
+      }
+      setArrangeDrag(null);
+      // measured from the card's laid-out place, not from where the drag has been drawing it
+      const base = placedByKey.current.get(target.key);
+      if (phase !== "end" || !base?.arrangeId) return;
+      useEngineSession.getState().arrange(base.arrangeId, base.cell, arrangeDrop(base, dx, dy, tile).offset);
+    },
+    [tile],
   );
   const marks = useMemo(() => tileMarks(permanents), [permanents]);
   const toneOf = useCallback((token: string) => cardTone(picker, token), [picker]);
@@ -200,12 +230,16 @@ export default function Board2D({ tileW, tileH, docked = false, children }: Boar
     if (entering) store.setPreviewCard(card);
     else if (sameCard(store.previewCard, card)) store.setPreviewCard(null);
   };
+  const hoverTile = (cell: CellKey, entering: boolean) =>
+    setHoverCell((current) => (entering ? cell : current === cell ? null : current));
   const onCardHover = (target: Placed, entering: boolean, attachment?: Attachment) => {
     hoverToken(attachment?.token ?? target.token, entering);
     hoverCard(attachment?.card ?? target.card, entering);
+    hoverTile(target.cell, entering);
   };
   const onTileHover = (cell: CellKey, entering: boolean) => {
     hoverToken(cell, entering);
+    hoverTile(cell, entering);
     const site = board.sites[cell]?.card;
     if (site) hoverCard(site, entering);
   };
@@ -213,6 +247,9 @@ export default function Board2D({ tileW, tileH, docked = false, children }: Boar
   const bounds = useMemo(() => ({ w: tile.w * BOARD_COLS, h: tile.h * BOARD_ROWS }), [tile]);
   const below = layer === "subsurface";
   const toggleLayer = () => setLayer(layer === "surface" ? "subsurface" : "surface");
+  const dragged = arrangeDrag ? placedByKey.current.get(arrangeDrag.key) : undefined;
+  // the tile a card can be slid around in: the dragged card's, else the one under the mouse
+  const outlined = dragged?.cell ?? (arrangeHeld ? hoverCell : null);
 
   return (
     <div
@@ -269,12 +306,26 @@ export default function Board2D({ tileW, tileH, docked = false, children }: Boar
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-[2]">
+        {outlined && (
+          <div
+            aria-hidden
+            data-arrange-tile={outlined}
+            className="pointer-events-none absolute rounded-[3px]"
+            style={{ ...cellBox(outlined, tile), zIndex: 1, outline: "1px dashed rgba(215,219,230,0.55)", outlineOffset: -3 }}
+          />
+        )}
         {placed.map((p) => {
           const tone = cardTone(picker, p.token);
+          const dragging = arrangeDrag?.key === p.key;
+          let shown = isClickableTone(tone) ? { ...p, z: Z_PICK + p.z } : p;
+          if (dragging && arrangeDrag) {
+            const to = arrangeDrop(p, arrangeDrag.dx, arrangeDrag.dy, tile);
+            shown = { ...shown, x: to.x, y: to.y, z: Z_PICK + 100 };
+          }
           return (
             <Card2D
               key={p.key}
-              placed={isClickableTone(tone) ? { ...p, z: Z_PICK + p.z } : p}
+              placed={shown}
               tone={tone}
               colors={colors}
               toneOf={toneOf}
@@ -282,6 +333,7 @@ export default function Board2D({ tileW, tileH, docked = false, children }: Boar
               onLongPress={onCardLongPress}
               onHover={onCardHover}
               bounds={bounds}
+              arrange={p.arrangeId ? { mode: arrangeMode, held: arrangeHeld, dragging, onDrag: onArrangeDrag } : undefined}
             />
           );
         })}
