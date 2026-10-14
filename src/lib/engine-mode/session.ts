@@ -95,6 +95,37 @@ export interface ControlSwap {
   text: string;
 }
 
+/** Stands in for a card this client is not allowed to know (an unseen deck card). */
+export const HIDDEN_CARD = "hidden";
+
+/** A player record as it arrives in a view: piles as counts, some bookkeeping left out. */
+interface ViewPlayer {
+  atlasCount?: number;
+  spellbookCount?: number;
+  atlas?: unknown;
+  spellbook?: unknown;
+}
+
+/**
+ * A server view, made the shape every board component and engine helper expects of a game.
+ *
+ * A view keeps units, sites and cards as they are, but its players carry `atlasCount` and
+ * `spellbookCount` instead of the piles (deck order is secret, and the seed would give it away),
+ * and leave out some bookkeeping flags. Code that reads `player.spellbook.length` — the resource
+ * panels, the seat bars — then threw on the first remote board. The piles become arrays of
+ * HIDDEN_CARD of the right length, so counts read true and nothing can be learned from them.
+ */
+export function stateFromView(view: PlayerView): EngineState {
+  const hidden = (n: unknown) => Array.from({ length: typeof n === "number" && n > 0 ? n : 0 }, () => HIDDEN_CARD);
+  const players = (view.players as ViewPlayer[]).map((p) => ({
+    usedAvatarSiteAbility: false,
+    ...p,
+    atlas: Array.isArray(p.atlas) ? p.atlas : hidden(p.atlasCount),
+    spellbook: Array.isArray(p.spellbook) ? p.spellbook : hidden(p.spellbookCount),
+  }));
+  return { ...view, players } as unknown as EngineState;
+}
+
 /**
  * What to call the other player. Single player seats the bot as "Computer", and the server seats
  * each player under their display name, so the name on the game is right in both — this only
@@ -1079,9 +1110,10 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         return;
       }
       set({
-        // The view is engine-state SHAPED (units, sites, players, prompts, flow), which is why
-        // every board component reads it exactly as it reads a local game.
-        game: envelope.view as unknown as EngineState,
+        // The view is engine-state SHAPED (units, sites, prompts, flow), which is why every
+        // board component reads it exactly as it reads a local game — except its players,
+        // which stateFromView fills in.
+        game: stateFromView(envelope.view),
         rev: envelope.rev,
         seat: envelope.seat,
         legal: envelope.legal,
