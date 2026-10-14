@@ -433,6 +433,16 @@ function cardOf(view: PlayerView, instanceId: string, owner: PlayerKey): CardRef
   return { ...cardRefFor(inst.name), instanceId, owner };
 }
 
+/**
+ * A unit shows what it IS now, not the card it was printed as: Assimilator Snail and other
+ * "becomes a copy" effects rename the unit and leave its card instance untouched.
+ */
+function unitCardOf(view: PlayerView, unit: PlayerView["units"][string], owner: PlayerKey): CardRef {
+  const card = cardOf(view, unit.cardId, owner);
+  if (!unit.name || unit.name === view.cards[unit.cardId]?.name) return card;
+  return { ...cardRefFor(unit.name), instanceId: unit.cardId, owner };
+}
+
 /** Engine unit statuses shown as our status tokens attached to the unit. */
 const STATUS_TOKENS: { flag: "stealth" | "ward" | "disabled" | "silenced"; token: string }[] = [
   { flag: "stealth", token: "Stealth" },
@@ -716,7 +726,7 @@ export function projectView(
     if (unit.isAvatar) {
       const p = engineToBoard(unit.x, unit.y, viewer);
       avatars[seatKey(unit.owner, viewer)] = {
-        card: cardOf(view, unit.cardId, seatKey(unit.owner, viewer)),
+        card: unitCardOf(view, unit, seatKey(unit.owner, viewer)),
         pos: [p.x, p.y],
         tapped: unit.tapped,
         offset: null,
@@ -737,7 +747,7 @@ export function projectView(
     const at = placed?.at ?? engineCellKey(unit.x, unit.y, viewer);
     if (placed) pinned.add(unit.id);
     const index = pushTo(permanents, at, {
-      card: cardOf(view, unit.cardId, owner),
+      card: unitCardOf(view, unit, owner),
       owner: seatOwner(unit.controller, viewer),
       instanceId: unit.id,
       tapped: unit.tapped,

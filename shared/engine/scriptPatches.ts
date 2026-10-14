@@ -1,4 +1,5 @@
-import { effKeywords, getKeywords, getScript, siteAt, unitsAt } from "../../vendor/untested-realm/shared/src/index";
+import { plunderCard } from "../../vendor/untested-realm/shared/src/cards/scripts/multi-card-utils/plunder-card";
+import { effKeywords, getKeywords, getScript, opponent, siteAt, unitsAt } from "../../vendor/untested-realm/shared/src/index";
 import type { CardScript, EffectAPI, UnitState } from "../../vendor/untested-realm/shared/src/index";
 
 /**
@@ -112,12 +113,64 @@ function gateSlimyMutants(): boolean {
   return true;
 }
 
+/*
+ * Sea Raider — WORKAROUND for vendor cards/scripts/gen/sea-raider.ts: "Whenever Sea Raider attacks
+ * and kills an enemy, its controller discards their topmost spell. You may cast that spell..." —
+ * "its controller" is the killed ENEMY's controller (a pirate, like Captain Baldassare), but the
+ * vendor script plunders the raider's own spellbook. Plunder the opponent's instead.
+ * DELETE once fixed upstream.
+ */
+type AttackKill = NonNullable<CardScript["onAttackKill"]> & { [PATCHED]?: true };
+
+function fixSeaRaider(): boolean {
+  const script = getScript("Sea Raider");
+  const original = script?.onAttackKill as AttackKill | undefined;
+  if (!script || !original || original[PATCHED]) return false;
+  // the victim is already dead here, and an enemy is by definition the opponent's
+  const patched: AttackKill = (ctx) => {
+    const cardId = ctx.state.players[opponent(ctx.controller)].spellbook.shift();
+    if (cardId !== undefined) plunderCard(ctx, cardId);
+  };
+  patched[PATCHED] = true;
+  script.onAttackKill = patched;
+  return true;
+}
+
+/*
+ * The Manor at Daperyll Hill — WORKAROUND for vendor cards/scripts/gen/the-manor-at-daperyll-hill.ts:
+ * "deal 3 damage to target enemy here to heal you 3" is offered with no enemy at the site, so the
+ * player (and the CPU, every turn) can activate it, logging "3 damage to an enemy here → heal 3"
+ * for an effect that then does nothing. Offer it only while an enemy unit stands there.
+ * DELETE once fixed upstream.
+ */
+function gateAbility(name: string, key: string, available: NonNullable<Ability["available"]>): boolean {
+  const abilities = getScript(name)?.abilities;
+  const index = abilities?.findIndex((a) => a.key === key) ?? -1;
+  const original = abilities?.[index] as MarkedAbility | undefined;
+  if (!abilities || !original || original[PATCHED]) return false;
+  const patched: MarkedAbility = {
+    ...original,
+    available: (state, sourceId) =>
+      available(state, sourceId) && (original.available?.(state, sourceId) ?? true),
+  };
+  patched[PATCHED] = true;
+  abilities[index] = patched;
+  return true;
+}
+
+const enemyAtManor: NonNullable<Ability["available"]> = (state, sourceId) => {
+  const site = state.sites[sourceId];
+  return !!site && unitsAt(state, site.x, site.y).some((u) => u.controller !== site.controller);
+};
+
 /** Applies every patch; idempotent (import side effect, exported for tests). */
 export function applyScriptPatches(): void {
   wrapCont("Waveshaper", "wave", waveshaperWave);
   wrapBreakStealth("Frozen Horror", "terror");
   wrapBreakStealth("Asmodeus", "immolate");
   gateSlimyMutants();
+  fixSeaRaider();
+  gateAbility("The Manor at Daperyll Hill", "feast", enemyAtManor);
 }
 
 applyScriptPatches();

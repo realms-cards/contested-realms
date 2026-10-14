@@ -1,4 +1,4 @@
-import { applyAction, createGame, getScript, legalActions, viewFor } from "@sorcery/shared";
+import { applyAction, createGame, getScript, legalActions, makeCtx, viewFor } from "@sorcery/shared";
 import type { GameState as EngineState, PlayerId } from "@sorcery/shared";
 import { describe, expect, it } from "vitest";
 import { engineCellKey } from "./coords";
@@ -204,5 +204,58 @@ describe("Slimy Mutants is only offered with a submerging ally (scriptPatches)",
     expect(slimy(g)).toEqual([]);
     g.units["mine"] = { ...g.units["mine"], name: "Coy Nixie", modifiers: [] } as unknown as Unit;
     expect(slimy(g)).toHaveLength(1);
+  });
+});
+
+describe("Sea Raider plunders the enemy's spellbook (scriptPatches)", () => {
+  it("takes the killed enemy's controller's topmost spell, not its own", () => {
+    const { g } = setup({ enemyTapped: false });
+    g.units["mine"] = { ...g.units["mine"], name: "Sea Raider" } as unknown as Unit;
+    const mine = [...g.players[0].spellbook];
+    const theirs = [...g.players[1].spellbook];
+    getScript("Sea Raider")!.onAttackKill!(makeCtx(g, "mine", 0 as PlayerId, []), { id: "enemy" } as Unit);
+    expect(g.players[0].spellbook).toEqual(mine);
+    expect(g.players[1].spellbook).toEqual(theirs.slice(1));
+    expect(g.players[0].hand).toContain(theirs[0]);
+  });
+});
+
+describe("The Manor at Daperyll Hill needs an enemy there (scriptPatches)", () => {
+  const feast = (g: EngineState) =>
+    legalActions(g, 0 as PlayerId).filter((a) => a.t === "activate" && a.ability === "feast");
+
+  it("is offered only while an enemy stands at the Manor, and then heals", () => {
+    const { g } = setup({ enemyTapped: false });
+    g.sites["dry2"] = { ...g.sites["dry2"], name: "The Manor at Daperyll Hill" };
+    for (let x = 0; x < 4; x++) {
+      g.sites[`spire${x}`] = { ...g.sites["dry2"], id: `spire${x}`, name: "Spire", x, y: 3 };
+    }
+    expect(feast(g)).toEqual([]);
+    g.units["enemy"] = { ...g.units["enemy"], x: 1, y: 2 };
+    const [action] = feast(g);
+    expect(action).toBeTruthy();
+    const avatar = Object.values(g.units).find((u) => u.isAvatar && u.owner === 0)!;
+    avatar.life = 10;
+    applyAction(g, 0 as PlayerId, action);
+    const p = g.prompts.find((q) => q.player === 0);
+    if (p) applyAction(g, 0 as PlayerId, { t: "prompt", promptId: p.id, choice: ["enemy"] });
+    expect(avatar.life).toBe(13);
+  });
+});
+
+describe("Assimilator Snail shows the minion it copied", () => {
+  it("projects the copied card on the board", () => {
+    const { g } = setup({ enemyTapped: false });
+    g.cards["card_mine"] = { id: "card_mine", name: "Assimilator Snail", owner: 0 } as unknown as EngineState["cards"][string];
+    g.units["mine"] = { ...g.units["mine"], name: "Assimilator Snail" } as unknown as Unit;
+    g.cards["c_dead"] = { id: "c_dead", name: "Sea Raider", owner: 1 } as unknown as EngineState["cards"][string];
+    g.players[1].cemetery.push("c_dead");
+    expect(applyAction(g, 0 as PlayerId, { t: "activate", sourceId: "mine", ability: "assimilate" })).toEqual({ ok: true });
+    const p = g.prompts.find((q) => q.player === 0)!;
+    applyAction(g, 0 as PlayerId, { t: "prompt", promptId: p.id, choice: "Sea Raider" });
+    expect(g.units["mine"].name).toBe("Sea Raider");
+    const proj = projectView(viewFor(g, 0 as PlayerId));
+    const card = proj.permanents[engineCellKey(1, 2)]?.find((q) => q.instanceId === "mine")?.card;
+    expect(card?.name).toBe("Sea Raider");
   });
 });
