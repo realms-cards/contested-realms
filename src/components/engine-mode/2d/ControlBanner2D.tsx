@@ -17,8 +17,9 @@ import { PLAYER_COLORS } from "@/lib/game/constants";
  */
 export default function ControlBanner2D() {
   const game = useEngineSession((s) => s.game);
+  const viewer = useEngineSession((s) => s.seat);
   useEngineSession((s) => s.rev);
-  const swap = game ? controlSwap(game) : null;
+  const swap = game ? controlSwap(game, viewer) : null;
   if (!swap) return null;
   // the seat making the decisions: the computer while it plays ours, us while we play theirs
   const decider = swap.kind === "computer-plays-yours" || swap.kind === "computer-will-play-yours" ? "p2" : "p1";

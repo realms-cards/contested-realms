@@ -234,6 +234,19 @@ describe("session notes and piloted turns", () => {
       [4, null],
     ]);
   });
+
+  it("credits the right seat when this client plays engine seat 1", () => {
+    // Online, seat 1 sees itself as p1. Its own turn (engine seat 1) piloted by the opponent
+    // was decided by p2; the opponent's turn (engine seat 0) piloted by us, by p1.
+    const feed = buildActionFeed(
+      events(["4|1|— Turn 4: Them —", "4|1|Them draws a card.", "5|0|— Turn 5: You —", "5|0|You draws a card."]),
+      { ...ctx, viewer: 1, controlTurns: { 4: 1, 5: 0 } },
+    );
+    expect(feed.map((t) => [t.turn, t.playedBy])).toEqual([
+      [5, "p1"],
+      [4, "p2"],
+    ]);
+  });
 });
 
 describe("a turn played by the other seat (Courtesan Thaïs)", () => {

@@ -94,8 +94,9 @@ export default function Board2D({ tileW, tileH, docked = false, children }: Boar
 
   // arrangements are keyed by engine id; an avatar's is its unit's (fixed for the match)
   const avatarIds = useMemo(
-    () => (game ? { p1: game.players[0]?.avatarUnitId, p2: game.players[1]?.avatarUnitId } : undefined),
-    [game],
+    // p1 is always the viewer's seat (the bottom of the board), p2 the other
+    () => (game ? { p1: game.players[viewer]?.avatarUnitId, p2: game.players[viewer === 0 ? 1 : 0]?.avatarUnitId } : undefined),
+    [game, viewer],
   );
   const placed = useMemo(
     () => layoutBoard2D({ permanents, avatars, spans: overlays.spans, positions, tile, arrangement, avatarIds }),

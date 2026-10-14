@@ -8,7 +8,7 @@ import { createPortal } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
 import { useVisualAid, type VisualAid } from "@/hooks/useGraphicsSettings";
 import { engineSeatResources, manaColor, THRESHOLD_ELEMENTS } from "@/lib/engine-mode/resources";
-import { BOT_SEAT, HUMAN_SEAT, useEngineSession } from "@/lib/engine-mode/session";
+import { useEngineSession } from "@/lib/engine-mode/session";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import { toneColors } from "@/lib/game/cpu/fieldTargets";
@@ -266,6 +266,7 @@ export default function SeatBar2D({ seat, density }: { seat: Seat; density: Seat
   const openContextMenu = useGameStore((s) => s.openContextMenu);
   const game = useEngineSession((s) => s.game);
   const rev = useEngineSession((s) => s.rev);
+  const viewer = useEngineSession((s) => s.seat);
   const botThinking = useEngineSession((s) => s.botThinking);
   const aid = useVisualAid();
   const colors = toneColors(aid);
@@ -276,7 +277,8 @@ export default function SeatBar2D({ seat, density }: { seat: Seat; density: Seat
   const pickRequest = useCpuBoardPicker((s) => s.request);
   const pickLabels = useCpuBoardPicker((s) => s.labels);
   const ownHand = useGameStore((s) => (seat === "p1" ? s.zones.p1?.hand : undefined));
-  const engineSeat = seat === "p1" ? HUMAN_SEAT : BOT_SEAT;
+  // the bottom bar ("p1") is always the seat this client plays
+  const engineSeat = seat === "p1" ? viewer : viewer === 0 ? 1 : 0;
   // Your split comes from the cards you hold; the computer's from what the engine shows you
   // (card backs differ, so the split is public — except a Magician's, which is the total only).
   const split = useMemo<HandSplit | null>(() => {
@@ -284,8 +286,12 @@ export default function SeatBar2D({ seat, density }: { seat: Seat; density: Seat
     if (!game) return null;
     // `rev` re-reads the engine state, which is mutated in place
     void rev;
-    return readHandCounts(viewFor(game, HUMAN_SEAT).players[engineSeat]);
-  }, [seat, ownHand, game, rev, engineSeat]);
+    // In a server-run match the game IS already our view (counts included); viewFor needs the
+    // full state and would throw on it.
+    const player: unknown = game.players[engineSeat];
+    if (player && typeof player === "object" && "handCounts" in player) return readHandCounts(player);
+    return readHandCounts(viewFor(game, viewer).players[engineSeat]);
+  }, [seat, ownHand, game, rev, engineSeat, viewer]);
 
   if (!game) return null;
   const resources = engineSeatResources(game, engineSeat);

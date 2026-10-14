@@ -4,7 +4,7 @@ import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { soundManager } from "@/lib/audio/soundManager";
-import { HUMAN_SEAT, humanDecisionSeat, useEngineSession } from "@/lib/engine-mode/session";
+import { humanDecisionSeat, opponentName, useEngineSession } from "@/lib/engine-mode/session";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import { useActionFeed } from "./ActionFeed2D";
@@ -42,9 +42,9 @@ function useTurnBeat(): { turn: number; piloting: boolean } | null {
   const mine = useEngineSession((s) => {
     const g = s.game;
     if (!g || g.phase === "mulligan" || g.phase === "over") return null;
-    const decider = humanDecisionSeat(g);
+    const decider = humanDecisionSeat(g, s.seat);
     if (decider === null) return null;
-    return `${g.turn}:${decider === HUMAN_SEAT ? "own" : "pilot"}`;
+    return `${g.turn}:${decider === s.seat ? "own" : "pilot"}`;
   });
   const seen = useRef(mine);
   const [beat, setBeat] = useState<{ turn: number; piloting: boolean } | null>(null);
@@ -132,9 +132,11 @@ export default function StatusLine2D({ large = false }: { large?: boolean }) {
   const narration = useEngineSession((s) => s.narration);
   const botThinking = useEngineSession((s) => s.botThinking);
   const over = useEngineSession((s) => s.game?.phase === "over");
-  const theirTurn = useEngineSession((s) => s.game?.activePlayer === 1);
+  // "them" is the seat we do not hold — the computer in single player, a person online
+  const theirTurn = useEngineSession((s) => !!s.game && s.game.activePlayer !== s.seat);
   const turn = useEngineSession((s) => s.game?.turn ?? 0);
-  const them = useEngineSession((s) => s.game?.players[1].name ?? "Computer");
+  // narration only exists in single player, so with no game yet the speaker is the computer
+  const them = useEngineSession((s) => (s.game ? opponentName(s.game, s.seat) : "Computer"));
   const { hovered, labels } = useCpuBoardPicker(useShallow((p) => ({ hovered: p.hovered, labels: p.labels })));
   const turns = useActionFeed();
 

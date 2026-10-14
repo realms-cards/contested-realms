@@ -10,7 +10,7 @@ import { useMusicPlayer } from "@/hooks/useMusicPlayer";
 import { DEFAULT_SOUND_VOLUME } from "@/lib/audio/soundManager";
 import { useSound } from "@/lib/contexts/SoundContext";
 import { cardRefFor } from "@/lib/engine-mode/cardIndex";
-import { HUMAN_SEAT, humanDecisionSeat, useEngineSession } from "@/lib/engine-mode/session";
+import { humanDecisionSeat, useEngineSession } from "@/lib/engine-mode/session";
 import { useGameStore } from "@/lib/game/store";
 import BoardViewToggle from "../BoardViewToggle";
 import type { EngineInteraction } from "../useEngineInteraction";
@@ -45,6 +45,7 @@ export default function MoreSheet2D({
   initialView?: MoreView;
 }) {
   const game = useEngineSession((s) => s.game);
+  const viewer = useEngineSession((s) => s.seat);
   useEngineSession((s) => s.rev);
   const dispatch = useEngineSession((s) => s.dispatch);
   const collection = useGameStore((s) => s.zones.p1?.collection);
@@ -119,8 +120,8 @@ export default function MoreSheet2D({
 
   if (!mounted || !game) return null;
   // the same gates as EngineActionRail: actions follow the decision seat (Courtesan Thaïs)
-  const deciding = humanDecisionSeat(game);
-  const piloting = deciding !== null && deciding !== HUMAN_SEAT;
+  const deciding = humanDecisionSeat(game, viewer);
+  const piloting = deciding !== null && deciding !== viewer;
   const myMain = deciding !== null && game.phase === "main" && game.prompts.length === 0;
   const over = game.phase === "over";
   const pool = collection ?? [];
