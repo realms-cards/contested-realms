@@ -1,3 +1,4 @@
+import { useEffect, useSyncExternalStore } from "react";
 import type { CardRef } from "@/lib/game/store/types";
 import { findCard } from "@sorcery/shared";
 
@@ -12,6 +13,28 @@ type SearchIndexEntry = [number, number, number, string, string, string, boolean
 
 let index: Map<string, PrintingRef> | null = null;
 let loading: Promise<Map<string, PrintingRef>> | null = null;
+const listeners = new Set<() => void>();
+
+function subscribeCardIndex(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+/**
+ * True once our printings are known, loading them if need be. A component that builds refs with
+ * `cardRefFor` during render calls this so it renders again when the art becomes resolvable —
+ * a prompt raised the moment a match starts (the Dragonlord's set-aside) otherwise kept the
+ * slug-less refs it was first drawn with and showed names in empty boxes for good.
+ */
+export function useCardIndexReady(): boolean {
+  const ready = useSyncExternalStore(subscribeCardIndex, () => index !== null, () => false);
+  useEffect(() => {
+    if (!ready) void loadCardIndex().catch(() => undefined);
+  }, [ready]);
+  return ready;
+}
 
 export function loadCardIndex(): Promise<Map<string, PrintingRef>> {
   if (index) return Promise.resolve(index);
@@ -23,6 +46,7 @@ export function loadCardIndex(): Promise<Map<string, PrintingRef>> {
         if (!map.has(name)) map.set(name, { cardId, variantId, slug });
       }
       index = map;
+      for (const listener of listeners) listener();
       return map;
     })
     .finally(() => {

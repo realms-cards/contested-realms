@@ -304,6 +304,23 @@ function castCandidates(
   return squares.map((sq): Action => ({ t: "castSpell", cardId, casterId, at: { ...sq, region: "surface" } }));
 }
 
+/**
+ * An attack on a unit that upstream's generator offers (it lists every enemy on the square) but
+ * the engine turns down — "only Airborne units can attack an Airborne unit", "that minion has
+ * Stealth" — and only once `moveAttack` has already TAPPED the attacker (combat.ts beginAttack).
+ * Offered to a human as "Attack <name>", it would spend the unit's turn on nothing. The same two
+ * checks the engine's own retarget menu applies (coLocatedAttackTargets).
+ */
+export function attackRefused(state: GameState, action: Action): boolean {
+  if (action.t !== "moveAttack" || !action.attack || !("unit" in action.attack)) return false;
+  const attacker = state.units[action.unitId];
+  const target = state.units[action.attack.unit];
+  if (!attacker || !target) return false;
+  const truesight = attacker.carrying.some((id) => getScript(state.artifacts[id]?.name ?? "")?.bearerTruesight);
+  if (target.stealth && !truesight) return true;
+  return target.region === "surface" && !!effKeywords(state, target).airborne && !effKeywords(state, attacker).airborne;
+}
+
 /** Every legal action for `me`: upstream's list plus everything a human can do that it skips. */
 /** Candidates the last call skipped because the budget ran out (logged by the legal worker). */
 export const legalGenerationStats = { dropped: 0 };
@@ -313,9 +330,12 @@ export function legalActionsWithCasters(state: GameState, me: PlayerId): Action[
   const base = legalActions(state, me);
   if (state.phase !== "main" || state.prompts.length || actingSeatFor(state, state.activePlayer) !== me) return base;
 
-  // drop upstream casts that would waste the card for a human (see Chaos Twister above)
+  // drop upstream casts that would waste the card for a human (see Chaos Twister above), and
+  // attacks the engine would refuse only after tapping the attacker (see attackRefused)
   const filtered = base.filter(
-    (a) => !(a.t === "castSpell" && state.cards[a.cardId]?.name === "Chaos Twister" && !(a.extra as { origin?: unknown } | undefined)?.origin),
+    (a) =>
+      !(a.t === "castSpell" && state.cards[a.cardId]?.name === "Chaos Twister" && !(a.extra as { origin?: unknown } | undefined)?.origin) &&
+      !attackRefused(state, a),
   );
 
   const deadline = Date.now() + EXTRA_BUDGET_MS;

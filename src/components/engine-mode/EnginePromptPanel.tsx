@@ -3,13 +3,13 @@
 import { Icon } from "@iconify/react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CpuCardPick from "@/components/game/CpuCardPick";
 import { cardImage } from "@/components/game/CpuPlayReveal";
 import { RcButton } from "@/components/ui/rc-button";
 import { tokenForEngineId } from "@/lib/engine-mode/actionPaths";
 import { areaFootprints, edgeFootprints, edgeToken, type EngineEdge, permutationPlacements, swapSlots } from "@/lib/engine-mode/areaPrompt";
-import { cardRefFor } from "@/lib/engine-mode/cardIndex";
+import { cardRefFor, useCardIndexReady } from "@/lib/engine-mode/cardIndex";
 import {
   BOARD_DIRECTION,
   boardArrowForStep,
@@ -24,9 +24,9 @@ import type { ArrowDirection } from "@/lib/game/cpu/fieldTargets";
 import { dirToken, handToken, pileToken } from "@/lib/game/cpu/pickTokens";
 import { useGameStore } from "@/lib/game/store";
 import type { Action, GameState as EngineState, Prompt } from "@sorcery/shared";
-import { actingSeatFor, allCards, GRID_H, GRID_W } from "@sorcery/shared";
+import { actingSeatFor, allCards, findCard, GRID_H, GRID_W } from "@sorcery/shared";
 import { botAction } from "@untested-realm/bot/bot";
-import { Compass, directionKey, PromptBanner, PromptDialog } from "./EnginePromptShell";
+import { Compass, directionKey, PromptBanner, PromptDialog, usePromptPlacement } from "./EnginePromptShell";
 import { pickNoun, pickPlace } from "./promptNoun";
 
 /** Harbinger's portal setup rolls D20s on a WebGL canvas: loaded only when it is on screen, so
@@ -425,6 +425,9 @@ function Mulligan({ game }: { game: EngineState }) {
 
 function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Prompt }) {
   const dispatch = useEngineSession((s) => s.dispatch);
+  // every card row below builds its refs with cardRefFor while rendering: draw again once the
+  // printings are in, or a prompt raised at match start keeps names in empty boxes
+  useCardIndexReady();
   // titles come from the engine and may name squares in engine space — show our tile numbers
   const prompt = { ...rawPrompt, title: localizeEngineText(rawPrompt.title ?? "") };
   const data = (prompt.data ?? {}) as PromptData;
@@ -573,6 +576,19 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
         // options that name squares (Chaos Twister's landing roll) are picked on the board
         const squares = squareOptionsFor(options);
         if (squares.length >= 2) return <SquarePick prompt={prompt} options={options} squares={squares} onSend={send} />;
+        // options that name real cards (a minion to pick by name, '(none)' beside them): cards
+        const named = cardOptionSplit(options);
+        if (named.cards.length) {
+          return (
+            <CardChoice title={prompt.title} hint="Choose a card." names={named.cards} onChoose={send}>
+              {named.rest.map((option) => (
+                <RcButton key={option} variant="outline" size="sm" onClick={() => send(option)}>
+                  {localizeEngineText(option)}
+                </RcButton>
+              ))}
+            </CardChoice>
+          );
+        }
         // no origin from the engine (Windblast's worded options, 'hold fire' sets): compass
         if (options.length >= 3 && dirs.every((d) => d.key)) {
           return (
@@ -978,6 +994,111 @@ function OrderCards({ prompt, data, onSend }: { prompt: Prompt; data: PromptData
 }
 
 /**
+ * A prompt's options split into those that name a real card and the rest ('(none)', 'ok').
+ * Exact names only (the engine's own lookup), so words like "Fire" or "left" stay words.
+ */
+export function cardOptionSplit(options: readonly string[]): { cards: string[]; rest: string[] } {
+  const cards: string[] = [];
+  const rest: string[] = [];
+  for (const option of new Set(options)) (findCard(option) ? cards : rest).push(option);
+  return { cards, rest };
+}
+
+/**
+ * Choose one card by name, shown as the cards themselves.
+ *
+ * A tap LOOKS first: it marks the card and puts it in the preview panel, so a choice like the
+ * Dragonlord's dragon can be read before it is made. A second tap on the marked card, or the
+ * Choose button that names it, answers. `children` sit beside that button (Auto, '(none)').
+ */
+function CardChoice({
+  title,
+  hint,
+  listTitle,
+  names,
+  onChoose,
+  children,
+}: {
+  title: string;
+  hint: string;
+  listTitle?: string;
+  names: readonly string[];
+  onChoose: (name: string) => void;
+  children?: React.ReactNode;
+}) {
+  useCardIndexReady();
+  const placement = usePromptPlacement();
+  const [held, setHeld] = useState<number | null>(null);
+  const shown = held === null ? null : (names[held] ?? null);
+  // the preview belongs to this choice while it is open: put back nothing of ours on the way out
+  const offered = useRef(names);
+  offered.current = names;
+  useEffect(
+    () => () => {
+      const store = useGameStore.getState();
+      const card = store.previewCard;
+      if (card && !card.instanceId && offered.current.includes(card.name)) store.setPreviewCard(null);
+    },
+    [],
+  );
+  const pick = (id: string) => {
+    const i = Number(id);
+    const name = names[i];
+    if (name === undefined) return;
+    if (held === i) {
+      onChoose(name);
+      return;
+    }
+    setHeld(i);
+    useGameStore.getState().setPreviewCard(cardRefFor(name));
+  };
+  const docked = placement === "docked";
+  // A dock's column is narrow: "Choose" alone keeps Auto on the same row (the preview beside it
+  // and the ring on the card already say which). The centred dialog names the card.
+  const confirm = (
+    <RcButton
+      size="sm"
+      disabled={shown === null}
+      aria-label={shown === null ? undefined : `Choose ${shown}`}
+      onClick={() => shown !== null && onChoose(shown)}
+    >
+      {shown === null ? (docked ? "Tap a card" : "Tap a card to look at it") : docked ? "Choose" : `Choose ${shown}`}
+    </RcButton>
+  );
+  const row = (
+    <CpuCardPick
+      title={listTitle ?? `${names.length} to choose from`}
+      items={names.map((name, i) => ({ id: String(i), card: cardRefFor(name) }))}
+      selected={held === null ? null : String(held)}
+      onPick={pick}
+      strip={docked}
+    />
+  );
+  // The 2D dock keeps the board and the preview panel beside it in view: a strip of cards in
+  // the docked banner, each read in full in that panel. A sheet over the dock would hide it.
+  if (docked) {
+    return (
+      <PromptBanner title={title} hint={hint}>
+        {/* in the pinned action row, so a long title scrolls away above it but the cards never do */}
+        <div className="w-full min-w-0 basis-full">{row}</div>
+        {confirm}
+        {children}
+      </PromptBanner>
+    );
+  }
+  return (
+    <PromptDialog title={title} hint={hint} wide>
+      {row}
+      {/* outside the row, which scrolls on its own: Choose is never below its fold */}
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+        {confirm}
+        {children}
+      </div>
+    </PromptDialog>
+  );
+}
+
+/**
  * Which kind of nameCard prompt this is.
  *
  * Decided on the PRESENCE of `names`, not its truthiness: an empty list is still a
@@ -1026,25 +1147,28 @@ function NameCard({
   const where = data.fromCollection ? "from your collection" : null;
 
   if (mode === "list") {
-    return (
-      <PromptDialog title={prompt.title} hint={where ? `Choose a card ${where}.` : "Choose a card."} wide>
-        {offered.length === 0 ? (
+    if (offered.length === 0) {
+      return (
+        <PromptDialog title={prompt.title} hint={where ? `Choose a card ${where}.` : "Choose a card."} wide>
           <div className="py-4 text-center text-sm text-rc-fg-muted">
             There is nothing to choose from — let the engine settle it.
             <div className="mt-3 flex justify-center">{auto}</div>
           </div>
-        ) : (
-          <CpuCardPick
-            title={where ? `Your collection (${offered.length})` : `${offered.length} to choose from`}
-            items={offered.map((name, i) => ({ id: String(i), card: cardRefFor(name) }))}
-            onPick={(id) => onSend(offered[Number(id)])}
-          >
-            {/* No cancel here on purpose: an empty answer either loops this prompt forever
-                (Legion of Gall) or throws inside getCard. Auto is the way out. */}
-            <div className="mt-3 flex justify-center">{auto}</div>
-          </CpuCardPick>
-        )}
-      </PromptDialog>
+        </PromptDialog>
+      );
+    }
+    return (
+      <CardChoice
+        title={prompt.title}
+        hint={where ? `Choose a card ${where}.` : "Choose a card."}
+        listTitle={where ? `Your collection (${offered.length})` : `${offered.length} to choose from`}
+        names={offered}
+        onChoose={onSend}
+      >
+        {/* No cancel here on purpose: an empty answer either loops this prompt forever
+            (Legion of Gall) or throws inside getCard. Auto is the way out. */}
+        {auto}
+      </CardChoice>
     );
   }
 

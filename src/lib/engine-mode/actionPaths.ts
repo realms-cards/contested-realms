@@ -243,6 +243,36 @@ export function actionPaths(
     return [token, opt(tile, `as-${asAura ? "aura" : "minion"}-${target}`, `${name} as ${asAura ? "an aura" : "a minion"}`)];
   };
 
+  /**
+   * Attacks a unit can make WITHOUT moving (the engine's empty-path moveAttack): an enemy on its
+   * own square, or the site it stands on. The full click path for these runs through the unit's
+   * own tile — which the unit itself covers on the board — so each also gets a labelled option
+   * right after the unit, on the same row as its abilities: "Attack <target>". When two targets
+   * share a name a label cannot tell them apart, so the row says "Attack here" and the target is
+   * then picked on the board.
+   */
+  const attacksHere = new Map<string, { action: Action; target: string; name: string }[]>();
+  for (const action of actions) {
+    if (action.t !== "moveAttack" || !action.attack || action.path.length) continue;
+    const target = "unit" in action.attack ? action.attack.unit : action.attack.site;
+    const name = ("unit" in action.attack ? game.units[target]?.name : game.sites[target]?.name) ?? "it";
+    const list = attacksHere.get(action.unitId) ?? [];
+    if (!list.some((a) => a.target === target)) list.push({ action, target, name });
+    attacksHere.set(action.unitId, list);
+  }
+  const attackHereSteps = (unitId: string, target: string): string[] | null => {
+    const list = attacksHere.get(unitId);
+    const entry = list?.find((a) => a.target === target);
+    if (!list || !entry) return null;
+    const tile = tileOf(game, unitId);
+    const distinct = new Set(list.map((a) => a.name)).size === list.length;
+    if (distinct) return [tokenForEngineId(game, unitId), opt(tile, `attack-here-${target}`, `Attack ${entry.name}`)];
+    const here = opt(tile, "attack-here", "Attack here");
+    // a unit is picked by its own card; the site under the attacker by a labelled option
+    const pick = game.units[target] ? tokenForEngineId(game, target) : opt(tile, `attack-site-${target}`, `Attack ${entry.name}`);
+    return [tokenForEngineId(game, unitId), here, pick];
+  };
+
   for (const action of actions) {
     switch (action.t) {
       case "avatarSite": {
@@ -311,6 +341,11 @@ export function actionPaths(
           steps.push(opt(tile, `attack-site-${action.attack.site}`, site ? `Attack ${site.name}` : "Attack the site"));
         }
         paths.push(body ? { action, steps, areas: { [tile]: body.map((sq) => engineCellKey(sq.x, sq.y)) } } : { action, steps });
+        if (action.attack && !action.path.length) {
+          const target = "unit" in action.attack ? action.attack.unit : action.attack.site;
+          const here = attackHereSteps(action.unitId, target);
+          if (here) paths.push({ action, steps: here });
+        }
         break;
       }
       case "activate": {
