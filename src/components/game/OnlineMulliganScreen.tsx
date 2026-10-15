@@ -3,6 +3,7 @@
 import { Icon } from "@iconify/react";
 import Image from "next/image";
 import { useEffect, useState, useCallback } from "react";
+import type { ComponentProps } from "react";
 import { RcButton } from "@/components/ui/rc-button";
 import { cardbackAtlasUrl } from "@/lib/assets";
 import { useSound } from "@/lib/contexts/SoundContext";
@@ -252,7 +253,7 @@ export default function OnlineMulliganScreen({
                   onMouseEnter={() => setPreviewCard(myAvatar)}
                   onMouseLeave={() => setPreviewCard(null)}
                 >
-                  <Image
+                  <CardImage
                     src={`/api/images/${myAvatar.slug}`}
                     alt={myAvatar.name}
                     fill
@@ -280,7 +281,7 @@ export default function OnlineMulliganScreen({
                   onMouseEnter={() => setPreviewCard(opponentAvatar)}
                   onMouseLeave={() => setPreviewCard(null)}
                 >
-                  <Image
+                  <CardImage
                     src={`/api/images/${opponentAvatar.slug}`}
                     alt={opponentAvatar.name}
                     fill
@@ -360,7 +361,7 @@ export default function OnlineMulliganScreen({
                       isSelected && !showSeerUI ? "opacity-70" : ""
                     } ${done || myMulligans === 0 ? "opacity-60" : ""}`}
                   >
-                    <Image
+                    <CardImage
                       src={`/api/images/${cardSlug}`}
                       alt={card.name}
                       fill
@@ -538,7 +539,7 @@ export default function OnlineMulliganScreen({
                             : "w-24 h-32"
                         }`}
                       >
-                        <Image
+                        <CardImage
                           src={`/api/images/${topCard.slug}`}
                           alt={topCard.name}
                           fill
@@ -613,5 +614,38 @@ export default function OnlineMulliganScreen({
             : "Other players are making their mulligan decisions..."}
       </div>
     </div>
+  );
+}
+
+/** Retry a failed card image this long after the error (a cold dev route or a restarting server). */
+const CARD_IMAGE_RETRY_MS = 1000;
+
+/**
+ * A card image that retries once on error. A plain <img> that fails stays broken, and this screen
+ * shows right at match start, when the image route can still be compiling or the server restarting.
+ * The retry adds a query so the browser does not reuse the failed response.
+ */
+export function CardImage({ src, alt, ...props }: ComponentProps<typeof Image> & { src: string }) {
+  const [retried, setRetried] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRetried(false);
+    setFailedSrc(null);
+  }, [src]);
+
+  useEffect(() => {
+    if (failedSrc !== src || retried) return undefined;
+    const timer = setTimeout(() => setRetried(true), CARD_IMAGE_RETRY_MS);
+    return () => clearTimeout(timer);
+  }, [failedSrc, src, retried]);
+
+  return (
+    <Image
+      {...props}
+      src={retried ? `${src}?retry=1` : src}
+      alt={alt}
+      onError={() => setFailedSrc(src)}
+    />
   );
 }
