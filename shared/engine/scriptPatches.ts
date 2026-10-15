@@ -1,5 +1,16 @@
 import { plunderCard } from "../../vendor/untested-realm/shared/src/cards/scripts/multi-card-utils/plunder-card";
-import { effKeywords, getKeywords, getScript, opponent, siteAt, unitsAt } from "../../vendor/untested-realm/shared/src/index";
+import {
+  effKeywords,
+  getCard,
+  getKeywords,
+  getScript,
+  isWaterSite,
+  nearbySquaresW,
+  opponent,
+  siteAt,
+  siteStillFlooded,
+  unitsAt,
+} from "../../vendor/untested-realm/shared/src/index";
 import type { CardScript, EffectAPI, UnitState } from "../../vendor/untested-realm/shared/src/index";
 
 /**
@@ -47,11 +58,62 @@ function wrapCont(name: string, key: string, wrap: (original: ContFn) => ContFn)
 /** a minion the wave holds down: the same test the vendor script uses, minus the tapped guard */
 const waveHolds = (u: UnitState) => !u.isAvatar && !getKeywords(u.name).submerge;
 
+/*
+ * Waveshaper on an ALREADY-flooded site — WORKAROUND for vendor waveshaper.ts (`!s.flooded ||
+ * keptByThis`): sites flooded by something else (Atlantean Fate, a Naiad, …) are never offered,
+ * so the wave can't tap down a minion standing on one. Nothing in the text asks for a dry site.
+ * And because siteStillFlooded knows nothing of permanent floods like Atlantean Fate's, moving the
+ * wave on would dry such a site out. `flow.floodedBeforeWave` remembers the sites that were
+ * flooded on their own when the wave hit, so they stay flooded when it leaves.
+ * DELETE once fixed upstream.
+ */
+const FLOODED_BEFORE_WAVE = "floodedBeforeWave";
+
+function waveSquares(ctx: EffectAPI): { x: number; y: number }[] {
+  const squares: { x: number; y: number }[] = [];
+  for (const w of Object.values(ctx.state.sites)) {
+    if (w.controller !== ctx.controller || !isWaterSite(ctx.state, w, getCard)) continue;
+    for (const adj of nearbySquaresW(ctx.state, w.x, w.y)) {
+      if (siteAt(ctx.state, adj.x, adj.y) && !squares.some((q) => q.x === adj.x && q.y === adj.y)) squares.push(adj);
+    }
+  }
+  return squares;
+}
+
+function waveAnySite(): boolean {
+  const abilities = getScript("Waveshaper")?.abilities;
+  const index = abilities?.findIndex((a) => a.key === "wave") ?? -1;
+  const original = abilities?.[index] as MarkedAbility | undefined;
+  if (!abilities || !original || original[PATCHED]) return false;
+  const patched: MarkedAbility = {
+    ...original,
+    effect: (ctx) => {
+      const squares = waveSquares(ctx);
+      if (!squares.length) return ctx.log("You control no body of water.");
+      ctx.ask({ kind: "chooseSquare", title: "The wave crashes over which site?", data: { squares } }, "wave");
+    },
+  };
+  patched[PATCHED] = true;
+  abilities[index] = patched;
+  return true;
+}
+
 const waveshaperWave = (original: ContFn): ContFn => (ctx: EffectAPI, contCtx: unknown, choice: unknown) => {
   const site = isSquare(choice) ? siteAt(ctx.state, choice.x, choice.y) : null;
   // the targets are whoever stood there when the wave hit — collected before the original runs
   const before = new Set(site ? unitsAt(ctx.state, site.x, site.y, "surface").filter(waveHolds).map((u) => u.id) : []);
+  const flow = (ctx.state.flow = ctx.state.flow ?? {});
+  const prev: string | undefined = flow.waveshaperFlood?.[ctx.controller];
+  const ownFloods: string[] = flow[FLOODED_BEFORE_WAVE] ?? [];
+  if (site?.flooded && !siteStillFlooded(ctx.state, site.id) && !ownFloods.includes(site.id)) ownFloods.push(site.id);
+  flow[FLOODED_BEFORE_WAVE] = ownFloods;
   original(ctx, contCtx, choice);
+  // the wave moved on from a site that was flooded before it came: the water stays
+  if (prev && prev !== site?.id && ownFloods.includes(prev)) {
+    const left = ctx.state.sites[prev];
+    if (left) left.flooded = true;
+    flow[FLOODED_BEFORE_WAVE] = ownFloods.filter((id) => id !== prev);
+  }
   const flooded = site ? ctx.state.sites[site.id] : undefined;
   if (!flooded) return;
   // re-read after floodSite (it may move or kill units); the original already logged the ones it tapped
@@ -166,6 +228,7 @@ const enemyAtManor: NonNullable<Ability["available"]> = (state, sourceId) => {
 /** Applies every patch; idempotent (import side effect, exported for tests). */
 export function applyScriptPatches(): void {
   wrapCont("Waveshaper", "wave", waveshaperWave);
+  waveAnySite();
   wrapBreakStealth("Frozen Horror", "terror");
   wrapBreakStealth("Asmodeus", "immolate");
   gateSlimyMutants();

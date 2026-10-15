@@ -259,3 +259,23 @@ describe("Assimilator Snail shows the minion it copied", () => {
     expect(card?.name).toBe("Sea Raider");
   });
 });
+
+describe("Waveshaper on an already-flooded site (scriptPatches)", () => {
+  it("can wave a site Atlantean Fate flooded, and the site stays flooded when the wave moves on", () => {
+    const { g, avatarId } = setup({ enemyTapped: false });
+    g.sites["dry"].flooded = true; // flooded by Atlantean Fate, not by the wave
+    applyAction(g, 0 as PlayerId, { t: "activate", sourceId: avatarId, ability: "wave" });
+    const p = g.prompts.find((q) => q.player === 0)!;
+    const squares = (p.data as { squares: { x: number; y: number }[] }).squares;
+    expect(squares, "the flooded site is not offered").toContainEqual({ x: 2, y: 1 });
+    applyAction(g, 0 as PlayerId, { t: "prompt", promptId: p.id, choice: { x: 2, y: 1 } });
+    expect(g.units["enemy"].tapped).toBe(true);
+    expect(g.units["enemy"].counters?.skipUntap).toBe(1);
+    endTurn(g);
+    endTurn(g);
+    g.units[avatarId].tapped = false;
+    wave(g, avatarId, 1, 2);
+    expect(g.sites["dry2"].flooded).toBe(true);
+    expect(g.sites["dry"].flooded, "the wave dried out a site Atlantean Fate flooded").toBe(true);
+  });
+});
