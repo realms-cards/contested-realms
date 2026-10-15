@@ -405,6 +405,10 @@ let revealTimer: ReturnType<typeof setTimeout> | null = null;
 let matchCounter = 0;
 /** How a remote match posts actions back. Null in single player. */
 let remoteSend: ((message: unknown) => void) | null = null;
+/** The last view the server sent, kept so the board can be repainted once card art resolves. */
+let lastRemoteView: { view: PlayerView; power: Record<string, { atk: number; def: number }>; disabled: Set<string> } | null = null;
+/** Wait before retrying a failed card index load (a cold or restarting server). */
+const CARD_INDEX_RETRY_MS = 2000;
 
 export const useEngineSession = create<EngineSession>((set, get) => {
   /**
@@ -1094,7 +1098,24 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         // value left over from an earlier local game must not open that screen on a view.
         portalsRevealed: true,
       });
+      lastRemoteView = null;
       takeOverBoard();
+      // Card art comes from our printings index. The first view (the opening hands) usually
+      // lands before it does and is painted with slug-less refs — card backs — so repaint the
+      // latest view once the index is in, as single player's start/resume do. Retry once: a
+      // failed load would otherwise leave the backs until the server happens to send a new view.
+      const repaint = () => {
+        const last = lastRemoteView;
+        if (get().mode !== "remote" || get().matchId !== matchId || !last) return;
+        paint(last.view, last.power, last.disabled, "silent");
+      };
+      void loadCardIndex()
+        .catch(
+          () =>
+            new Promise((resolve) => setTimeout(resolve, CARD_INDEX_RETRY_MS)).then(() => loadCardIndex()),
+        )
+        .then(repaint)
+        .catch(() => undefined);
       send({ type: "engine:resync", matchId });
     },
 
@@ -1120,7 +1141,8 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         lastError: null,
         decisionSeat: envelope.over ? null : envelope.seat,
       });
-      paint(envelope.view, envelope.power, new Set(envelope.disabled), "remote");
+      lastRemoteView = { view: envelope.view, power: envelope.power, disabled: new Set(envelope.disabled) };
+      paint(lastRemoteView.view, lastRemoteView.power, lastRemoteView.disabled, "remote");
     },
 
     applyRemoteReject: (reason) => {
@@ -1148,6 +1170,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       unsubscribeStore?.();
       unsubscribeStore = null;
       lastProjection = null;
+      lastRemoteView = null;
       nextBotAt = 0;
       lastBotTurn = -1;
       useCpuReveals.getState().reset();

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ENGINE_BUILD } from "@shared/engine/build";
 import { enginePrecons, toEngineDeck } from "./decks";
 import { useEngineSession } from "./session";
+import { useGameStore } from "@/lib/game/store";
 
 /**
  * A player-vs-player client holds no game. It paints the view the server sent and posts actions
@@ -118,5 +119,37 @@ describe("a client in a server-run match", () => {
   it("leaves undo unavailable", () => {
     useEngineSession.getState().joinRemote("m1", 0 as PlayerId, () => undefined);
     expect(useEngineSession.getState().canUndo).toBe(false);
+  });
+
+  /*
+   * Kept last: the printing index is module-global and, once loaded, stays loaded.
+   * The opening hands are usually painted before the index arrives — every card without a slug,
+   * drawn as a card back — and nothing repainted until the server sent its next view.
+   */
+  it("repaints the board with card art once the printing index arrives", async () => {
+    const { view } = serverView(0 as PlayerId);
+    const handNames = (view.players[0] as unknown as { hand: string[] }).hand.map((id) => view.cards[id]?.name ?? "");
+    expect(handNames.length).toBeGreaterThan(0);
+    let deliver: () => void = () => undefined;
+    vi.stubGlobal("fetch", () =>
+      new Promise((resolve) => {
+        deliver = () =>
+          resolve({
+            json: () =>
+              Promise.resolve({
+                entries: handNames.map((name, i) => [i + 1, i + 1, 0, name, `slug-${i}`, "", false, false]),
+              }),
+          });
+      }),
+    );
+    useEngineSession.getState().joinRemote("m1", 0 as PlayerId, () => undefined);
+    useEngineSession.getState().applyRemoteView(envelope(0 as PlayerId, 1, view));
+    const hand = () => useGameStore.getState().zones.p1.hand;
+    expect(hand().every((c) => !c.slug), "painted before the index: no art yet").toBe(true);
+
+    await vi.waitFor(() => deliver !== undefined);
+    deliver();
+    await vi.waitFor(() => expect(hand().every((c) => !!c.slug)).toBe(true), { timeout: 5000 });
+    vi.unstubAllGlobals();
   });
 });
