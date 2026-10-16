@@ -6,6 +6,88 @@ import { sitesOf, unitsOf, avatarOf, siteAt } from './grid'
 import { siteSilenced, artifactSilenced, siteDisabledByArtifact, canTap, isDisabled } from './statics'
 import { playSite } from './casting'
 
+/** The mana a player's CURRENTLY-CONTROLLED sources provide right now — sites (incl. enemy
+ *  "provides for everyone" sites) plus units/artifacts with `extraManaEachTurn`. Pure (no floats, no
+ *  one-time gifts). KEEP THE SUMMATION IN SYNC WITH beginTurn's source loops below. */
+export function sourceMana(state: GameState, player: PlayerId): number {
+  let mana = 0
+  for (const site of Object.values(state.sites)) {
+    if (site.isRubble || site.controller === player || site.controller === null) continue
+    if (getScript(site.name)?.providesForEveryone && !siteDisabledByArtifact(state, site)) mana += 1
+  }
+  for (const site of sitesOf(state, player)) {
+    if (site.isRubble || siteDisabledByArtifact(state, site)) continue
+    const silenced = siteSilenced(state, site)
+    const gate = getScript(site.name)?.siteProvides
+    if (gate && !silenced && !gate(state, site)) continue
+    if (getScript(site.name)?.noMana) continue
+    let gain = 1 + (silenced ? 0 : getScript(site.name)?.siteExtraMana ?? 0)
+    const fn = getScript(site.name)?.siteExtraManaFn
+    if (fn && !silenced) gain += fn(state, site.id)
+    for (const r of Object.values(state.auras)) {
+      const extra = getScript(r.name)?.auraSiteExtraMana
+      if (extra && r.squares.some((s) => s.x === site.x && s.y === site.y)) gain += extra
+    }
+    mana += gain
+  }
+  const extraOf = (name: string, id: string): number => {
+    const e = getScript(name)?.extraManaEachTurn
+    return typeof e === 'function' ? e(state, id) : e ?? 0
+  }
+  for (const unit of unitsOf(state, player)) {
+    if (unit.silenced) continue
+    mana += extraOf(unit.name, unit.id)
+  }
+  for (const art of Object.values(state.artifacts)) {
+    const controller = art.carriedBy ? state.units[art.carriedBy]?.controller : art.conjuredBy
+    if (controller !== player) continue
+    mana += extraOf(art.name, art.id)
+  }
+  return mana
+}
+
+/** Rules (Oct 2026): mana sources provide mana WHILE you control them. If the ACTIVE player loses a
+ *  mana source mid-turn (a site destroyed / sacrificed / silenced / taken), the mana it provided leaves
+ *  their pool now — down to 0, never below what they've already spent. GAINS are credited at their entry
+ *  point (enterSite for a played site, the editor's placeSite, an auraSiteExtraMana aura entering, a
+ *  unit/artifact's own on-summon credit), so here we only reclaim on a DROP vs the turn's baseline, then
+ *  re-sync the baseline. Called at the applyAction settle point, so it reflects every board change. */
+export function reconcileControlledMana(state: GameState): void {
+  if (state.phase === 'over') return
+  const player = state.activePlayer
+  const base = state.flow?.manaBase?.[player]
+  if (base === undefined) return
+  const cur = sourceMana(state, player)
+  if (cur < base) state.players[player].mana = Math.max(0, state.players[player].mana - (base - cur))
+  state.flow!.manaBase![player] = cur
+}
+
+/** Animated auras (Enchantress, or anyone who borrowed her animate — a masked Imposter, Vivien…) revert
+ *  to mere enchantments at the start of the ANIMATOR's next turn. The lifetime belongs to the ANIMATION
+ *  (flow.auraAnimations), so this runs centrally at beginTurn — NOT via the Enchantress's own startOfTurn
+ *  hook, which never fired once she left the realm, nor when an Imposter (whose forwarded hooks don't
+ *  include a de-animator) did the animating. The aura itself persists; only the minion dissolves, and
+ *  whoever controls the minion keeps the reverted aura. */
+export function deanimateExpiredAuras(state: GameState, player: PlayerId): void {
+  const anims = (state.flow?.auraAnimations ?? []) as { unitId: string; player: PlayerId; turn: number }[]
+  if (!anims.length) return
+  const keep: typeof anims = []
+  for (const a of anims) {
+    if (a.player === player && a.turn < state.turn) {
+      const u = state.units[a.unitId]
+      if (u) {
+        const aura = state.auras[String(u.counters?.animatedAura ?? '')]
+        if (aura) aura.controller = u.controller
+        delete state.units[a.unitId]
+        pushLog(state, player, `${u.name} settles back into a mere enchantment.`)
+      }
+    } else {
+      keep.push(a)
+    }
+  }
+  state.flow!.auraAnimations = keep
+}
+
 export function beginTurn(state: GameState, player: PlayerId): void {
   // skipped turns pass straight to the opponent (Vaults of Zul)
   if (state.flow?.skipTurn?.[player]) {
@@ -42,6 +124,9 @@ export function beginTurn(state: GameState, player: PlayerId): void {
       (m) => !(m.duration === 'untilYourNextTurn' && m.sourcePlayer === player && m.turn < state.turn),
     )
   }
+  // Animated auras revert to mere enchantments at the start of the animator's next turn (handled
+  // centrally — see deanimateExpiredAuras).
+  deanimateExpiredAuras(state, player)
   // named-spell seals expire at the start of the sealer's next turn (Hyter Sprites)
   if (state.flow?.castBans) {
     state.flow.castBans = state.flow.castBans.filter(
@@ -139,6 +224,11 @@ export function beginTurn(state: GameState, player: PlayerId): void {
   state.flow.lifeLost = { 0: 0, 1: 0 }
   state.flow.manaSpent = { 0: 0, 1: 0 } // remaining/total mana widget (total = remaining + spent)
   state.flow.killerByVictim = {} // per-victim kill credit (Accursed Albatross et al.); combat deaths are same-turn
+  // rules (Oct 2026): mana sources provide mana WHILE you control them — snapshot this turn's SOURCE
+  // total (no one-time gifts) so that if a source is lost mid-turn, reconcileControlledMana takes its
+  // mana back out of the pool. (Gains are credited on site entry already; this only reclaims on loss.)
+  state.flow.manaBase = state.flow.manaBase ?? {}
+  state.flow.manaBase[player] = sourceMana(state, player)
   state.flow.damageCredit = {}   // per-victim damager list feeding kill credit
   state.flow.airCastSum = { 0: 0, 1: 0 }
   state.flow.drawsThisTurn = { 0: 0, 1: 0 }

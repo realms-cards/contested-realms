@@ -1,4 +1,4 @@
-import { registerScript, getScript } from '../registry'
+import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { effectCastSpell, casterCandidatesFor } from '../../../engine/casting'
 import { zoneAccessToll } from '../../../engine/statics'
@@ -60,18 +60,17 @@ registerScript('Archimago', {
         if (!p.banished.includes(id)) p.banished.push(id)
       }
       if (toll) { p.mana -= toll; bumpManaSpent(ctx.state, ctx.controller, toll) }
-      // "Cast a copy" — CAST it for real now (prompting for its targets); the copy MUST still
-      // pay its mana cost and meet its elemental thresholds (FAQ), so free:false. The token
-      // copy is cleaned up after it resolves; it must NOT sit in hand.
+      // "Cast a copy" — CAST it for real now (prompting for its targets); the copy MUST still pay its
+      // mana cost and meet its elemental thresholds (FAQ), so free:false. It is a COPY, i.e. a token
+      // (tokenCopy) — it VANISHES when it resolves and must NEVER land in the cemetery (FAQ: "no way
+      // back" — the copy leaves no card behind, so you can't re-echo it into an infinite loop).
       pushLog(ctx.state, ctx.controller, `Archimago echoes ${echoName}.`)
-      // FAQ: "any of your spellcasters can cast the copied spell" — so when the caster's position
-      // matters (a projectile fires from the caster; a targeted spell is cast from it) and you have
-      // more than one spellcaster, let the player pick which one. For a targetless spell the caster
-      // is irrelevant, so just auto-cast (no needless prompt).
+      // FAQ: "any of your spellcasters can cast the copied spell." WHENEVER you have more than one
+      // legal spellcaster, let the player pick — not just for position-based spells: WHO casts can
+      // matter for any spell ("whenever you cast" triggers, Sturmgeist, Enchantress, caster element…).
+      // Only skip the prompt when there's a single legal caster (nothing to choose).
       const casters = casterCandidatesFor(ctx.state, ctx.controller, echoName)
-      const sc = getScript(echoName)
-      const positional = !!sc?.shootsProjectile || !!sc?.targets?.length
-      if (positional && casters.length > 1) {
+      if (casters.length > 1) {
         ctx.ask(
           { kind: 'chooseTargets', title: `Which spellcaster casts ${echoName}?`, data: { candidates: casters, count: 1, kind: 'unit' } },
           'pickCaster',
@@ -79,12 +78,12 @@ registerScript('Archimago', {
         )
         return
       }
-      effectCastSpell(ctx.state, ctx.controller, echoName, { free: false, caster: casters[0] })
+      effectCastSpell(ctx.state, ctx.controller, echoName, { free: false, tokenCopy: true, caster: casters[0] })
     },
     pickCaster: (ctx, c, choice) => {
       const echoName = c.echoName as string
       const id = Array.isArray(choice) ? choice[0] : choice
-      effectCastSpell(ctx.state, ctx.controller, echoName, { free: false, caster: typeof id === 'string' ? id : undefined })
+      effectCastSpell(ctx.state, ctx.controller, echoName, { free: false, tokenCopy: true, caster: typeof id === 'string' ? id : undefined })
     },
   },
 })

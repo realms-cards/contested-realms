@@ -2,7 +2,7 @@ import { getCard } from '../cards/db'
 import { getScript, type AbilityDef, type EffectAPI } from '../cards/scripts/registry'
 import type { Action, ActionResult, GameState, PlayerId, UnitState } from './types'
 import { doMulligan, keepHand } from './setup'
-import { endTurn } from './turn'
+import { endTurn, reconcileControlledMana } from './turn'
 import { activePrompt, resolvePrompt, pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkStateBased, killUnit, tapUnit, checkWard, luckyCandidates, bumpManaSpent, beginAreaReveal, sealAbilityReveal, revealAbility, setActionCredit, restoreActionCredit, reconcileSummonTax, completeDeferredDeaths, finishBattleCapture, runDamageEvent } from './effects'
 import { castSpell, playSite, affinity, validateTarget, legalTargetOptions, sameTargetRef, resolvePendingCast } from './casting'
 import { moveAttack, shootProjectile, pickUp, drop, enforceForcedAttacks, resolvePendingMoveAttack } from './combat'
@@ -38,6 +38,8 @@ export function applyAction(state: GameState, player: PlayerId, action: Action):
   // The Green Knight: proactively compel any enemy minion that can now attack it (at turn start and
   // after every action). Runs only when no prompt is open; it may open its own (order / defend) prompt.
   if (state.prompts.length === 0) enforceForcedAttacks(state)
+  // mana sources provide while controlled — a source lost this turn takes its mana back (Oct 2026)
+  if (state.prompts.length === 0) reconcileControlledMana(state)
   // a card effect may force the turn to end (e.g. Candlemas Monks' deathrite)
   if (state.flow?.endPhaseNow && state.phase === 'main' && state.prompts.length === 0) {
     state.flow.endPhaseNow = false
@@ -362,11 +364,14 @@ export function canActivate(
     if (isDisabled(state, unit)) return `${unit.name} is disabled.`
     if (unit.silenced) return `${unit.name} is silenced.`
   } else {
-    const controller = state.sites[sourceId]?.controller ?? state.artifacts[sourceId]?.conjuredBy
+    const art = state.artifacts[sourceId]
+    // a CARRIED artifact is controlled by its BEARER (so a stolen Toolbox, now carried by your unit,
+    // is yours to use); only a ground/conjured artifact falls back to conjuredBy. Matches entityOwner.
+    const controller = state.sites[sourceId]?.controller
+      ?? (art?.carriedBy ? state.units[art.carriedBy]?.controller : art?.conjuredBy)
     if (controller !== player) return 'You do not control that.'
     const site = state.sites[sourceId]
     if (site && siteSilenced(state, site)) return `${site.name} is silenced.`
-    const art = state.artifacts[sourceId]
     if (art && artifactSilenced(state, art)) return `${art.name} is silenced.` // Acid Rain hushes artifacts too
   }
 
@@ -580,9 +585,13 @@ function activateAbility(
   // bearer (rulebook: tapping to pay = activating the artifact's ability).
   const creditUnit = state.units[action.sourceId] ? action.sourceId : (state.artifacts[action.sourceId]?.carriedBy ?? undefined)
   const prevCredit = setActionCredit(state, 3, creditUnit ? [creditUnit] : [])
+  // a client-chosen oversized placement (anchor + rotation) rides in `extra`; ctx.teleport consumes it
+  // for the relocation — so a teleport ABILITY (Avatar of Air, …) respects it, exactly like a spell.
+  if (action.extra?.teleportPlace) state.flow = { ...(state.flow ?? {}), teleportPlace: action.extra.teleportPlace }
   // one simultaneous damage event: an area-damage ability (Doomsday Device, Corpse Explosion) resolves
   // every victim's reduction/prevention before a single death settles (see runDamageEvent).
   runDamageEvent(state, () => ability.effect(abilityCtx))
+  if (state.flow?.teleportPlace) delete state.flow.teleportPlace
   if (ability.cost.sacrificeSelf && unit) {
     // a sacrifice is a forced self-kill that bypasses "can't be destroyed" (The Doom of Dilmun)
     state.flow = state.flow ?? {}

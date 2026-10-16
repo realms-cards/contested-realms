@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import { join } from "path";
 import { describe, expect, it } from "vitest";
 import { handle, type EngineRequest } from "../../server/modules/engine/worker";
 import { starterDecks } from "../../vendor/untested-realm/shared/src/index";
@@ -93,15 +95,12 @@ describe("the server-side engine authority", () => {
 });
 
 describe("the server plays by the same card rules as single player", () => {
-  it("has our script patches applied to the engine it runs", async () => {
-    // shared/engine/scriptPatches.ts fixes vendored card scripts (Waveshaper's untap lock, Break
-    // Stealth, Slimy Mutants) on import, and must be imported WHEREVER the engine runs. In a
-    // player-vs-player match that is the server — so without it, PvP would silently play by the
-    // unpatched vendor rules while single player played by ours.
-    await import("../../server/modules/engine/worker");
-    const { getScript } = await import("../../vendor/untested-realm/shared/src/index");
-    const wave = getScript("Waveshaper")?.conts?.wave as { [key: symbol]: unknown } | undefined;
-    expect(wave, "Waveshaper has a wave continuation to patch").toBeTruthy();
-    expect(wave?.[Symbol.for("realms.engine-mode.scriptPatch")], "and it is our wrapped version").toBe(true);
+  it("imports our script patches wherever it runs the engine", () => {
+    // shared/engine/scriptPatches.ts fixes vendored card scripts on import, and must be imported
+    // WHEREVER the engine runs. In a player-vs-player match that is the server — so without it,
+    // PvP would silently play by the unpatched vendor rules while single player played by ours.
+    // (It holds no patches right now, so this checks the wiring, not a patched script.)
+    const worker = readFileSync(join(__dirname, "../../server/modules/engine/worker.ts"), "utf8");
+    expect(worker).toMatch(/import\s+["'][./]*shared\/engine\/scriptPatches["']/);
   });
 });

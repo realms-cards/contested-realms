@@ -9,8 +9,11 @@ import { applyScriptPatches } from "@shared/engine/scriptPatches";
 /**
  * Waveshaper: "Tap -> Flood a site near your body of water until you do so again. Tap minions
  * without submerge there. They don't untap the next time they would."
- * Guards the scriptPatches.ts workaround for vendor waveshaper.ts:45 (already-tapped minions got
- * no skipUntap marker). Once upstream is fixed and the patch deleted, these must still pass.
+ * Already-tapped minions used to get no skipUntap marker (fixed upstream in 0.5.0).
+ *
+ * The card fixes in this file were runtime patches in shared/engine/scriptPatches.ts; they are all
+ * in the vendored engine now (upstream, or our fork's `realms` branch). These tests keep guarding
+ * the behaviour in our game, whichever side the fix lives on.
  */
 type Unit = EngineState["units"][string];
 
@@ -28,6 +31,9 @@ function setup(opts: { enemyTapped: boolean }) {
   g.sites["dry2"] = site("dry2", 1, 2, "Dark Tower", 0);
   const avatar = Object.values(g.units).find((u) => u.isAvatar && u.owner === 0)!;
   avatar.tapped = false;
+  // "your body of water" is the one your avatar stands in (Waveshaper FAQ, engine 0.5.1)
+  avatar.x = 2;
+  avatar.y = 2;
   const minion = (id: string, seat: 0 | 1, x: number, y: number, tapped: boolean): Unit =>
     ({
       ...avatar,
@@ -81,8 +87,8 @@ const projectedTapped = (g: EngineState, id: string) => {
   return proj.permanents[engineCellKey(u.x, u.y)]?.find((p) => p.instanceId === id)?.tapped;
 };
 
-describe("Waveshaper keeps minions tapped down (scriptPatches)", () => {
-  it("wraps the live script once, however often the patches are applied", () => {
+describe("Waveshaper keeps minions tapped down", () => {
+  it("re-applying the (now empty) patch set leaves the live script alone", () => {
     const wave = getScript("Waveshaper")?.conts?.wave;
     expect(wave).toBeTruthy();
     applyScriptPatches();
@@ -156,9 +162,9 @@ describe("Waveshaper keeps minions tapped down (scriptPatches)", () => {
 
 /**
  * Break Stealth → … : the engine strips Stealth on activation before the effect runs, so Frozen
- * Horror and Asmodeus fizzled with "No Stealth to break.". Guards the scriptPatches.ts workaround.
+ * Horror and Asmodeus fizzled with "No Stealth to break.". Fixed upstream in 0.5.0.
  */
-describe("Break Stealth abilities resolve (scriptPatches)", () => {
+describe("Break Stealth abilities resolve", () => {
   const hide = (g: EngineState, id: string, name: string, x: number, y: number, stealth: boolean) => {
     g.units[id] = { ...g.units["mine"], id, name, cardId: `card_${id}`, x, y, stealth, modifiers: [] } as unknown as Unit;
   };
@@ -192,7 +198,7 @@ describe("Break Stealth abilities resolve (scriptPatches)", () => {
   });
 });
 
-describe("Slimy Mutants is only offered with a submerging ally (scriptPatches)", () => {
+describe("Slimy Mutants is only offered with a submerging ally", () => {
   const slimy = (g: EngineState) =>
     legalActions(g, 0 as PlayerId).filter((a) => a.t === "activate" && String(a.ability).startsWith("slime:"));
 
@@ -207,7 +213,7 @@ describe("Slimy Mutants is only offered with a submerging ally (scriptPatches)",
   });
 });
 
-describe("Sea Raider plunders the enemy's spellbook (scriptPatches)", () => {
+describe("Sea Raider plunders the enemy's spellbook", () => {
   it("takes the killed enemy's controller's topmost spell, not its own", () => {
     const { g } = setup({ enemyTapped: false });
     g.units["mine"] = { ...g.units["mine"], name: "Sea Raider" } as unknown as Unit;
@@ -220,7 +226,7 @@ describe("Sea Raider plunders the enemy's spellbook (scriptPatches)", () => {
   });
 });
 
-describe("The Manor at Daperyll Hill needs an enemy there (scriptPatches)", () => {
+describe("The Manor at Daperyll Hill needs an enemy there", () => {
   const feast = (g: EngineState) =>
     legalActions(g, 0 as PlayerId).filter((a) => a.t === "activate" && a.ability === "feast");
 
@@ -260,7 +266,7 @@ describe("Assimilator Snail shows the minion it copied", () => {
   });
 });
 
-describe("Waveshaper on an already-flooded site (scriptPatches)", () => {
+describe("Waveshaper on an already-flooded site", () => {
   it("can wave a site Atlantean Fate flooded, and the site stays flooded when the wave moves on", () => {
     const { g, avatarId } = setup({ enemyTapped: false });
     g.sites["dry"].flooded = true; // flooded by Atlantean Fate, not by the wave

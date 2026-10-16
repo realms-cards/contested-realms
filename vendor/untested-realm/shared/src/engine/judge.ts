@@ -14,6 +14,7 @@ import {
   drawCards,
   summonToken,
   destroySite,
+  banishSite,
   checkStateBased,
   newId,
   makeCtx,
@@ -230,12 +231,11 @@ export function applyJudge(state: GameState, player: PlayerId, op: JudgeOp): str
       const s = state.sites[op.siteId]
       if (!s) return 'No such site.'
       if (op.toBanish) {
-        // editor "remove completely": the site leaves the game (no cemetery, no
-        // rubble) and the square is cleared. Bypasses indestructible/ward guards.
-        const card = state.cards[s.cardId]
-        delete state.sites[op.siteId]
-        if (card && !card.isToken) state.players[card.owner].banished.push(card.id)
+        // editor "remove completely": the site leaves the game (banished, no cemetery, no rubble) and the
+        // square becomes an empty void — everything on it sinks into the void (banishSite). Same behaviour
+        // as Lord of the Void; distinct from "replace" (replaceSite) which keeps a site on the square.
         j(`removed ${s.name} from the game`)
+        banishSite(state, op.siteId)
       } else {
         j(`destroyed ${s.name}`)
         destroySite(state, op.siteId, player)
@@ -358,6 +358,17 @@ export function applyJudge(state: GameState, player: PlayerId, op: JudgeOp): str
         isRubble,
         // printed Ward enters with the site (Blessed Well, Pilgrim's Shrine...) — rubble has none
         ward: isRubble ? undefined : getKeywords(def.name).ward || undefined,
+      }
+      // mana follows control: a site placed from the editor provides its mana right away (like a played
+      // site), base + any aura boosts (Abundance), to the player who now controls it.
+      const scr = getScript(op.name)
+      if (!isRubble && !scr?.noMana) {
+        let gain = 1 + (scr?.siteExtraMana ?? 0)
+        for (const r of Object.values(state.auras)) {
+          const extra = getScript(r.name)?.auraSiteExtraMana
+          if (extra && r.squares.some((q) => q.x === op.x && q.y === op.y)) gain += extra
+        }
+        state.players[op.player].mana += gain
       }
       j(`placed ${op.name} at ${squareLabel(op.x, op.y)}`)
       checkStateBased(state)

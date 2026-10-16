@@ -18,7 +18,7 @@ registerScript("Merlin's Tower", {
     // the tower gets the discount, not an unrelated magic your avatar casts.
     flow.spellDiscounts = [
       ...(flow.spellDiscounts ?? []),
-      { player: ctx.controller, turn: ctx.state.turn, amount: 3, elements: null, casterId: ctx.sourceId },
+      { player: ctx.controller, turn: ctx.state.turn, amount: 3, elements: null, casterId: ctx.sourceId, magicOnly: true },
     ]
     pushLog(ctx.state, ctx.controller, "Merlin's Tower awakens — it becomes a Spellcaster and its next magic costs ③ less this turn.")
   },

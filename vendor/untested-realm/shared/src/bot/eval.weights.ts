@@ -73,6 +73,12 @@ export interface EvalWeights {
    *  instead of developing. HEAVY under 5 sites, moderate at 5, slight at 6, NOTHING above 6 (fully
    *  developed). Below 4 sites the bot never even considers it (a hard ban in moves.ts). */
   avatarTapWaste: number
+  /** SEVERE penalty for a Pathfinder-style avatar (noStandardSiteAction) that CAN blaze a trail (its
+   *  site-play ability — untapped, atlas non-empty, an adjacent void/rubble to build on) but hasn't.
+   *  Pathfinders are exempt from avatarIdle/avatarWander (they develop via this ability, not a normal
+   *  site play), so this is their equivalent "don't squander the turn" penalty — and it's heavier, since
+   *  a Pathfinder blazing is both its site development AND its board advance. */
+  pathfinderIdle: number
 
   // ── Material (per non-avatar unit, mine − foe) ─────────────────────────────
   /** per point of (effective attack + FULL defence). Non-lethal damage is ignored — it heals each turn,
@@ -171,6 +177,8 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   avatarWander: 28, // roaming instead of developing (scaled ×2 weak / ×1 strong <4 sites / ×0.5 strong 4–5)
   avatarTapWaste: 45, // Tap squandered on a non-site ability vs developing — heavy (>a card/site's worth) so
   //                     it beats even a strong Tap while developing; scaled ×1 <5 / ×0.5 at 5 / ×0.2 at 6 / 0 above 6
+  pathfinderIdle: 50, // SEVERE — a Pathfinder that can blaze but doesn't is wasting a site play AND a board
+  //                     advance; must outweigh the lure of wandering/attacking so it always lays its trail
   myAvatarExposed: 9, // (was 6) — flinch harder from incoming avatar threat; don't over-extend into it
 
   // Material: DAMAGE still leads, but placing minions is worth a bit more so the bot plays cards from

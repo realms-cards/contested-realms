@@ -1,10 +1,10 @@
 import { getCard, type ParsedKeywords } from '../cards/db'
-import type { GameState, PlayerId, Region, Step, UnitState } from './types'
+import type { GameState, PlayerId, Region, Step, UnitState, SiteState, ArtifactState } from './types'
 import { GRID_H, GRID_W, inBounds, isOrthAdjacent, isDiagAdjacent, siteAt, isWaterSite, sameSquare, nearbySquaresW, orthAdjacentWrapped, occupiedSquares, edgesConnected } from './grid'
 import { emitUnitMoved, makeCtx, avatarTrapBlocksMove, recordMoveAnim } from './effects'
 import { detachFromCarrier } from './carrying'
 import { getScript } from '../cards/scripts/registry'
-import { effKeywords, isDisabled, isUnmodifiable, immobilizeImmune, terrainAt, siteSilenced, artifactSilenced } from './statics'
+import { effKeywords, isDisabled, isUnmodifiable, immobilizeImmune, terrainAt, siteSilenced, artifactSilenced, protectedFromSites } from './statics'
 
 
 /** Do the SITE / artifact entry restrictions (Gnome Hollows' power cap, Great Wall, walls…) permit
@@ -18,10 +18,7 @@ export function siteEntryAllowed(state: GameState, unit: UnitState, from: Step, 
   //  · entryFilterBlocksPush → applies only to a PUSH/pull/drag, NOT a Teleport (Perilous Bridge).
   const forcedActivates = (script: { entryFilterBlocksForcedEntry?: boolean; entryFilterBlocksPush?: boolean }) =>
     !!script.entryFilterBlocksForcedEntry || (viaPush && !!script.entryFilterBlocksPush)
-  const deafToSites =
-    unit.carrying.some((id) => getScript(state.artifacts[id]?.name ?? '')?.bearerIgnoresSites) ||
-    (!!getScript(unit.name)?.ignoresSites && !unit.silenced)
-  if (!deafToSites) {
+  if (!protectedFromSites(state, unit)) {
     for (const s of Object.values(state.sites)) {
       const script = getScript(s.name)
       if (!script?.entryFilter || (forced && !forcedActivates(script))) continue
@@ -36,14 +33,132 @@ export function siteEntryAllowed(state: GameState, unit: UnitState, from: Step, 
   return true
 }
 
+/** Is the WHOLE multi-square footprint of an oversized (2x2) / rigid-body (wall, Rack-stretched) unit
+ *  LEGAL if its anchor sits at `to`? Used by TELEPORT / forced relocation (rulebook: an oversized unit
+ *  must be teleported "to a location or set of locations that conforms to its size restrictions and is
+ *  otherwise legal for that unit to occupy"). Unlike a STEP this imposes no adjacency — only that every
+ *  occupied square is in-bounds (Magellan-wrap aware) and holds a site. Single-square units are trivially
+ *  legal. `shape` overrides the unit's current footprint (used when the player ROTATES it on teleport).
+ *  The returned squares are the ABSOLUTE footprint at `to` so the caller can place the parts. */
+export function multiSquareDestSquares(
+  state: GameState, unit: UnitState, to: { x: number; y: number }, shape?: { dx: number; dy: number }[],
+): { x: number; y: number }[] | null {
+  const wrap = edgesConnected(state)
+  const wrapX = (x: number) => (wrap ? ((x % GRID_W) + GRID_W) % GRID_W : x)
+  const wrapY = (y: number) => (wrap ? ((y % GRID_H) + GRID_H) % GRID_H : y)
+  // offsets of each occupied part from the anchor (its own x/y). An explicit `shape` wins (rotation).
+  const offsets: { dx: number; dy: number }[] =
+    shape ??
+    (unit.size === '2x2'
+      ? [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }]
+      : (unit.extraSquares?.length ?? 0) > 0
+        ? occupiedSquares(unit).map((s) => ({ dx: s.x - unit.x, dy: s.y - unit.y }))
+        : [{ dx: 0, dy: 0 }])
+  const out: { x: number; y: number }[] = []
+  for (const { dx, dy } of offsets) {
+    const x = wrapX(to.x + dx), y = wrapY(to.y + dy)
+    if (!inBounds(x, y) || !siteAt(state, x, y)) return null
+    out.push({ x, y })
+  }
+  return out
+}
+
+export type TeleportPlacement = { x: number; y: number; shape?: { dx: number; dy: number }[]; squares: { x: number; y: number }[] }
+
+/** The DISTINCT, LEGAL placements a multi-square unit can be teleported to with the clicked square `to`
+ *  as its ANCHOR (the spell validates `to` is in reach — e.g. Blink's "nearby") — the choices a player
+ *  picks among. ONE unified model for every body type: the body's offset-0 cell lands on the clicked
+ *  square and the whole rigid footprint ROTATES about it (0 / 90 / 180 / 270°):
+ *    · a 2x2 → the up-to-4 anchor corners (each rotation lands the clicked square as TL / TR / BL / BR);
+ *    · a wall / Rack-stretched avatar / Megamoeba-Aethermoeba blob → up to 4 rigid rotations.
+ *  Each placement carries the engine args: the anchor (x,y) and, for a rigid body, the rotated `shape`
+ *  (offsets from the anchor; a 2x2 is size-based and converts to its top-left anchor instead — no shape).
+ *  Symmetric/coincident rotations collapse to one entry; illegal ones (a part off-board or over void) are
+ *  dropped. A single-square unit yields its one square. */
+export function oversizedTeleportPlacements(state: GameState, unit: UnitState, to: { x: number; y: number }): TeleportPlacement[] {
+  const out: TeleportPlacement[] = []
+  const seen = new Set<string>()
+  const add = (x: number, y: number, shape: { dx: number; dy: number }[] | undefined) => {
+    const squares = multiSquareDestSquares(state, unit, { x, y }, shape)
+    if (!squares) return
+    const key = squares.map((s) => `${s.x},${s.y}`).sort().join('|')
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push({ x, y, shape, squares })
+  }
+  const is2x2 = unit.size === '2x2'
+  if (!is2x2 && (unit.extraSquares?.length ?? 0) === 0) { add(to.x, to.y, undefined); return out } // single-square
+
+  const base = is2x2
+    ? [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }]
+    : occupiedSquares(unit).map((s) => ({ dx: s.x - unit.x, dy: s.y - unit.y }))
+  const rots: ((o: { dx: number; dy: number }) => { dx: number; dy: number })[] = [
+    (o) => ({ dx: o.dx, dy: o.dy }),       // 0°
+    (o) => ({ dx: -o.dy, dy: o.dx }),      // 90° CW
+    (o) => ({ dx: -o.dx, dy: -o.dy }),     // 180°
+    (o) => ({ dx: o.dy, dy: -o.dx }),      // 270° CW
+  ]
+  for (const rot of rots) {
+    const rotated = base.map(rot)
+    if (is2x2) {
+      // 2x2 is size-based (always top-left anchored): convert the rotated block to its TOP-LEFT anchor
+      const minDx = Math.min(...rotated.map((o) => o.dx)), minDy = Math.min(...rotated.map((o) => o.dy))
+      add(to.x + minDx, to.y + minDy, undefined)
+    } else {
+      add(to.x, to.y, rotated) // anchor the clicked square (offset-0) and rotate the rest
+    }
+  }
+  return out
+}
+
+// Per-(unit,state) movement context: the values isLegalStep needs that are INVARIANT across every step
+// of one search but expensive to derive (each scans the whole board). A path search (reachableLocations /
+// enumeratePaths / findPath BFS) builds this ONCE and reuses it for every edge instead of re-deriving it
+// per step — which is what made a single defend run isDisabled tens of thousands of times (the defend
+// candidate scan runs a BFS per potential defender, and each BFS edge re-scanned every unit). `kw` is the
+// unit's effective keywords; `movingDisabled` its "can't move at all" gate; the remaining lists are the
+// (usually empty) handful of entities whose movement hooks apply — so the common board costs O(1) per edge.
+export interface StepCtx {
+  kw: ParsedKeywords
+  movingDisabled: boolean
+  entryFilters: UnitState[] // active OTHER units with a unitEntryFilter hook (Undesirables)
+  stepGranters: UnitState[] // active OTHER units with a grantsExtraSteps hook
+  siteGranters: SiteState[] // sites with an extraSteps hook
+  artGranters: ArtifactState[] // non-silenced artifacts with an extraSteps hook
+}
+
+export function buildStepCtx(state: GameState, unit: UnitState): StepCtx {
+  const kw = effKeywords(state, unit)
+  const movingDisabled = isDisabled(state, unit)
+  const entryFilters: UnitState[] = []
+  const stepGranters: UnitState[] = []
+  // a disabled mover can't move at all, so the filter/grant hooks are never consulted — skip collecting them.
+  if (!movingDisabled) {
+    for (const u of Object.values(state.units)) {
+      if (u.id === unit.id) continue
+      const sc = getScript(u.name)
+      if (!sc?.unitEntryFilter && !sc?.grantsExtraSteps) continue // cheap skip — only hook-holders pay isDisabled
+      if (u.silenced || isDisabled(state, u)) continue // a disabled source has no ability
+      if (sc.unitEntryFilter) entryFilters.push(u)
+      if (sc.grantsExtraSteps) stepGranters.push(u)
+    }
+  }
+  const siteGranters: SiteState[] = []
+  for (const s of Object.values(state.sites)) if (getScript(s.name)?.extraSteps) siteGranters.push(s)
+  const artGranters: ArtifactState[] = []
+  for (const a of Object.values(state.artifacts)) if (!artifactSilenced(state, a) && getScript(a.name)?.extraSteps) artGranters.push(a)
+  return { kw, movingDisabled, entryFilters, stepGranters, siteGranters, artGranters }
+}
+
 /** Is a single step legal for this unit right now? */
-// `kw` (the unit's effective keywords) is INVARIANT for a fixed unit+state, but computing it is
-// expensive (effKeywords scans the whole board). Callers that test MANY steps for the same unit
-// (the enumeratePaths DFS, reachableLocations BFS, findPath BFS) precompute it once and pass it in;
-// every other caller omits it and pays the default. Behaviour is identical either way.
-export function isLegalStep(state: GameState, unit: UnitState, from: Step, to: Step, kw: ParsedKeywords = effKeywords(state, unit)): boolean {
+// The 5th arg is the per-search movement context (see StepCtx / buildStepCtx) — INVARIANT for a fixed
+// unit+state. Callers that test MANY steps for the same unit (the enumeratePaths DFS, reachableLocations
+// BFS, findPath BFS) build it once and pass it in; every other caller omits it and pays the default.
+// Behaviour is identical either way.
+export function isLegalStep(state: GameState, unit: UnitState, from: Step, to: Step, ctx: StepCtx = buildStepCtx(state, unit)): boolean {
+  const { kw } = ctx
   if (!inBounds(to.x, to.y)) return false
-  if (kw.immobile || isDisabled(state, unit)) return false
+  if (kw.immobile || ctx.movingDisabled) return false
   // Bog: units atop the marked site are Immobile — but a unit that "can't be immobilized" (Monks of
   // Kobalsa, Gossamer Ghost, an Onslaught'd ally…) isn't held by it.
   if (!immobilizeImmune(state, unit)) {
@@ -66,22 +181,22 @@ export function isLegalStep(state: GameState, unit: UnitState, from: Step, to: S
   if (selfFilter && !unit.silenced && !selfFilter(state, unit, from, to)) return false
   // sites/artifacts that block entry or passage (Gnome Hollows, Great Wall...)
   if (!siteEntryAllowed(state, unit, from, to)) return false
-  // units that filter other units' movement (Undesirables)
-  for (const u of Object.values(state.units)) {
-    if (u.id === unit.id || u.silenced) continue
+  // units that filter other units' movement (Undesirables) — precomputed active set
+  for (const u of ctx.entryFilters) {
     const f = getScript(u.name)?.unitEntryFilter
     if (f && !f(state, u.id, unit, from, to)) return false
   }
   // Sphere of Animosity: a trapped avatar can't step to a square outside the trap (moving within
   // the trap's own squares is still fine — FAQ: "can't enter locations not occupied by the Sphere")
   if (avatarTrapBlocksMove(state, unit, to.x, to.y)) return false
-  // card-granted extra steps (leaps, wraps, tunnels) are legal by definition
-  for (const grantor of [unit, ...Object.values(state.units).filter((u) => u.id !== unit.id)]) {
-    const script = getScript(grantor.name)
-    if (grantor.silenced) continue
-    const steps = grantor.id === unit.id ? script?.extraSteps?.(state, unit, from, grantor.id) ?? [] : []
-    if (steps.some((s) => s.x === to.x && s.y === to.y && s.region === to.region)) return true
-    const granted = grantor.id !== unit.id ? script?.grantsExtraSteps?.(state, grantor.id, unit, from) ?? [] : []
+  // card-granted extra steps (leaps, wraps, tunnels) are legal by definition. The unit's OWN extra steps
+  // (gated by its own silence), then OTHER units' grants (precomputed active set).
+  if (!unit.silenced) {
+    const own = getScript(unit.name)?.extraSteps?.(state, unit, from, unit.id) ?? []
+    if (own.some((s) => s.x === to.x && s.y === to.y && s.region === to.region)) return true
+  }
+  for (const grantor of ctx.stepGranters) {
+    const granted = getScript(grantor.name)?.grantsExtraSteps?.(state, grantor.id, unit, from) ?? []
     if (granted.some((s) => s.x === to.x && s.y === to.y && s.region === to.region)) return true
   }
   // temporary adjacency webs (Marine Voyage, Minecart Madness, Waypoint Portal)
@@ -96,13 +211,13 @@ export function isLegalStep(state: GameState, unit: UnitState, from: Step, to: S
       ) return true
     }
   }
-  for (const s of Object.values(state.sites)) {
+  for (const s of ctx.siteGranters) {
     const extra = getScript(s.name)?.extraSteps
     if (extra && extra(state, unit, from, s.id).some((t) => t.x === to.x && t.y === to.y && t.region === to.region)) return true
   }
-  for (const a of Object.values(state.artifacts)) {
+  for (const a of ctx.artGranters) {
     const extra = getScript(a.name)?.extraSteps
-    if (extra && !artifactSilenced(state, a) && extra(state, unit, from, a.id).some((t) => t.x === to.x && t.y === to.y && t.region === to.region)) return true
+    if (extra && extra(state, unit, from, a.id).some((t) => t.x === to.x && t.y === to.y && t.region === to.region)) return true
   }
 
   // oversized: the anchor moves one orthogonal step; all four parts move with it
@@ -143,6 +258,11 @@ export function isLegalStep(state: GameState, unit: UnitState, from: Step, to: S
   const diag = isDiagAdjacent(from, to)
   const toSite = siteAt(state, to.x, to.y)
   const toWater = toSite ? isWaterSite(state, toSite, getCard) : false
+
+  // An Avatar can never exist in the void (canExistIn: avatars are surface-only). So even if it gained
+  // Voidwalk — a Dragonlord taking the aspect of a void-walking Dragon — it still cannot step into a
+  // void square. Guard here, ahead of every Voidwalk branch below.
+  if (unit.isAvatar && to.region === 'void') return false
 
   // vertical step: surface ↔ subsurface of the same square
   if (sameSq && from.region !== to.region) {
@@ -227,7 +347,7 @@ function extraStepsFor(state: GameState, unit: UnitState, from: Step): Step[] {
   if (own && !unit.silenced) out.push(...own(state, unit, from, unit.id))
   // other units granting steps (Ruler of Thul's edge wrap)
   for (const o of Object.values(state.units)) {
-    if (o.id === unit.id || o.silenced) continue
+    if (o.id === unit.id || o.silenced || isDisabled(state, o)) continue // a disabled granter grants nothing
     const g = getScript(o.name)?.grantsExtraSteps
     if (g) out.push(...g(state, o.id, unit, from))
   }
@@ -257,7 +377,7 @@ function extraStepsFor(state: GameState, unit: UnitState, from: Step): Step[] {
  * (its "range of motion") — 0-1 BFS so free steps cost nothing.
  */
 export function reachableLocations(state: GameState, unit: UnitState): Step[] {
-  const kw = effKeywords(state, unit) // invariant — computed once, reused for budget + every isLegalStep
+  const ctx = buildStepCtx(state, unit); const kw = ctx.kw // ctx built once, reused for budget + every isLegalStep
   const limit = Math.max(0, 1 + (kw.movement ?? 0)) // == maxSteps(state, unit)
   const start: Step = { x: unit.x, y: unit.y, region: unit.region }
   const key = (s: Step) => `${s.x},${s.y},${s.region}`
@@ -270,7 +390,7 @@ export function reachableLocations(state: GameState, unit: UnitState): Step[] {
     const { s: from, cost } = deque.shift()!
     if ((best.get(key(from)) ?? Infinity) < cost) continue
     for (const to of [...candidateSteps(from), ...extraStepsFor(state, unit, from)]) {
-      if (!isLegalStep(state, unit, from, to, kw)) continue
+      if (!isLegalStep(state, unit, from, to, ctx)) continue
       const stepCost = isFreeStep(state, unit, from, to) ? 0 : 1
       const total = cost + stepCost
       if (total > limit) continue
@@ -292,7 +412,7 @@ export function reachableLocations(state: GameState, unit: UnitState): Step[] {
  *  so the caller can offer them like any other set of routes (and every departed-square effect still
  *  fires). Empty when the unit hasn't the budget to leave AND return (a plain 1-step unit can't). */
 export function loopRoutes(state: GameState, unit: UnitState): Step[][] {
-  const kw = effKeywords(state, unit) // invariant for this unit — computed once, reused for every step test
+  const ctx = buildStepCtx(state, unit); const kw = ctx.kw // ctx built once, reused for every step test
   const limit = Math.max(0, 1 + (kw.movement ?? 0))
   if (limit < 1) return []
   // oversized / rigid multi-square bodies shift their whole footprint; a bounce-in-place picker for
@@ -305,8 +425,8 @@ export function loopRoutes(state: GameState, unit: UnitState): Step[][] {
   for (const n of [...candidateSteps(start), ...extraStepsFor(state, unit, start)]) {
     if (same(n, start) || seen.has(`${n.x},${n.y},${n.region}`)) continue
     if (n.region !== start.region) continue // a loop is a lateral out-and-back in the unit's own region (no dive-and-surface)
-    if (!isLegalStep(state, unit, start, n, kw)) continue // can we step out to n…
-    if (!isLegalStep(state, unit, n, start, kw)) continue // …and straight back onto our own site?
+    if (!isLegalStep(state, unit, start, n, ctx)) continue // can we step out to n…
+    if (!isLegalStep(state, unit, n, start, ctx)) continue // …and straight back onto our own site?
     const cost = (isFreeStep(state, unit, start, n) ? 0 : 1) + (isFreeStep(state, unit, n, start) ? 0 : 1)
     if (cost < 1 || cost > limit) continue
     seen.add(`${n.x},${n.y},${n.region}`)
@@ -332,7 +452,7 @@ export function enumeratePaths(
 ): Step[][] {
   // effKeywords scans the whole board (~ms on a busy board); it's INVARIANT for this unit, so compute
   // it ONCE here and reuse for both the step budget and every isLegalStep — never per node/candidate.
-  const kw = effKeywords(state, unit)
+  const ctx = buildStepCtx(state, unit); const kw = ctx.kw
   const limit = Math.max(0, 1 + (kw.movement ?? 0)) // == maxSteps(state, unit), without re-scanning
   const dk = (s: { x: number; y: number; region: Region }) => `${s.x},${s.y},${s.region}`
   const goal = dk(dest)
@@ -391,7 +511,7 @@ export function enumeratePaths(
       // an admissible lower bound); with free steps present it's disabled (a 0-cost glide can still close
       // distance), preserving every glide route. This is what keeps a small search well under the budget.
       if (!freeStepPossible && cost + 1 + minSteps(to) > limit) continue
-      if (!isLegalStep(state, unit, from, to, kw)) continue
+      if (!isLegalStep(state, unit, from, to, ctx)) continue
       const sk = `${from.x},${from.y},${from.region}->${to.x},${to.y},${to.region}`
       if (used.has(sk)) continue
       // a free step (Updraft Ridge glide, East-West Dragon, Arcade of Bones) costs 0, so a route may have
@@ -421,9 +541,9 @@ export function enumeratePaths(
 export function legalStepsFrom(state: GameState, unit: UnitState, from: Step): Step[] {
   const out: Step[] = []
   const seen = new Set<string>()
-  const kw = effKeywords(state, unit)
+  const ctx = buildStepCtx(state, unit); const kw = ctx.kw
   for (const to of [...candidateSteps(from), ...extraStepsFor(state, unit, from)]) {
-    if (!isLegalStep(state, unit, from, to, kw)) continue
+    if (!isLegalStep(state, unit, from, to, ctx)) continue
     const k = `${to.x},${to.y},${to.region}`
     if (seen.has(k)) continue
     seen.add(k); out.push(to)
@@ -535,7 +655,7 @@ export function resolveMovement(state: GameState, unit: UnitState, path: Step[])
  * cheaper to enumerate. The start square is excluded (it has no move).
  */
 export function reachableWithPaths(state: GameState, unit: UnitState): { dest: Step; path: Step[] }[] {
-  const kw = effKeywords(state, unit) // invariant — computed once, reused for budget + every isLegalStep
+  const ctx = buildStepCtx(state, unit); const kw = ctx.kw // ctx built once, reused for budget + every isLegalStep
   const limit = Math.max(0, 1 + (kw.movement ?? 0)) // == maxSteps(state, unit)
   const start: Step = { x: unit.x, y: unit.y, region: unit.region }
   const key = (s: Step) => `${s.x},${s.y},${s.region}`
@@ -549,7 +669,7 @@ export function reachableWithPaths(state: GameState, unit: UnitState): { dest: S
     const { s: from, cost } = deque.shift()!
     if ((best.get(key(from)) ?? Infinity) < cost) continue
     for (const to of [...candidateSteps(from), ...extraStepsFor(state, unit, from)]) {
-      if (!isLegalStep(state, unit, from, to, kw)) continue
+      if (!isLegalStep(state, unit, from, to, ctx)) continue
       const stepCost = isFreeStep(state, unit, from, to) ? 0 : 1
       const total = cost + stepCost
       if (total > limit) continue
@@ -574,7 +694,7 @@ export function reachableWithPaths(state: GameState, unit: UnitState): { dest: S
 
 /** 0-1 BFS a legal path (≤ maxSteps of cost) from the unit's position to `dest`. */
 export function findPath(state: GameState, unit: UnitState, dest: Step): Step[] | null {
-  const kw = effKeywords(state, unit) // invariant — computed once, reused for budget + every isLegalStep
+  const ctx = buildStepCtx(state, unit); const kw = ctx.kw // ctx built once, reused for budget + every isLegalStep
   const limit = Math.max(0, 1 + (kw.movement ?? 0)) // == maxSteps(state, unit)
   const key = (s: Step) => `${s.x},${s.y},${s.region}`
   const start: Step = { x: unit.x, y: unit.y, region: unit.region }
@@ -587,7 +707,7 @@ export function findPath(state: GameState, unit: UnitState, dest: Step): Step[] 
     const { s: from, cost } = deque.shift()!
     if ((best.get(key(from)) ?? Infinity) < cost) continue
     for (const to of [...candidateSteps(from), ...extraStepsFor(state, unit, from)]) {
-      if (!isLegalStep(state, unit, from, to, kw)) continue
+      if (!isLegalStep(state, unit, from, to, ctx)) continue
       const stepCost = isFreeStep(state, unit, from, to) ? 0 : 1
       const total = cost + stepCost
       if (total > limit) continue

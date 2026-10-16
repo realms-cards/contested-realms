@@ -1,5 +1,5 @@
 import { type EffectAPI } from '../registry'
-import { pushLog } from '../../../engine/effects'
+import { pushLog, registerSpellDraw } from '../../../engine/effects'
 
 /** draw the top spell into hand and bond it to a caster */
 // `grantsCasting`: does the drawing effect confer the ability to cast (Archangel
@@ -7,6 +7,9 @@ import { pushLog } from '../../../engine/effects'
 // caster's own Spellcaster ability (Morgana, the Omphaloi)? The latter can't cast
 // if transformed into a non-spellcaster, though the hand persists.
 export function drawLocked(ctx: EffectAPI, casterId: string, label: string, grantsCasting = false): void {
+  // A caster-locked draw is still a spell draw by the player: Garden of Eden caps it at one
+  // per turn (FAQ — Morgana/the Omphaloi draw only 1 while it's active). Gate before pulling.
+  if (!registerSpellDraw(ctx.state, ctx.controller)) return
   const p = ctx.state.players[ctx.controller]
   const top = p.spellbook.shift()
   if (top === undefined) return

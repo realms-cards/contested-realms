@@ -1,6 +1,7 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { nearbySquaresW, siteAt } from '../../../engine/grid'
+import { teleportWithPlacement } from '../../../engine/effects'
 
 // 'Once on your turn, if you occupy an Air site, you may fly a unit atop it to a nearby site.'
 registerScript('Avatar of Air', {
@@ -39,7 +40,9 @@ registerScript('Avatar of Air', {
       const siteId = Array.isArray(choice) ? choice[0] : choice
       const site = ctx.state.sites[siteId]
       const u = ctx.state.units[contCtx.unitId]
-      if (site && u) ctx.teleport(u.id, site.x, site.y, 'surface')
+      // teleportWithPlacement offers an anchor/rotation pick first when the flown unit is oversized/rigid
+      // and more than one placement is legal at the destination; otherwise it teleports directly.
+      if (site && u) teleportWithPlacement(ctx, u.id, { x: site.x, y: site.y }, 'surface')
     },
   },
 })

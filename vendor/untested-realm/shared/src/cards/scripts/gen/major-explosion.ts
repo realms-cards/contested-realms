@@ -1,12 +1,16 @@
 import { registerScript } from '../registry'
 import { realStepDistanceW } from '../../../engine/movement'
+import { resolveCaster } from '../../../engine/casting'
 import { CROSS_3X3, applyGrid, resolveCells } from '../multi-card-utils/apply-grid'
 import { squaresWithinSteps } from '../multi-card-utils/step-range-targets'
 
 // 'Target a location up to two steps away. [3 5 3 / 5 7 5 / 3 5 3]'
 registerScript('Major Explosion', {
   areaDamage: (state, casterId, params) => {
-    const caster = state.units[casterId]
+    // resolve the caster from its id — may be a unit OR a spellcaster ARTIFACT (Omphalos) / site, so the
+    // ≤2-step range (and thus the preview) is measured from THERE, not the avatar (player 0 arg is only a
+    // last-resort owner fallback, unused for the distance check).
+    const caster = resolveCaster(state, casterId, 0)
     if (!caster || !params.at) return null
     if (realStepDistanceW(state, caster, params.at) > 2) return null
     return resolveCells(state, params.at, CROSS_3X3, 'n')

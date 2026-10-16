@@ -2,14 +2,12 @@ import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog } from '../../../engine/effects'
 import { effSubtypes } from '../../../engine/statics'
+import { summonPermissionAura } from '../multi-card-utils/summon-permission-aura'
 
 // 'You may summon Spirits to affected sites. When you summon a Spirit here, give
 //  it Charge, and return Evil Presence to its owner's hand.'
 registerScript('Evil Presence', {
-  auraAllowsSummon: (state, aura, player, cardName, at) =>
-    aura.controller === player &&
-    getCard(cardName).subtypes.includes('Spirit') &&
-    aura.squares.some((s) => s.x === at.x && s.y === at.y),
+  ...summonPermissionAura({ canSummon: (_s, _p, name) => getCard(name).subtypes.includes('Spirit') }),
   onUnitEnters: (ctx, entered) => {
     const aura = ctx.state.auras[ctx.sourceId]
     if (!aura || entered.controller !== ctx.controller || entered.isAvatar) return

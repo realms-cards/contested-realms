@@ -7,10 +7,13 @@ registerScript('Asmodeus', {
     key: 'immolate',
     label: 'Break Stealth → Destroy everything here',
     cost: {},
+    // "Break Stealth →" costs his Stealth, so it's only usable WHILE he has Stealth. Activating ANY ability
+    // already breaks Stealth in the engine (Codex — Stealth: interacting with the realm), so the effect must
+    // NOT re-check self.stealth — it is already false here, which is exactly the "Break Stealth" cost paid.
+    available: (state, sourceId) => !!state.units[sourceId]?.stealth,
     effect: (ctx) => {
       const self = ctx.state.units[ctx.sourceId]
-      if (!self || !self.stealth) return ctx.log('Asmodeus has no Stealth to break.')
-      self.stealth = false
+      if (!self) return
       // "everything else here" is Asmodeus's OWN location (its region) — the surface layer if he's atop
       // the site, like Year of the Blaze. A burrowed/submerged minion under the site isn't consumed (it
       // only contends with the site being destroyed via normal state-based rules).

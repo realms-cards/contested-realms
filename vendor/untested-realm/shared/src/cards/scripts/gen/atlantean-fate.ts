@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { pushLog, trySubmerge, applyFlood } from '../../../engine/effects'
+import { pushLog, trySubmerge, applyFlood, notifySiteInterference } from '../../../engine/effects'
 import { siteAt, unitsAt } from '../../../engine/grid'
 import { siteRarity } from '../../../engine/statics'
 
@@ -16,7 +16,12 @@ registerScript('Atlantean Fate', {
     if (!aura) return
     for (const sq of aura.squares) {
       const site = siteAt(ctx.state, sq.x, sq.y)
-      if (site && siteRarity(ctx.state, site) !== 'Ordinary') applyFlood(ctx.state, site, ctx.controller)
+      if (site && siteRarity(ctx.state, site) !== 'Ordinary') {
+        applyFlood(ctx.state, site, ctx.controller)
+        // modifying an enemy's site is interference — but FAQ (Oct 2026): exactly ONE "modify" per site,
+        // so a nearby Vindictive Nation exacts only 1 life per affected site (not once per sub-effect).
+        notifySiteInterference(ctx.state, 'modify', { id: site.id, x: site.x, y: site.y, controller: site.controller }, ctx.controller)
+      }
       for (const u of unitsAt(ctx.state, sq.x, sq.y, 'surface')) trySubmerge(ctx.state, u)
       for (const a of Object.values(ctx.state.artifacts)) {
         if (!a.carriedBy && a.x === sq.x && a.y === sq.y && a.region === 'surface') a.region = 'underwater'

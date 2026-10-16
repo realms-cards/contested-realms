@@ -6,8 +6,14 @@ import { pushLog } from '../../../engine/effects'
 // to each unit at its location.'
 registerScript('Detonate', {
   onCast: (ctx) => {
-    const mine = Object.values(ctx.state.units).filter((u) => !u.isAvatar && u.controller === ctx.controller).map((u) => u.id)
-    const arts = Object.values(ctx.state.artifacts).filter((a) => (a.carriedBy ? ctx.state.units[a.carriedBy]?.controller : a.conjuredBy) === ctx.controller).map((a) => a.id)
+    // "a minion or artifact you OWN or control" — so a minion of yours an enemy has infiltrated (you
+    // still OWN the card, they control it) is a legal Detonate target, as is a carried/ground artifact.
+    const owns = (cardId: string) => ctx.state.cards[cardId]?.owner === ctx.controller
+    const mine = Object.values(ctx.state.units)
+      .filter((u) => !u.isAvatar && (u.controller === ctx.controller || owns(u.cardId))).map((u) => u.id)
+    const arts = Object.values(ctx.state.artifacts)
+      .filter((a) => (a.carriedBy ? ctx.state.units[a.carriedBy]?.controller : a.conjuredBy) === ctx.controller || owns(a.cardId))
+      .map((a) => a.id)
     const candidates = [...mine, ...arts]
     if (!candidates.length) return
     ctx.ask({ kind: 'chooseTargets', title: 'Detonate what?', data: { candidates, count: 1, kind: 'unit' } }, 'boom')

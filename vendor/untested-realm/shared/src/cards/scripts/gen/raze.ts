@@ -16,8 +16,13 @@ registerScript('Raze', {
     for (const u2 of unitsAt(ctx.state, site.x, site.y)) {
       if (isArtifactUnit(ctx.state, u2)) ctx.kill(u2.id) // automatons are artifacts
     }
+    // "all artifacts there" — EVERY artifact at the razed site, loose OR carried by a unit standing there
+    // (a carried artifact is located at its bearer's square). breakArtifact detaches a carried one as it dies.
     for (const a of Object.values(ctx.state.artifacts)) {
-      if (!a.carriedBy && a.x === site.x && a.y === site.y) ctx.breakArtifact(a.id)
+      const bearer = a.carriedBy ? ctx.state.units[a.carriedBy] : null
+      const ax = bearer ? bearer.x : a.x
+      const ay = bearer ? bearer.y : a.y
+      if (ax === site.x && ay === site.y) ctx.breakArtifact(a.id)
     }
     ctx.destroySite(site.id)
   },

@@ -209,7 +209,7 @@ export function beginAttack(
       (target.region === 'underground' || target.region === 'underwater') &&
       Object.values(state.units).some((u) => {
         const f = getScript(u.name)?.allowsSubsurfaceAttackAt
-        return f && !u.silenced && f(state, u.id, target.x, target.y)
+        return f && !u.silenced && !isDisabled(state, u) && f(state, u.id, target.x, target.y)
       })
     // allowSubsurface: a SITE-sourced attacker (Free City) reaches down into its own subsurface — it may
     // strike a burrowed/submerged enemy sharing its square without needing a Putrid-Presence dig.
@@ -510,12 +510,17 @@ registerCont('combat:defenders', (state, ctx: FightCtx, choice: string[]) => {
   if (!attacker) return
   const loc: Step = { x: attacker.x, y: attacker.y, region: attacker.region }
   let chosen = Array.isArray(choice) ? choice : []
-  // Lord of Fear: enemies can't defend alone
+  // Lord of Fear: enemies can't defend alone. FAQ (Oct 2026): a single ADDED defender IS allowed when
+  // the originally-attacked unit remains in the fight — then the chosen unit isn't defending alone (the
+  // attacked unit fights alongside it). Only a truly lone defender (attack on a site, or the attacked
+  // unit already gone) is cowed.
   if (chosen.length === 1) {
     const fear = Object.values(state.units).some(
-      (u) => u.controller === attacker.controller && !u.silenced && getScript(u.name)?.enemiesCantDefendAlone,
+      (u) => u.controller === attacker.controller && !u.silenced && !isDisabled(state, u) && getScript(u.name)?.enemiesCantDefendAlone,
     )
-    if (fear) {
+    const attacked = ctx.targetUnitId ? state.units[ctx.targetUnitId] : undefined
+    const attackedStillInFight = !!attacked && attacked.x === loc.x && attacked.y === loc.y && attacked.region === loc.region
+    if (fear && !attackedStillInFight) {
       pushLog(state, opponent(attacker.controller), 'Terror grips the lone defender — enemies of the Lord of Fear cannot defend alone.')
       chosen = []
     }
@@ -525,6 +530,9 @@ registerCont('combat:defenders', (state, ctx: FightCtx, choice: string[]) => {
   const atLoc = (u: UnitState | undefined): boolean => !!u && u.x === loc.x && u.y === loc.y && u.region === loc.region
   const commit = (u: UnitState) => {
     tapUnit(state, u)
+    // Defending IS an interaction — a Stealth minion (Midnight Rogue) reveals itself by blocking, so
+    // its Stealth breaks. A walk-in defender already lost it to movement; this covers the in-place case.
+    breakStealth(state, u)
     ctx.defenderIds.push(u.id)
     state.flow = state.flow ?? {}
     state.flow.battleUnits = [...new Set([...(state.flow.battleUnits ?? []), u.id])] // now a combatant → exempt from at-rest disable
@@ -546,6 +554,7 @@ registerCont('combat:defenders', (state, ctx: FightCtx, choice: string[]) => {
       const survivor = state.units[id]
       if (!survivor) { pushLog(state, null, `${u.name} never reaches the fight.`); continue }
       if (!atLoc(survivor)) continue
+      breakStealth(state, survivor) // defending breaks Stealth (movement usually already did)
       syncCarried(state, survivor)
       ctx.defenderIds.push(id)
       pushLog(state, u.controller, `${u.name} defends!`)

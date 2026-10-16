@@ -24,27 +24,9 @@ registerScript('Enchantress', {
       {},
     )
   },
-  startOfTurn: (ctx) => {
-    // animations from the previous turn end; the minions dissolve back into auras
-    const list: { unitId: string; player: PlayerId; turn: number }[] = ctx.state.flow?.auraAnimations ?? []
-    const keep: typeof list = []
-    for (const a of list) {
-      if (a.player === ctx.controller && a.turn < ctx.state.turn) {
-        const u = ctx.state.units[a.unitId]
-        if (u) {
-          // whoever controls the MINION when it settles back keeps the aura — an opponent who
-          // took control of the animated minion now controls the enchantment it reverts to.
-          const aura = ctx.state.auras[String(u.counters?.animatedAura ?? '')]
-          if (aura) aura.controller = u.controller
-          delete ctx.state.units[a.unitId]
-          pushLog(ctx.state, ctx.controller, `${u.name} settles back into a mere enchantment.`)
-        }
-      } else {
-        keep.push(a)
-      }
-    }
-    if (ctx.state.flow) ctx.state.flow.auraAnimations = keep
-  },
+  // NB: animated auras REVERT at the start of the animator's next turn — handled centrally in
+  // beginTurn (off flow.auraAnimations), so it works even if the Enchantress has left the realm or a
+  // masked Imposter did the animating (whose forwarded hooks don't include a startOfTurn de-animator).
   // NB: "animated minion leaves the realm → its aura is destroyed with it" is handled centrally in
   // removeUnitFromRealm (so it fires on EVERY exit — death, Bury/flood, banish, exile — and even when
   // the Enchantress herself has already left), not by a listener here.

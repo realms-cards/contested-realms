@@ -8,6 +8,14 @@ registerScript('Flanking Maneuver', {
     { what: 'square', count: 1, targeted: false, label: 'the allies\' location' },
     { what: 'square', count: 1, targeted: false, label: "a knight's move away" },
   ],
+  // if a MULTI-SQUARE ally is in the stack being flanked, let the client offer its placement/rotation at
+  // the destination (ctx.teleport applies the choice via flow.teleportPlace to that oversized unit).
+  teleportPlacement: (state, targets) => {
+    if (!('square' in targets[0]) || !('square' in targets[1])) return null
+    const src = targets[0].square, dst = targets[1].square
+    const u = unitsAt(state, src.x, src.y, src.region ?? 'surface').find((x) => x.size === '2x2' || (x.extraSquares?.length ?? 0) > 0)
+    return u ? { unitId: u.id, dest: { x: dst.x, y: dst.y } } : null
+  },
   onCast: (ctx) => {
     const [t1, t2] = ctx.targets
     if (!('square' in t1) || !('square' in t2)) return

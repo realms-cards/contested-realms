@@ -218,10 +218,18 @@ export function isVoidAt(state: GameState, x: number, y: number): boolean {
   return !!getScript(site.name)?.siteAlsoVoid && !siteSilenced(state, site)
 }
 
+// Cycle guard for the recursion below (a silencer site that is itself silenced silences nothing): two
+// Smokestacks silencing each other can't loop; the mutual case resolves in the queried site's favour.
+const siteSilenceStack = new Set<string>()
+
 export function siteSilenced(state: GameState, site: { x: number; y: number }): boolean {
   // Bedrock "can't be modified" — it can't be silenced or lose its abilities (FAQ).
   const here = Object.values(state.sites).find((s) => s.x === site.x && s.y === site.y && !s.isRubble)
   if (here && getScript(here.name)?.unmodifiableSite) return false
+  const sKey = `${site.x},${site.y}`
+  if (siteSilenceStack.has(sKey)) return false
+  siteSilenceStack.add(sKey)
+  try {
   for (const ss of (state.flow?.siteSilences ?? []) as { siteId: string }[]) {
     const src = state.sites[ss.siteId]
     if (src && nearbySquaresW(state, src.x, src.y).some((q) => q.x === site.x && q.y === site.y)) return true
@@ -229,8 +237,13 @@ export function siteSilenced(state: GameState, site: { x: number; y: number }): 
   for (const src of Object.values(state.sites)) {
     if (src.isRubble || (src.x === site.x && src.y === site.y)) continue // never itself
     const script = getScript(src.name)
-    if (script?.silencesNearbySites && nearbySquaresW(state, src.x, src.y).some((q) => q.x === site.x && q.y === site.y)) return true
-    if (script?.silencesSiteAt && script.silencesSiteAt(state, src, site)) return true
+    // only an in-range silencer matters — check that FIRST so we never recurse into ordinary sites (which
+    // would blow up: siteSilenced is called in hot loops and most boards have several sites).
+    const silencesThis = (!!script?.silencesNearbySites && nearbySquaresW(state, src.x, src.y).some((q) => q.x === site.x && q.y === site.y))
+      || (!!script?.silencesSiteAt && script.silencesSiteAt(state, src, site))
+    if (!silencesThis) continue
+    if (siteSilenced(state, { x: src.x, y: src.y })) continue // a silencer that is itself silenced silences nothing (FAQ layering)
+    return true
   }
   // units that silence specific sites (Sinterfee)
   for (const u of Object.values(state.units)) {
@@ -247,6 +260,17 @@ export function siteSilenced(state: GameState, site: { x: number; y: number }): 
     const full = siteAt(state, site.x, site.y)
     if (typeof f === 'function' && full && f(state, full)) return true
   }
+  return false
+  } finally { siteSilenceStack.delete(sKey) }
+}
+
+/** Is this unit "Protected from Sites" (codex: Protected from X) — so no site ability may target,
+ *  damage, destroy, banish, modify, move or impede it? Key to the City ("Bearer ignores site
+ *  abilities") grants this to its bearer; Yog-Sothoth ("ignores the abilities of sites") to itself.
+ *  Covers passive site grants (keywords/power), site entry filters, and site enter-triggers. */
+export function protectedFromSites(state: GameState, unit: UnitState): boolean {
+  if (unit.carrying.some((id) => getScript(state.artifacts[id]?.name ?? '')?.bearerIgnoresSites)) return true
+  if (!!getScript(unit.name)?.ignoresSites && !unit.silenced) return true
   return false
 }
 
@@ -291,7 +315,7 @@ export function isBlanked(unit: UnitState): boolean {
 // effKeywords skips its own disable check (returns keywords un-stripped) so the cycle can't loop.
 let inDisableCheck = false
 export function effKeywords(state: GameState, unit: UnitState, seen: Set<string> = new Set()): ParsedKeywords {
-  if (unit.silenced || isBlanked(unit) || seen.has(unit.id)) return {}
+  if (isBlanked(unit) || seen.has(unit.id)) return {}
   // A DISABLED minion has NO abilities — including basic keyword abilities (Airborne, Burrowing,
   // Submerge, Voidwalk, Ranged, Charge, Stealth, Ward, Spellcaster, Strike-first, Lethal…). Same
   // blanket wipe as silence — so a disabled subsurface unit even loses Burrowing/Submerge and
@@ -304,8 +328,14 @@ export function effKeywords(state: GameState, unit: UnitState, seen: Set<string>
     if (dis) return {}
   }
   seen.add(unit.id)
-  const kw: ParsedKeywords = { ...getKeywords(unit.name) }
-  if (unit.isAvatar) kw.spellcaster = true
+  // SILENCE (rules: Oct 2026) removes only a card's own PRINTED keyword abilities and its ability to
+  // cast — NOT its characteristics, basic abilities, or keywords it gains from OTHER sources. So a
+  // silenced unit starts with NO printed keywords, but still collects every EXTERNAL grant below
+  // (carrier, carried artifacts, modifier grants, static grants). Codex example: a silenced Pudge
+  // Butcher keeps Immobile granted by Entangle Terrain but loses its own printed Immobile.
+  const silenced = !!unit.silenced
+  const kw: ParsedKeywords = silenced ? {} : { ...getKeywords(unit.name) }
+  if (unit.isAvatar && !silenced) kw.spellcaster = true // innate avatar Spellcaster — silence revokes it
   for (const mod of unit.modifiers) {
     if (mod.kind === 'keyword' && mod.keyword && !mod.remove) applyKeywordString(kw, mod.keyword)
   }
@@ -329,9 +359,12 @@ export function effKeywords(state: GameState, unit: UnitState, seen: Set<string>
       for (const k of script.bearerKeywords) applyKeywordString(kw, k)
     }
   }
-  // self-granted conditional keywords (Realm-Eater's post-meal torpor)
-  const selfKw = getScript(unit.name)?.selfKeywords
-  if (selfKw) for (const k of selfKw(state, unit)) applyKeywordString(kw, k)
+  // self-granted conditional keywords (Realm-Eater's post-meal torpor) are the card's OWN ability →
+  // removed by silence (printed-only rule); external grants below still apply.
+  if (!silenced) {
+    const selfKw = getScript(unit.name)?.selfKeywords
+    if (selfKw) for (const k of selfKw(state, unit)) applyKeywordString(kw, k)
+  }
   // (Evil Twin's strike-first is NOT a blanket keyword: it applies only when the
   // twin fights the minion it copied — handled target-aware in combat.ts.)
   // scripted global/static keyword grants
@@ -350,7 +383,7 @@ export function effKeywords(state: GameState, unit: UnitState, seen: Set<string>
   // minion is void too (an Evil AVATAR is not a minion, so it keeps its ward).
   // isEvilUnit → effSubtypes only (no subtype hook calls effKeywords), so no
   // recursion; the `seen` guard above already covers the carrier path regardless.
-  if (kw.ward && !unit.isAvatar && isEvilUnit(state, unit)) delete kw.ward
+  if (kw.ward && !unit.isAvatar && isEvilUnitIntrinsic(state, unit)) delete kw.ward // real Evil can't be warded — a Persecutor brand doesn't count
   return kw
 }
 
@@ -541,10 +574,7 @@ function collectStaticGrants(state: GameState, unit: UnitState): string[] {
     const g = getScript(aura.name)?.auraGrantsKeywords
     if (g) for (const k of g(state, aura, unit)) out.push(k)
   }
-  const deafToSites =
-    unit.carrying.some((id) => getScript(state.artifacts[id]?.name ?? '')?.bearerIgnoresSites) ||
-    (!!getScript(unit.name)?.ignoresSites && !unit.silenced)
-  if (!deafToSites) for (const site of src.sites) { // Key to the City: the bearer ignores site abilities
+  if (!protectedFromSites(state, unit)) for (const site of src.sites) { // Key to the City: the bearer ignores site abilities
     const g = getScript(site.name)?.siteGrantsKeywords
     if (g && !siteSilenced(state, site)) for (const k of g(state, site, unit)) out.push(k)
   }
@@ -611,10 +641,7 @@ function powerModifiers(state: GameState, unit: UnitState): number {
     const g = getScript(art.name)?.artifactGrantsPower
     if (g && !artifactSilenced(state, art)) n += g(state, art.id, unit)
   }
-  const unitDeafToSites =
-    unit.carrying.some((id) => getScript(state.artifacts[id]?.name ?? '')?.bearerIgnoresSites) ||
-    (!!getScript(unit.name)?.ignoresSites && !unit.silenced)
-  if (!unitDeafToSites) for (const site of src.sites) {
+  if (!protectedFromSites(state, unit)) for (const site of src.sites) {
     const g = getScript(site.name)?.siteGrantsPower
     if (g && !siteSilenced(state, site)) n += g(state, site, unit)
   }
@@ -731,12 +758,48 @@ export function silenceImmune(state: GameState, unit: UnitState): boolean {
   return unit.modifiers.some((m) => m.kind === 'keyword' && m.keyword === 'unsilenceable')
 }
 
+// Guards the disabledByEffect recursion below: deciding whether a disabler (Basilisk/Gorgon/Root Spider) is
+// ITSELF disabled re-enters disabledByEffect for that source. This set breaks cycles (mutual disablers).
+const disableEvalStack = new Set<string>()
+// Memoize disabledByEffect WITHIN a single top-level traversal. The function recurses into other
+// disabler SOURCES (to skip ones that are themselves disabled), so without memoization a web of mutual
+// disablers re-computes the same units exponentially (observed: 54M+ calls / 20s+ for one action on a
+// 9-unit board). A unit's disabled-status is stable for the duration of one query, so we cache it and
+// clear the cache when the OUTERMOST call completes (the next query may run against a mutated state).
+// Clearing per top-level call also preserves the old "mutual disablers resolve in the QUERIED unit's
+// favour" behaviour — each top-level query recomputes fresh.
+const disableMemo = new Map<string, boolean>()
+
 export function disabledByEffect(state: GameState, unit: UnitState): boolean {
+  const topLevel = disableEvalStack.size === 0
+  if (topLevel) disableMemo.clear()
+  const cached = disableMemo.get(unit.id)
+  if (cached !== undefined) return cached
+  // mid-cycle (two minions disabling each other): resolve in the queried unit's favour; do NOT cache
+  // this transient — only the fully-computed result below is memoized.
+  if (disableEvalStack.has(unit.id)) return false
+  disableEvalStack.add(unit.id)
+  let result = false
+  try {
+    result = computeDisabledByEffect(state, unit)
+  } finally {
+    disableEvalStack.delete(unit.id)
+    disableMemo.set(unit.id, result)
+    if (topLevel) disableMemo.clear()
+  }
+  return result
+}
+
+function computeDisabledByEffect(state: GameState, unit: UnitState): boolean {
   if (isUnmodifiable(state, unit)) return false // can't be disabled
   if (getScript(unit.name)?.immuneToDisable && !unit.silenced) return false
   if (unit.modifiers.some((m) => m.kind === 'keyword' && m.keyword === 'undisableable')) return false
   if (directlyDisabled(state, unit)) return true
   if (unit.isAvatar) return false
+  // A disabler that is itself disabled/silenced has no abilities (Codex), so it disables nothing. The loops
+  // below therefore skip a source that is disabledByEffect — including an AREA-disabled one (a Basilisk under
+  // a Root Spider, a mutual Gorgon), which plain directlyDisabled missed. (Memoized + stack-guarded above.)
+  {
   const brookHits = (): boolean => {
     for (const ad of (state.flow?.areaDisables ?? []) as { siteId: string }[]) {
       const src = state.sites[ad.siteId]
@@ -769,7 +832,7 @@ export function disabledByEffect(state: GameState, unit: UnitState): boolean {
   if (ix && ix.gen === state.nextId) {
     for (const oid of ix.u) {
       const o = state.units[oid]
-      if (!o || o.id === unit.id || o.silenced || directlyDisabled(state, o)) continue
+      if (!o || o.id === unit.id || o.silenced || disabledByEffect(state, o)) continue
       if (disablesNow(o.name, o.id)) return true
     }
     for (const aid of ix.a) {
@@ -784,7 +847,9 @@ export function disabledByEffect(state: GameState, unit: UnitState): boolean {
     if (ix.area && brookHits()) return true
   } else {
     for (const o of Object.values(state.units)) {
-      if (o.id === unit.id || o.silenced || directlyDisabled(state, o)) continue
+      // only a unit that could disable this one is worth asking whether it is itself disabled — asking
+      // every unit recursed through the whole board (factorial in the number of minions).
+      if (o.id === unit.id || o.silenced || !getScript(o.name)?.disablesOther || disabledByEffect(state, o)) continue
       if (disablesNow(o.name, o.id)) return true
     }
     for (const a of Object.values(state.artifacts)) {
@@ -798,6 +863,7 @@ export function disabledByEffect(state: GameState, unit: UnitState): boolean {
   const selfDisabled = getScript(unit.name)?.selfDisabled
   if (selfDisabled && !unit.silenced && selfDisabled(state, unit)) return true
   return false
+  }
 }
 
 // The "Court" minions. Overflowing Court's "Other Courts are disabled" shuts these off too — not just
@@ -937,14 +1003,15 @@ export function isArtifactUnit(state: GameState, u: UnitState): boolean {
   return false
 }
 
-/** Saint of Redemption: while she stands, NO minion anywhere is Evil */
+/** Saint of Redemption: while she stands (and is neither silenced nor disabled), NO minion is Evil */
 export function saintWatches(state: GameState): boolean {
-  return Object.values(state.units).some((x) => x.name === 'Saint of Redemption' && !x.silenced)
+  return Object.values(state.units).some((x) => x.name === 'Saint of Redemption' && !x.silenced && !isDisabled(state, x))
 }
 
-/** is this unit Evil? Demon/Undead/Monster (honoring subtype overrides and
- *  Persecutor's brand), all overridden by Saint of Redemption */
-export function isEvilUnit(state: GameState, u: UnitState): boolean {
+/** INTRINSIC Evil: Demon/Undead/Monster by subtype (honoring real subtype overrides like Corruptor) or
+ *  an Evil-copy (Evil Twin), overridden by Saint of Redemption. This is "really Evil" — the rulebook's
+ *  "Evil minions can't be warded" keys off THIS, not off Persecutor's brand (branding isn't real Evil). */
+export function isEvilUnitIntrinsic(state: GameState, u: UnitState): boolean {
   if (saintWatches(state)) return false
   // A Demon/Undead/Monster Avatar IS Evil (Mephistopheles stays an Evil Demon Avatar, FAQ 1953). The
   // "Evil minions can't be warded" clause is enforced separately in wardUnit (gated on !isAvatar), so an
@@ -954,6 +1021,17 @@ export function isEvilUnit(state: GameState, u: UnitState): boolean {
   if (u.counters?.evilTwin) return true
   const st = effSubtypes(state, u)
   return st.includes('Demon') || st.includes('Undead') || st.includes('Monster')
+}
+
+/** is this unit treated as Evil for card effects (targeting/affecting Evil)? Intrinsic Evil, OR branded
+ *  by a Persecutor this turn. Persecutor's brand ("your cards treat them as Evil") is NOT real Evil — it
+ *  does NOT change subtypes and does NOT break Wards (ward-strip uses isEvilUnitIntrinsic) — it only makes
+ *  the minion a valid "Evil" target/subject for cards. The brand lasts the branding player's turn only. */
+export function isEvilUnit(state: GameState, u: UnitState): boolean {
+  if (isEvilUnitIntrinsic(state, u)) return true
+  if (saintWatches(state)) return false // the Saint redeems even the branded
+  const b = state.flow?.branded
+  return !!(b && b.unitId === u.id && b.turn === state.turn)
 }
 
 /** is this card name printed-Evil? (for hand/spellbook checks — the Saint
@@ -1040,6 +1118,19 @@ export function grantedAbilities(state: GameState, unit: UnitState): AbilityDef[
   for (const site of Object.values(state.sites)) {
     const g = getScript(site.name)?.siteGrantsAbilities
     if (g && !siteSilenced(state, site)) out.push(...tag(g(state, site, unit), site.name))
+  }
+  // Cards HELD IN HAND that grant an ability to an allied unit in play (Moon Clan Werewolf: each of your
+  // Mortals may sacrifice itself to summon the Werewolf onto its square). Surfaced on the UNIT — exactly
+  // like a Skeleton granting itself a bone-raise — not on the avatar. Scans the unit's controller's hand
+  // (view-safe via `?? []`; an opponent's hand is redacted, so nothing leaks).
+  {
+    const seen = new Set<string>()
+    for (const cardId of state.players[unit.controller]?.hand ?? []) {
+      const nm = state.cards[cardId]?.name
+      if (!nm || seen.has(nm)) continue
+      const g = getScript(nm)?.handAbilitiesForAlly
+      if (g) { seen.add(nm); out.push(...tag(g(state, cardId, unit.controller, unit), nm)) }
+    }
   }
   // Persistent bindings stay releasable even after the SOURCE that made them has left play — Bind Evil
   // is a spell already in the cemetery, and a Gargantula may since have died. So the release ability is

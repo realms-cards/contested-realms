@@ -12,9 +12,9 @@
 // pathfinding (the search itself resolves exact reachability by applying moves).
 // ─────────────────────────────────────────────────────────────────────────────
 import type { GameState, PlayerId, UnitState } from '../engine/types'
-import { avatarOf, siteAt } from '../engine/grid'
+import { avatarOf, siteAt, orthAdjacentWrapped } from '../engine/grid'
 import { opponent } from '../engine/effects'
-import { effAttack, effDefence, effKeywords, siteSilenced, siteDisabledByArtifact, cemeteryActivations, isBlanked } from '../engine/statics'
+import { effAttack, effDefence, effKeywords, siteSilenced, siteDisabledByArtifact, cemeteryActivations, isBlanked, isDisabled } from '../engine/statics'
 import { affinity } from '../engine/casting'
 import { stepDistance } from '../engine/movement'
 import { getCard } from '../cards/db'
@@ -40,6 +40,7 @@ function hasSupportAbility(name: string): boolean {
  *  (only strikes adjacent, or shoots if Ranged). Manhattan distance, Magellan-agnostic — good
  *  enough for a static threat estimate; the search confirms real reachability. */
 function attackReach(state: GameState, u: UnitState): number {
+  if (isDisabled(state, u)) return -1 // can neither move nor strike: threatens nothing
   const kw = effKeywords(state, u)
   if (kw.immobile) return kw.ranged ?? 1
   return 1 + (kw.movement ?? 0) + (kw.ranged ?? 0)
@@ -87,7 +88,9 @@ function predictedSiteLoss(state: GameState, owner: PlayerId): number {
     if (boardUnits(state, owner).some((u) => u.x === site.x && u.y === site.y)) continue // defended
     let maxPower = 0
     for (const u of boardUnits(state, foe)) {
-      if (u.tapped) continue
+      // a TAPPED attacker still counts: it untaps at end of turn, so it's a standing threat to this site
+      // next turn. (Also: this stops a unit that just RAZED a site — now tapped on it — from "losing" the
+      // threat it still poses, which otherwise made attacking a site look worse than merely threatening it.)
       if (stepDistance(u, site) <= attackReach(state, u)) maxPower = Math.max(maxPower, effAttack(state, u))
     }
     if (maxPower > 0) loss += maxPower + siteManaOf(state, site) // life razed + mana denied
@@ -157,7 +160,9 @@ export function unitValue(state: GameState, u: UnitState, w: EvalWeights): numbe
   if (kw.spellcaster) v += w.kwSpellcaster
   if (kw.immobile) v += w.kwImmobile // negative
   if (u.tapped) v -= w.tappedPenalty
-  if (u.disabled || u.silenced) v -= w.disabledPenalty
+  // derived disables count too (Bound Spirit away from an allied Spellcaster, [X]bound off its
+  // terrain, Basilisk-style neighbours) — not just the raw flag a few effects set
+  if (u.silenced || isDisabled(state, u)) v -= w.disabledPenalty
   // summoning-sick: entered this turn and can't attack yet
   if (u.enteredTurn === state.turn) v -= w.summonSickPenalty
   return v
@@ -176,6 +181,19 @@ function avatarDefended(state: GameState, player: PlayerId, avatar: UnitState): 
 }
 
 const isInterrogator = (av: UnitState): boolean => av.name === 'Interrogator'
+
+/** Can a Pathfinder-style avatar fire its blaze ability right now? — untapped, a site left in its atlas,
+ *  and an orthogonally-adjacent square (Magellan-wrapped, as the ability itself computes) that is a bare
+ *  void or a rubble it can build over. Mirrors pathfinder.ts's own spot-finding, so the eval's "you could
+ *  have blazed" matches exactly when the move generator actually offers the blaze. */
+function canPathfinderBlaze(state: GameState, me: PlayerId, avatar: UnitState): boolean {
+  if (getScript(avatar.name)?.noStandardSiteAction !== true) return false
+  if (avatar.tapped || state.players[me].atlas.length === 0) return false
+  return orthAdjacentWrapped(state, avatar.x, avatar.y).some((s) => {
+    const site = siteAt(state, s.x, s.y)
+    return !site || site.isRubble
+  })
+}
 
 /** true if the player holds at least one Site in hand (a site the avatar could establish this turn). */
 function hasSiteInHand(state: GameState, player: PlayerId): boolean {
@@ -333,6 +351,17 @@ export function explainEval(state: GameState, me: PlayerId, w: EvalWeights = DEF
   if (getScript(myAv.name)?.noStandardSiteAction !== true && mySites <= 6 && state.flow?.avatarTapAbility?.[me] === state.turn) {
     const mult = mySites < 5 ? 1 : mySites < 6 ? 0.5 : 0.2 // heavy < 5, moderate at 5, slight at 6
     terms.avatarTapWaste = -w.avatarTapWaste * mult
+  }
+
+  // ── Pathfinder discipline: a Pathfinder (noStandardSiteAction) is EXEMPT from the avatar-development
+  //    penalties above because it develops via its blaze ability, not a normal site play. So give it its
+  //    own, SEVERE "don't waste the turn" penalty: while it CAN blaze (untapped, atlas non-empty, an
+  //    adjacent void/rubble) but hasn't, punish hard — blazing is both a site AND a board advance, so it
+  //    should always lay the trail rather than wander or attack. Roaming (a non-blaze move) is punished
+  //    extra, exactly like a normal avatar's avatarWander. Once it blazes it's tapped → penalty clears. ──
+  if (canPathfinderBlaze(state, me, myAv)) {
+    terms.pathfinderIdle = -w.pathfinderIdle
+    if (myAv.interactedTurn === state.turn) terms.pathfinderWander = -w.avatarWander
   }
   terms.exposedSite = -w.exposedSite * predictedSiteLoss(state, me) // my sites the foe can raze (life + mana)
   terms.foeExposedSite = w.foeExposedSite * predictedSiteLoss(state, foe) // enemy sites I can raze

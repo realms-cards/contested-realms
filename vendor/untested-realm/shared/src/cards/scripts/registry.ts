@@ -89,7 +89,10 @@ export interface EffectAPI {
   addPower(unitId: string, amount: number, duration: 'endOfTurn' | 'permanent'): void
   grantKeyword(unitId: string, keyword: string, duration: 'endOfTurn' | 'permanent'): void
   summonToken(name: string, owner: PlayerId, x: number, y: number, region?: Region): UnitState | null
-  teleport(unitId: string, x: number, y: number, region?: Region, opts?: { push?: boolean; intoVoid?: boolean }): void
+  // `shape`: for a rigid multi-square body (an Enchantress wall), the chosen footprint offsets from the
+  // destination anchor — lets a player ROTATE it as they teleport it (a 2x2 needs no shape; its anchor
+  // corner is just the chosen (x,y)). Offsets must include {dx:0,dy:0}; the engine validates legality.
+  teleport(unitId: string, x: number, y: number, region?: Region, opts?: { push?: boolean; intoVoid?: boolean; shape?: { dx: number; dy: number }[] }): void
   tap(unitId: string): void
   untap(unitId: string): void
   /** `by` overrides who is credited with the destruction (Vindictive Nation, ward checks);
@@ -117,7 +120,7 @@ export interface EffectAPI {
   /** put the top N cards of a deck into the cemetery */
   mill(player: PlayerId, deck: 'spellbook' | 'atlas', n: number): void
   /** ask the acting player a follow-up question; effect continues in the script's `conts[contKey]` */
-  ask(prompt: { kind: 'yesNo' | 'chooseOption' | 'chooseTargets' | 'chooseSquare' | 'chooseCards' | 'nameCard' | 'drawDeck' | 'sitePermutation'; title: string; data?: any; player?: PlayerId; spec?: TargetSpec }, contKey: string, ctx?: any): void
+  ask(prompt: { kind: 'yesNo' | 'chooseOption' | 'chooseTargets' | 'chooseSquare' | 'chooseCards' | 'nameCard' | 'drawDeck' | 'sitePermutation' | 'teleportPlace'; title: string; data?: any; player?: PlayerId; spec?: TargetSpec }, contKey: string, ctx?: any): void
   /**
    * Resolve ONE random outcome for the controller, honoring Kythera/Black Cat (choose
    * any) and Lucky Charm (roll N+1, choose one). Returns the chosen `payload` when no
@@ -519,8 +522,12 @@ export interface CardScript {
   /** an ally just tapped to defend (Valor's response window) */
   onAllyDefends?: (ctx: EffectAPI, defender: UnitState) => void
   /** abilities usable straight from the hand, surfaced on the owner's Avatar
-   *  (Moon Clan Werewolf, Sir Gareth, Slimy Mutants) */
+   *  (Sir Gareth, Slimy Mutants, I Am Colossus) */
   handAbilities?: (state: GameState, cardId: string, owner: PlayerId) => AbilityDef[]
+  /** while this card is held in `owner`'s hand, it grants an activated ability to each eligible ALLIED
+   *  unit in play — surfaced ON that unit (not the avatar), like a Skeleton raising a bone-raiser.
+   *  Moon Clan Werewolf: each of your Mortals may sacrifice itself to summon the Werewolf onto its square. */
+  handAbilitiesForAlly?: (state: GameState, cardId: string, owner: PlayerId, ally: UnitState) => AbilityDef[]
   /** site: extra threshold this instance provides (Valley of Delight, Sow the Earth) */
   siteExtraThreshold?: (state: GameState, site: { id: string; x: number; y: number; controller: PlayerId | null }) => Partial<Thresholds>
   /** site: provides no mana at all (Wedding Hall) */
@@ -790,6 +797,10 @@ export interface CardScript {
    *  "share no borders with an already-chosen site". Return the full set for `specIndex`; `picked`
    *  holds the refs chosen for earlier specs this cast. */
   targetOptions?: (state: GameState, caster: UnitState, picked: TargetRef[], specIndex: number) => TargetRef[]
+  /** A relocation spell declares which chosen target UNIT it teleports and to which destination square,
+   *  so the client can offer an oversized-placement/rotation picker (and pass the chosen placement back
+   *  in `extra.teleportPlace = { x, y, shape }`, which the onCast reads). null = no relocation to offer. */
+  teleportPlacement?: (state: GameState, targets: TargetRef[]) => { unitId: string; dest: { x: number; y: number } } | null
   /** continuations for ask(); key → handler */
   conts?: Record<string, (ctx: EffectAPI, contCtx: any, choice: any) => void>
   /** UI hint: how to pick `at` when casting (minions default to own sites) */

@@ -1,8 +1,13 @@
 import { registerScript } from '../registry'
-import { pushLog, newId } from '../../../engine/effects'
+import { pushLog, newId, checkStateBased, sinkSquareIntoVoid } from '../../../engine/effects'
 import { siteAt } from '../../../engine/grid'
 import { cemeteryProtected } from '../../../engine/statics'
 import type { GameState, PlayerId, Region } from '../../../engine/types'
+
+/** Banishment is permanent: a card that has been banished is OUT OF THE GAME and is never restored. */
+function isBanished(state: GameState, cardId: string): boolean {
+  return Object.values(state.players).some((p) => p.banished.includes(cardId))
+}
 
 // ------------------------------------------------- Kairos the Archivist ----
 // 'Genesis → Archive the state of the realm.
@@ -17,7 +22,8 @@ type AuraRec = { squares: { x: number; y: number }[]; controller: PlayerId; name
 
 function removeFromZones(state: GameState, cardId: string, actor: PlayerId): void {
   for (const p of Object.values(state.players)) {
-    for (const zone of [p.hand, p.cemetery, p.banished, p.spellbook, p.atlas]) {
+    // NB: p.banished is NOT here — banishment is permanent, the archive can't pull a card back from it.
+    for (const zone of [p.hand, p.cemetery, p.spellbook, p.atlas]) {
       // Wormelow Tump: an opponent's restore can't reach into a sealed cemetery
       if (zone === p.cemetery && cemeteryProtected(state, p.id, actor)) continue
       const at = zone.indexOf(cardId)
@@ -68,6 +74,7 @@ registerScript('Kairos the Archivist', {
         existing.ward = r.ward
         continue
       }
+      if (isBanished(s, cardId)) continue // a site banished since the archive stays banished; its square is left as-is (maybe a void)
       const there = siteAt(s, r.x, r.y)
       if (there) {
         // a site in the way of the returning record is banished (FAQ)
@@ -90,6 +97,7 @@ registerScript('Kairos the Archivist', {
         continue
       }
       if (r.isAvatar) continue // a gone avatar means the game already ended
+      if (isBanished(s, cardId)) continue // banished since the archive → permanently out, not restored
       removeFromZones(s, cardId, ctx.controller)
       const unitId = newId(s, 'u')
       s.units[unitId] = {
@@ -115,6 +123,7 @@ registerScript('Kairos the Archivist', {
         existing.x = carrier?.x ?? r.x; existing.y = carrier?.y ?? r.y; existing.region = carrier?.region ?? r.region
         continue
       }
+      if (isBanished(s, cardId)) continue // banished since the archive → permanently out, not restored
       removeFromZones(s, cardId, ctx.controller)
       const artId = newId(s, 'a')
       s.artifacts[artId] = {
@@ -131,6 +140,7 @@ registerScript('Kairos the Archivist', {
         existing.squares = r.squares.map((q) => ({ ...q }))
         continue
       }
+      if (isBanished(s, cardId)) continue // banished since the archive → permanently out, not restored
       removeFromZones(s, cardId, ctx.controller)
       const auraId = newId(s, 'r')
       s.auras[auraId] = { id: auraId, cardId, name: r.name, controller: r.controller, squares: r.squares.map((q) => ({ ...q })) }
@@ -143,5 +153,15 @@ registerScript('Kairos the Archivist', {
       if (owner !== undefined) s.players[owner].banished.push(self.cardId)
       pushLog(s, ctx.controller, 'Kairos, his archive spent, is banished.')
     }
+    // A restored unit may have landed on a square whose archived site is itself banished (and so was NOT
+    // restored) — that square is now a void. Sink anything stranded on a siteless square into the void
+    // (voidwalkers survive, everything else is banished; loose ground artifacts fall in too), then settle.
+    for (const key of new Set(Object.values(s.units)
+      .filter((u) => !u.isAvatar && u.region !== 'void' && u.size !== '2x2' && !siteAt(s, u.x, u.y))
+      .map((u) => `${u.x},${u.y}`))) {
+      const [x, y] = key.split(',').map(Number)
+      sinkSquareIntoVoid(s, x, y)
+    }
+    checkStateBased(s)
   },
 })

@@ -1,24 +1,17 @@
 import { registerScript } from '../registry'
-import { adjacentSquaresW } from '../../../engine/grid'
 import { pushLog, emitUnitMoved } from '../../../engine/effects'
 import { isLegalStep } from '../../../engine/movement'
 import { fightUnits } from '../../../engine/combat'
+import { adjacentFightTargets, resolveAdjacentCombatants } from '../multi-card-utils/adjacent-fight'
 
 // "An ally targets an enemy they're adjacent to, then they both take a step to
 // swap places. If they pass each other, they fight."
 registerScript('Joust!', {
-  // "an ally" / "an enemy" (not "minion") — both may be Avatars
-  targets: [
-    { what: 'unit', count: 1, targeted: false, owner: 'ally', label: 'your jouster' },
-    { what: 'unit', count: 1, targeted: true, owner: 'enemy', label: 'target adjacent enemy' },
-  ],
+  targets: adjacentFightTargets('your jouster'),
   onCast: (ctx) => {
-    const [t1, t2] = ctx.targets
-    if (!('unit' in t1) || !('unit' in t2)) return
-    const a = ctx.state.units[t1.unit]
-    const b = ctx.state.units[t2.unit]
-    if (!a || !b) return
-    if (!adjacentSquaresW(ctx.state, a.x, a.y).some((s) => s.x === b.x && s.y === b.y) || a.region !== b.region) return ctx.log('Not adjacent.')
+    const pair = resolveAdjacentCombatants(ctx)
+    if (!pair) return ctx.log('Not adjacent.')
+    const { a, b } = pair
     // FAQ: "they BOTH take a step to swap places" — if either can't take its step (Immobile, disabled, a
     // wall or entry-ban between them), they haven't passed each other, so no joust.
     const aFrom = { x: a.x, y: a.y, region: a.region }

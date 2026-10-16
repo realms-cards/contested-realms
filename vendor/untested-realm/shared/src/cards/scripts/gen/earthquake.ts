@@ -15,8 +15,10 @@ import { getCard } from '../../db'
 // permutation) and sends it in one shot. The engine only validates it (a bijection of the area that
 // keeps immovable sites — Bedrock, a Bluecap Knockers site — on their own squares and strands no
 // placement-restricted site) and relocates every site with its normal-size contents simultaneously.
-// Void squares stay void; they just travel like anything else. This makes Earthquake trivial for the
-// bot too — it can answer with the identity permutation (rearrange nothing).
+// Earthquake rearranges SITES, not empty space: a void (siteless) square is a FIXED POINT — it can't
+// be moved, and a site can't slide onto one (that would relocate the void). So sites only permute
+// among the site-occupied squares. This makes Earthquake trivial for the bot too — it can answer with
+// the identity permutation (rearrange nothing).
 registerScript('Earthquake', {
   onCast: (ctx) => {
     // First: pick the two-by-two AREA. Every anchor whose 2×2 holds at least one site is offered,
@@ -37,10 +39,11 @@ registerScript('Earthquake', {
       if (!sq || sq.x < 0 || sq.y < 0 || sq.x >= (wrap ? GRID_W : GRID_W - 1) || sq.y >= (wrap ? GRID_H : GRID_H - 1)) return
       const c = { ax: sq.x, ay: sq.y }
       const area = areaSquares(ctx.state, c)
-      // squares whose site is immovable are fixed points of the permutation (never offered to move)
+      // only a square holding a MOVABLE site can be rearranged. Void (siteless) squares and immovable
+      // sites are fixed points of the permutation (never offered to move).
       const movable = area.filter((s) => {
         const site = siteAt(ctx.state, s.x, s.y)
-        return !site || !siteCantBeMoved(ctx.state, site)
+        return !!site && !siteCantBeMoved(ctx.state, site)
       })
       // if at most one square can move, there's no rearrangement to make — go straight to the burrow
       if (movable.length < 2) return finishQuake(ctx, c)
@@ -48,7 +51,7 @@ registerScript('Earthquake', {
       // and author the permutation entirely on its own; `squares` is kept for the bot's identity answer.
       const cells = area.map((s) => {
         const site = siteAt(ctx.state, s.x, s.y)
-        return { x: s.x, y: s.y, name: site && !site.isRubble ? site.name : site?.isRubble ? 'Rubble' : null, movable: !site || !siteCantBeMoved(ctx.state, site) }
+        return { x: s.x, y: s.y, name: site && !site.isRubble ? site.name : site?.isRubble ? 'Rubble' : null, movable: !!site && !siteCantBeMoved(ctx.state, site) }
       })
       ctx.ask(
         { kind: 'sitePermutation', title: 'Earthquake: rearrange the sites in the area.', data: { squares: area, movable, cells } },
@@ -102,6 +105,9 @@ function applyPermutation(ctx: EffectAPI, c: any, placements: { x: number; y: nu
     const src = siteAt(state, p.sx, p.sy)
     const dst = siteAt(state, p.x, p.y)
     if (!fixed && ((src && siteCantBeMoved(state, src)) || (dst && siteCantBeMoved(state, dst)))) return bad('an immovable site would move')
+    // Earthquake rearranges SITES, not empty space: a void (siteless) square can't be moved, and a
+    // site can't slide onto one. So a non-fixed placement must have a site on BOTH its squares.
+    if (!fixed && (!src || !dst)) return bad('a void square cannot be moved')
   }
 
   // capture each source square's contents + original coords, keyed by source square

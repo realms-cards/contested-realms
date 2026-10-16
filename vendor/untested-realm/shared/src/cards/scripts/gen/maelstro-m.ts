@@ -32,9 +32,12 @@ function maelstromNext(ctx: EffectAPI, done: string[]): void {
   const self = ctx.state.sites[ctx.sourceId]
   if (!self) return
   const body = waterBody(ctx.state, self.x, self.y)
+  // A CARRIED unit (a passenger on a mount, or a minion swallowed in a Brobdingnag Bullfrog's belly)
+  // isn't independently in the water — it rides at its carrier's square. The Maelström pulls the
+  // CARRIER (its cargo follows via syncCarried), and never yanks a carried/swallowed unit on its own.
   const prey = body
     .flatMap((s) => unitsAt(ctx.state, s.x, s.y))
-    .find((u) => !u.isAvatar && !done.includes(u.id) && !(u.x === self.x && u.y === self.y))
+    .find((u) => !u.isAvatar && !u.carriedBy && !done.includes(u.id) && !(u.x === self.x && u.y === self.y))
   if (!prey) {
     pushLog(ctx.state, ctx.controller, 'The Maelström drags everything toward its maw.')
     return

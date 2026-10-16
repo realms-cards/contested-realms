@@ -1,18 +1,3 @@
-import { plunderCard } from "../../vendor/untested-realm/shared/src/cards/scripts/multi-card-utils/plunder-card";
-import {
-  effKeywords,
-  getCard,
-  getKeywords,
-  getScript,
-  isWaterSite,
-  nearbySquaresW,
-  opponent,
-  siteAt,
-  siteStillFlooded,
-  unitsAt,
-} from "../../vendor/untested-realm/shared/src/index";
-import type { CardScript, EffectAPI, UnitState } from "../../vendor/untested-realm/shared/src/index";
-
 /**
  * Local fixes to vendored card scripts, applied to the LIVE script registry on import.
  * Side-effect module: import it wherever the engine runs (session, bot worker, legal worker) so the
@@ -24,216 +9,20 @@ import type { CardScript, EffectAPI, UnitState } from "../../vendor/untested-rea
  * server's engine worker imports it for exactly that reason. The engine is reached by relative
  * path because tsc does not rewrite path aliases into the CommonJS the server build emits.
  *
- * Waveshaper — WORKAROUND for vendor cards/scripts/gen/waveshaper.ts:45 (`&& !u.tapped`): only
- * minions the wave actually taps get `skipUntap`, so an already-tapped minion (it moved or attacked
- * last turn, or the previous wave's marker was just consumed) untaps as normal and the FAQ3
- * re-wave lock never holds. Sir Tristan and Blasphemy set the marker unconditionally.
- * DELETE this patch once the upstream fix is vendored (scripts/vendor-untested-realm.sh).
+ * There are no patches right now. Everything that used to be worked around here is fixed in the
+ * vendored engine: either upstream (0.5.0: the Waveshaper untap lock, Break Stealth abilities;
+ * 0.5.1: Waveshaper on already-flooded sites) or on our fork's `realms` branch, pending upstream
+ * PRs (Sea Raider, The Manor at Daperyll Hill, Slimy Mutants / Sir Gareth, Waveshaper keeping a
+ * permanently flooded site wet). A runtime patch is a stopgap: put the
+ * real fix on a fork branch (scripts/untested-realm-fork.sh) and delete the patch once it is
+ * vendored. Earlier patches in git history show the wrapping patterns (conts, abilities,
+ * handAbilities), each marked with Symbol.for("realms.engine-mode.scriptPatch") so a re-run is a
+ * no-op.
  */
-
-type ContFn = NonNullable<CardScript["conts"]>[string];
-
-/** Symbol.for so a re-executed module (HMR) still recognises its own earlier wrapper. */
-const PATCHED = Symbol.for("realms.engine-mode.scriptPatch");
-
-type Marked = ContFn & { [PATCHED]?: true };
-
-function isSquare(v: unknown): v is { x: number; y: number } {
-  if (typeof v !== "object" || v === null) return false;
-  const s = v as { x?: unknown; y?: unknown };
-  return typeof s.x === "number" && typeof s.y === "number";
-}
-
-/** Wraps `script.conts[key]` once; a second import (or HMR re-run) finds the marker and skips. */
-function wrapCont(name: string, key: string, wrap: (original: ContFn) => ContFn): boolean {
-  const conts = getScript(name)?.conts;
-  const original = conts?.[key] as Marked | undefined;
-  if (!conts || !original || original[PATCHED]) return false;
-  const patched: Marked = wrap(original);
-  patched[PATCHED] = true;
-  conts[key] = patched;
-  return true;
-}
-
-/** a minion the wave holds down: the same test the vendor script uses, minus the tapped guard */
-const waveHolds = (u: UnitState) => !u.isAvatar && !getKeywords(u.name).submerge;
-
-/*
- * Waveshaper on an ALREADY-flooded site — WORKAROUND for vendor waveshaper.ts (`!s.flooded ||
- * keptByThis`): sites flooded by something else (Atlantean Fate, a Naiad, …) are never offered,
- * so the wave can't tap down a minion standing on one. Nothing in the text asks for a dry site.
- * And because siteStillFlooded knows nothing of permanent floods like Atlantean Fate's, moving the
- * wave on would dry such a site out. `flow.floodedBeforeWave` remembers the sites that were
- * flooded on their own when the wave hit, so they stay flooded when it leaves.
- * DELETE once fixed upstream.
- */
-const FLOODED_BEFORE_WAVE = "floodedBeforeWave";
-
-function waveSquares(ctx: EffectAPI): { x: number; y: number }[] {
-  const squares: { x: number; y: number }[] = [];
-  for (const w of Object.values(ctx.state.sites)) {
-    if (w.controller !== ctx.controller || !isWaterSite(ctx.state, w, getCard)) continue;
-    for (const adj of nearbySquaresW(ctx.state, w.x, w.y)) {
-      if (siteAt(ctx.state, adj.x, adj.y) && !squares.some((q) => q.x === adj.x && q.y === adj.y)) squares.push(adj);
-    }
-  }
-  return squares;
-}
-
-function waveAnySite(): boolean {
-  const abilities = getScript("Waveshaper")?.abilities;
-  const index = abilities?.findIndex((a) => a.key === "wave") ?? -1;
-  const original = abilities?.[index] as MarkedAbility | undefined;
-  if (!abilities || !original || original[PATCHED]) return false;
-  const patched: MarkedAbility = {
-    ...original,
-    effect: (ctx) => {
-      const squares = waveSquares(ctx);
-      if (!squares.length) return ctx.log("You control no body of water.");
-      ctx.ask({ kind: "chooseSquare", title: "The wave crashes over which site?", data: { squares } }, "wave");
-    },
-  };
-  patched[PATCHED] = true;
-  abilities[index] = patched;
-  return true;
-}
-
-const waveshaperWave = (original: ContFn): ContFn => (ctx: EffectAPI, contCtx: unknown, choice: unknown) => {
-  const site = isSquare(choice) ? siteAt(ctx.state, choice.x, choice.y) : null;
-  // the targets are whoever stood there when the wave hit — collected before the original runs
-  const before = new Set(site ? unitsAt(ctx.state, site.x, site.y, "surface").filter(waveHolds).map((u) => u.id) : []);
-  const flow = (ctx.state.flow = ctx.state.flow ?? {});
-  const prev: string | undefined = flow.waveshaperFlood?.[ctx.controller];
-  const ownFloods: string[] = flow[FLOODED_BEFORE_WAVE] ?? [];
-  if (site?.flooded && !siteStillFlooded(ctx.state, site.id) && !ownFloods.includes(site.id)) ownFloods.push(site.id);
-  flow[FLOODED_BEFORE_WAVE] = ownFloods;
-  original(ctx, contCtx, choice);
-  // the wave moved on from a site that was flooded before it came: the water stays
-  if (prev && prev !== site?.id && ownFloods.includes(prev)) {
-    const left = ctx.state.sites[prev];
-    if (left) left.flooded = true;
-    flow[FLOODED_BEFORE_WAVE] = ownFloods.filter((id) => id !== prev);
-  }
-  const flooded = site ? ctx.state.sites[site.id] : undefined;
-  if (!flooded) return;
-  // re-read after floodSite (it may move or kill units); the original already logged the ones it tapped
-  for (const u of unitsAt(ctx.state, flooded.x, flooded.y, "surface")) {
-    if (!before.has(u.id) || !waveHolds(u)) continue;
-    u.tapped = true;
-    u.counters = { ...u.counters, skipUntap: 1 };
-  }
-};
-
-/*
- * Break Stealth → … — WORKAROUND for vendor engine/game.ts (activate): activating ANY minion
- * ability strips its Stealth before the effect runs, so Frozen Horror and Asmodeus, whose effects
- * open with `if (!self.stealth) return`, always fizzle ("No Stealth to break."). The patch offers
- * the ability only while the minion is stealthed and hands the effect back the Stealth the engine
- * just took, so the original breaks it itself and resolves. DELETE once fixed upstream.
- */
-type Ability = NonNullable<CardScript["abilities"]>[number];
-type MarkedAbility = Ability & { [PATCHED]?: true };
-
-function wrapBreakStealth(name: string, key: string): boolean {
-  const abilities = getScript(name)?.abilities;
-  const index = abilities?.findIndex((a) => a.key === key) ?? -1;
-  const original = abilities?.[index] as MarkedAbility | undefined;
-  if (!abilities || !original || original[PATCHED]) return false;
-  const patched: MarkedAbility = {
-    ...original,
-    available: (state, sourceId) =>
-      state.units[sourceId]?.stealth === true && (original.available?.(state, sourceId) ?? true),
-    effect: (ctx) => {
-      const self = ctx.state.units[ctx.sourceId];
-      if (self) self.stealth = true;
-      return original.effect(ctx);
-    },
-  };
-  patched[PATCHED] = true;
-  abilities[index] = patched;
-  return true;
-}
-
-/*
- * Slimy Mutants — WORKAROUND for vendor cards/scripts/gen/slimy-mutants.ts: the hand ability is
- * offered whenever ③ is affordable, even with no submerging ally to transform, and then spends the
- * mana for nothing ("No submerging ally to mutate."). Offer it only while such an ally exists.
- * DELETE once fixed upstream.
- */
-type HandAbilities = NonNullable<CardScript["handAbilities"]> & { [PATCHED]?: true };
-
-function gateSlimyMutants(): boolean {
-  const script = getScript("Slimy Mutants");
-  const original = script?.handAbilities as HandAbilities | undefined;
-  if (!script || !original || original[PATCHED]) return false;
-  const patched: HandAbilities = (state, cardId, owner) =>
-    Object.values(state.units).some((u) => u.controller === owner && !u.isAvatar && effKeywords(state, u).submerge)
-      ? original(state, cardId, owner)
-      : [];
-  patched[PATCHED] = true;
-  script.handAbilities = patched;
-  return true;
-}
-
-/*
- * Sea Raider — WORKAROUND for vendor cards/scripts/gen/sea-raider.ts: "Whenever Sea Raider attacks
- * and kills an enemy, its controller discards their topmost spell. You may cast that spell..." —
- * "its controller" is the killed ENEMY's controller (a pirate, like Captain Baldassare), but the
- * vendor script plunders the raider's own spellbook. Plunder the opponent's instead.
- * DELETE once fixed upstream.
- */
-type AttackKill = NonNullable<CardScript["onAttackKill"]> & { [PATCHED]?: true };
-
-function fixSeaRaider(): boolean {
-  const script = getScript("Sea Raider");
-  const original = script?.onAttackKill as AttackKill | undefined;
-  if (!script || !original || original[PATCHED]) return false;
-  // the victim is already dead here, and an enemy is by definition the opponent's
-  const patched: AttackKill = (ctx) => {
-    const cardId = ctx.state.players[opponent(ctx.controller)].spellbook.shift();
-    if (cardId !== undefined) plunderCard(ctx, cardId);
-  };
-  patched[PATCHED] = true;
-  script.onAttackKill = patched;
-  return true;
-}
-
-/*
- * The Manor at Daperyll Hill — WORKAROUND for vendor cards/scripts/gen/the-manor-at-daperyll-hill.ts:
- * "deal 3 damage to target enemy here to heal you 3" is offered with no enemy at the site, so the
- * player (and the CPU, every turn) can activate it, logging "3 damage to an enemy here → heal 3"
- * for an effect that then does nothing. Offer it only while an enemy unit stands there.
- * DELETE once fixed upstream.
- */
-function gateAbility(name: string, key: string, available: NonNullable<Ability["available"]>): boolean {
-  const abilities = getScript(name)?.abilities;
-  const index = abilities?.findIndex((a) => a.key === key) ?? -1;
-  const original = abilities?.[index] as MarkedAbility | undefined;
-  if (!abilities || !original || original[PATCHED]) return false;
-  const patched: MarkedAbility = {
-    ...original,
-    available: (state, sourceId) =>
-      available(state, sourceId) && (original.available?.(state, sourceId) ?? true),
-  };
-  patched[PATCHED] = true;
-  abilities[index] = patched;
-  return true;
-}
-
-const enemyAtManor: NonNullable<Ability["available"]> = (state, sourceId) => {
-  const site = state.sites[sourceId];
-  return !!site && unitsAt(state, site.x, site.y).some((u) => u.controller !== site.controller);
-};
 
 /** Applies every patch; idempotent (import side effect, exported for tests). */
 export function applyScriptPatches(): void {
-  wrapCont("Waveshaper", "wave", waveshaperWave);
-  waveAnySite();
-  wrapBreakStealth("Frozen Horror", "terror");
-  wrapBreakStealth("Asmodeus", "immolate");
-  gateSlimyMutants();
-  fixSeaRaider();
-  gateAbility("The Manor at Daperyll Hill", "feast", enemyAtManor);
+  // nothing to patch
 }
 
 applyScriptPatches();

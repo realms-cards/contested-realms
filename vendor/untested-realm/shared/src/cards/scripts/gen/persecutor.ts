@@ -8,17 +8,19 @@ const isEvilU = (state: GameState, u: UnitState) => isEvilUnit(state, u)
 
 // 'Once on your turn, Persecutor may step toward the closest Evil, or brand an
 //  enemy so your cards treat them as Evil this turn.'
+// The brand does NOT change subtypes (it must NOT make the enemy a Monster, and must NOT break its Ward).
+// It is a per-turn "treated as Evil" flag (flow.branded) that isEvilUnit() recognises for targeting/
+// affecting Evil, while isEvilUnitIntrinsic() (ward-strip, "real Evil") ignores it.
 registerScript('Persecutor', {
-  subtypeOverride: (state, selfId, unit, st) => {
-    const brand = state.flow?.branded
-    if (brand && brand.unitId === unit.id && brand.turn === state.turn && !st.includes('Monster')) return [...st, 'Monster']
-    return st
-  },
   abilities: [{
     key: 'zeal',
     label: 'Step toward Evil, or brand an enemy',
     cost: {},
     oncePerTurn: true,
+    deferUse: true, // the turn's use is spent only when a step or brand actually COMMITS — so you can
+    // back out of the "step or brand / which way / which enemy" prompts freely until then.
+    tentativePlay: true, // online: the whole flow is held privately and rolled back with no trace if you
+    // go back (or it does nothing), exactly like Animist — so "↩ Go back" works across its prompts.
     effect: (ctx) => {
       ctx.ask({ kind: 'chooseOption', title: 'The Persecutor…', data: { options: ['steps toward the closest Evil', 'brands an enemy as Evil'] } }, 'zeal')
     },
@@ -41,6 +43,7 @@ registerScript('Persecutor', {
         if (!steps.length) return ctx.log('No step brings the Persecutor closer.')
         if (steps.length === 1) {
           ctx.teleport(self.id, steps[0].x, steps[0].y, self.region)
+          self.usedThisTurn.zeal = 1 // committed → spend the once-per-turn use
           pushLog(ctx.state, ctx.controller, 'The Persecutor stalks toward the nearest Evil.')
           return
         }
@@ -57,12 +60,15 @@ registerScript('Persecutor', {
       if (!u) return
       ctx.state.flow = ctx.state.flow ?? {}
       ctx.state.flow.branded = { unitId: u.id, by: ctx.controller, turn: ctx.state.turn }
+      const self = ctx.state.units[ctx.sourceId]
+      if (self) self.usedThisTurn.zeal = 1 // committed → spend the once-per-turn use
       pushLog(ctx.state, ctx.controller, `${u.name} is branded a heretic — Evil in the Persecutor's eyes.`)
     },
     persecutorStep: (ctx, _c, sq) => {
       const self = ctx.state.units[ctx.sourceId]
       if (self && sq) {
         ctx.teleport(self.id, sq.x, sq.y, self.region)
+        self.usedThisTurn.zeal = 1 // committed → spend the once-per-turn use
         pushLog(ctx.state, ctx.controller, 'The Persecutor stalks toward the nearest Evil.')
       }
     },

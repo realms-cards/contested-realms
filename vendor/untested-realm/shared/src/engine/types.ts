@@ -211,6 +211,7 @@ export type PromptKind =
   | 'nameCard'          // type/pick any card name (Feast for Crows, Hyter Sprites)
   | 'firstSite'         // forced first-turn site placement (pick a site from hand)
   | 'sitePermutation'   // rearrange the sites within a 2x2 area (Earthquake) — client sends the final permutation
+  | 'teleportPlace'     // choose an oversized unit's anchor+rotation at a teleport destination (client sends the chosen index)
 
 export interface Prompt {
   id: string

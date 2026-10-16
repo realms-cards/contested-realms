@@ -1,12 +1,19 @@
 import { registerScript } from '../registry'
-import { pushLog, killUnit, checkStateBased, toCemetery } from '../../../engine/effects'
+import { pushLog, killUnit, checkStateBased, toCemetery, checkWard } from '../../../engine/effects'
 
 // 'When the Roots of Yggdrasil are destroyed, destroy everything.'
 registerScript('Roots of Yggdrasil', {
   onSelfDestroyed: (ctx) => {
     pushLog(ctx.state, null, '🌳 THE WORLD-TREE FALLS. EVERYTHING FOLLOWS.')
     for (const u of Object.values(ctx.state.units)) {
-      if (!u.isAvatar) killUnit(ctx.state, u.id)
+      if (u.isAvatar) continue
+      // Ward breaks instead of dying when its bearer would be destroyed, from ANY source (codex) —
+      // so a warded minion (Paladins of Bazia) survives the world-tree's collapse, ward spent.
+      if (checkWard(ctx.state, u, ctx.controller, u.controller, 'destroy')) {
+        pushLog(ctx.state, null, `${u.name}'s ward holds against the falling world-tree.`)
+        continue
+      }
+      killUnit(ctx.state, u.id)
     }
     for (const a of Object.values(ctx.state.artifacts)) ctx.breakArtifact(a.id)
     for (const r of Object.values(ctx.state.auras)) {

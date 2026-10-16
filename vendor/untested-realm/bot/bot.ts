@@ -1219,6 +1219,13 @@ function castMinion(
   }
   if (!surfaceSpots.length && !subSpots.length && !voidSpots.length) return null
 
+  // a minion that would arrive DISABLED is a wasted summon (Bound Spirit away from an allied
+  // Spellcaster, a waterbound minion on land): keep only the spots where it can act, if any.
+  for (const spots of [surfaceSpots, subSpots, voidSpots]) {
+    const active = spots.filter((s) => !isDisabled(state, summonProbe(state, me, name, s)))
+    if (active.length) spots.splice(0, spots.length, ...active)
+  }
+
   // shield the avatar when it's at death's door, else press toward the enemy avatar.
   const wantShield = avatar.deathsDoor
   const anchor = wantShield ? avatar : enemyAvatar

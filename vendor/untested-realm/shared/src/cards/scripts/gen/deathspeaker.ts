@@ -124,7 +124,19 @@ function deathspeakerFlicker(ctx: EffectAPI, name: string, at: { x: number; y: n
   const [id] = ctx.state.players[owner].cemetery.splice(idx, 1)
   ctx.state.players[ctx.state.cards[id].owner].banished.push(id) // banished to its owner's pile
   const copy = copyMinion(ctx.state, name, ctx.controller, at.x, at.y, region, false, genesisTargets)
-  if (copy && ctx.state.units[copy.id]) banishUnit(ctx.state, copy.id)
-  pushLog(ctx.state, ctx.controller, `${name}'s echo fades back into death.`)
+  if (copy && ctx.state.units[copy.id]) {
+    // If the copy's Genesis raised a prompt (Archangel Michael's "take a step"), it's still ENTERING —
+    // banishing it now would cut the Genesis short. Defer the banish to settleEntering, which runs once
+    // the whole Genesis prompt chain has drained. A no-prompt Genesis already settled, so banish inline.
+    const stillEntering = ((ctx.state.flow?.entering as string[] | undefined) ?? []).includes(copy.id)
+    if (stillEntering) {
+      ctx.state.flow!.banishOnSettle = [...((ctx.state.flow!.banishOnSettle as string[] | undefined) ?? []), copy.id]
+    } else {
+      banishUnit(ctx.state, copy.id)
+      pushLog(ctx.state, ctx.controller, `${name}'s echo fades back into death.`)
+    }
+  } else {
+    pushLog(ctx.state, ctx.controller, `${name}'s echo fades back into death.`)
+  }
   checkStateBased(ctx.state)
 }
