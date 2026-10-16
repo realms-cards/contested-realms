@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useOnline } from "@/app/online/online-context";
-import { isFeatureEnabled } from "@/lib/config/features";
+import { FEATURE_ENGINE_MODE, isFeatureEnabled } from "@/lib/config/features";
 import {
   buildLobbyInvitePath,
   buildLobbyInviteUrl,
@@ -20,10 +20,11 @@ const EYEBROW = "font-rc-mono text-[11px] uppercase tracking-[0.24em]";
 const SUB = "mt-2 font-rc-mono text-xs tracking-[0.06em]";
 
 /**
- * The four entry actions: Create Match (solid gold), Constructed Queue
- * (amber, live count + matchmaking states), Invite a Friend (dashed, copy
- * link) and Learn to Play (ghost). Hidden while the player is in a lobby or
- * match, exactly like the panel it replaces.
+ * The entry actions: Create Match (solid gold), Constructed Queue (amber,
+ * live count + matchmaking states), Invite a Friend (dashed, copy link),
+ * Rules Engine vs CPU (moonlight outline), with Learn to Play as one quiet line
+ * below. Hidden while the player is in a lobby or match, exactly like the panel
+ * it replaces.
  */
 export default function LobbyActionStrip({
   onCreateMatch,
@@ -113,105 +114,119 @@ export default function LobbyActionStrip({
         : "click to find match";
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-3.5">
-      {/* (a) Create Match: the only filled tile */}
-      <button
-        type="button"
-        onClick={onCreateMatch}
-        className={`${TILE_BASE} border-rc-accent-ring bg-gradient-to-b from-rc-accent-hover to-rc-accent text-rc-accent-fg shadow-[0_6px_14px_rgba(0,0,0,0.4),0_0_22px_rgba(243,207,106,0.22)] hover:-translate-y-px hover:shadow-[0_6px_14px_rgba(0,0,0,0.4),0_0_30px_rgba(243,207,106,0.35)]`}
-      >
-        <div className={`${EYEBROW} text-rc-gold-ink`}>primary</div>
-        <div className="mt-1.5 font-rc-display text-[34px] leading-none text-rc-accent-fg">
-          Create Match
-        </div>
-        <div className={`${SUB} text-rc-gold-ink`}>
-          Constructed · Sealed · Draft
-        </div>
-      </button>
-
-      {/* (b) Constructed Queue: amber card with the live count */}
-      {isGuest ? (
-        <Link
-          href="/auth/signin?callbackUrl=%2Fonline%2Flobby"
-          className={`${TILE_BASE} flex items-center justify-between gap-4 border-rc-warning/45 bg-gradient-to-br from-rc-warning/16 to-[rgba(9,13,25,0.85)] to-60% shadow-rc-panel hover:-translate-y-px hover:border-rc-warning hover:shadow-[0_6px_14px_rgba(0,0,0,0.4),0_0_18px_rgba(217,155,44,0.35)]`}
-        >
-          <div>
-            <div className={`${EYEBROW} text-rc-warning`}>ranked</div>
-            <div className="mt-1.5 font-rc-display text-[28px] leading-none text-rc-fg-strong">
-              Constructed Queue
-            </div>
-            <div className={`${SUB} text-rc-fg-subtle`}>
-              sign in to use matchmaking
-            </div>
-          </div>
-          <QueueCount value={queueSize} />
-        </Link>
-      ) : (
+    <div>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-3.5">
+        {/* (a) Create Match: the only filled tile */}
         <button
           type="button"
-          onClick={handleQueueClick}
-          className={`${TILE_BASE} flex items-center justify-between gap-4 border-rc-warning/45 bg-gradient-to-br from-rc-warning/16 to-[rgba(9,13,25,0.85)] to-60% shadow-rc-panel hover:-translate-y-px hover:border-rc-warning hover:shadow-[0_6px_14px_rgba(0,0,0,0.4),0_0_18px_rgba(217,155,44,0.35)] ${
-            isSearching || isConfirming ? "border-rc-warning" : ""
-          }`}
-          aria-live="polite"
+          onClick={onCreateMatch}
+          className={`${TILE_BASE} border-rc-accent-ring bg-gradient-to-b from-rc-accent-hover to-rc-accent text-rc-accent-fg shadow-[0_6px_14px_rgba(0,0,0,0.4),0_0_22px_rgba(243,207,106,0.22)] hover:-translate-y-px hover:shadow-[0_6px_14px_rgba(0,0,0,0.4),0_0_30px_rgba(243,207,106,0.35)]`}
         >
-          <div className="min-w-0">
-            <div className={`${EYEBROW} text-rc-warning`}>ranked</div>
-            <div className="mt-1.5 font-rc-display text-[28px] leading-none text-rc-fg-strong">
-              {queueTitle}
-            </div>
-            <div className={`${SUB} text-rc-fg-subtle`}>{queueSub}</div>
-            {queueBySource && !isSearching && !isConfirming && (
-              <div className="mt-1 font-rc-mono text-[11px] tracking-[0.06em] text-rc-fg-dim">
-                {queueBySource.web} web · {queueBySource.discord} discord
-              </div>
-            )}
+          <div className={`${EYEBROW} text-rc-gold-ink`}>primary</div>
+          <div className="mt-1.5 font-rc-display text-[34px] leading-none text-rc-accent-fg">
+            Create Match
           </div>
-          <QueueCount value={queueSize} pulse={isSearching || isConfirming} />
+          <div className={`${SUB} text-rc-gold-ink`}>
+            Constructed · Sealed · Draft
+          </div>
         </button>
-      )}
 
-      {/* (c) Invite a Friend: dashed outline + inline copy field */}
-      <Link
-        href={invitePath}
-        className={`${TILE_BASE} border-dashed border-rc-info/60 bg-rc-info/6 hover:-translate-y-px hover:border-rc-info hover:bg-rc-info/12`}
-        title="Open a private lobby anyone with the link can join - no account needed"
-      >
-        <div className={`${EYEBROW} text-rc-info`}>private</div>
-        <div className="mt-1.5 font-rc-display text-[28px] leading-none text-rc-fg-strong">
-          Invite a Friend
-        </div>
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={copyInvite}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") void copyInvite(e as unknown as React.MouseEvent);
-          }}
-          className="mt-2.5 flex items-center gap-2 rounded-rc-sm border border-rc-line/12 bg-black/40 px-2.5 py-1.5 font-rc-mono text-xs text-rc-fg-muted transition-colors hover:border-rc-info/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring"
-          title="Copy invite link"
-        >
-          <span className="flex-1 truncate">{inviteDisplay || "…"}</span>
-          <span className="text-[10px] uppercase tracking-[0.1em] text-rc-info">
-            {copied ? "copied" : "copy"}
-          </span>
-        </div>
-      </Link>
+        {/* (b) Constructed Queue: amber card with the live count */}
+        {isGuest ? (
+          <Link
+            href="/auth/signin?callbackUrl=%2Fonline%2Flobby"
+            className={`${TILE_BASE} flex items-center justify-between gap-4 border-rc-warning/45 bg-gradient-to-br from-rc-warning/16 to-[rgba(9,13,25,0.85)] to-60% shadow-rc-panel hover:-translate-y-px hover:border-rc-warning hover:shadow-[0_6px_14px_rgba(0,0,0,0.4),0_0_18px_rgba(217,155,44,0.35)]`}
+          >
+            <div>
+              <div className={`${EYEBROW} text-rc-warning`}>ranked</div>
+              <div className="mt-1.5 font-rc-display text-[28px] leading-none text-rc-fg-strong">
+                Constructed Queue
+              </div>
+              <div className={`${SUB} text-rc-fg-subtle`}>
+                sign in to use matchmaking
+              </div>
+            </div>
+            <QueueCount value={queueSize} />
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={handleQueueClick}
+            className={`${TILE_BASE} flex items-center justify-between gap-4 border-rc-warning/45 bg-gradient-to-br from-rc-warning/16 to-[rgba(9,13,25,0.85)] to-60% shadow-rc-panel hover:-translate-y-px hover:border-rc-warning hover:shadow-[0_6px_14px_rgba(0,0,0,0.4),0_0_18px_rgba(217,155,44,0.35)] ${
+              isSearching || isConfirming ? "border-rc-warning" : ""
+            }`}
+            aria-live="polite"
+          >
+            <div className="min-w-0">
+              <div className={`${EYEBROW} text-rc-warning`}>ranked</div>
+              <div className="mt-1.5 font-rc-display text-[28px] leading-none text-rc-fg-strong">
+                {queueTitle}
+              </div>
+              <div className={`${SUB} text-rc-fg-subtle`}>{queueSub}</div>
+              {queueBySource && !isSearching && !isConfirming && (
+                <div className="mt-1 font-rc-mono text-[11px] tracking-[0.06em] text-rc-fg-dim">
+                  {queueBySource.web} web · {queueBySource.discord} discord
+                </div>
+              )}
+            </div>
+            <QueueCount value={queueSize} pulse={isSearching || isConfirming} />
+          </button>
+        )}
 
-      {/* (d) Learn to Play: quiet ghost tile */}
-      {isFeatureEnabled("tutorialMode") && (
+        {/* (c) Invite a Friend: dashed outline + inline copy field */}
         <Link
-          href="/tutorial"
-          className={`${TILE_BASE} flex flex-col justify-center border-transparent bg-transparent hover:border-rc-success/50 hover:bg-rc-success/6`}
+          href={invitePath}
+          className={`${TILE_BASE} border-dashed border-rc-info/60 bg-rc-info/6 hover:-translate-y-px hover:border-rc-info hover:bg-rc-info/12`}
+          title="Open a private lobby anyone with the link can join - no account needed"
         >
-          <div className={`${EYEBROW} text-rc-success`}>new here?</div>
+          <div className={`${EYEBROW} text-rc-info`}>private</div>
           <div className="mt-1.5 font-rc-display text-[28px] leading-none text-rc-fg-strong">
-            Learn to Play <span className="text-rc-success">→</span>
+            Invite a Friend
           </div>
-          <div className={`${SUB} text-rc-fg-subtle`}>
-            Interactive tutorial · 12 min · no account
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={copyInvite}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") void copyInvite(e as unknown as React.MouseEvent);
+            }}
+            className="mt-2.5 flex items-center gap-2 rounded-rc-sm border border-rc-line/12 bg-black/40 px-2.5 py-1.5 font-rc-mono text-xs text-rc-fg-muted transition-colors hover:border-rc-info/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring"
+            title="Copy invite link"
+          >
+            <span className="flex-1 truncate">{inviteDisplay || "…"}</span>
+            <span className="text-[10px] uppercase tracking-[0.1em] text-rc-info">
+              {copied ? "copied" : "copy"}
+            </span>
           </div>
         </Link>
+
+        {/* (d) Rules Engine vs CPU: solo, in the browser — open to guests too */}
+        {FEATURE_ENGINE_MODE && (
+          <Link
+            href="/play/engine"
+            className={`${TILE_BASE} border-rc-moonlight/45 bg-rc-moonlight/6 hover:-translate-y-px hover:border-rc-moonlight hover:bg-rc-moonlight/12`}
+          >
+            <div className={`${EYEBROW} text-rc-moonlight`}>solo · experimental</div>
+            <div className="mt-1.5 font-rc-display text-[28px] leading-none text-rc-fg-strong">
+              Rules Engine vs CPU
+            </div>
+            <div className={`${SUB} text-rc-fg-subtle`}>every card enforced</div>
+          </Link>
+        )}
+      </div>
+
+      {/* Learn to Play: a quiet line under the tiles, not a tile of its own */}
+      {isFeatureEnabled("tutorialMode") && (
+        <div className="mt-3 text-center font-rc-mono text-xs tracking-[0.06em] text-rc-fg-subtle">
+          <span className="uppercase tracking-[0.2em] text-rc-success">new here?</span>{" "}
+          <Link
+            href="/tutorial"
+            className="rounded-rc-sm text-rc-fg-strong underline-offset-4 transition-colors hover:text-rc-success hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rc-accent-ring"
+          >
+            Learn to play <span className="text-rc-success">→</span>
+          </Link>{" "}
+          · interactive tutorial · 12 min · no account
+        </div>
       )}
     </div>
   );

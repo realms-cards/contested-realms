@@ -2,7 +2,7 @@
  * Pathfinder Avatar Ability State
  *
  * Pathfinder: Atlas can't contain duplicates. Draw no sites during setup.
- * Tap → Reveal and play the topmost site of your atlas to an adjacent void or Rubble and move there.
+ * Tap → If able, play the topmost site of your atlas to an adjacent location and move there.
  *
  * This module handles the interactive flow for the Pathfinder tap ability:
  * 1. Player taps Pathfinder avatar
@@ -217,17 +217,19 @@ export const createPathfinderSlice: StateCreator<
 
     set({ pendingPathfinderPlay: pending });
 
+    // The topmost atlas site stays face down until it is played: "play the topmost site of your
+    // atlas to an adjacent location" — choose the square first, then see what lands there.
     get().log(
-      `[${who.toUpperCase()}] Pathfinder selecting target for ${topSite.name}`,
+      `[${who.toUpperCase()}] Pathfinder chooses where to play the topmost site of their atlas`,
     );
 
-    // Broadcast to opponent
+    // Broadcast to opponent — without the site: it travels with pathfinderResolve once played
     const transport = get().transport;
     if (transport?.sendMessage) {
       try {
         transport.sendMessage({
           type: "pathfinderBegin",
-          pending,
+          pending: { ...pending, topSite: null },
         } as never);
       } catch {}
     }

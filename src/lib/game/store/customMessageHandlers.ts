@@ -6606,9 +6606,7 @@ export function handleCustomMessage(
 
     try {
       get().log(
-        `[${pending.ownerSeat.toUpperCase()}] Pathfinder selecting target for ${
-          pending.topSite?.name
-        }`,
+        `[${pending.ownerSeat.toUpperCase()}] Pathfinder chooses where to play the topmost site of their atlas`,
       );
     } catch {}
     return;

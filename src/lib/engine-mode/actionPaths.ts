@@ -395,13 +395,17 @@ export function actionPaths(
       case "pickUp": {
         const tile = tileOf(game, action.unitId, viewer);
         const carrier = tokenForEngineId(game, action.unitId, seat, viewer);
-        if (action.unitIds?.length) {
-          const names = action.unitIds.map((id) => game.units[id]?.name ?? "unit").join(", ");
-          paths.push({ action, steps: [carrier, opt(tile, `carry-${action.unitIds.join("+")}`, `Carry ${names}`)] });
-          break;
-        }
-        const names = action.artifactIds.map((id) => game.artifacts[id]?.name ?? "artifact").join(", ");
-        paths.push({ action, steps: [carrier, opt(tile, `pickup-${action.artifactIds.join("+")}`, `Pick up ${names}`)] });
+        // one Pick Up may take artifacts and allies together: "Pick up Lance + carry Squire"
+        const unitIds = action.unitIds ?? [];
+        const artifacts = action.artifactIds.map((id) => game.artifacts[id]?.name ?? "artifact").join(", ");
+        const units = unitIds.map((id) => game.units[id]?.name ?? "unit").join(", ");
+        const label = [artifacts && `Pick up ${artifacts}`, units && (artifacts ? `carry ${units}` : `Carry ${units}`)]
+          .filter(Boolean)
+          .join(" + ");
+        const id = unitIds.length
+          ? `carry-${[...action.artifactIds, ...unitIds].join("+")}`
+          : `pickup-${action.artifactIds.join("+")}`;
+        paths.push({ action, steps: [carrier, opt(tile, id, label)] });
         break;
       }
       case "drop": {

@@ -56,6 +56,8 @@ const REGIONS_WITH_VOID: Region[] = [...REGIONS, "void"];
 const TARGET_COMBO_CAP = 48;
 /** genesis combos are PER SUMMON SQUARE — keep each square's slice small or minions explode */
 const GENESIS_COMBO_CAP = 6;
+/** up to this many artifacts + allies at a location, every Pick Up combination is offered (2^n − 1) */
+const PICKUP_COMBO_ITEMS = 5;
 /** per-call budget for the extra generation; the base generator has its own pacing */
 const EXTRA_BUDGET_MS = 2000;
 
@@ -439,15 +441,32 @@ export function legalActionsWithCasters(state: GameState, me: PlayerId): Action[
   }
 
   // ── carrying and picking up: unit carries, multi-artifact pickups, partial drops ──
+  // Pick Up is once per turn, but that one Pick Up may take any mix of the artifacts and allies at
+  // the unit's location at once — so offer every combination (the trial apply keeps the ones the
+  // carrier can take: capacity, allowed cargo). A big pile only gets singles and "all artifacts".
   for (const unit of myUnits) {
     if (timeUp()) break;
     const here = myUnits.filter((u) => u.id !== unit.id && u.x === unit.x && u.y === unit.y && u.region === unit.region);
-    for (const other of here) offer({ t: "pickUp", unitId: unit.id, artifactIds: [], unitIds: [other.id] });
     for (const carried of unit.carryingUnits) offer({ t: "drop", unitId: unit.id, artifactIds: [], unitIds: [carried] });
     const loose = Object.values(state.artifacts).filter(
       (a) => !a.carriedBy && a.x === unit.x && a.y === unit.y && a.region === unit.region,
     );
-    if (loose.length > 1) offer({ t: "pickUp", unitId: unit.id, artifactIds: loose.map((a) => a.id) });
+    const items = [...loose.map((a) => ({ id: a.id, unit: false })), ...here.map((u) => ({ id: u.id, unit: true }))];
+    if (items.length <= PICKUP_COMBO_ITEMS) {
+      for (let mask = 1; mask < 1 << items.length; mask++) {
+        const pick = items.filter((_, i) => mask & (1 << i));
+        const unitIds = pick.filter((p) => p.unit).map((p) => p.id);
+        offer({
+          t: "pickUp",
+          unitId: unit.id,
+          artifactIds: pick.filter((p) => !p.unit).map((p) => p.id),
+          ...(unitIds.length ? { unitIds } : {}),
+        });
+      }
+    } else {
+      for (const other of here) offer({ t: "pickUp", unitId: unit.id, artifactIds: [], unitIds: [other.id] });
+      if (loose.length > 1) offer({ t: "pickUp", unitId: unit.id, artifactIds: loose.map((a) => a.id) });
+    }
     for (const artifactId of unit.carrying) offer({ t: "drop", unitId: unit.id, artifactIds: [artifactId] });
   }
 

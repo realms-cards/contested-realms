@@ -395,3 +395,34 @@ describe("actionPaths hand abilities", () => {
     expect(narrow(paths, [hand, ability]).done).toEqual(legal.find((a) => isSlime(a, slimy)));
   }, 120_000);
 });
+
+/**
+ * Pick Up is once per turn, but that one Pick Up may take any mix of the artifacts and allies at
+ * the unit's location. The generator used to offer one unit OR the artifacts, never both, so a
+ * carrier that picked up its artifact could no longer take its rider that turn.
+ */
+describe("one Pick Up takes artifacts and allies together", () => {
+  it("offers the artifact and the ally in a single pick-up, and applies it", () => {
+    const g = createGame([toEngineDeck(enginePrecons[0]), toEngineDeck(enginePrecons[1])], ["You", "Computer"], 7, 0 as PlayerId);
+    g.phase = "main";
+    g.activePlayer = 0 as PlayerId;
+    g.prompts = [];
+    const avatar = Object.values(g.units).find((u) => u.isAvatar && u.owner === 0)!;
+    const unit = (id: string, name: string): UnitState =>
+      (g.units[id] = { ...avatar, id, name, cardId: `c_${id}`, isAvatar: false, x: 1, y: 2, region: "surface", tapped: false, counters: {}, modifiers: [], usedThisTurn: {}, carrying: [], carryingUnits: [], carriedBy: null, enteredTurn: -5 } as unknown as UnitState);
+    unit("horse", "War Horse");
+    unit("rider", "Blacksmith Family");
+    g.artifacts["lance"] = { id: "lance", cardId: "c_lance", name: "Lance", x: 1, y: 2, region: "surface", carriedBy: null, conjuredBy: 0, tapped: false } as unknown as GameState["artifacts"][string];
+
+    const both = legalActionsWithCasters(g, 0 as PlayerId).find(
+      (a) => a.t === "pickUp" && a.unitId === "horse" && a.artifactIds.includes("lance") && (a.unitIds ?? []).includes("rider"),
+    );
+    expect(both, "a pick-up of the Lance and the rider together").toBeTruthy();
+    const { labels } = actionPaths(g, [both!]);
+    expect(Object.values(labels)).toContain("Pick up Lance + carry Blacksmith Family");
+
+    expect(applyAction(g, 0 as PlayerId, both!)).toEqual({ ok: true });
+    expect(g.units["horse"].carrying).toEqual(["lance"]);
+    expect(g.units["horse"].carryingUnits).toEqual(["rider"]);
+  });
+});

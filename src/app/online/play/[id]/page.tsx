@@ -2226,7 +2226,11 @@ export default function OnlineMatchPage() {
   // during Setup, so the board doesn't fire a 50+ request burst the moment
   // turn 1 reveals the canvas (failures there left cards face-down until a
   // reload). The canvas stays behind a small loading overlay until done.
-  const [assetsReady, setAssetsReady] = useState(false);
+  // Keyed by match id rather than a boolean: the per-match reset effect below
+  // runs after the release effect on mount, and clearing a boolean there left
+  // spectators (who never prefetch) behind the curtain forever.
+  const [assetsReadyFor, setAssetsReadyFor] = useState<string | null>(null);
+  const assetsReady = !!matchId && assetsReadyFor === matchId;
   const [assetProgress, setAssetProgress] = useState<{
     loaded: number;
     total: number;
@@ -2258,17 +2262,17 @@ export default function OnlineMatchPage() {
     assetPrefetchForRef.current = matchId;
     void prefetchCardImages(slugs, {
       onProgress: (loaded, total) => setAssetProgress({ loaded, total }),
-    }).finally(() => setAssetsReady(true));
+    }).finally(() => setAssetsReadyFor(matchId));
   }, [matchId, isSpectatorView, resolvedSeat, myDeckCardCount]);
   // Never hold the board hostage: if the prefetch didn't run (spectator,
   // empty zones) release immediately; otherwise cap the wait.
   useEffect(() => {
-    if (setupOpen || assetsReady) return undefined;
+    if (!matchId || setupOpen || assetsReady) return undefined;
     if (assetPrefetchForRef.current !== matchId) {
-      setAssetsReady(true);
+      setAssetsReadyFor(matchId);
       return undefined;
     }
-    const t = window.setTimeout(() => setAssetsReady(true), 12000);
+    const t = window.setTimeout(() => setAssetsReadyFor(matchId), 12000);
     return () => window.clearTimeout(t);
   }, [setupOpen, assetsReady, matchId]);
 
@@ -2796,7 +2800,6 @@ export default function OnlineMatchPage() {
     setFinalEndContext(null);
     setSoatcLeagueResult(null);
     setRematchInfo(null);
-    setAssetsReady(false);
     setMatchReady(false);
     setBoardLoadTimedOut(false);
     resetBoardAssets();
