@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { pushLog } from '../../../engine/effects'
-import { orthAdjacentWrapped, unitsAt } from '../../../engine/grid'
+import { adjacentSquaresW, unitsAt } from '../../../engine/grid'
 import { effAttack } from '../../../engine/statics'
 
 // 'Can pick up adjacent weaker enemy minions. They're disabled while carried.'
@@ -13,7 +13,7 @@ registerScript('Bodach Bogeyman', {
     effect: (ctx) => {
       const self = ctx.state.units[ctx.sourceId]
       if (!self) return
-      const prey = orthAdjacentWrapped(ctx.state, self.x, self.y)
+      const prey = adjacentSquaresW(ctx.state, self.x, self.y)
         .flatMap((s) => unitsAt(ctx.state, s.x, s.y, self.region))
         .filter((u) => !u.isAvatar && u.controller !== ctx.controller && !u.carriedBy && effAttack(ctx.state, u) < effAttack(ctx.state, self))
         .map((u) => u.id)

@@ -1,6 +1,6 @@
 import { registerScript, type EffectAPI } from '../registry'
 import { pushLog } from '../../../engine/effects'
-import { orthAdjacentWrapped, siteAt, unitsAt } from '../../../engine/grid'
+import { adjacentSquaresW, siteAt, unitsAt } from '../../../engine/grid'
 import { selfStepsCloser } from '../../../engine/movement'
 
 // 'At the start of your turn, if Unland Angler is submerged, force each enemy
@@ -21,7 +21,7 @@ registerScript('Unland Angler', {
 function anglerNext(ctx: EffectAPI, done: string[]): void {
   const self = ctx.state.units[ctx.sourceId]
   if (!self || self.region !== 'underwater') return
-  const prey = orthAdjacentWrapped(ctx.state, self.x, self.y)
+  const prey = adjacentSquaresW(ctx.state, self.x, self.y)
     .filter((s) => siteAt(ctx.state, s.x, s.y))
     .flatMap((s) => unitsAt(ctx.state, s.x, s.y, 'surface'))
     .find((u) => !u.isAvatar && u.controller !== ctx.controller && !done.includes(u.id))

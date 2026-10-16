@@ -3128,7 +3128,13 @@ export function checkStateBased(state: GameState): void {
           // Spider power washing — a subsurface Root Spider that can't survive its now-flooded site
           if (unit.name === 'Root Spider' && (unit.region === 'underground' || unit.region === 'underwater'))
             awardAchievement(state, 'spider-power-washing', state.activePlayer)
+          // DROWNING is central: a minion that can't exist UNDERWATER (no Submerge) dies BY DROWNING,
+          // however it got there — Drown/forcedSubsurface, a flooding site, a forced relocation into water,
+          // or losing Submerge to disable/silence. Fire onDrowned for EVERY such death (not only trySubmerge),
+          // so Watery Grave and friends hear it. (killUnit already fires death events here, so this is safe.)
+          const drowned = unit.region === 'underwater' ? { ...unit } : null
           killUnit(state, unit.id)
+          if (drowned) { pushLog(state, null, `${drowned.name} drowns!`); emitEvent(state, 'onDrowned', drowned) }
         }
         changed = true
       }

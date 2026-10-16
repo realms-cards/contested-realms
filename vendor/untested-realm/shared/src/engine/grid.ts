@@ -168,6 +168,15 @@ export function nearbySquaresW(state: GameState, x: number, y: number): { x: num
   return neighboursWrapped(state, x, y, NEAR_OFFS)
 }
 
+/** The rules term "adjacent": (bx,by) is (ax,ay)'s OWN square or a square it shares a border with
+ *  (wrap-aware). Rulebook — "Adjacent: the card's own square, and the squares that it shares a border
+ *  with." So a co-located unit (same site) IS adjacent (FAQ: an adjacent enemy sharing the location).
+ *  Use this for every card that says "adjacent" — NOT orthAdjacentWrapped, which omits the own square
+ *  (that one is for movement/placement: a STEP or a site placed on a neighbour, never one's own square). */
+export function isAdjacentW(state: GameState, ax: number, ay: number, bx: number, by: number): boolean {
+  return adjacentSquaresW(state, ax, ay).some((s) => s.x === bx && s.y === by)
+}
+
 export function sameSquare(a: { x: number; y: number }, b: { x: number; y: number }): boolean {
   return a.x === b.x && a.y === b.y
 }

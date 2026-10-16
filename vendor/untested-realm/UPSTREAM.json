@@ -2,6 +2,6 @@
   "source": "fork",
   "repo": "https://github.com/realms-cards/Untested-realm.git",
   "ref": "realms",
-  "commit": "9671fdc4e7970855e736c194ef8d45e209d77128",
-  "upstreamBase": "e2236ef39542c6a9caaa6e448c2c078dca6d2e2c"
+  "commit": "b180da2a89b806a510489e5ba13e6e1e60d5639a",
+  "upstreamBase": "9fdc7d7264906ff0c441a90d796d47673803cee8"
 }

@@ -131,8 +131,10 @@ function chase(ctx: EffectAPI, sharkId: string, preyId: string): void {
   const shark = ctx.state.units[sharkId]
   const prey = ctx.state.units[preyId]
   if (!shark || !prey) return
-  if (shark.x === prey.x && shark.y === prey.y) return fight(ctx, sharkId, preyId)
   const goal: Node = { x: prey.x, y: prey.y, region: prey.region === 'underwater' ? 'underwater' : 'surface' }
+  // already there only if it shares the prey's square AND depth — a Shark below a surface prey on its own
+  // site still has to surface (the vertical step) to fight it
+  if (shark.x === goal.x && shark.y === goal.y && shark.region === goal.region) return fight(ctx, sharkId, preyId)
   const dist = distToGoal(ctx.state, shark, goal)
   const start: Node = { x: shark.x, y: shark.y, region: shark.region }
   if (dist.get(K(start)) === undefined) return // Waterbound: no water path reaches the prey → don't move/fight

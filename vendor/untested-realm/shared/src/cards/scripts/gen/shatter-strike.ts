@@ -1,5 +1,5 @@
 import { registerScript, type EffectAPI } from '../registry'
-import { orthAdjacentWrapped } from '../../../engine/grid'
+import { isAdjacentW } from '../../../engine/grid'
 
 // 'An ally targets an enemy adjacent to them, destroying an artifact they're
 //  carrying and then striking them.'
@@ -15,7 +15,7 @@ registerScript('Shatter Strike', {
     const ally = ctx.state.units[t1.unit]
     const foe = ctx.state.units[t2.unit]
     if (!ally || !foe) return
-    if (!orthAdjacentWrapped(ctx.state, ally.x, ally.y).some((s) => s.x === foe.x && s.y === foe.y)) return ctx.log('They are not adjacent.')
+    if (!isAdjacentW(ctx.state, ally.x, ally.y, foe.x, foe.y)) return ctx.log('They are not adjacent.') // "adjacent" includes the SAME site (rulebook)
     const arts = foe.carrying.filter((id) => ctx.state.artifacts[id])
     if (arts.length <= 1) return shatterResolve(ctx, ally.id, foe.id, arts[0])
     // several carried artifacts → the caster chooses which one to shatter

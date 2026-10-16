@@ -2,7 +2,7 @@ import { getCard, cardSupport, getKeywords } from '../cards/db'
 import { getScript, type CardScript, type TargetRef, type TargetSpec } from '../cards/scripts/registry'
 import type { GameState, PlayerId, Region, Thresholds, UnitState } from './types'
 import { adjacentSquares, adjacentSquaresW, avatarOf, chebyshev, chebyshevW, orthAdjacentWrapped, nearbySquares, nearbySquaresW, siteAt, sitesOf, inBounds, unitsAt, occupies, occupiedSquares, GRID_W, GRID_H, edgesConnected, aura2x2Squares } from './grid'
-import { newId, pushLog, makeCtx, checkStateBased, opponent, emitUnitEnters, emitEvent, isMagicProtected, loseLife, checkWard, pushPrompt, registerCont, runCont, toCemetery, bumpManaSpent, beginAreaReveal, recordAffectedSites, snapshotRealm, recordTouchedSites, sealSpellReveal, setActionCredit, restoreActionCredit, firesGenesisOnEntry, recordManaGain, deferTurnStep, settleEntering, runDamageEvent, notifySilencerEntered } from './effects'
+import { newId, pushLog, makeCtx, checkStateBased, opponent, emitUnitEnters, directionReach, emitEvent, isMagicProtected, loseLife, checkWard, pushPrompt, registerCont, runCont, toCemetery, bumpManaSpent, beginAreaReveal, recordAffectedSites, snapshotRealm, recordTouchedSites, sealSpellReveal, setActionCredit, restoreActionCredit, firesGenesisOnEntry, recordManaGain, deferTurnStep, settleEntering, runDamageEvent, notifySilencerEntered } from './effects'
 import { affinity, effKeywords, isDisabled, disabledByEffect, canExistIn, siteSilenced, siteDisabledByArtifact, artifactSilenced, artScript, zoneAccessToll, applyKeywordString, isArtifactUnit, isEvilUnit, isEvilUnitIntrinsic, isEvilCardName, isEvilCardNameFor, cardSubtypesFor, collectionBanned, payZoneToll, takeFromCollection, carriedInside, isBlanked, isCarriableArtifact, terrainAt } from './statics'
 import { siteEntryAllowed } from './movement'
 import { TRAP_DISGUISE, trapElementOf } from './traps'
@@ -1843,7 +1843,10 @@ function advanceEffectCast(state: GameState, cardId: string): void {
   // Magic
   if (name === 'Chaos Twister') return advanceChaosTwister(state, cardId)
   if (script?.shootsProjectile) {
-    pushPrompt(state, { player: pc.player, kind: 'chooseOption', title: `${label} — which direction?`, data: { options: ['n', 's', 'e', 'w'] }, cont: 'effectcast:dir', ctx: { cardId } })
+    // the same origin + lanes every other n/s/e/w prompt carries (EffectAPI.ask), so a client can draw the
+    // arrows on the board from the caster instead of a detached compass
+    const data = { options: ['n', 's', 'e', 'w'], from: { x: caster.x, y: caster.y }, dirs: directionReach(state, caster.x, caster.y), element: def.elements }
+    pushPrompt(state, { player: pc.player, kind: 'chooseOption', title: `${label} — which direction?`, data, cont: 'effectcast:dir', ctx: { cardId } })
     return
   }
   const specs = script?.targets ?? []

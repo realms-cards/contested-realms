@@ -285,8 +285,8 @@ const COMPASS_SPOT: Record<string, string> = {
   E: "col-start-3 row-start-2",
   W: "col-start-1 row-start-2",
 };
-/** One arrow, turned: 0° points up the screen. */
-const COMPASS_TURN: Record<string, number> = { N: 0, E: 90, S: 180, W: 270 };
+/** One arrow, turned to point its way. game-icons:plain-arrow points DOWN at 0°, so N needs 180°. */
+const COMPASS_TURN: Record<string, number> = { N: 180, E: 270, S: 0, W: 90 };
 
 /**
  * A direction choice drawn as a compass rather than a row of words — the fallback for the

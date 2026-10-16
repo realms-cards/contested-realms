@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { pushLog, checkStateBased, dealDamageToUnit } from '../../../engine/effects'
-import { orthAdjacentWrapped } from '../../../engine/grid'
+import { isAdjacentW } from '../../../engine/grid'
 import { effDefence } from '../../../engine/statics'
 
 // 'Sir Gawain takes damage for other adjacent allies. If he dies from damage
@@ -10,7 +10,7 @@ registerScript('Sir Gawain', {
     if (victim.id === selfId || victim.isAvatar || amount <= 0) return amount
     const gawain = state.units[selfId]
     if (!gawain || gawain.silenced || gawain.controller !== victim.controller) return amount
-    if (!orthAdjacentWrapped(state, gawain.x, gawain.y).some((s) => s.x === victim.x && s.y === victim.y)) return amount
+    if (!isAdjacentW(state, gawain.x, gawain.y, victim.x, victim.y)) return amount
     const controller = gawain.controller
     dealDamageToUnit(state, gawain, amount, source?.player ?? controller, { source })
     checkStateBased(state)

@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { pushLog } from '../../../engine/effects'
 import { effSubtypes } from '../../../engine/statics'
-import { orthAdjacentWrapped } from '../../../engine/grid'
+import { isAdjacentW } from '../../../engine/grid'
 
 // 'Lance. Genesis → Choose an allied Beast. Sir Yvain and his Beast companion
 //  have +2 power while adjacent to each other.'
@@ -22,7 +22,7 @@ registerScript('Sir Yvain', {
     if (!compId) return 0
     const comp = state.units[compId]
     if (!comp) return 0
-    const adjacent = orthAdjacentWrapped(state, self.x, self.y).some((s) => s.x === comp.x && s.y === comp.y)
+    const adjacent = isAdjacentW(state, self.x, self.y, comp.x, comp.y)
     if (!adjacent) return 0
     return other.id === self.id || other.id === compId ? 2 : 0
   },

@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
-import { orthAdjacentWrapped } from '../../../engine/grid'
+import { isAdjacentW } from '../../../engine/grid'
 
 // 'Airborne, Immune to fire damage / Once on your turn, discard a fire card →
 // Deal 3 damage to units at target adjacent location.'
@@ -22,7 +22,7 @@ registerScript('Ignis Rex', {
       const self = ctx.state.units[ctx.sourceId]
       const t = ctx.targets[0]
       if (!self || !t || !('square' in t)) return
-      if (!orthAdjacentWrapped(ctx.state, self.x, self.y).some((s) => s.x === t.square.x && s.y === t.square.y)) return ctx.log('Not adjacent.')
+      if (!isAdjacentW(ctx.state, self.x, self.y, t.square.x, t.square.y)) return ctx.log('Not adjacent.')
       // COST: "discard a fire card" — the controller chooses which when holding several
       const hasFire = ctx.state.players[ctx.controller].hand.some((id) => getCard(ctx.state.cards[id].name).elements.includes('Fire'))
       if (!hasFire) return ctx.log('No fire card to discard.')

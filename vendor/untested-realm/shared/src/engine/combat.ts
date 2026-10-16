@@ -505,11 +505,35 @@ function openDefendWindow(state: GameState, attacker: UnitState, target: { unitI
   })
 }
 
-registerCont('combat:defenders', (state, ctx: FightCtx, choice: string[]) => {
+// A defender's pick: either just the unit id (engine auto-paths it — the bot and the pre-route client send
+// this) or the unit plus a player-DECLARED route to the fight square (validated below). Mixed lists are fine.
+type DefendPick = string | { unitId: string; path?: Step[] }
+
+// Validate a human-declared defender route: every step legal, within the unit's step budget, and ENDING on
+// the fight square (intermediate steps are unrestricted — a unit may leave its site and re-enter). Returns
+// the path if good, else null so the caller falls back to auto-path. Mirrors moveAttack's budget/legality.
+function validDeclaredDefendPath(state: GameState, unit: UnitState, path: Step[] | undefined, dest: Step): Step[] | null {
+  if (!Array.isArray(path) || path.length === 0) return null
+  let cost = 0
+  let cur: Step = { x: unit.x, y: unit.y, region: unit.region }
+  for (const step of path) {
+    if (!isLegalStep(state, unit, cur, step)) return null
+    cost += isFreeStep(state, unit, cur, step) ? 0 : 1
+    cur = step
+  }
+  if (cost > maxSteps(state, unit)) return null
+  const last = path[path.length - 1]
+  return last.x === dest.x && last.y === dest.y && last.region === dest.region ? path : null
+}
+
+registerCont('combat:defenders', (state, ctx: FightCtx, choice: DefendPick[]) => {
   const attacker = state.units[ctx.attackerId]
   if (!attacker) return
   const loc: Step = { x: attacker.x, y: attacker.y, region: attacker.region }
-  let chosen = Array.isArray(choice) ? choice : []
+  // normalize: a bare id becomes an auto-path pick
+  let chosen: { unitId: string; path?: Step[] }[] = (Array.isArray(choice) ? choice : [])
+    .map((c) => (typeof c === 'string' ? { unitId: c } : c))
+    .filter((c): c is { unitId: string; path?: Step[] } => !!c && typeof c.unitId === 'string')
   // Lord of Fear: enemies can't defend alone. FAQ (Oct 2026): a single ADDED defender IS allowed when
   // the originally-attacked unit remains in the fight — then the chosen unit isn't defending alone (the
   // attacked unit fights alongside it). Only a truly lone defender (attack on a site, or the attacked
@@ -525,8 +549,6 @@ registerCont('combat:defenders', (state, ctx: FightCtx, choice: string[]) => {
       chosen = []
     }
   }
-  const reachesLoc = (u: UnitState) =>
-    reachableLocations(state, u).some((s) => s.x === loc.x && s.y === loc.y && s.region === loc.region)
   const atLoc = (u: UnitState | undefined): boolean => !!u && u.x === loc.x && u.y === loc.y && u.region === loc.region
   const commit = (u: UnitState) => {
     tapUnit(state, u)
@@ -543,17 +565,30 @@ registerCont('combat:defenders', (state, ctx: FightCtx, choice: string[]) => {
   // Pass 1 — non-carried defenders (carriers included) tap and WALK to the fight; per-step
   // effects (Wall of Fire, Brambles, enter-square triggers) apply along the way. A carrier
   // that defends drags its cargo along (syncCarried), setting up its riders for Pass 2.
-  for (const id of chosen) {
+  for (const pick of chosen) {
+    const id = pick.unitId
     const u = state.units[id]
     if (!u || u.carriedBy || u.controller === attacker.controller || !canTap(state, u) || isDisabled(state, u)) continue
     if (!atLoc(u)) {
-      if (!reachesLoc(u)) continue
+      // use the player's declared route when valid (ends on the fight square), else auto-path
+      const path = validDeclaredDefendPath(state, u, pick.path, loc) ?? findPath(state, u, loc)
+      if (!path) continue // can't reach the fight
       tapUnit(state, u)
-      const path = findPath(state, u, loc)
-      if (path) resolveMovement(state, u, path)
+      resolveMovement(state, u, path)
       const survivor = state.units[id]
       if (!survivor) { pushLog(state, null, `${u.name} never reaches the fight.`); continue }
       if (!atLoc(survivor)) continue
+      // the arrived defender is now a combatant → exempt from AT-REST disablers (Basilisk/Gorgon) for the
+      // fight. But a NON-at-rest disabler on the fight square (Cold Iron Rod on a Faerie, a Root Spider
+      // burrowed below) disables it regardless, and a disabled unit can't defend — so it doesn't count
+      // (and gives the attacked unit no reason to withdraw).
+      state.flow = state.flow ?? {}
+      state.flow.battleUnits = [...new Set([...(state.flow.battleUnits ?? []), survivor.id])]
+      if (isDisabled(state, survivor)) {
+        state.flow.battleUnits = (state.flow.battleUnits ?? []).filter((bid: string) => bid !== survivor.id)
+        pushLog(state, survivor.controller, `${survivor.name} reaches the fight but is disabled and cannot defend.`)
+        continue
+      }
       breakStealth(state, survivor) // defending breaks Stealth (movement usually already did)
       syncCarried(state, survivor)
       ctx.defenderIds.push(id)
@@ -566,8 +601,8 @@ registerCont('combat:defenders', (state, ctx: FightCtx, choice: string[]) => {
 
   // Pass 2 — a CARRIED minion joins the defense ONLY if its carrier ALSO defended (and so
   // reached the fight, bringing it). A rider chosen without its carrier can't defend alone.
-  for (const id of chosen) {
-    const u = state.units[id]
+  for (const pick of chosen) {
+    const u = state.units[pick.unitId]
     if (!u || !u.carriedBy || u.controller === attacker.controller || !canTap(state, u) || isDisabled(state, u)) continue
     const carrier = state.units[u.carriedBy]
     if (!carrier || !ctx.defenderIds.includes(carrier.id) || !atLoc(u)) continue

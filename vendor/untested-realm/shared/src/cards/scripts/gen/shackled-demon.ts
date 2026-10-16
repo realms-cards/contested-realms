@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { pushLog } from '../../../engine/effects'
 import { effKeywords } from '../../../engine/statics'
-import { orthAdjacentWrapped } from '../../../engine/grid'
+import { isAdjacentW } from '../../../engine/grid'
 
 // 'Disabled until an adjacent Spellcaster taps to release him.'
 registerScript('Shackled Demon', {
@@ -13,7 +13,7 @@ registerScript('Shackled Demon', {
     const self = state.units[selfId]
     if (!self || !self.disabled || unit.id === selfId) return []
     if (!effKeywords(state, unit).spellcaster && !unit.isAvatar) return []
-    if (!orthAdjacentWrapped(state, self.x, self.y).some((s) => s.x === unit.x && s.y === unit.y)) return []
+    if (!isAdjacentW(state, self.x, self.y, unit.x, unit.y)) return [] // "adjacent" includes the same site (rulebook)
     return [{
       key: 'shackles:release',
       label: 'Tap → Release the Shackled Demon',

@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
-import { isWaterSite, orthAdjacentWrapped, siteAt, unitsAt } from '../../../engine/grid'
+import { isWaterSite, adjacentSquaresW, siteAt, unitsAt } from '../../../engine/grid'
 
 // 'Tap → Deal 1 damage to target minion above or below an adjacent water site
 //  and pull that minion to this location.'
@@ -12,7 +12,7 @@ registerScript('Ormund Harpooneers', {
     effect: (ctx) => {
       const self = ctx.state.units[ctx.sourceId]
       if (!self) return
-      const prey = orthAdjacentWrapped(ctx.state, self.x, self.y)
+      const prey = adjacentSquaresW(ctx.state, self.x, self.y)
         .filter((s) => {
           const site = siteAt(ctx.state, s.x, s.y)
           return !!site && isWaterSite(ctx.state, site, getCard)

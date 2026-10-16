@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { pushLog } from '../../../engine/effects'
 import type { PlayerId } from '../../../engine/types'
-import { orthAdjacentWrapped } from '../../../engine/grid'
+import { isAdjacentW } from '../../../engine/grid'
 
 // 'Genesis → If an ally died last turn, Megalurker may drag the killer from an
 //  adjacent site to here.'
@@ -16,7 +16,7 @@ registerScript('Megalurker', {
         .map((d) => d.killerId!)
         .filter((id) => {
           const k = ctx.state.units[id]
-          return k && orthAdjacentWrapped(ctx.state, self.x, self.y).some((s) => s.x === k.x && s.y === k.y)
+          return k && isAdjacentW(ctx.state, self.x, self.y, k.x, k.y)
         }),
     )]
     if (!killers.length) return
