@@ -5,6 +5,7 @@ import {
   artifactCastPlacements,
   canActivate,
   canCast,
+  canExistIn,
   cloneState,
   effKeywords,
   getCard,
@@ -54,6 +55,9 @@ const REGIONS: Region[] = ["surface", "underground", "underwater"];
 /** granted squares can be bare ground — the unit then stands in the void */
 const REGIONS_WITH_VOID: Region[] = [...REGIONS, "void"];
 const TARGET_COMBO_CAP = 48;
+/** a pick anchored to an earlier one (whereOf) multiplies per earlier choice: an ally × its own
+ *  nearby squares — give those casts room, or the later allies' destinations are cut off */
+const DEPENDENT_COMBO_CAP = 160;
 /** genesis combos are PER SUMMON SQUARE — keep each square's slice small or minions explode */
 const GENESIS_COMBO_CAP = 6;
 /** up to this many artifacts + allies at a location, every Pick Up combination is offered (2^n − 1) */
@@ -61,7 +65,8 @@ const PICKUP_COMBO_ITEMS = 5;
 /** per-call budget for the extra generation; the base generator has its own pacing */
 const EXTRA_BUDGET_MS = 2000;
 
-type TargetSpecLike = { what?: string; count?: number; upTo?: boolean };
+/** `whereOf` anchors a pick's range to an EARLIER target (Blink: "a location it's nearby" = the ally). */
+type TargetSpecLike = { what?: string; count?: number; upTo?: boolean; whereOf?: number };
 
 function accepted(state: GameState, player: PlayerId, action: Action): boolean {
   try {
@@ -95,10 +100,23 @@ function extraMinionSquares(state: GameState, player: PlayerId): { x: number; y:
   return [...out.values()];
 }
 
-/** Valid target-id combinations for `specs` as seen from `anchor` (mirrors upstream castTargetCombos). */
-function targetCombos(state: GameState, me: PlayerId, specs: TargetSpecLike[], anchor: UnitState, cap = TARGET_COMBO_CAP): string[][] {
-  const candidates = (spec: TargetSpecLike): string[] => {
-    let raw: { id: string; ref: object }[];
+/** Valid target-id combinations for `specs` as seen from `anchor` (mirrors upstream castTargetCombos).
+ *  Targets are built IN ORDER and each pick is validated with the picks before it, so a range anchored
+ *  to an earlier target (`whereOf` — Blink's "a location it's nearby") is measured from that target,
+ *  not from the caster. */
+function targetCombos(
+  state: GameState,
+  me: PlayerId,
+  specs: TargetSpecLike[],
+  anchor: UnitState,
+  cap = TARGET_COMBO_CAP,
+  /** the square anchored to a unit is where that unit is SENT (a teleport: Blink) — only offer the
+   *  regions it can exist in; the others always fail the trial apply and just cost time */
+  destinationOfAnchor = false,
+): string[][] {
+  type Candidate = { id: string; ref: object };
+  const candidates = (spec: TargetSpecLike, picked: object[]): Candidate[] => {
+    let raw: Candidate[];
     if (spec.what === "site") {
       raw = Object.values(state.sites).filter((s) => !s.isRubble).map((s) => ({ id: s.id, ref: { site: s.id } }));
     } else if (spec.what === "artifact") {
@@ -116,10 +134,14 @@ function targetCombos(state: GameState, me: PlayerId, specs: TargetSpecLike[], a
     } else {
       raw = Object.values(state.units).filter((u) => !u.carriedBy).map((u) => ({ id: u.id, ref: { unit: u.id } }));
     }
-    const out: string[] = [];
+    const anchorRef = spec.whereOf != null ? (picked[spec.whereOf] as { unit?: string } | undefined) : undefined;
+    const sent = destinationOfAnchor && anchorRef?.unit ? state.units[anchorRef.unit] : undefined;
+    const out: Candidate[] = [];
     for (const c of raw) {
+      const square = (c.ref as { square?: { x: number; y: number; region: Region } }).square;
+      if (sent && square && !canExistIn(state, sent, square.region, square.x, square.y)) continue;
       try {
-        if (validateTarget(state, spec as never, c.ref as never, anchor, me) === null) out.push(c.id);
+        if (validateTarget(state, spec as never, c.ref as never, anchor, me, picked as never) === null) out.push(c);
       } catch {
         // not a legal target
       }
@@ -127,29 +149,33 @@ function targetCombos(state: GameState, me: PlayerId, specs: TargetSpecLike[], a
     return out;
   };
 
-  let combos: string[][] = [[]];
+  const limit = specs.some((spec) => spec.whereOf != null) ? Math.max(cap, DEPENDENT_COMBO_CAP) : cap;
+  let combos: Candidate[][] = [[]];
   for (const spec of specs) {
-    const ids = candidates(spec);
+    // an independent pick has the same candidates whatever came before; a dependent one is re-derived
+    const shared = spec.whereOf == null ? candidates(spec, []) : null;
     const n = spec.count ?? 1;
-    const picks: string[][] = spec.upTo ? [[]] : [];
-    if (n <= 1) for (const id of ids) picks.push([id]);
-    else {
-      const pick = (start: number, acc: string[]): void => {
-        if (picks.length >= cap) return;
-        if (acc.length === n) return void picks.push([...acc]);
-        for (let i = start; i < ids.length; i++) pick(i + 1, [...acc, ids[i]]);
-      };
-      pick(0, []);
-    }
-    const next: string[][] = [];
-    outer: for (const base of combos)
+    const next: Candidate[][] = [];
+    outer: for (const base of combos) {
+      const ids = shared ?? candidates(spec, base.map((c) => c.ref));
+      const picks: Candidate[][] = spec.upTo ? [[]] : [];
+      if (n <= 1) for (const c of ids) picks.push([c]);
+      else {
+        const pick = (start: number, acc: Candidate[]): void => {
+          if (picks.length >= limit) return;
+          if (acc.length === n) return void picks.push([...acc]);
+          for (let i = start; i < ids.length; i++) pick(i + 1, [...acc, ids[i]]);
+        };
+        pick(0, []);
+      }
       for (const p of picks) {
         next.push([...base, ...p]);
-        if (next.length >= cap) break outer;
+        if (next.length >= limit) break outer;
       }
+    }
     combos = next.length ? next : [[]];
   }
-  return combos;
+  return combos.map((combo) => combo.map((c) => c.id));
 }
 
 type Square = { x: number; y: number; region: Region };
@@ -238,7 +264,7 @@ function castCandidates(
   const script = getScript(def.name);
   if (def.type === "Magic") {
     const specs = (script?.targets ?? []) as TargetSpecLike[];
-    const combos = specs.length ? targetCombos(state, me, specs, caster) : [[]];
+    const combos = specs.length ? targetCombos(state, me, specs, caster, TARGET_COMBO_CAP, !!script?.teleportPlacement) : [[]];
     // Chaos Twister consumes the card even without extra.origin/direction (it "fizzles"), so a
     // bare cast is a trap for a human — generate only the real blows, from the minion's square.
     if (script?.shootsProjectile) {

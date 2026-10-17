@@ -1,4 +1,4 @@
-import { applyAction, cloneState, createGame, getCard, legalActions, occupiedSquares, orthAdjacentWrapped, validateSummonAt } from "@sorcery/shared";
+import { applyAction, cloneState, createGame, getCard, legalActions, nearbySquaresW, occupiedSquares, orthAdjacentWrapped, validateSummonAt } from "@sorcery/shared";
 import type { Action, GameState, PlayerId, Region, UnitState } from "@sorcery/shared";
 import { botAction, botNeedsToAct } from "@untested-realm/bot/bot";
 import { describe, expect, it } from "vitest";
@@ -424,5 +424,46 @@ describe("one Pick Up takes artifacts and allies together", () => {
     expect(applyAction(g, 0 as PlayerId, both!)).toEqual({ ok: true });
     expect(g.units["horse"].carrying).toEqual(["lance"]);
     expect(g.units["horse"].carryingUnits).toEqual(["rider"]);
+  });
+});
+
+/**
+ * Blink: "An ally teleports to a location it's nearby." The destination is nearby the ALLY (the
+ * script's `whereOf: 0`). The generator validated every pick against the CASTER, so an ally away
+ * from the avatar was only offered the few squares near both — "only lets me teleport to some
+ * sites, not all nearby". (A 48-combination cap also cut later allies short on a crowded board;
+ * dependent picks now get a larger one.)
+ */
+describe("Blink offers every location nearby the chosen ally", () => {
+  it("measures the destination from the ally, for every ally", () => {
+    const g = createGame([toEngineDeck(enginePrecons[0]), toEngineDeck(enginePrecons[1])], ["You", "Computer"], 7, 0 as PlayerId);
+    g.phase = "main";
+    g.activePlayer = 0 as PlayerId;
+    g.prompts = [];
+    const avatar = Object.values(g.units).find((u) => u.isAvatar && u.owner === 0)!;
+    // unit target ids are read by prefix ("u…"), so the allies are named that way
+    // sites everywhere, so every nearby location of an ally is a real destination
+    for (let x = 0; x < 5; x++)
+      for (let y = 0; y < 4; y++)
+        if (!Object.values(g.sites).some((s) => s.x === x && s.y === y))
+          g.sites[`s${x}${y}`] = { id: `s${x}${y}`, cardId: `cs${x}${y}`, name: "Spire", owner: 0, controller: 0, x, y, tapped: false, isRubble: false } as unknown as GameState["sites"][string];
+    const ally = (id: string, x: number, y: number): UnitState => {
+      g.cards[`c_${id}`] = { id: `c_${id}`, name: "Blacksmith Family", owner: 0 } as unknown as GameState["cards"][string];
+      return (g.units[id] = { ...avatar, id, name: "Blacksmith Family", cardId: `c_${id}`, isAvatar: false, x, y, region: "surface", tapped: false, counters: {}, modifiers: [], usedThisTurn: {}, carrying: [], carryingUnits: [], carriedBy: null, enteredTurn: -5 } as unknown as UnitState);
+    };
+    const far = ally("ufar", avatar.x === 0 ? 4 : 0, avatar.y === 0 ? 3 : 0);
+    // a couple of other allies, so the far one is not simply the only choice
+    ally("ua0", 1, 1);
+    ally("ua1", 3, 2);
+    g.cards["c_blink"] = { id: "c_blink", name: "Blink", owner: 0 } as unknown as GameState["cards"][string];
+    g.players[0].hand.push("c_blink");
+    g.players[0].mana = 9;
+
+    const dests = legalActionsWithCasters(g, 0 as PlayerId)
+      .filter((a) => a.t === "castSpell" && a.cardId === "c_blink" && a.targets?.[0] === "ufar")
+      .map((a) => (a as { targets: string[] }).targets[1]);
+    const offered = [...new Set(dests.map((d) => d.slice(3).split(",").slice(0, 2).join(",")))].sort();
+    const nearby = nearbySquaresW(g, far.x, far.y).map((sq) => `${sq.x},${sq.y}`).sort();
+    expect(offered, "every location nearby the ally, measured from the ally").toEqual(nearby);
   });
 });

@@ -18,9 +18,9 @@ import upstream from "../../vendor/untested-realm/UPSTREAM.json";
  * Bump whenever shared/engine changes, then update ENGINE_RULES_FINGERPRINT. Enforced by
  * tests/server/engine-build.test.ts, which fails when the files no longer match it.
  */
-export const ENGINE_RULES_REVISION = 5;
+export const ENGINE_RULES_REVISION = 6;
 
 /** sha256 (first 16 hex) of shared/engine/*.ts, build.ts and tests excluded, at this revision. */
-export const ENGINE_RULES_FINGERPRINT = "e035fd096af3a8f0";
+export const ENGINE_RULES_FINGERPRINT = "32151d88686936e3";
 
 export const ENGINE_BUILD = `${upstream.commit.slice(0, 12)}.r${ENGINE_RULES_REVISION}`;
