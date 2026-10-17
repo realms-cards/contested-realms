@@ -3,6 +3,19 @@
 import { useState, useEffect, useMemo } from "react";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { RcButton } from "@/components/ui/rc-button";
+import {
+  fetchPublicDecks,
+  fetchTopDecks,
+  isTop8Value,
+  resolveDeckLink,
+  top8Label,
+  top8Title,
+  top8Url,
+  top8Value,
+  type PublicDeckListEntry,
+  type SummitTopDecks,
+} from "@/lib/decks/deckCategories";
+import type { PlayerKey } from "@/lib/game/store";
 
 type MyDeckInfo = {
   id: string;
@@ -19,6 +32,10 @@ type PublicDeckInfo = {
   imported?: boolean;
   userName: string;
 };
+
+/** picker entries that are actions, not decks */
+const LOAD_PUBLIC = "__load_public__";
+const NO_PUBLIC = "__no_public__";
 
 interface DeckSelectorProps {
   onPrepareComplete: (options: { enableSeer: boolean }) => void;
@@ -41,6 +58,62 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
   const [deckErrP1, setDeckErrP1] = useState<string | null>(null);
   const [deckErrP2, setDeckErrP2] = useState<string | null>(null);
   const [decksLoaded, setDecksLoaded] = useState<boolean>(false);
+  // the latest offline event's top 8 (links, resolved when loaded) and, only once asked for,
+  // other players' public decks
+  const [topDecks, setTopDecks] = useState<SummitTopDecks | null>(null);
+  const [otherPublic, setOtherPublic] = useState<PublicDeckListEntry[] | null>(null);
+  const [otherPublicLoading, setOtherPublicLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchTopDecks().then((top) => {
+      if (!cancelled) setTopDecks(top);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadOtherPublic = async () => {
+    if (otherPublicLoading || otherPublic) return;
+    setOtherPublicLoading(true);
+    try {
+      setOtherPublic(await fetchPublicDecks());
+    } catch {
+      setOtherPublic([]);
+    } finally {
+      setOtherPublicLoading(false);
+    }
+  };
+
+  /** Your decks, the precons, the latest top 8 and other players' public decks (once asked for). */
+  const options = useMemo(
+    () => [
+      ...myDecks.map((d) => ({ value: d.id, label: `${d.name} (${d.format})`, group: "Your decks" })),
+      ...(includePublic
+        ? publicDecks.map((d) => ({ value: d.id, label: `${d.name} (${d.format})`, group: "Precons" }))
+        : []),
+      ...(topDecks
+        ? topDecks.decks.map((d) => ({ value: top8Value(d), label: top8Label(d), group: top8Title(topDecks) }))
+        : []),
+      ...(otherPublic === null
+        ? [{
+            value: LOAD_PUBLIC,
+            label: otherPublicLoading ? "Loading public decks…" : "Show other players' public decks…",
+            group: "Public decks",
+          }]
+        : otherPublic.length
+          ? otherPublic.map((d) => ({ value: d.id, label: `${d.name} — ${d.userName} (${d.format})`, group: "Public decks" }))
+          : [{ value: NO_PUBLIC, label: "No public decks from other players yet", group: "Public decks" }]),
+    ],
+    [myDecks, publicDecks, includePublic, topDecks, otherPublic, otherPublicLoading],
+  );
+
+  const pick = (set: (v: string) => void) => (v: string) => {
+    if (v === LOAD_PUBLIC) return void loadOtherPublic();
+    if (v === NO_PUBLIC) return;
+    set(v);
+  };
 
   const isPreconP1 = useMemo(
     () => !!deckIdP1 && publicDecks.some((d) => d.id === deckIdP1),
@@ -74,8 +147,19 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
     })();
   }, []);
 
+  /** A saved deck loads by id; a top-8 deck is resolved from its link (nothing is saved). */
+  const loadSelected = async (who: PlayerKey, value: string, setErr: (e: string | null) => void) => {
+    const { loadDeckFor, loadDeckFromData } = await import("@/lib/game/deckLoader");
+    if (!isTop8Value(value)) return loadDeckFor(who, value, setErr);
+    try {
+      return await loadDeckFromData(who, await resolveDeckLink(top8Url(value)), setErr);
+    } catch (err) {
+      setErr(err instanceof Error ? err.message : "Could not load deck");
+      return false;
+    }
+  };
+
   const prepareHands = async () => {
-    const { loadDeckFor } = await import("@/lib/game/deckLoader");
     const { useGameStore } = await import("@/lib/game/store");
 
     setDeckErrP1(null);
@@ -83,8 +167,8 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
 
     if (!deckIdP1 || !deckIdP2) return;
 
-    const ok1 = await loadDeckFor("p1", deckIdP1, setDeckErrP1);
-    const ok2 = await loadDeckFor("p2", deckIdP2, setDeckErrP2);
+    const ok1 = await loadSelected("p1", deckIdP1, setDeckErrP1);
+    const ok2 = await loadSelected("p2", deckIdP2, setDeckErrP2);
 
     if (ok1 && ok2) {
       useGameStore.getState().setPhase("Start");
@@ -96,7 +180,8 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
     <div className="grid w-full max-w-5xl grid-cols-1 gap-6 rounded-rc-lg border border-rc-line/18 bg-[rgba(9,13,25,0.9)] p-6 text-rc-fg shadow-rc-panel md:grid-cols-2">
       <div className="md:col-span-2 flex items-center justify-between gap-4">
         <div className="font-rc-sans text-sm text-rc-fg-muted">
-          Select decks for both players. Optionally include precon decks.
+          Select decks for both players: your own, the precons, the latest top 8 or other
+          players&apos; public decks.
         </div>
         <label className="rc-check flex text-[13px]">
           <input
@@ -113,7 +198,7 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
               } catch {}
             }}
           />
-          Include precon decks
+          Include precons
         </label>
       </div>
 
@@ -127,20 +212,9 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
           <CustomSelect
             className="w-full"
             value={deckIdP1}
-            onChange={(v) => setDeckIdP1(v)}
+            onChange={pick(setDeckIdP1)}
             placeholder="Select…"
-            options={[
-              ...myDecks.map((d) => ({
-                value: d.id,
-                label: `${d.name} (${d.format})`,
-              })),
-              ...(includePublic
-                ? publicDecks.map((d) => ({
-                    value: d.id,
-                    label: `[Precon] ${d.name} (${d.format})`,
-                  }))
-                : []),
-            ]}
+            options={options}
           />
         )}
         {deckErrP1 && (
@@ -164,20 +238,9 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
           <CustomSelect
             className="w-full"
             value={deckIdP2}
-            onChange={(v) => setDeckIdP2(v)}
+            onChange={pick(setDeckIdP2)}
             placeholder="Select…"
-            options={[
-              ...myDecks.map((d) => ({
-                value: d.id,
-                label: `${d.name} (${d.format})`,
-              })),
-              ...(includePublic
-                ? publicDecks.map((d) => ({
-                    value: d.id,
-                    label: `[Precon] ${d.name} (${d.format})`,
-                  }))
-                : []),
-            ]}
+            options={options}
           />
         )}
         {deckErrP2 && (

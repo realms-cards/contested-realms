@@ -9,9 +9,16 @@ import { CustomSelect } from "@/components/ui/CustomSelect";
 import { PageHeader, PanelHeader } from "@/components/ui/page-header";
 import { RcButton, RcLinkButton } from "@/components/ui/rc-button";
 import { RcEmpty } from "@/components/ui/rc-empty";
+import {
+  fetchPublicDecks,
+  fetchTopDecks,
+  type PublicDeckListEntry,
+  type SummitTopDecks,
+} from "@/lib/decks/deckCategories";
 import DeckImportCuriosa from "./DeckImportCuriosa";
 import DeckImportText from "./DeckImportText";
 import DeckItem from "./DeckItem";
+import TopDecksSection from "./TopDecksSection";
 
 type AvatarSummary = {
   avatarState: "none" | "single" | "multiple";
@@ -135,6 +142,33 @@ export default function DecksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
+  // the latest offline event's top 8, and other players' public decks (only once asked for)
+  const [topDecks, setTopDecks] = useState<SummitTopDecks | null>(null);
+  const [otherPublic, setOtherPublic] = useState<PublicDeckListEntry[] | null>(null);
+  const [otherPublicLoading, setOtherPublicLoading] = useState(false);
+  const [otherPublicError, setOtherPublicError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchTopDecks().then((top) => {
+      if (!cancelled) setTopDecks(top);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadOtherPublic = async () => {
+    setOtherPublicLoading(true);
+    setOtherPublicError(null);
+    try {
+      setOtherPublic(await fetchPublicDecks());
+    } catch (e) {
+      setOtherPublicError(e instanceof Error ? e.message : "Could not load public decks");
+    } finally {
+      setOtherPublicLoading(false);
+    }
+  };
 
   // Filter state
   const [filterFormat, setFilterFormat] = useState<string>("all");
@@ -586,7 +620,7 @@ export default function DecksPage() {
           {publicDecks.length > 0 && (
             <section className="rc-panel">
               <PanelHeader
-                title="Public Decks"
+                title="Precons"
                 meta={`${sortedPublicDecks.length} decks`}
               />
               <div className={`px-[18px] py-3.5 ${listClassName}`}>
@@ -611,6 +645,45 @@ export default function DecksPage() {
               </div>
             </section>
           )}
+
+          {topDecks && <TopDecksSection top={topDecks} onImported={() => void fetchDecks(true)} />}
+
+          <section className="rc-panel">
+            <PanelHeader
+              title="Public Decks"
+              meta={otherPublic ? `${otherPublic.length} decks from other players` : "other players' public decks"}
+            />
+            {otherPublic === null ? (
+              <div className="flex flex-wrap items-center gap-3 px-[18px] py-3.5">
+                <RcButton variant="outline" size="sm" disabled={otherPublicLoading} onClick={() => void loadOtherPublic()}>
+                  {otherPublicLoading ? "Loading…" : "Show public decks"}
+                </RcButton>
+                {otherPublicError && <span className="rc-hint text-rc-danger">{otherPublicError}</span>}
+              </div>
+            ) : otherPublic.length === 0 ? (
+              <div className="rc-hint px-[18px] py-3.5">No public decks from other players yet.</div>
+            ) : (
+              <div className={`px-[18px] py-3.5 ${listClassName}`}>
+                {otherPublic.map((d) => (
+                  <DeckItem
+                    key={d.id}
+                    deck={{
+                      id: d.id,
+                      name: d.name,
+                      format: d.format,
+                      userName: d.userName,
+                      avatarState: d.avatarState,
+                      avatarCard: d.avatarCard,
+                      updatedAt: d.updatedAt,
+                      isPublic: true,
+                      isOwner: false,
+                    }}
+                    variant={viewMode}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       )}
     </OnlinePageShell>

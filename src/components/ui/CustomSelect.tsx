@@ -7,6 +7,8 @@ import { createPortal } from "react-dom";
 export interface CustomSelectOption {
   value: string;
   label: string;
+  /** a section header is shown above the first option of each run of the same group */
+  group?: string;
 }
 
 export interface CustomSelectProps {
@@ -48,7 +50,8 @@ export function CustomSelect({
   useEffect(() => {
     if (isOpen && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
-      const estimatedHeight = Math.min(options.length * 36, 192); // max-h-48 = 192px
+      const groups = new Set(options.map((o) => o.group).filter(Boolean)).size;
+      const estimatedHeight = Math.min((options.length + groups) * 36, 192); // max-h-48 = 192px
       const spaceBelow = window.innerHeight - rect.bottom - 4;
       const openAbove =
         spaceBelow < estimatedHeight && rect.top > estimatedHeight;
@@ -59,7 +62,7 @@ export function CustomSelect({
         width: Math.max(rect.width, 160),
       });
     }
-  }, [isOpen, options.length]);
+  }, [isOpen, options]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -150,9 +153,10 @@ export function CustomSelect({
   // Scroll highlighted option into view
   useEffect(() => {
     if (isOpen && listRef.current && highlightedIndex >= 0) {
-      const highlightedElement = listRef.current.children[
-        highlightedIndex
-      ] as HTMLElement;
+      // section headers sit between the options, so find the option by its index, not its position
+      const highlightedElement = listRef.current.querySelector(
+        `[data-option-index="${highlightedIndex}"]`,
+      ) as HTMLElement | null;
       if (highlightedElement) {
         highlightedElement.scrollIntoView({ block: "nearest" });
       }
@@ -210,9 +214,19 @@ export function CustomSelect({
             }}
             role="listbox"
           >
-            {options.map((option, index) => (
+            {options.map((option, index) => [
+              option.group && option.group !== options[index - 1]?.group ? (
+                <div
+                  key={`__group__${index}`}
+                  className="rc-eyebrow px-3 pb-0.5 pt-2 text-[10px] text-rc-fg-subtle"
+                  role="presentation"
+                >
+                  {option.group}
+                </div>
+              ) : null,
               <div
                 key={option.value || "__none__"}
+                data-option-index={index}
                 className={`
                   cursor-pointer px-3 py-1.5 font-rc-mono text-[13px]
                   transition-colors duration-100
@@ -226,8 +240,8 @@ export function CustomSelect({
                 aria-selected={option.value === value}
               >
                 {option.label}
-              </div>
-            ))}
+              </div>,
+            ])}
           </div>,
           document.body,
         )}

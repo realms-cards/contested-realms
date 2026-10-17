@@ -5,6 +5,7 @@ import {
   formatValidationErrors,
   validateDeck,
 } from "@/lib/deck/validation-rules";
+import { deckAvatarSummaries, type AvatarSummary } from "@/lib/decks/avatarSummary.server";
 import { getRequestPrincipal } from "@/lib/guest/request-principal.server";
 import { logPerformance } from "@/lib/monitoring/performance";
 import { prisma } from "@/lib/prisma";
@@ -12,10 +13,7 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 // Cache avatar metadata for a short time to improve performance
-type AvatarCacheValue = {
-  state: "none" | "single" | "multiple";
-  avatarCard?: { name: string; slug: string | null };
-};
+type AvatarCacheValue = AvatarSummary;
 
 const avatarCache = new Map<
   string,
@@ -128,72 +126,8 @@ export async function GET() {
 
         // Only fetch avatar info for uncached decks
         if (uncachedIds.length > 0) {
-          // Optimized query: fetch deck cards with avatar type
-          // Use raw query for better performance on large datasets
-          const avatarCards = await prisma.$queryRaw<
-            Array<{
-              deckId: string;
-              count: number;
-              cardName: string;
-              variantSlug: string | null;
-            }>
-          >`
-            SELECT 
-              dc."deckId",
-              dc.count,
-              c.name as "cardName",
-              v.slug as "variantSlug"
-            FROM "DeckCard" dc
-            JOIN "Variant" v ON dc."variantId" = v.id
-            JOIN "Card" c ON dc."cardId" = c.id
-            JOIN "CardSetMetadata" csm ON dc."cardId" = csm."cardId" AND v."setId" = csm."setId"
-            WHERE dc."deckId" = ANY(${uncachedIds})
-              AND dc.zone IN ('Spellbook', 'Atlas', 'Sideboard')
-              AND csm.type ILIKE '%Avatar%'
-          `;
-
-          type AvatarCardRow = (typeof avatarCards)[number];
-          const avatarCardsByDeck = new Map<string, AvatarCardRow[]>();
-          for (const entry of avatarCards) {
-            const arr = avatarCardsByDeck.get(entry.deckId);
-            if (arr) {
-              arr.push(entry);
-            } else {
-              avatarCardsByDeck.set(entry.deckId, [entry]);
-            }
-          }
-
-          for (const deckId of uncachedIds) {
-            const entries = avatarCardsByDeck.get(deckId) ?? [];
-            const totalCount = entries.reduce(
-              (sum, item) => sum + item.count,
-              0
-            );
-
-            let summary: AvatarCacheValue;
-            if (totalCount === 1) {
-              const avatarEntry =
-                entries.find((item) => item.count > 0) ?? entries[0];
-              if (avatarEntry?.cardName) {
-                const slug = avatarEntry.variantSlug
-                  ? avatarEntry.variantSlug.toLowerCase()
-                  : null;
-                summary = {
-                  state: "single",
-                  avatarCard: {
-                    name: avatarEntry.cardName,
-                    slug,
-                  },
-                };
-              } else {
-                summary = { state: "single" };
-              }
-            } else if (totalCount > 1) {
-              summary = { state: "multiple" };
-            } else {
-              summary = { state: "none" };
-            }
-
+          const fresh = await deckAvatarSummaries(uncachedIds);
+          for (const [deckId, summary] of fresh) {
             avatarCache.set(deckId, { summary, timestamp: now });
             avatarSummaryByDeckId.set(deckId, summary);
           }

@@ -2093,7 +2093,7 @@ export default function TournamentDetailsPage() {
                       } catch {}
                     }}
                   />
-                  Include public decks
+                  Include precons
                 </label>
                 {/* Curiosa Import Section */}
                 <div className="mb-3">
@@ -2288,7 +2288,7 @@ export default function TournamentDetailsPage() {
                     {includePublicDecks &&
                       constructedPublicDecks.length > 0 && (
                         <div>
-                          <div className="rc-eyebrow mb-1">Public Decks</div>
+                          <div className="rc-eyebrow mb-1">Precons</div>
                           <div className="flex flex-col gap-2">
                             {constructedPublicDecks.map((d) => (
                               <div
@@ -3247,7 +3247,7 @@ export default function TournamentDetailsPage() {
                       }
                     }}
                   />
-                  Include public decks
+                  Include precons
                 </label>
               </div>
               {constructedLoading ? (
@@ -3306,7 +3306,7 @@ export default function TournamentDetailsPage() {
                   )}
                   {includePublicDecks && constructedPublicDecks.length > 0 && (
                     <div>
-                      <div className="rc-eyebrow mb-1">Public Decks</div>
+                      <div className="rc-eyebrow mb-1">Precons</div>
                       <div className="flex flex-col gap-2">
                         {constructedPublicDecks.map((d) => (
                           <div

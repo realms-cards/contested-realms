@@ -5,6 +5,18 @@ import { useOnline } from "@/app/online/online-context";
 import GoldfishCoverage from "@/components/game/GoldfishCoverage";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { RcButton } from "@/components/ui/rc-button";
+import {
+  fetchPublicDecks,
+  fetchTopDecks,
+  isTop8Value,
+  resolveDeckLink,
+  top8Label,
+  top8Title,
+  top8Url,
+  top8Value,
+  type PublicDeckListEntry,
+  type SummitTopDecks,
+} from "@/lib/decks/deckCategories";
 import { readGoldfishDeck, saveGoldfishDeck, type GoldfishDeckSnapshot } from "@/lib/game/cpu/goldfishTesting";
 import { betaPrecons } from "@/lib/game/cpu/precons";
 import type { DeckLoadPayload } from "@/lib/game/deckLoader";
@@ -25,6 +37,10 @@ type PublicDeckInfo = {
   imported?: boolean;
   userName: string;
 };
+
+/** picker entries that are actions, not decks */
+const LOAD_PUBLIC = "__load_public__";
+const NO_PUBLIC = "__no_public__";
 
 interface OnlineDeckSelectorProps {
   myPlayerKey: PlayerKey;
@@ -70,6 +86,11 @@ export default function OnlineDeckSelector({
   // Guests have no saved decks: besides the precons they can paste a
   // sorcerytcg.com / Four Cores URL that is resolved on the fly, never stored.
   const [guestUrl, setGuestUrl] = useState("");
+  // the latest offline event's top 8 (links, resolved when picked) and, only once asked for,
+  // other players' public decks
+  const [topDecks, setTopDecks] = useState<SummitTopDecks | null>(null);
+  const [otherPublic, setOtherPublic] = useState<PublicDeckListEntry[] | null>(null);
+  const [otherPublicLoading, setOtherPublicLoading] = useState(false);
 
   const isConstructed = (matchType ?? "constructed") === "constructed";
   const isPrecon = cpuPreconsOnly || matchType === "precon";
@@ -79,6 +100,29 @@ export default function OnlineDeckSelector({
     if (cpuPreconsOnly) return betaPrecons;
     return publicDecks.filter((d) => d.name.toLowerCase().includes("precon"));
   }, [publicDecks, cpuPreconsOnly]);
+
+  useEffect(() => {
+    if (cpuPreconsOnly || matchType === "precon") return;
+    let cancelled = false;
+    void fetchTopDecks().then((top) => {
+      if (!cancelled) setTopDecks(top);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cpuPreconsOnly, matchType]);
+
+  const loadOtherPublic = async () => {
+    if (otherPublicLoading || otherPublic) return;
+    setOtherPublicLoading(true);
+    try {
+      setOtherPublic(await fetchPublicDecks());
+    } catch {
+      setDeckError("Could not load public decks");
+    } finally {
+      setOtherPublicLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (cpuPreconsOnly) { setDecksLoaded(true); return; }
@@ -129,6 +173,13 @@ export default function OnlineDeckSelector({
     setDeckError(null);
 
     try {
+      if (isTop8Value(selectedDeck)) {
+        const deck = await resolveDeckLink(top8Url(selectedDeck));
+        if (goldfishTesting) { await reviewDeck(deck,selectedDeckMeta?.name || "Top 8 deck"); return; }
+        const { loadDeckFromData } = await import("@/lib/game/deckLoader");
+        if (await loadDeckFromData(myPlayerKey, deck, setDeckError)) await finishPrepare();
+        return;
+      }
       if (goldfishTesting) {
         const response = await fetch(`/api/decks/${encodeURIComponent(selectedDeck)}`,{cache:"no-store"});
         if (!response.ok) { setDeckError("Failed to load deck"); return; }
@@ -150,8 +201,8 @@ export default function OnlineDeckSelector({
         setDeckError
       );
       if (success) await finishPrepare();
-    } catch {
-      setDeckError("Failed to load deck");
+    } catch (err) {
+      setDeckError(err instanceof Error && err.message ? err.message : "Failed to load deck");
     } finally {
       setIsLoading(false);
     }
@@ -165,22 +216,11 @@ export default function OnlineDeckSelector({
     setDeckError(null);
 
     try {
-      const res = await fetch("/api/guest/deck", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const unresolved = Array.isArray(data?.unresolved)
-          ? (data.unresolved as Array<{ name: string }>)
-              .map((c) => c.name)
-              .slice(0, 5)
-              .join(", ")
-          : "";
-        const msg =
-          typeof data?.error === "string" ? data.error : "Could not load deck";
-        setDeckError(unresolved ? `${msg}: ${unresolved}` : msg);
+      let data: DeckLoadPayload;
+      try {
+        data = await resolveDeckLink(url);
+      } catch (err) {
+        setDeckError(err instanceof Error ? err.message : "Could not load deck");
         return;
       }
       const { loadDeckFromData } = await import("@/lib/game/deckLoader");
@@ -199,8 +239,12 @@ export default function OnlineDeckSelector({
     const mine = myDecks.find((d) => d.id === selectedDeck) || null;
     if (mine) return mine;
     const pub = publicDecks.find((d) => d.id === selectedDeck) || null;
-    return pub;
-  }, [selectedDeck, myDecks, publicDecks]);
+    if (pub) return pub;
+    const other = otherPublic?.find((d) => d.id === selectedDeck) ?? null;
+    if (other) return other;
+    const top = topDecks?.decks.find((d) => top8Value(d) === selectedDeck);
+    return top ? { id: selectedDeck, name: top.deckName || `${top.player}'s deck`, format: "Constructed" } : null;
+  }, [selectedDeck, myDecks, publicDecks, otherPublic, topDecks]);
 
   const isPreconSelected = useMemo(() => {
     const name = selectedDeckMeta?.name || "";
@@ -386,7 +430,7 @@ export default function OnlineDeckSelector({
                     } catch {}
                   }}
                 />
-                Include precon decks
+                Include precons
               </label>
             </div>
           )}
@@ -408,24 +452,51 @@ export default function OnlineDeckSelector({
               }))}
             />
           ) : (
-            /* Normal mode: show user's decks and optionally public decks */
+            /* Normal mode: your decks, then the precons, the latest top 8 and other players'
+               public decks (those only once asked for) */
             <CustomSelect
               className="w-full"
               value={selectedDeck}
-              onChange={(v) => setSelectedDeck(v)}
+              onChange={(v) => {
+                if (v === LOAD_PUBLIC) return void loadOtherPublic();
+                if (v === NO_PUBLIC) return;
+                setSelectedDeck(v);
+              }}
               disabled={isLoading}
               placeholder="Select a deck..."
               options={[
                 ...myDecks.map((deck) => ({
                   value: deck.id,
                   label: `${deck.name} (${deck.format})`,
+                  group: "Your decks",
                 })),
                 ...(includePublic || isGuest
                   ? publicDecks.map((deck) => ({
                       value: deck.id,
-                      label: `[Precon] ${deck.name} (${deck.format})`,
+                      label: `${deck.name} (${deck.format})`,
+                      group: "Precons",
                     }))
                   : []),
+                ...(topDecks
+                  ? topDecks.decks.map((deck) => ({
+                      value: top8Value(deck),
+                      label: top8Label(deck),
+                      group: top8Title(topDecks),
+                    }))
+                  : []),
+                ...(otherPublic === null
+                  ? [{
+                      value: LOAD_PUBLIC,
+                      label: otherPublicLoading ? "Loading public decks…" : "Show other players' public decks…",
+                      group: "Public decks",
+                    }]
+                  : otherPublic.length
+                    ? otherPublic.map((deck) => ({
+                        value: deck.id,
+                        label: `${deck.name} — ${deck.userName} (${deck.format})`,
+                        group: "Public decks",
+                      }))
+                    : [{ value: NO_PUBLIC, label: "No public decks from other players yet", group: "Public decks" }]),
               ]}
             />
           )}
