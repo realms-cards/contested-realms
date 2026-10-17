@@ -172,11 +172,16 @@ function placementSquares(state: GameState): { x: number; y: number }[] {
  *  this the search never generates any targeted spell at all. Candidates are over-generated per `what`
  *  and filtered by the engine's own `validateTarget` (the arbiter — honours owner/range/ward/filter);
  *  combos are capped so a multi-target spell can't blow up the branching. */
-function castTargetCombos(state: GameState, me: PlayerId, specs: { what?: string; count?: number; upTo?: boolean }[], caster: UnitState): string[][] {
-  const CAP = 48
-  const candsFor = (spec: { what?: string }): string[] => {
+// Targets are built IN ORDER and each pick is validated with the picks before it, so a range anchored to an
+// earlier target (`whereOf` — Blink's "a location it's nearby" is nearby the ALLY) is measured from that
+// target, not from the caster. A dependent pick multiplies per earlier choice (ally × its own squares), so
+// those casts get a larger cap, or later allies' destinations are cut off.
+function castTargetCombos(state: GameState, me: PlayerId, specs: { what?: string; count?: number; upTo?: boolean; whereOf?: number }[], caster: UnitState): string[][] {
+  const CAP = specs.some((s) => s.whereOf != null) ? 160 : 48
+  type Cand = { id: string; ref: unknown }
+  const candsFor = (spec: { what?: string; whereOf?: number }, picked: unknown[]): Cand[] => {
     const w = spec.what
-    let raw: { id: string; ref: unknown }[]
+    let raw: Cand[]
     if (w === 'site') raw = Object.values(state.sites).filter((s) => !s.isRubble).map((s) => ({ id: s.id, ref: { site: s.id } }))
     else if (w === 'artifact') raw = Object.values(state.artifacts).map((a) => ({ id: a.id, ref: { artifact: a.id } }))
     else if (w === 'minionOrArtifact') raw = [
@@ -187,30 +192,35 @@ function castTargetCombos(state: GameState, me: PlayerId, specs: { what?: string
       raw = []
       for (let x = 0; x < GRID_W; x++) for (let y = 0; y < GRID_H; y++) for (const region of REGIONS) raw.push({ id: `sq:${x},${y},${region}`, ref: { square: { x, y, region } } })
     } else raw = Object.values(state.units).filter((u) => !u.carriedBy).map((u) => ({ id: u.id, ref: { unit: u.id } })) // unit / minion / avatar
-    const out: string[] = []
-    for (const c of raw) { try { if (validateTarget(state, spec as never, c.ref as never, caster, me) === null) out.push(c.id) } catch { /* not a legal target */ } }
+    const out: Cand[] = []
+    for (const c of raw) { try { if (validateTarget(state, spec as never, c.ref as never, caster, me, picked as never) === null) out.push(c) } catch { /* not a legal target */ } }
     return out
   }
-  let combos: string[][] = [[]]
+  let combos: Cand[][] = [[]]
   for (const spec of specs) {
-    const ids = candsFor(spec)
+    // an independent pick has the same candidates whatever came before; a dependent one is re-derived
+    const shared = spec.whereOf == null ? candsFor(spec, []) : null
     const n = spec.count ?? 1
-    const picks: string[][] = []
-    if (spec.upTo) picks.push([]) // may take none of this spec
-    if (n <= 1) { for (const id of ids) picks.push([id]) }
-    else { // combinations of size n, capped
-      const pick = (start: number, acc: string[]): void => {
-        if (picks.length >= CAP) return
-        if (acc.length === n) { picks.push([...acc]); return }
-        for (let i = start; i < ids.length; i++) pick(i + 1, [...acc, ids[i]])
+    const next: Cand[][] = []
+    for (const base of combos) {
+      const ids = shared ?? candsFor(spec, base.map((c) => c.ref))
+      const picks: Cand[][] = []
+      if (spec.upTo) picks.push([]) // may take none of this spec
+      if (n <= 1) { for (const id of ids) picks.push([id]) }
+      else { // combinations of size n, capped
+        const pick = (start: number, acc: Cand[]): void => {
+          if (picks.length >= CAP) return
+          if (acc.length === n) { picks.push([...acc]); return }
+          for (let i = start; i < ids.length; i++) pick(i + 1, [...acc, ids[i]])
+        }
+        pick(0, [])
       }
-      pick(0, [])
+      for (const p of picks) { next.push([...base, ...p]); if (next.length >= CAP) break }
+      if (next.length >= CAP) break
     }
-    const next: string[][] = []
-    for (const base of combos) { for (const p of picks) { next.push([...base, ...p]); if (next.length >= CAP) break } if (next.length >= CAP) break }
     combos = next.length ? next : [[]]
   }
-  return combos
+  return combos.map((combo) => combo.map((c) => c.id))
 }
 
 /**
@@ -299,7 +309,7 @@ export function expandActions(state: GameState, player: PlayerId, opts?: { deadl
       // enumerate valid target COMBINATIONS (Grapple Shot's ally, Bolt's victim…) — a targeted spell
       // cast without its targets fails "Missing targets." Projectile spells also need a direction.
       const script = getScript(def.name)
-      const specs = (script?.targets ?? []) as { what?: string; count?: number; upTo?: boolean }[]
+      const specs = (script?.targets ?? []) as { what?: string; count?: number; upTo?: boolean; whereOf?: number }[]
       const dirs: (string | undefined)[] = script?.shootsProjectile ? ['n', 's', 'e', 'w'] : [undefined]
       const combos = specs.length ? castTargetCombos(state, me, specs, state.units[avatarId]) : [[]]
       for (const targets of combos) for (const dir of dirs) {
