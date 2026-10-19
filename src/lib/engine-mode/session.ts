@@ -1070,9 +1070,9 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     },
 
     requestEndTurn: () => {
-      const { game } = get();
+      const { game, seat: viewer } = get();
       if (!game) return;
-      const seat = humanDecisionSeat(game);
+      const seat = humanDecisionSeat(game, viewer);
       // Mirrors /play's requestEndTurn: an untapped avatar almost always means a forgotten
       // site or draw, so ask before spending the turn. Same wording, same dialog.
       const avatar = seat !== null ? game.units[game.players[seat].avatarUnitId] : null;

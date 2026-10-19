@@ -971,6 +971,8 @@ export default function OnlineMatchPage() {
   // 2. Deck prepared and any player has Harbinger avatar, OR
   // 3. Harbinger detected but portals not fully assigned (catch edge cases)
   const needsPortalPhase = useMemo(() => {
+    // The rules engine rolls the Harbinger's portents itself when it deals the game
+    if (match?.engineMode) return false;
     // If portal setup already done locally AND portals are fully assigned, skip
     if (portalSetupComplete && arePortalsFullyAssigned(portalState)) {
       return false;
@@ -1001,7 +1003,17 @@ export default function OnlineMatchPage() {
 
     // Final check: any Harbinger avatar present
     return hasAnyHarbinger(avatars);
-  }, [prepared, portalSetupComplete, portalState, avatars, harbingerSeats]);
+  }, [match?.engineMode, prepared, portalSetupComplete, portalState, avatars, harbingerSeats]);
+
+  // A rules-engine match leaves the D20 setup once (see the hand-over below) and never comes
+  // back: the engine screen takes the shared store over and resets it, phase included, so
+  // "phase is past Setup" stops being true the moment the hand-over happens.
+  const engineSetupPassed =
+    match?.engineMode === true && (match.engineDealt === true || serverPhase !== "Setup");
+  const [engineEnteredFor, setEngineEnteredFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (engineSetupPassed && matchId) setEngineEnteredFor(matchId);
+  }, [engineSetupPassed, matchId]);
 
   // Initialize portal state after deck selection when Harbinger is detected
   // Portal phase happens BEFORE D20 roll, right after avatars are placed
@@ -3194,8 +3206,15 @@ export default function OnlineMatchPage() {
   // it has BOTH decks, and a lobby match sends its deck from the deck selector — which lives in
   // the ordinary setup view below. Taking over sooner would hide the only way to submit one.
   // `deckSubmissions` covers a reload: the deck is already on record, so go straight back in.
+  //
+  // Nor before the D20: who goes first is rolled and chosen on the same screen every online match
+  // uses, below, and the server deals the engine game from that choice. (The engine has its own
+  // mulligan, so the ordinary one is never shown.) A game the server has already dealt opens
+  // straight away: on a reload the store's phase is "Setup" until the snapshot lands, and games
+  // dealt before the D20 step existed never left it.
   const engineDeckIn = prepared || (match?.deckSubmissions ?? []).includes(myPlayerId ?? "");
-  if (match?.engineMode && !isSpectatorView && myPlayerId && engineDeckIn) {
+  const engineSetupDone = engineSetupPassed || (!!matchId && engineEnteredFor === matchId);
+  if (match?.engineMode && !isSpectatorView && myPlayerId && engineDeckIn && engineSetupDone) {
     const seat = (match.playerIds ?? []).indexOf(myPlayerId);
     if (seat === 0 || seat === 1) {
       return (

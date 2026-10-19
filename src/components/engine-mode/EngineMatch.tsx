@@ -291,6 +291,24 @@ export default function EngineMatch() {
  * EngineOnlineMatch, for a match against another player — it never needed to know which, since
  * the session it reads looks the same either way.
  */
+/** The engine owns life totals: the familiar counters, read-only. */
+export function EngineLifeCounters() {
+  const opponent = useEngineSession((s) => opponentName(s.game, s.seat));
+  const viewerSeat = useEngineSession((s) => s.seat);
+  return (
+    <OnlineLifeCounters
+      dragFromHand={false}
+      myPlayerKey="p1"
+      playerNames={{ p1: "You", p2: opponent }}
+      readOnly
+      spectating={false}
+      showYouLabels
+      // the board always shows the viewer as p1; the chips name the seat actually held
+      seatLabels={viewerSeat === 1 ? { p1: "P2", p2: "P1" } : { p1: "P1", p2: "P2" }}
+    />
+  );
+}
+
 export function EngineGame({
   onRestart,
   onExit,
@@ -404,15 +422,7 @@ export function EngineGame({
       {/* Everything from here to the console is chrome, and hides together with U. */}
       {!uiHidden && (
         <>
-          {/* the engine owns life totals — the familiar counters, read-only */}
-          <OnlineLifeCounters
-            dragFromHand={false}
-            myPlayerKey="p1"
-            playerNames={{ p1: "You", p2: opponent }}
-            readOnly
-            spectating={false}
-            showYouLabels
-          />
+          <EngineLifeCounters />
           {/* The mana/threshold readout keeps its own centred spot, untouched by the rail. */}
           <div className="pointer-events-none fixed right-3 top-1/2 z-[150] -translate-y-1/2">
             <EngineResourcePanels />

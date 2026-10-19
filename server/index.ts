@@ -133,6 +133,10 @@ async function maybeStartEngineMatch(match: AnyRecord | null | undefined): Promi
   if (!match || match.engineMode !== true || match._engineStarted) return;
   // A game that was already dealt before a restart is picked up, never dealt again.
   if (await restoreEngineMatch(match)) return;
+  // Who goes first is chosen the way every online match chooses it: the D20 screen, whose
+  // winner picks (`{ phase: "Start", currentPlayer }`). Until then there is nothing to deal.
+  const setup = (match.game ?? {}) as { phase?: unknown; currentPlayer?: unknown };
+  if (setup.phase === "Setup") return;
   const engine = engineService();
   const matchId = String(match.id);
   if (!engine || engine.isEngineMatch(matchId)) return;
@@ -161,12 +165,15 @@ async function maybeStartEngineMatch(match: AnyRecord | null | undefined): Promi
     return;
   }
 
-  // The SERVER picks the seed and who goes first. In single player the client does, which is
-  // fine when it is also the only player; here it would be a knob on the opponent's game.
+  // The SERVER picks the seed. In single player the client does, which is fine when it is also
+  // the only player; here it would be a knob on the opponent's game. Who goes first is the D20
+  // winner's choice (p1 = playerIds[0] = engine seat 0); a match that never had a D20 step
+  // falls back to the seed.
   const seedText = String((match.seed as string | undefined) ?? (match.id as string));
   let seed = 0;
   for (const ch of seedText) seed = (seed * 31 + ch.charCodeAt(0)) | 0;
-  const first = ((seed >>> 0) % 2) as 0 | 1;
+  const chosen = setup.currentPlayer;
+  const first = (chosen === 1 ? 0 : chosen === 2 ? 1 : (seed >>> 0) % 2) as 0 | 1;
   const names = ids.map((pid) => players.get(pid)?.displayName ?? "Player") as [string, string];
   const started = await engine.start(
     matchId,
@@ -985,13 +992,20 @@ const matchLeaderService: MatchLeaderService = createMatchLeaderService({
 } as unknown as Parameters<typeof createMatchLeaderService>[0]);
 
 const {
-  applyAction: leaderApplyAction,
+  applyAction: leaderApplyLegacyAction,
   joinMatch: leaderJoinMatch,
   handleMulliganDone: leaderHandleMulliganDone,
   handleClientReady: leaderHandleClientReady,
   handleInteractionRequest: leaderHandleInteractionRequest,
   handleInteractionResponse: leaderHandleInteractionResponse,
 } = matchLeaderService;
+
+/** The leader's patch path. An engine match is dealt by the patch that ends its D20 setup. */
+const leaderApplyAction: typeof leaderApplyLegacyAction = async (matchId, playerId, patch, socketId) => {
+  await leaderApplyLegacyAction(matchId, playerId, patch, socketId);
+  const match = matches.get(matchId);
+  if (match?.engineMode === true && match.game?.phase !== "Setup") await maybeStartEngineMatch(match);
+};
 
 // Global feature flag for CPU bots (default: disabled)
 const CPU_BOTS_ENABLED =
@@ -2493,6 +2507,12 @@ function getMatchInfo(match: ServerMatchState): AnyRecord {
     // Must be declared on MatchInfoSchema too, or zod strips it silently and the client opens
     // the legacy board over a rules-engine match.
     engineMode: match.engineMode === true,
+    // The engine game is dealt (or on record, after a restart): a reconnecting client goes
+    // straight to the board instead of waiting on the D20 setup phase. Declared on the schema too.
+    engineDealt:
+      match.engineMode === true &&
+      (match._engineStarted === true ||
+        (match.engineState as { state?: unknown } | null | undefined)?.state !== undefined),
     sealedConfig: match.sealedConfig
       ? normalizeSealedConfig(match.sealedConfig)
       : null,

@@ -12,6 +12,7 @@ import EngineGame2D from "./2d/EngineGame2D";
 import EngineActionRail from "./EngineActionRail";
 import EngineContextMenu from "./EngineContextMenu";
 import EngineHud from "./EngineHud";
+import { EngineLifeCounters } from "./EngineMatch";
 import EnginePromptPanel from "./EnginePromptPanel";
 import EngineResourcePanels from "./EngineResourcePanels";
 import { useEngineInteraction } from "./useEngineInteraction";
@@ -46,6 +47,7 @@ function Screen3DChrome() {
       <EnginePromptPanel />
       <EngineContextMenu />
       <EngineActionRail interaction={interaction} onExit={() => undefined} />
+      <EngineLifeCounters />
     </>
   );
 }
@@ -76,7 +78,19 @@ function paintAs(envelope: ViewEnvelope) {
   });
   expect(useEngineSession.getState().game, "the view was accepted").not.toBeNull();
   for (const ui of [<EngineGame2D key="2d" onExit={() => undefined} onRestart={() => undefined} />, <Screen3DChrome key="3d" />]) {
-    render(<ColorBlindProvider>{ui}</ColorBlindProvider>);
+    const { container, queryAllByRole } = render(<ColorBlindProvider>{ui}</ColorBlindProvider>);
+    if (ui.key === "3d") {
+      // The rail's End turn follows the server: shown exactly when this seat may end the turn
+      // (seat 1 used to be judged as seat 0 — no button on its turn, a refused one on the other).
+      const canEnd = (envelope.legal as Action[]).some((a) => a.t === "endTurn");
+      const buttons = (label: string) => queryAllByRole("button", { name: label });
+      expect(buttons("End turn"), `seat ${seat} End turn`).toHaveLength(canEnd ? 1 : 0);
+      expect(buttons("Undo"), `seat ${seat} Undo is always on the rail`).toHaveLength(1);
+      // The board draws the viewer as p1 whichever seat they hold; the life chips must still
+      // name the seat actually held (the second seat used to read "P1 (You)").
+      const chip = container.querySelector('[title="You"]');
+      expect(chip?.textContent?.startsWith(seat === 1 ? "P2" : "P1"), `seat ${seat} life chip: ${chip?.textContent}`).toBe(true);
+    }
     cleanup();
   }
 }

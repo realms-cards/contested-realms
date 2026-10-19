@@ -238,6 +238,8 @@ export const MatchInfoSchema = z.object({
   // so a field missing from it is stripped SILENTLY — which is why it has to be declared here
   // as well as on the match record.
   engineMode: z.boolean().optional(),
+  // The engine game has been dealt: past the D20 setup, so the client opens the board directly.
+  engineDealt: z.boolean().optional(),
   sealedConfig: SealedConfigSchema.nullable().optional(),
   draftConfig: DraftConfigSchema.nullable().optional(),
   deckSubmissions: z.array(z.string()).optional(),

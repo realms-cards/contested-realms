@@ -26,6 +26,9 @@ interface OnlineLifeCountersProps {
   /** True only for a viewer watching someone else's match; defaults to `readOnly`. */
   spectating?: boolean;
   spectatorMode?: boolean;
+  /** The seat each store key holds, when it is not its own name: engine mode always draws the
+   *  viewer as p1, so the player in the second seat needs p1 called "P2". */
+  seatLabels?: { p1: string; p2: string };
 }
 
 function formatLifeDisplay(life: number, lifeState: LifeState): string {
@@ -338,6 +341,7 @@ export default function OnlineLifeCounters({
   showYouLabels = false,
   readOnly = false,
   spectating,
+  seatLabels = { p1: "P1", p2: "P2" },
 }: OnlineLifeCountersProps) {
   // "(Watching)" means a viewer with no stake in the match. Read-only alone does not mean that:
   // a seated player can be read-only too (the tutorial, engine mode). Callers that are truly
@@ -464,7 +468,7 @@ export default function OnlineLifeCounters({
           key={seat}
           player={seat}
           playerName={playerNames[seat]}
-          label={seat === "p1" ? "P1" : "P2"}
+          label={seatLabels[seat]}
           canModify={canModifyLife}
           dragFromHand={dragFromHand}
           isMe={myPlayerKey === seat}

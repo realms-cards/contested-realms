@@ -155,7 +155,8 @@ export default function EngineActionRail({
   if (!game) return null;
   // Under Courtesan Thaïs the human plays the OPPONENT's turn: the decisions are ours even
   // though `activePlayer` is the other seat, so every action gate follows the decision seat.
-  const deciding = humanDecisionSeat(game);
+  // the viewer's seat, not the default: online the player in seat 1 decides on their own turns
+  const deciding = humanDecisionSeat(game, viewer);
   const piloting = deciding !== null && deciding !== viewer;
   const myMain = deciding !== null && game.phase === "main" && game.prompts.length === 0;
   const over = game.phase === "over";
@@ -171,7 +172,8 @@ export default function EngineActionRail({
           {myMain && !interaction.confirmable && (
             <RailButton id="end-turn" label="End turn" tone="live" onClick={requestEndTurn} />
           )}
-          {canUndo && <RailButton id="undo" label="Undo" onClick={undo} />}
+          {/* always there, like the 2D bar's: a game without undo (online) shows it disabled */}
+          <RailButton id="undo" label="Undo" onClick={undo} disabled={!canUndo} />
         </RailGroup>
 
         {/* YOUR CARDS — the piles you can act on or look through */}

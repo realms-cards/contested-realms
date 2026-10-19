@@ -219,7 +219,7 @@ e0c80bde925cf109a4f43e73c70b042fc66ae2b57245bb1d80ec4980dc7fb110  shared/src/car
 0292c485454d30155350fd08afc19ae6bcc24b581cbf91fd3c0f5569358062c2  shared/src/cards/scripts/gen/crawler.ts
 11cc0451369606ceac4a28023093b3072bf91638cbd6c8666ea6f88b57f941f4  shared/src/cards/scripts/gen/crawling-congregation.ts
 1b39d28cf445960b0a3375bf5a1eb983111f89ed9b35a7d8c650e25f9b99267c  shared/src/cards/scripts/gen/critical-strike.ts
-32ade28f42ed1515a6f4055bbf2d63349cdbdeaf6581ed9efb9376f48683f306  shared/src/cards/scripts/gen/croaking-swamp.ts
+8f74aa7febfe1627ea8a6e5c22543682c411e471a2aba2b5ad90ff1cbfba9b70  shared/src/cards/scripts/gen/croaking-swamp.ts
 dc2612ee53214566581e2265330e3b4156f5a375ac0523bdd62b03749338782d  shared/src/cards/scripts/gen/crossroads.ts
 948e6b589604f5b3b59b016accca94f9698bce12d7946afdb5e3746846eb2301  shared/src/cards/scripts/gen/crown-of-the-victor.ts
 e52d078636cb3f9b0aa238fba8b8c97e7b80cd8c5bae96bdaa3a7539323fd2a4  shared/src/cards/scripts/gen/crown-prince.ts
