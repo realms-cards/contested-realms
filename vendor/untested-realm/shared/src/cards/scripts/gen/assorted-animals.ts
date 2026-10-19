@@ -1,8 +1,8 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { searchLimit } from '../../../engine/statics'
-import { shuffleWithSeed } from '../../../engine/rng'
 import { revealCards } from '../../../engine/effects'
+import { shuffleDeck } from '../../../engine/knowledge'
 
 // 'Search your spellbook for different Beasts with a combined mana cost of X or
 // less, reveal them, and put them in your hand. Shuffle your spellbook.'
@@ -29,7 +29,7 @@ registerScript('Assorted Animals', {
         return d.type === 'Minion' && d.subtypes.includes('Beast') && (d.cost ?? 99) <= x
       })
       if (!beasts.length) {
-        ctx.state.seed = shuffleWithSeed(p.spellbook, ctx.state.seed)
+        shuffleDeck(ctx.state, p.id, 'spellbook')
         return ctx.log('No fitting Beasts found.')
       }
       pickBeast(ctx, x, [], beasts)
@@ -54,7 +54,7 @@ registerScript('Assorted Animals', {
           if (remaining.length) return pickBeast(ctx, contCtx.x, spent, remaining)
         }
       }
-      ctx.state.seed = shuffleWithSeed(p.spellbook, ctx.state.seed)
+      shuffleDeck(ctx.state, p.id, 'spellbook')
     },
   },
 })

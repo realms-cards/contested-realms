@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { pushLog, removeUnitFromRealm } from '../../../engine/effects'
 import { cemeteryProtected } from '../../../engine/statics'
-import { shuffleWithSeed } from '../../../engine/rng'
+import { shuffleDeck } from '../../../engine/knowledge'
 
 // ---------- killer tracking ----------
 
@@ -40,7 +40,7 @@ registerScript('Grim Reaper', {
         }
       }
     }
-    state.seed = shuffleWithSeed(owner.spellbook, state.seed)
+    shuffleDeck(state, owner.id, 'spellbook')
     pushLog(state, reaper.controller, `The Grim Reaper erases ${name} from existence (${reaped} more cop${reaped === 1 ? 'y' : 'ies'} reaped).`)
     return true
   },

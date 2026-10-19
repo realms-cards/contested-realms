@@ -85,9 +85,15 @@ for (const t of EXAMPLE_TRAPS) byName.set(t.name.toLowerCase(), t)
 
 export const allCards: CardDef[] = normalizedCards
 
+// getCard runs in the engine's and the evaluator's inner loops: memoize by exact spelling to skip toLowerCase()
+const exactCardCache = new Map<string, CardDef>()
+
 export function getCard(name: string): CardDef {
+  const hit = exactCardCache.get(name)
+  if (hit) return hit
   const c = byName.get(name.toLowerCase())
   if (!c) throw new Error(`Unknown card: ${name}`)
+  exactCardCache.set(name, c)
   return c
 }
 

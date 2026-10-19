@@ -6,6 +6,7 @@ import { newId, pushLog, makeCtx, checkStateBased, opponent, emitUnitEnters, dir
 import { affinity, effKeywords, isDisabled, disabledByEffect, canExistIn, siteSilenced, siteDisabledByArtifact, artifactSilenced, artScript, zoneAccessToll, applyKeywordString, isArtifactUnit, isEvilUnit, isEvilUnitIntrinsic, isEvilCardName, isEvilCardNameFor, cardSubtypesFor, collectionBanned, payZoneToll, takeFromCollection, carriedInside, isBlanked, isCarriableArtifact, terrainAt } from './statics'
 import { siteEntryAllowed } from './movement'
 import { TRAP_DISGUISE, trapElementOf } from './traps'
+import { isKnightSirDame } from '../cards/scripts/multi-card-utils/knightly'
 
 // ---- affinity ----
 // `affinity` now lives in statics.ts so static/replacement gates in effects.ts and statics.ts itself
@@ -18,6 +19,16 @@ export function meetsThreshold(have: Thresholds, need: Thresholds): boolean {
 }
 
 // ---- playing sites (avatar tap ability) ----
+
+/** May `player` cast the artifact `castName` into `unit`'s hands? Their own units always; an enemy only if
+ *  the artifact conjures to enemies — unconditionally (Iron Shackles) or per its predicate (Just a Rock:
+ *  a unit already carrying an artifact). Shared by cast validation, placement listing and the client. */
+export function canHandArtifactTo(state: GameState, player: PlayerId, castName: string, unit: UnitState): boolean {
+  if (!isCarriableArtifact(castName)) return false // a Monument/Automaton is never carried — it must be conjured onto a site
+  if (unit.controller === player) return true
+  const rule = getScript(castName)?.conjureToEnemy
+  return typeof rule === 'function' ? rule(state, unit) : !!rule
+}
 
 /** The STANDARD site-play squares for `player`: empty squares bordering a site they control (or,
  *  with no sites yet, the squares closest to their avatar). `ignoreSiteId` treats that site's square
@@ -292,7 +303,7 @@ export function effectiveCost(
     if (spellDiscountMatches(state, d, player, cardName, at, false, caster?.id)) cost -= d.amount
   }
   for (const u of Object.values(state.units)) if (!u.silenced) applyFrom(u.name, u.id)
-  for (const s of Object.values(state.sites)) if (s.controller !== null && !siteSilenced(state, s)) applyFrom(s.name, s.id)
+  for (const s of Object.values(state.sites)) if (s.controller !== null && getScript(s.name)?.costModifier && !siteSilenced(state, s)) applyFrom(s.name, s.id)
   for (const a of Object.values(state.artifacts)) applyFrom(a.name, a.id)
   for (const r of Object.values(state.auras)) applyFrom(r.name, r.id)
   return Math.max(0, cost)
@@ -331,12 +342,14 @@ function normalCasterCheck(caster: UnitState, kw: ReturnType<typeof effKeywords>
  *  as a throwaway pseudo-caster carrying the artifact's NAME (so effKeywords/getKeywords resolve
  *  its "Air and Fire Spellcaster" identity) and its board position (targeting geometry, "summon
  *  here"). Returns null for a non-caster / silenced artifact / unknown id. Never added to state. */
-export function resolveCaster(state: GameState, casterId: string, player: PlayerId): UnitState | null {
+export function resolveCaster(state: GameState, casterId: string, player: PlayerId, granted = false): UnitState | null {
   const u = state.units[casterId]
   if (u) return u
   const art = state.artifacts[casterId]
-  if (art && !artifactSilenced(state, art) && getKeywords(art.name).spellcaster) {
-    const controller = art.carriedBy ? state.units[art.carriedBy]?.controller : art.conjuredBy
+  // `granted`: a caster-lock that GRANTS this artifact the cast (Orb of Ba'al Berith casting its copy on
+  // behalf of the spell's controller) — it needn't be a Spellcaster, and it casts for `player`.
+  if (art && !artifactSilenced(state, art) && (granted || getKeywords(art.name).spellcaster)) {
+    const controller = granted ? player : art.carriedBy ? state.units[art.carriedBy]?.controller : art.conjuredBy
     return {
       id: art.id, cardId: art.cardId, name: art.name,
       owner: state.cards[art.cardId]?.owner ?? player, controller: controller ?? player,
@@ -410,7 +423,8 @@ export function canCast(state: GameState, player: PlayerId, cardId: string, cast
       // spells itself; no other caster is legal, so the client offers no picker.
       if (casterId !== lock.casterId) return { ok: false, reason: `Only ${lockedArt.name} may cast that.` }
       const artController = lockedArt.carriedBy ? state.units[lockedArt.carriedBy]?.controller : lockedArt.conjuredBy
-      if (artController !== player) return { ok: false, reason: `Only ${lockedArt.name} may cast that.` }
+      // a GRANT-lock (Orb of Ba'al Berith) casts for whoever controls the copied spell, not the Orb's owner
+      if (!lock.grantsCasting && artController !== player) return { ok: false, reason: `Only ${lockedArt.name} may cast that.` }
       if (artifactSilenced(state, lockedArt)) return { ok: false, reason: `${lockedArt.name} can't cast right now.` }
     }
   }
@@ -529,9 +543,9 @@ export function ignoresThreshold(state: GameState, player: PlayerId, cardId: str
   // sites with a continuous threshold waiver for cards cast onto them (Dragonlord's Lair:
   // Dragons). Mirrors the artifact grantsNoThreshold scan above.
   for (const s of Object.values(state.sites)) {
-    if (s.isRubble || siteSilenced(state, s)) continue
     const f = getScript(s.name)?.siteGrantsNoThreshold
-    if (f && f(state, s, cardId, at)) return true
+    if (!f || s.isRubble || siteSilenced(state, s)) continue
+    if (f(state, s, cardId, at)) return true
   }
   const cardName = state.cards[cardId]?.name
   if (!cardName) return false
@@ -540,8 +554,9 @@ export function ignoresThreshold(state: GameState, player: PlayerId, cardId: str
     // verified for real in castSpell with the chosen square
     if (d.noThreshold && spellDiscountMatches(state, d, player, cardName, at, at === undefined)) return true
   }
-  // Tournament Grounds: Knights/Sirs/Dames cast to it need no threshold
-  if (/\b(Knight|Sir|Dame)\b/.test(cardName) || getCard(cardName).subtypes.includes('Knight')) {
+  // Tournament Grounds: Knights/Sirs/Dames cast to it need no threshold. The same matcher as its "anyone
+  // may cast them here" rule, so plurals (Vanguard Knights) are covered too.
+  if (isKnightSirDame(cardName)) {
     for (const s of Object.values(state.sites)) {
       if (s.isRubble || !getScript(s.name)?.knightsNeedNoThresholdHere || siteSilenced(state, s)) continue
       if (at === undefined || (at.x === s.x && at.y === s.y)) return true
@@ -594,6 +609,35 @@ export function spellDiscountMatches(
 
 /** validate a chosen target against a spec (targeted → same region as caster,
  *  stealth/ward interplay). Then Blasted Oak's compulsion gets its say. */
+/** A Genesis target that means "this minion itself". Genesis targets are picked at CAST time, before the
+ *  minion exists, so the card can't name it by id; this placeholder is checked against a stand-in for the
+ *  minion where it will land, and swapped for the real unit id when the Genesis fires (Town Priest under a
+ *  Corruptor: a Mortal that is also Undead, so Evil, and adjacent to its own square → may bounce itself). */
+export const SELF_TARGET = 'u:self' // parses as a unit ref (wire targets are id strings); real ids are u<number>, so it can't collide
+
+/** Run `fn` with a stand-in for the about-to-be-cast minion `cardName` at `at` sitting in the realm under
+ *  SELF_TARGET (owner/controller `player`, so type-changers like Corruptor apply), then remove it. */
+function withSelfProbe<T>(state: GameState, player: PlayerId, cardName: string, at: { x: number; y: number; region?: Region }, fn: () => T): T {
+  const probe: UnitState = {
+    id: SELF_TARGET, cardId: '', name: cardName, owner: player, controller: player, isAvatar: false,
+    x: at.x, y: at.y, region: at.region ?? 'surface', tapped: false, damage: 0, enteredTurn: state.turn,
+    modifiers: [], carrying: [], carryingUnits: [], usedThisTurn: {},
+  }
+  state.units[SELF_TARGET] = probe
+  try { return fn() } finally { delete state.units[SELF_TARGET] }
+}
+
+/** May the minion `cardName`, cast to `at`, pick ITSELF for its `specIndex`-th Genesis target (after the
+ *  earlier picks `picked`)? Same validation as the cast itself — the client uses it to offer the choice. */
+export function genesisSelfTargetOk(
+  state: GameState, player: PlayerId, cardName: string, at: { x: number; y: number; region?: Region }, specIndex: number, picked: TargetRef[] = [],
+): boolean {
+  const spec = getScript(cardName)?.genesisTargets?.[specIndex]
+  if (!spec || getCard(cardName).type !== 'Minion') return false
+  const anchor = { ...avatarOf(state, player), x: at.x, y: at.y, region: at.region ?? 'surface' }
+  return withSelfProbe(state, player, cardName, at, () => validateTarget(state, spec, { unit: SELF_TARGET }, anchor, player, [...picked, { unit: SELF_TARGET }]) === null)
+}
+
 export function validateTarget(
   state: GameState,
   spec: TargetSpec,
@@ -879,7 +923,9 @@ function summonCastMinion(
     // fires no Genesis. Shared predicate with the effect-summon path (a Slumbering Giantess summoned
     // already-disabled must never add her own "fall asleep" whichever way she enters).
     if (script?.genesis && firesGenesisOnEntry(state, unit)) {
-      script.genesis(makeCtx(state, unitId, player, targets, at, extra))
+      // a "this minion itself" pick (SELF_TARGET) now names the real unit
+      const own = targets.map((t) => ('unit' in t && t.unit === SELF_TARGET ? { unit: unitId } : t))
+      script.genesis(makeCtx(state, unitId, player, own, at, extra))
     }
     // cast-only riders (Mephistopheles' avatar replacement — "Must be cast...", NOT a Genesis ability;
     // faq_dump.md:1954) fire only on a real cast, right here where genesis fires.
@@ -897,7 +943,7 @@ function summonCastMinion(
  *  a deferred Magic resolution re-derives the same caster it would have used inline. */
 function resolveCasterForCast(state: GameState, player: PlayerId, cardId: string, casterId: string): UnitState {
   const lock = (state.flow?.lockedCards ?? []).find((e: any) => e.cardId === cardId)
-  return (lock ? resolveCaster(state, lock.casterId, player) : undefined) ?? resolveCaster(state, casterId, player) ?? avatarOf(state, player)
+  return (lock ? resolveCaster(state, lock.casterId, player, !!lock.grantsCasting) : undefined) ?? resolveCaster(state, casterId, player) ?? avatarOf(state, player)
 }
 
 /** Resolve a just-cast Magic (its onCast + cemetery/banish + reveal). Split out of castSpell so it can
@@ -1046,7 +1092,7 @@ export function castSpell(
   const lock = (state.flow?.lockedCards ?? []).find((e: any) => e.cardId === cardId)
   // caster-locked cards resolve with their bonded caster; a spellcaster ARTIFACT (Omphalos)
   // resolves to a pseudo-caster at its own square (its minions "must be summoned here").
-  const caster = (lock ? resolveCaster(state, lock.casterId, player) : undefined) ?? resolveCaster(state, casterId, player) ?? avatarOf(state, player)
+  const caster = (lock ? resolveCaster(state, lock.casterId, player, !!lock.grantsCasting) : undefined) ?? resolveCaster(state, casterId, player) ?? avatarOf(state, player)
   const script = getScript(castName)
   const targets = parseTargetRefs(rawTargets)
 
@@ -1071,6 +1117,14 @@ export function castSpell(
   for (let si = 0; si < specs.length; si++) {
     const spec = specs[si]
     for (let i = 0; i < spec.count && ti < targets.length; i++, ti++) {
+      const self = 'unit' in targets[ti] && (targets[ti] as { unit: string }).unit === SELF_TARGET
+      if (self) {
+        // "this minion itself": only a Minion's Genesis, checked against a stand-in where it will land
+        if (def.type !== 'Minion' || !at) return 'Not a legal target.'
+        const err = withSelfProbe(state, player, castName, at, () => validateTarget(state, spec, targets[ti], targetAnchor, player, targets))
+        if (err) return err
+        continue
+      }
       const err = validateTarget(state, spec, targets[ti], targetAnchor, player, targets)
       if (err) return err
       // engine-authoritative legal set for spatial/interdependent picks (explosion range, Meteor
@@ -1150,8 +1204,7 @@ export function castSpell(
     }
     if (extra?.giveTo) {
       const holder = state.units[extra.giveTo]
-      const enemyOk = !!getScript(castName)?.conjureToEnemy
-      if (!holder || (!enemyOk && holder.controller !== player)) return 'You can only hand an artifact to your own unit.'
+      if (!holder || !canHandArtifactTo(state, player, castName, holder)) return 'You can only hand an artifact to your own unit.'
     }
   }
   if (def.type === 'Aura') {
@@ -1693,6 +1746,24 @@ export function castFromCollection(state: GameState, player: PlayerId, name: str
   return true
 }
 
+/** Orb of Ba'al Berith: "creates a copy" of a Magic cast nearby. The copy is queued at cast time and
+ *  cast here once the original has fully resolved (no prompt open) — by the ORB (FAQ: the Orb is the
+ *  copy's spellcaster), for the original spell's controller, free, as a token that picks new targets.
+ *  FAQ: X stays the same — Arcane Barrage records its paid X in flow.lastX; the copy reuses it unpaid. */
+export function resolveQueuedCopyCasts(state: GameState): void {
+  const q = state.flow?.copyCastQueue as { player: PlayerId; name: string; casterId: string; turn: number }[] | undefined
+  while (q?.length && state.prompts.length === 0) {
+    const e = q.shift()!
+    const art = state.artifacts[e.casterId]
+    if (!art || e.turn !== state.turn) continue
+    const lastX = state.flow?.lastX
+    if (lastX && lastX.player === e.player && lastX.name === e.name && lastX.turn === state.turn) state.flow!.fixedX = { player: e.player, x: lastX.x }
+    pushLog(state, e.player, `${art.name} creates a copy of ${e.name}.`)
+    effectCastSpell(state, e.player, e.name, { caster: e.casterId, grantsCasting: true })
+    if (state.flow?.fixedX) delete state.flow.fixedX // unused (the copy fizzled before choosing X)
+  }
+}
+
 function finishEffectCast(state: GameState, cardId: string, at?: { x: number; y: number; region?: Region }, targets?: string[], extra?: unknown): void {
   const map = pcMap(state); const pc = map[cardId]; if (!pc) return
   delete map[cardId]
@@ -1754,8 +1825,7 @@ function effectSpecCandidates(state: GameState, player: PlayerId, caster: UnitSt
  *  offers the SAME locations and board visuals as a normal conjure — including handing it to your
  *  Avatar while it stands on an opponent's site (a giveTo unit, not a your-site square). */
 export function artifactCastPlacements(state: GameState, player: PlayerId, castName: string): { giveTo: string[]; conjure: string[] } {
-  const enemyOk = !!getScript(castName)?.conjureToEnemy
-  const giveTo = Object.values(state.units).filter((u) => enemyOk || u.controller === player).map((u) => u.id)
+  const giveTo = Object.values(state.units).filter((u) => canHandArtifactTo(state, player, castName, u)).map((u) => u.id)
   const filter = getScript(castName)?.conjureFilter
   const conjure: string[] = []
   for (const s of Object.values(state.sites)) {
@@ -1786,7 +1856,8 @@ function advanceEffectCast(state: GameState, cardId: string): void {
   // Only a genuine token COPY (a free Chaoswish-style cast) is prefixed "Copy of". A real hand card
   // (effectCastHandCard) and a PAID collection cast (Silver Bullet/Toolbox/Malleus…) use the plain name.
   const label = pc.isCopy && !pc.realCard ? `Copy of ${name}` : name
-  const caster = state.units[pc.casterId] ?? avatarOf(state, pc.player)
+  // an ARTIFACT caster (Omphalos, Orb of Ba'al Berith) measures directions/ranges from its own square
+  const caster = resolveCasterForCast(state, pc.player, cardId, pc.casterId)
 
   // forced placement (Troubled Town "cast … to this site"): skip the square
   // prompt and cast straight onto the dictated square — genesis/targets are still

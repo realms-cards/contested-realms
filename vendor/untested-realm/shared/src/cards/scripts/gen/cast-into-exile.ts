@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { siteAt } from '../../../engine/grid'
 import { pushLog, removeUnitFromRealm, returnToDeck } from '../../../engine/effects'
-import { shuffleWithSeed } from '../../../engine/rng'
+import { shuffleDeck } from '../../../engine/knowledge'
 
 // "Shuffle target minion occupying an allied site into its owner's spellbook."
 registerScript('Cast into Exile', {
@@ -21,7 +21,7 @@ registerScript('Cast into Exile', {
     if (removeUnitFromRealm(ctx.state, u.id)) delete ctx.state.units[u.id] // cargo stays (FAQ); avatars refuse removal
     if (card && !card.isToken) {
       const owner = returnToDeck(ctx.state, card.id) // its OWNER's deck, regardless of who controlled it
-      ctx.state.seed = shuffleWithSeed(ctx.state.players[owner].spellbook, ctx.state.seed)
+      shuffleDeck(ctx.state, ctx.state.players[owner].id, 'spellbook')
     }
     pushLog(ctx.state, ctx.controller, `${u.name} is cast into exile.`)
   },

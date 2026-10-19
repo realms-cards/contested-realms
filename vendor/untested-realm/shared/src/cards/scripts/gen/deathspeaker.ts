@@ -1,10 +1,10 @@
 import { registerScript, getScript, type EffectAPI, type TargetRef } from '../registry'
 import { getCard, findCard } from '../../db'
 import { GRID_W, GRID_H, avatarOf } from '../../../engine/grid'
-import { validateSummonAt, validateTarget } from '../../../engine/casting'
+import { validateSummonAt, validateTarget, meetsThreshold, ignoresThreshold } from '../../../engine/casting'
 import type { GameState, PlayerId, Region, UnitState } from '../../../engine/types'
 import { pushLog, checkStateBased, banishUnit, effectSummonUnit, bumpManaSpent } from '../../../engine/effects'
-import { zoneAccessToll } from '../../../engine/statics'
+import { zoneAccessToll, affinity } from '../../../engine/statics'
 
 // The echoed copy fires its Genesis — and a Genesis that needs a target (Gargantula's
 // "drag an adjacent minion") must let the controller pick one, exactly as a hand-cast
@@ -30,6 +30,25 @@ function deathspeakerFlickerWithGenesis(ctx: EffectAPI, name: string, at: { x: n
   )
 }
 
+/** the dead minion's card in either cemetery (player 0 first: the same order deathspeakerFlicker banishes in) */
+function deadMinionCardId(state: GameState, name: string): string | null {
+  for (const pid of [0, 1] as (0 | 1)[]) {
+    const id = state.players[pid].cemetery.find((c) => state.cards[c].name === name)
+    if (id) return id
+  }
+  return null
+}
+
+/** The echo is CAST, so its threshold must be met (FAQ: at Death's Door "only the casting cost is reduced to
+ *  (0)"). The usual waivers still apply — a per-turn waiver, or a site waiving it for what is cast onto it
+ *  (Tournament Grounds' Knights): with `at` unknown that is optimistic, as in canCast, and checked for real
+ *  once the square is chosen. */
+function echoThresholdOk(state: GameState, player: PlayerId, name: string, at?: { x: number; y: number }): boolean {
+  if (meetsThreshold(affinity(state, player), getCard(name).thresholds)) return true
+  const id = deadMinionCardId(state, name)
+  return !!id && ignoresThreshold(state, player, id, at)
+}
+
 registerScript('Deathspeaker', {
   abilities: [{
     key: 'speak',
@@ -51,8 +70,8 @@ registerScript('Deathspeaker', {
           if (getCard(ctx.state.cards[id].name).type === 'Minion') names.add(ctx.state.cards[id].name)
         }
       }
-      const options = [...names]
-      if (!options.length) return ctx.log('No dead minion to speak for.')
+      const options = [...names].filter((n) => echoThresholdOk(ctx.state, ctx.controller, n))
+      if (!options.length) return ctx.log(names.size ? 'No dead minion whose threshold you meet.' : 'No dead minion to speak for.')
       ctx.ask({ kind: 'chooseOption', title: 'Speak for which dead minion?', data: { options } }, 'speak')
     },
   }],
@@ -65,12 +84,13 @@ registerScript('Deathspeaker', {
       // the echo reaches into a cemetery, so the Bureau of Occult Control tolls (2) for that access
       const cost = (self.deathsDoor ? 0 : findCard(name)?.cost ?? 0) + zoneAccessToll(ctx.state)
       if (p.mana < cost) return ctx.log(`Not enough mana (${p.mana}/${cost}).`)
+      if (!echoThresholdOk(ctx.state, ctx.controller, name)) return ctx.log('Elemental threshold not met.')
       // offer every square the copy could legally enter (validateSummonAt is the arbiter),
       // then let the player pick where its echo appears so its Genesis fires there.
       const region: Region = getScript(name)?.mustSummonRegion ?? 'surface'
       const squares: { x: number; y: number }[] = []
       for (let y = 0; y < GRID_H; y++) for (let x = 0; x < GRID_W; x++) {
-        if (validateSummonAt(ctx.state, ctx.controller, name, { x, y, region }) === null) squares.push({ x, y })
+        if (validateSummonAt(ctx.state, ctx.controller, name, { x, y, region }) === null && echoThresholdOk(ctx.state, ctx.controller, name, { x, y })) squares.push({ x, y })
       }
       if (!squares.length) return ctx.log(`There is nowhere to summon ${name}.`)
       if (squares.length === 1) return deathspeakerFlickerWithGenesis(ctx, name, squares[0], region)
@@ -109,6 +129,7 @@ function deathspeakerFlicker(ctx: EffectAPI, name: string, at: { x: number; y: n
   // Bureau of Occult Control tolls (2) for reaching into a cemetery (mirrors the pre-check in `speak`)
   const cost = (self?.deathsDoor ? 0 : findCard(name)?.cost ?? 0) + zoneAccessToll(ctx.state)
   if (p.mana < cost) return ctx.log(`Not enough mana (${p.mana}/${cost}).`)
+  if (!echoThresholdOk(ctx.state, ctx.controller, name, at)) return ctx.log('Elemental threshold not met.')
   // the dead minion may lie in EITHER cemetery ("a dead minion")
   let owner: 0 | 1 | null = null
   let idx = -1

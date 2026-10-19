@@ -381,8 +381,9 @@ export interface CardScript {
   disablesOnlyAtRest?: boolean
   /** carried artifact: its bearer is disabled (Iron Shackles) */
   bearerDisabled?: boolean
-  /** artifact may be conjured onto an ENEMY minion (Iron Shackles) */
-  conjureToEnemy?: boolean
+  /** artifact may be conjured into the hands of an ENEMY unit — always (Iron Shackles), or only enemies this
+   *  predicate accepts (Just a Rock: a unit already carrying an artifact). */
+  conjureToEnemy?: boolean | ((state: GameState, unit: UnitState) => boolean)
   /** on an aura: its controller may summon (matching) minions to covered sites (Summoning Sphere, Crusade) */
   auraAllowsSummon?: (state: GameState, aura: { id: string; controller: PlayerId; squares: { x: number; y: number }[] }, player: PlayerId, cardName: string, at: { x: number; y: number }) => boolean
   /** on an aura: covered sites provide this much extra mana to their controller (Abundance) */
@@ -776,6 +777,9 @@ export interface CardScript {
   projectileTransparent?: boolean | ((state: GameState, self: UnitState) => boolean)
   /** minion must be summoned to this region (e.g. Drowned → 'underwater') */
   mustSummonRegion?: Region
+  /** may EXIST in this region without the matching keyword ("Summon … burrowed safely" — Awakened
+   *  Mummies). Grants no steps: the unit can't burrow, unburrow or move there on its own. */
+  existsSafelyIn?: Region
   /** static: reduce damage dealt to `victim` (e.g. Shield Maidens) */
   damageReduction?: (state: GameState, self: UnitState, victim: UnitState) => number
   /** static: keywords a SITE grants to units (e.g. Standing Stones) */
@@ -881,6 +885,9 @@ export interface DamageSource {
 }
 
 const registry = new Map<string, CardScript>()
+// getScript runs in the engine's innermost loops; memoize by the exact spelling (misses too — most
+// cards have no script) so the hot path skips toLowerCase(). registerScript clears it.
+const exactNameCache = new Map<string, CardScript | null>() // null = known to have no script
 
 export function registerScript(name: string, script: CardScript): void {
   if (registry.has(name.toLowerCase())) {
@@ -890,10 +897,15 @@ export function registerScript(name: string, script: CardScript): void {
   }
   registry.set(name.toLowerCase(), script)
   scriptedNames.add(name)
+  exactNameCache.clear()
 }
 
 export function getScript(name: string): CardScript | undefined {
-  return registry.get(name.toLowerCase())
+  const hit = exactNameCache.get(name) // one lookup on the hot path
+  if (hit !== undefined) return hit ?? undefined
+  const script = registry.get(name.toLowerCase())
+  exactNameCache.set(name, script ?? null)
+  return script
 }
 
 /** The element that tints a spell's damage overlay (fire/earth/water/air), or

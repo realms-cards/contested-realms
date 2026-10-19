@@ -5,6 +5,7 @@ import { pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkS
 import { sitesOf, unitsOf, avatarOf, siteAt } from './grid'
 import { siteSilenced, artifactSilenced, siteDisabledByArtifact, canTap, isDisabled } from './statics'
 import { playSite } from './casting'
+import { noteAddedToEnd } from './knowledge'
 
 /** The mana a player's CURRENTLY-CONTROLLED sources provide right now — sites (incl. enemy
  *  "provides for everyone" sites) plus units/artifacts with `extraManaEachTurn`. Pure (no floats, no
@@ -603,7 +604,7 @@ function finishEndTurn(state: GameState, player: PlayerId): void {
     const at = holder.hand.indexOf(e.cardId)
     if (at < 0) continue
     holder.hand.splice(at, 1)
-    if (e.returnTo === 'spellbookTop') state.players[e.owner].spellbook.unshift(e.cardId)
+    if (e.returnTo === 'spellbookTop') noteAddedToEnd(state, e.holder, e.owner, 'spellbook', 'top', [e.cardId], () => state.players[e.owner].spellbook.unshift(e.cardId))
     else if (e.returnTo === 'cemetery') state.players[e.owner].cemetery.push(e.cardId)
     // 'vanish': collection offers simply cease to exist
     if (e.returnTo !== 'vanish') pushLog(state, e.holder, `${state.cards[e.cardId].name} returns whence it came.`)

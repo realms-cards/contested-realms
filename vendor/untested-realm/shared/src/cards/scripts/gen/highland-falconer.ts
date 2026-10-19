@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { effectSummonUnit } from '../../../engine/effects'
-import { shuffleWithSeed } from '../../../engine/rng'
+import { shuffleDeck } from '../../../engine/knowledge'
 
 // 'Genesis â†’ You may search your hand and spellbook for a Beast with Airborne and
 // mana cost â‘¡ or less and summon it here. Shuffle if needed.'
@@ -34,7 +34,7 @@ registerScript('Highland Falconer', {
             tapped: false, damage: 0, enteredTurn: ctx.state.turn, modifiers: [], carrying: [],
             carryingUnits: [], usedThisTurn: {},
           })
-          if (zone === 'spellbook') ctx.state.seed = shuffleWithSeed(p.spellbook, ctx.state.seed)
+          if (zone === 'spellbook') shuffleDeck(ctx.state, p.id, 'spellbook')
           return
         }
       }

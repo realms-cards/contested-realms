@@ -47,6 +47,7 @@ import {
   type SiteState,
   type Step,
   actingSeatFor,
+  cloneState,
 } from '@sorcery/shared'
 
 export function botNeedsToAct(state: GameState, me: PlayerId): boolean {
@@ -208,7 +209,7 @@ function sabotageCast(
   }
   for (const a of candidates) {
     let dry: GameState
-    try { dry = structuredClone(state) } catch { continue }
+    try { dry = cloneState(state) } catch { continue }
     let ok = false
     try { ok = applyAction(dry, me, a).ok } catch { continue }
     if (!ok) continue
@@ -240,7 +241,7 @@ function atLoc(u: UnitState, loc: { x: number; y: number; region: string }): Uni
  * (casts, ability activations) we confirm it's legal — a mismatch between the
  * bot's target heuristics and the engine's target-legality rules then just makes
  * the bot try the next option instead of looping forever on a rejected cast.
- * GameState is plain serializable data, so structuredClone is safe and cheap
+ * GameState is plain serializable data, so cloneState is safe and cheap
  * enough for one-off checks at the UI's ~550ms cadence.
  */
 function isLegal(state: GameState, me: PlayerId, action: Action): boolean {
@@ -253,7 +254,7 @@ function isLegal(state: GameState, me: PlayerId, action: Action): boolean {
   if (!needsCheck) return true
   let clone: GameState
   try {
-    clone = structuredClone(state)
+    clone = cloneState(state)
   } catch {
     return true // can't verify → assume legal (never worse than the old behavior)
   }
@@ -291,7 +292,7 @@ function progressSig(s: GameState): string {
 function actionMakesProgress(state: GameState, me: PlayerId, action: Action): boolean {
   let clone: GameState
   try {
-    clone = structuredClone(state)
+    clone = cloneState(state)
   } catch {
     return true // can't verify → don't block (never worse than before)
   }
@@ -325,7 +326,7 @@ export function forceAtlasDraw(state: GameState, me: PlayerId): boolean {
 function safePromptAnswer(state: GameState, prompt: any): Action {
   const accepts = (a: Action): boolean => {
     let clone: GameState
-    try { clone = structuredClone(state) } catch { return true } // can't verify → trust it
+    try { clone = cloneState(state) } catch { return true } // can't verify → trust it
     try { return applyAction(clone, prompt.player, a).ok } catch { return false }
   }
   const primary = answerPrompt(state, prompt.player, prompt)
@@ -979,7 +980,7 @@ function tryCastWith(state: GameState, me: PlayerId, cand: CastCand, casterId: s
  *  Returns false for a buff/inert cast that changes nothing useful this turn. */
 function magicIsBeneficial(state: GameState, me: PlayerId, action: Action): boolean {
   let after: GameState
-  try { after = structuredClone(state) } catch { return true } // can't verify → don't block
+  try { after = cloneState(state) } catch { return true } // can't verify → don't block
   try { if (!applyAction(after, me, action).ok) return false } catch { return false }
   const opp = enemyOf(me)
 
@@ -1141,7 +1142,7 @@ function summonKillsEnemyMinion(state: GameState, me: PlayerId, action: Action):
   )
   if (!before.size) return false
   let clone: GameState
-  try { clone = structuredClone(state) } catch { return false }
+  try { clone = cloneState(state) } catch { return false }
   try { if (!applyAction(clone, me, action).ok) return false } catch { return false }
   for (const id of before) {
     const a = clone.units[id]

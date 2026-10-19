@@ -2,6 +2,7 @@ import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog } from '../../../engine/effects'
 import { lend } from '../multi-card-utils/lend'
+import { noteSeenAtEnd } from '../../../engine/knowledge'
 
 // 'Any time during your turn, you may look at your next spell. / You may cast
 //  Dragons from the top of your spellbook here for (1) less.'
@@ -14,6 +15,7 @@ registerScript('Cradle of Etherrum', {
       const p = ctx.state.players[ctx.controller]
       const top = p.spellbook[0]
       if (top === undefined) return ctx.log('The spellbook is empty.')
+      noteSeenAtEnd(ctx.state, ctx.controller, ctx.controller, 'spellbook', 'top', [top])
       ctx.ask({ kind: 'chooseOption', title: `Next spell: ${ctx.state.cards[top].name}.`, data: { options: ['ok'] } }, 'noop')
     },
   }, {

@@ -2,6 +2,7 @@ import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog, effectSummonUnit, revealCards } from '../../../engine/effects'
 import type { PlayerId } from '../../../engine/types'
+import { noteAddedToEnd } from '../../../engine/knowledge'
 
 // "At the end of your turn, reveal opponent's top spell. If it's a minion, summon
 // it here. Otherwise, put it at the bottom of the deck."
@@ -27,7 +28,7 @@ registerScript('Lilith', {
     } else {
       // not a minion → not summoned, just buried at the bottom → reveal it (nothing else shows it).
       revealCards(ctx.state, ctx.controller, [name])
-      p.spellbook.push(id)
+      noteAddedToEnd(ctx.state, 'both', opp, 'spellbook', 'bottom', [id], () => p.spellbook.push(id))
     }
   },
 })

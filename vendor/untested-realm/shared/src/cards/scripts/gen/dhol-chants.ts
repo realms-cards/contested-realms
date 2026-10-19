@@ -1,6 +1,7 @@
 import { registerScript } from '../registry'
 import { pushLog, revealCards } from '../../../engine/effects'
 import { nearbySquaresW, unitsAt } from '../../../engine/grid'
+import { noteAddedToEnd } from '../../../engine/knowledge'
 
 // 'Tap any number of nearby allies. Reveal that many spells from the top of
 //  your spellbook and cast one for free. Put the rest at the bottom.'
@@ -50,7 +51,8 @@ registerScript('Dhol Chants', {
         ctx.state.flow.freeCast = [...(ctx.state.flow.freeCast ?? []), chosen]
         pushLog(ctx.state, ctx.controller, `${ctx.state.cards[chosen].name} may be cast for free.`)
       }
-      p.spellbook.push(...revealed.filter((id) => id !== chosen))
+      const rest = revealed.filter((id) => id !== chosen)
+      noteAddedToEnd(ctx.state, 'both', ctx.controller, 'spellbook', 'bottom', rest, () => p.spellbook.push(...rest))
     },
   },
 })

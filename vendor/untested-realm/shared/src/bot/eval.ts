@@ -14,7 +14,7 @@
 import type { GameState, PlayerId, UnitState } from '../engine/types'
 import { avatarOf, siteAt, orthAdjacentWrapped } from '../engine/grid'
 import { opponent } from '../engine/effects'
-import { effAttack, effDefence, effKeywords, siteSilenced, siteDisabledByArtifact, cemeteryActivations, isBlanked, isDisabled } from '../engine/statics'
+import { effAttack, effDefence, effKeywords, siteSilenced, siteDisabledByArtifact, cemeteryActivations, isBlanked, isDisabled, withFrozenState } from '../engine/statics'
 import { affinity } from '../engine/casting'
 import { stepDistance } from '../engine/movement'
 import { getCard } from '../cards/db'
@@ -23,9 +23,30 @@ import { DEFAULT_WEIGHTS, type EvalWeights } from './eval.weights'
 
 const ELEMENTS = ['air', 'earth', 'fire', 'water'] as const
 
+// Per-evaluation memo. explainEval asks for each unit's reach/attack and each side's board units many times
+// (per site, per avatar check), and each answer is a board-wide keyword/disable scan — yet all of them are
+// fixed for the position being scored. Active only inside one explainEval call (memoState === state);
+// callers only read the returned arrays.
+let memoState: GameState | null = null
+const reachMemo = new Map<string, number>()
+const attackMemo = new Map<string, number>()
+const unitsMemo: [UnitState[] | null, UnitState[] | null] = [null, null]
+
 /** non-avatar units a player controls that are actually on the board (not carried). */
 function boardUnits(state: GameState, player: PlayerId): UnitState[] {
+  if (memoState === state) return (unitsMemo[player] ??= boardUnitsRaw(state, player))
+  return boardUnitsRaw(state, player)
+}
+function boardUnitsRaw(state: GameState, player: PlayerId): UnitState[] {
   return Object.values(state.units).filter((u) => u.controller === player && !u.isAvatar && !u.carriedBy)
+}
+
+/** effAttack, memoized for the position being scored */
+function unitAttack(state: GameState, u: UnitState): number {
+  if (memoState !== state) return effAttack(state, u)
+  let v = attackMemo.get(u.id)
+  if (v === undefined) { v = effAttack(state, u); attackMemo.set(u.id, v) }
+  return v
 }
 
 /** true if this minion has a real ability/trigger (so a low-stat "support" body still has worth). */
@@ -40,6 +61,12 @@ function hasSupportAbility(name: string): boolean {
  *  (only strikes adjacent, or shoots if Ranged). Manhattan distance, Magellan-agnostic — good
  *  enough for a static threat estimate; the search confirms real reachability. */
 function attackReach(state: GameState, u: UnitState): number {
+  if (memoState !== state) return attackReachRaw(state, u)
+  let v = reachMemo.get(u.id)
+  if (v === undefined) { v = attackReachRaw(state, u); reachMemo.set(u.id, v) }
+  return v
+}
+function attackReachRaw(state: GameState, u: UnitState): number {
   if (isDisabled(state, u)) return -1 // can neither move nor strike: threatens nothing
   const kw = effKeywords(state, u)
   if (kw.immobile) return kw.ranged ?? 1
@@ -59,7 +86,7 @@ function reachingPower(state: GameState, attackers: PlayerId, at: { x: number; y
   let power = 0
   for (const u of boardUnits(state, attackers)) {
     if (u.tapped) continue
-    if (stepDistance(u, at) <= attackReach(state, u)) power += effAttack(state, u)
+    if (stepDistance(u, at) <= attackReach(state, u)) power += unitAttack(state, u)
   }
   return power
 }
@@ -91,7 +118,7 @@ function predictedSiteLoss(state: GameState, owner: PlayerId): number {
       // a TAPPED attacker still counts: it untaps at end of turn, so it's a standing threat to this site
       // next turn. (Also: this stops a unit that just RAZED a site — now tapped on it — from "losing" the
       // threat it still poses, which otherwise made attacking a site look worse than merely threatening it.)
-      if (stepDistance(u, site) <= attackReach(state, u)) maxPower = Math.max(maxPower, effAttack(state, u))
+      if (stepDistance(u, site) <= attackReach(state, u)) maxPower = Math.max(maxPower, unitAttack(state, u))
     }
     if (maxPower > 0) loss += maxPower + siteManaOf(state, site) // life razed + mana denied
   }
@@ -132,15 +159,29 @@ function siteWorth(n: number, w: EvalWeights): number {
 /** how well a player's affinity meets the threshold DEMAND of the cards in their deck+hand. */
 export function thresholdFit(state: GameState, player: PlayerId): number {
   const aff = affinity(state, player)
-  const demand = { air: 0, earth: 0, fire: 0, water: 0 }
+  const demand = [0, 0, 0, 0]
   const p = state.players[player]
-  for (const id of [...p.hand, ...p.spellbook, ...p.atlas]) {
-    const t = getCard(state.cards[id].name).thresholds
-    for (const e of ELEMENTS) demand[e] = Math.max(demand[e], t[e] ?? 0)
+  for (const zone of [p.hand, p.spellbook, p.atlas]) {
+    for (const id of zone) {
+      const t = thresholdVec(state.cards[id].name)
+      for (let i = 0; i < 4; i++) if (t[i] > demand[i]) demand[i] = t[i]
+    }
   }
   let fit = 0
-  for (const e of ELEMENTS) fit += Math.min(aff[e], demand[e])
+  for (let i = 0; i < 4; i++) fit += Math.min(aff[ELEMENTS[i]], demand[i])
   return fit
+}
+
+/** a card's thresholds in ELEMENTS order — card data is static, so cache it per name */
+const thresholdVecCache = new Map<string, number[]>()
+function thresholdVec(name: string): number[] {
+  let v = thresholdVecCache.get(name)
+  if (!v) {
+    const t = getCard(name).thresholds
+    v = ELEMENTS.map((e) => t[e] ?? 0)
+    thresholdVecCache.set(name, v)
+  }
+  return v
 }
 
 /** the worth of a single non-avatar unit (from the controller's perspective, always positive). */
@@ -231,6 +272,16 @@ export interface EvalBreakdown {
 
 /** the same computation as `evaluate`, but returns a per-feature breakdown for tuning/inspection. */
 export function explainEval(state: GameState, me: PlayerId, w: EvalWeights = DEFAULT_WEIGHTS): EvalBreakdown {
+  memoState = state
+  try {
+    return withFrozenState(state, () => explainEvalRaw(state, me, w))
+  } finally {
+    memoState = null
+    reachMemo.clear(); attackMemo.clear(); unitsMemo[0] = null; unitsMemo[1] = null
+  }
+}
+
+function explainEvalRaw(state: GameState, me: PlayerId, w: EvalWeights): EvalBreakdown {
   const foe = opponent(me)
   const terms: Record<string, number> = {}
 

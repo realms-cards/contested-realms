@@ -1,5 +1,6 @@
 import { registerScript, type EffectAPI } from '../registry'
 import { getCard } from '../../db'
+import { noteAddedToEnd, noteSeenAtEnd } from '../../../engine/knowledge'
 
 // 'Ward / Once on your turn, you may banish a dead minion to look at your top
 // spell. You may put it at the bottom.'
@@ -31,10 +32,13 @@ registerScript('Clairvoyant', {
       clairvoyantBurn(ctx, corpseIds[idx])
     },
     scry: (ctx, _c, choice) => {
-      if (choice !== 'put on bottom') return
       const p = ctx.state.players[ctx.controller]
+      if (choice !== 'put on bottom') {
+        if (p.spellbook[0] !== undefined) noteSeenAtEnd(ctx.state, ctx.controller, ctx.controller, 'spellbook', 'top', [p.spellbook[0]])
+        return
+      }
       const id = p.spellbook.shift()
-      if (id !== undefined) p.spellbook.push(id)
+      if (id !== undefined) noteAddedToEnd(ctx.state, ctx.controller, ctx.controller, 'spellbook', 'bottom', [id], () => p.spellbook.push(id))
     },
   },
 })
@@ -48,6 +52,7 @@ function clairvoyantBurn(ctx: EffectAPI, corpseId: string) {
   p.banished.push(dead)
   const topId = p.spellbook[0]
   if (topId === undefined) return
+  noteSeenAtEnd(ctx.state, ctx.controller, ctx.controller, 'spellbook', 'top', [topId])
   ctx.ask(
     { kind: 'chooseOption', title: `Top spell: ${ctx.state.cards[topId].name}. Put it on the bottom?`, data: { options: ['keep on top', 'put on bottom'] } },
     'scry',

@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { effectSummonUnit } from '../../../engine/effects'
-import { shuffleWithSeed } from '../../../engine/rng'
+import { shuffleDeck } from '../../../engine/knowledge'
 
 // 'Genesis → You may search your spellbook or hand for another Brother Knight and
 // summon it here. Shuffle if needed.'
@@ -28,7 +28,7 @@ registerScript('Brother Knight', {
             tapped: false, damage: 0, enteredTurn: ctx.state.turn, modifiers: [], carrying: [],
             carryingUnits: [], usedThisTurn: {},
           })
-          if (zone === 'spellbook') ctx.state.seed = shuffleWithSeed(p.spellbook, ctx.state.seed)
+          if (zone === 'spellbook') shuffleDeck(ctx.state, p.id, 'spellbook')
           return
         }
       }

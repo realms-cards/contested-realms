@@ -38,8 +38,10 @@ registerScript('Skeleton Mage', {
       const name = ctx.state.cards[pick.cardId].name
       owner.cemetery.splice(at, 1)
       if (!ctx.state.cards[pick.cardId].isToken) owner.banished.push(pick.cardId) // "banishing it afterward"
-      // Skeleton Mage CASTS the magic now (it's the Spellcaster), paying its cost — not lent to hand
-      effectCastSpell(ctx.state, ctx.controller, name, { caster: ctx.sourceId, grantsCasting: true, free: false })
+      // Skeleton Mage CASTS the magic now (it's the Spellcaster), paying its cost — not lent to hand.
+      // The real card is already banished, so what's cast is a paid token (tokenCopy): it vanishes once
+      // resolved instead of landing back in a cemetery.
+      effectCastSpell(ctx.state, ctx.controller, name, { caster: ctx.sourceId, grantsCasting: true, free: false, tokenCopy: true })
       pushLog(ctx.state, ctx.controller, `${name} is cast from the grave, then crumbles to dust.`)
     },
   },

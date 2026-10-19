@@ -1,7 +1,7 @@
 import { registerScript, type EffectAPI } from '../registry'
 import { nearbySquaresW, siteAt } from '../../../engine/grid'
 import { effectSummonUnit } from '../../../engine/effects'
-import { shuffleWithSeed } from '../../../engine/rng'
+import { shuffleDeck } from '../../../engine/knowledge'
 
 // ================= cards =================
 
@@ -36,7 +36,7 @@ registerScript('Adept Illusionist', {
         const idx = p[zone].findIndex((id) => ctx.state.cards[id].name === self.name)
         if (idx < 0) continue
         const [cardId] = p[zone].splice(idx, 1)
-        if (zone === 'spellbook') ctx.state.seed = shuffleWithSeed(p.spellbook, ctx.state.seed)
+        if (zone === 'spellbook') shuffleDeck(ctx.state, p.id, 'spellbook')
         // "summon it NEARBY": the controller chooses which nearby site (own square included).
         // Only prompt when there's a real choice; one (or zero) option summons directly.
         const spots = nearbySquaresW(ctx.state, self.x, self.y).filter((s) => siteAt(ctx.state, s.x, s.y))

@@ -1,6 +1,7 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { toCemetery } from '../../../engine/effects'
+import { noteAddedToEnd } from '../../../engine/knowledge'
 
 // 'Genesis → Search your top five spells for a minion to discard. Bottom the rest.'
 registerScript('Forgotten Tomb', {
@@ -12,7 +13,7 @@ registerScript('Forgotten Tomb', {
     ctx.state.flow.tomb = top
     const minions = [...new Set(top.map((id) => ctx.state.cards[id].name).filter((n) => getCard(n).type === 'Minion'))]
     if (!minions.length) {
-      p.spellbook.push(...top)
+      noteAddedToEnd(ctx.state, ctx.controller, ctx.controller, 'spellbook', 'bottom', top, () => p.spellbook.push(...top))
       ctx.state.flow.tomb = []
       return
     }
@@ -29,7 +30,8 @@ registerScript('Forgotten Tomb', {
           toCemetery(ctx.state, id)
         }
       }
-      p.spellbook.push(...pool)
+      const rest = [...pool]
+      noteAddedToEnd(ctx.state, ctx.controller, ctx.controller, 'spellbook', 'bottom', rest, () => p.spellbook.push(...rest))
       if (ctx.state.flow) ctx.state.flow.tomb = []
     },
   },

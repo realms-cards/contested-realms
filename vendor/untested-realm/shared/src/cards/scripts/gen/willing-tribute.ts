@@ -9,7 +9,7 @@ registerScript('Willing Tribute', {
     label: 'Sacrifice → Untap an adjacent Evil ally',
     cost: { sacrificeSelf: true },
     targets: [{
-      what: 'minion', count: 1, targeted: false, owner: 'ally', where: 'adjacent', label: 'an adjacent Evil ally',
+      what: 'unit', count: 1, targeted: false, owner: 'ally', where: 'adjacent', label: 'an adjacent Evil ally', // any unit, Avatar included
       filter: (state, u) => isEvilU(state, u),
     }],
     effect: (ctx) => {

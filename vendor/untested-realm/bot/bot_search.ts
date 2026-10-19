@@ -42,6 +42,8 @@ import {
   GRID_W,
   GRID_H,
   DEFAULT_WEIGHTS,
+  knownCards,
+  spellbookTopsPublic,
   type Action,
   type GameState,
   type PlayerId,
@@ -80,6 +82,22 @@ export interface SearchConfig {
   /** span cap: also never roll forward more than this many turns from now (INCLUDING opponent turns).
    *  The effective horizon is min(earlyHorizonTurn, currentTurn + maxLookaheadTurns). */
   maxLookaheadTurns: number
+  /** OPPONENT MODEL — judge each opponent action by its RESOLVED effect: its follow-up prompts (an
+   *  ability's targets, a spell's choices) are played out with the opponent's own best answers before
+   *  scoring, instead of scoring the half-done "cost paid, nothing happened yet" state (which made the
+   *  model all but ignore targeted abilities). Those answers don't use up `oppTurnMaxActions`, and a
+   *  modelled turn never ends with a prompt left open. OFF by default. */
+  oppResolvePrompts: boolean
+  /** OPPONENT MODEL — how many of its own actions the opponent looks ahead when choosing each one.
+   *  1 = greedy (the default: best immediate action). 2+ = for its `oppLookaheadWidth` most promising
+   *  actions, also try its best follow-ups, so it finds simple combinations (move one unit to set up
+   *  another's attack). Costs nodes from the same `nodeBudget`. */
+  oppLookahead: number
+  /** how many candidate actions per opponent step the lookahead explores (oppLookahead ≥ 2). */
+  oppLookaheadWidth: number
+  /** also consider casting a MAGIC from my Spellcaster minions, not just my avatar — for magics whose reach
+   *  depends on where they're cast from (a target nearby/adjacent/here the caster, or a projectile). ON. */
+  minionCasters: boolean
   weights: EvalWeights
   /** anti-loop ward (driver-fed): action keys (botActionKey) that already proved score-neutral this
    *  turn. They're excluded from the ROOT of the search + the plan replay, so the bot can't re-pick a
@@ -99,6 +117,10 @@ export const DEFAULT_SEARCH: SearchConfig = {
   earlyPlanUntilTurn: 7, // only look ahead while current turn ≤ 7
   earlyHorizonTurn: 8, // never roll past turn 8
   maxLookaheadTurns: 5, // and at most 5 turns from now (incl. the opponent's)
+  oppResolvePrompts: false,
+  oppLookahead: 1,
+  oppLookaheadWidth: 3,
+  minionCasters: true,
   weights: DEFAULT_WEIGHTS,
 }
 
@@ -122,15 +144,95 @@ let TIMED_OUT = false
 /** a stable, exact signature of a position — used to key opponent-answer branches so the runtime can
  *  follow the branch matching what the opponent actually did. GameState is pure JSON and both the
  *  search clone and the live state are produced by the SAME engine path, so equal positions stringify
- *  identically (any nondeterministic drift just misses → a safe re-plan). */
-const sig = (s: GameState): string => JSON.stringify(s)
+ *  identically (any nondeterministic drift just misses → a safe re-plan). The search runs on a
+ *  DETERMINIZED copy (decks shuffled), so deck ORDER is left out — otherwise the live state never
+ *  matches a search state and every branch misses. Deck contents still count (sorted). It is taken
+ *  from `me`'s point of view (hiddenFrom): the opponent's unseen cards are compared by card back only,
+ *  so the real state and the search's stand-ins (fairView) agree wherever `me` can't tell them apart. */
+const sig = (s: GameState, me: PlayerId): string => {
+  const h = hiddenFrom(s, me)
+  const cards = { ...s.cards }
+  for (const [id, back] of h.unseen) cards[id] = { ...cards[id], name: `?${back}` }
+  const foe = opponent(me)
+  const sites = { ...s.sites }
+  for (const id of h.traps) {
+    const site = sites[id]
+    for (const cid of [site.cardId, site.trap!.realCardId]) if (cid && cards[cid]) cards[cid] = { ...cards[cid], name: site.name }
+    sites[id] = { ...site, trap: { element: site.trap!.element } }
+  }
+  const flow = { ...(s.flow ?? {}) }
+  delete flow.knownDeck
+  // what `me` knows of each deck end IS compared: a peek mid-turn must invalidate a plan made without it
+  const known = [0, 1].map((o) => (['spellbook', 'atlas'] as const).map((d) => knownEnds(s, me, o as PlayerId, d)))
+  return JSON.stringify({
+    ...s, cards, sites, flow, known, seed: 0,
+    players: s.players.map((p) => ({ ...p, spellbook: [...p.spellbook].sort(), atlas: [...p.atlas].sort(), collection: p.id === foe ? {} : p.collection })),
+  })
+}
 
-/** FAIRNESS: the bot is handed the full state (true deck order), so simulating its own draws would
- *  reveal the exact upcoming cards — foreknowledge a real player can't have. Determinize by SHUFFLING
- *  both decks' order in the search's working copy: the bot still knows its decklist (fair) but no longer
- *  the order, so a simulated draw yields a random plausible card, not the real next one. Hands stay real
- *  (you can see your own hand) and every returned action is validated against the true state on replay. */
-function determinize(state: GameState, me: PlayerId): GameState {
+// ── hidden information ──────────────────────────────────────────────────────
+// The bot is handed the FULL state, so everything it decides must come from a copy that holds only what
+// its player could know (fairView): both decks' order is unknown except the runs it has seen at either
+// end (engine/knowledge.ts, plus public Doomsday Cult tops), and the opponent's unseen cards — hand,
+// decks, sideboard, a face-down trap's true identity — are replaced by
+// stand-ins. Card backs are public (sites and spells look different, except a Magician's), so each
+// stand-in keeps its back: an unseen spell becomes an ability-less vanilla minion (the opponent model
+// never casts spells), an unseen site a basic site of the elements the opponent has shown.
+
+/** a vanilla minion with no script: what an unseen spell looks like to the search. */
+const SPELL_STANDIN = 'Bosk Troll'
+const BASIC_SITE: Record<string, string> = { air: 'Spire', earth: 'Valley', fire: 'Wasteland', water: 'Stream' }
+
+/** the runs `me` knows at each end of `owner`'s `deck`, in deck order. */
+function knownEnds(state: GameState, me: PlayerId, owner: PlayerId, deck: 'spellbook' | 'atlas'): { top: string[]; bottom: string[] } {
+  const live = state.players[owner][deck]
+  let top = knownCards(state, me, owner, deck, 'top')
+  if (!top.length && deck === 'spellbook' && live.length && spellbookTopsPublic(state)) top = [live[0]]
+  let bottom = knownCards(state, me, owner, deck, 'bottom')
+  if (top.length + bottom.length > live.length) bottom = bottom.slice(top.length + bottom.length - live.length) // the runs meet
+  return { top, bottom }
+}
+
+/** the opponent's cards whose identity `me` hasn't seen (id → card back), and their face-down traps. */
+function hiddenFrom(state: GameState, me: PlayerId): { unseen: Map<string, 'site' | 'spell'>; traps: string[] } {
+  const foe = opponent(me)
+  const p = state.players[foe]
+  const avatar = state.units[p.avatarUnitId]
+  const mixedBacks = !!(avatar && getScript(avatar.name)?.sitesInSpellbook) // a Magician's sites share the spell back
+  const unseen = new Map<string, 'site' | 'spell'>()
+  for (const id of p.hand) {
+    const c = state.cards[id]
+    if (!c || c.owner === me || state.handReveals?.[id]?.includes(me)) continue // my own card, or shown to me
+    unseen.set(id, !mixedBacks && cardType(c.name) === 'Site' ? 'site' : 'spell')
+  }
+  for (const deck of ['spellbook', 'atlas'] as const) {
+    const { top, bottom } = knownEnds(state, me, foe, deck)
+    const live = p[deck]
+    for (let i = top.length; i < live.length - bottom.length; i++) unseen.set(live[i], deck === 'atlas' ? 'site' : 'spell')
+  }
+  const traps = Object.keys(state.sites).filter((id) => state.sites[id].trap && state.sites[id].owner === foe)
+  return { unseen, traps }
+}
+
+const findCard = (name: string) => { try { return getCard(name) } catch { return undefined } }
+const cardType = (name: string) => findCard(name)?.type
+
+/** the elements the opponent's sites have shown (realm, cemetery, banished), one entry per site seen. */
+function shownSiteElements(state: GameState, foe: PlayerId): string[] {
+  const out: string[] = []
+  const add = (name: string | undefined) => {
+    const def = name ? findCard(name) : undefined
+    if (def?.type !== 'Site') return
+    for (const e of ['air', 'earth', 'fire', 'water'] as const) if ((def.thresholds[e] ?? 0) > 0) out.push(e)
+  }
+  for (const s of Object.values(state.sites)) if (s.owner === foe && !s.isRubble) add(s.name)
+  for (const id of [...state.players[foe].cemetery, ...state.players[foe].banished]) add(state.cards[id]?.name)
+  return out.length ? out : ['air', 'earth', 'fire', 'water']
+}
+
+/** `me`'s fair copy of the game (see "hidden information" above). Unknown deck order is SHUFFLED, so a
+ *  simulated draw yields a random plausible card, not the real next one; seen runs stay where they are. */
+function fairView(state: GameState, me: PlayerId): GameState {
   const s = clone(state)
   const shuffle = (arr: string[]) => {
     for (let i = arr.length - 1; i > 0; i--) {
@@ -138,9 +240,60 @@ function determinize(state: GameState, me: PlayerId): GameState {
       ;[arr[i], arr[j]] = [arr[j], arr[i]]
     }
   }
-  for (const p of [0, 1] as PlayerId[]) { shuffle(s.players[p].spellbook); shuffle(s.players[p].atlas) }
+  for (const p of [0, 1] as PlayerId[]) {
+    for (const deck of ['spellbook', 'atlas'] as const) {
+      const { top, bottom } = knownEnds(state, me, p, deck)
+      const live = s.players[p][deck]
+      const middle = live.slice(top.length, live.length - bottom.length)
+      shuffle(middle)
+      s.players[p][deck] = [...top, ...middle, ...bottom]
+    }
+  }
+  const foe = opponent(me)
+  const { unseen, traps } = hiddenFrom(state, me)
+  const elements = shownSiteElements(state, foe)
+  let nextSite = 0
+  for (const [id, back] of unseen) {
+    const name = back === 'spell' ? SPELL_STANDIN : BASIC_SITE[elements[nextSite++ % elements.length]]
+    s.cards[id] = { ...s.cards[id], name, art: undefined }
+  }
+  for (const id of traps) {
+    const site = s.sites[id]
+    s.cards[site.cardId] = { ...s.cards[site.cardId], name: site.name } // it looks like its disguise
+    if (site.trap!.realCardId && s.cards[site.trap!.realCardId]) s.cards[site.trap!.realCardId] = { ...s.cards[site.trap!.realCardId], name: site.name }
+    site.trap = { element: site.trap!.element } // no real identity → it can't be sprung in the search
+  }
+  s.players[foe].collection = {}
+  // the opponent's own knowledge records can name cards of MY deck they looked at — not mine to see
+  if (s.flow?.knownDeck) {
+    const mine: Record<string, string[]> = {}
+    for (const k in s.flow.knownDeck) if (k.startsWith(`${me}:`)) mine[k] = s.flow.knownDeck[k]
+    s.flow.knownDeck = mine
+  }
+  // the game's RNG seed decides every future random outcome (Lucky Charm, "a random minion", shuffles):
+  // a fresh one, so the search can't foresee them
+  s.seed = Math.floor(Math.random() * 2 ** 32) >>> 0
   return s
 }
+
+// ── tree reuse across a cut-off ─────────────────────────────────────────────
+// A search that hits its node budget plays only its first action and is not replayed (its deeper lines
+// are truncated). Instead of throwing the explored tree away, the next decision CONTINUES that same tree:
+// it searches from the chosen action's position, at its original depth, in the same determinized world,
+// and every subtree the earlier pass finished is reused as-is. Results are keyed by the action path from
+// the turn's root (exact: same world + same path = same position), and cached only when EXACT — the
+// node budget and deadline never fired while computing them (both only grow, so "still under at the end"
+// means no check inside bailed).
+type SubResult = { val: number; plan: PlanNode }
+type Continuation = { seat: PlayerId; turn: number; path: string; state: GameState; depth: number; bonus: number; answered?: boolean }
+/** per seat, so one bot seat's search never wipes the other's tree (bot-vs-bot in one worker). */
+const TREES: Map<string, SubResult>[] = [new Map(), new Map()]
+let TREE = TREES[0]
+/** where each seat's next decision continues after a cut-off: the chosen root child, as the search saw it. */
+const CONTS: (Continuation | null)[] = [null, null]
+/** depth of the current search's root (0 for a fresh turn plan; deeper when continuing a cut-off tree). */
+let ROOT_DEPTH = 0
+let ROOT_PICK: { path: string; state: GameState; bonus: number } | null = null
 
 /** True while `me` is the one to act: my open prompt, or my main phase with no pending prompt. */
 function controlMine(state: GameState, me: PlayerId): boolean {
@@ -189,7 +342,7 @@ function advancePlan(state: GameState, me: PlayerId): Action | null {
   while (PLAN) {
     if (PLAN.kind === 'end') { PLAN = null; return null }
     if (PLAN.kind === 'branch') {
-      const nxt = PLAN.byState[sig(state)] // which opponent answer actually happened?
+      const nxt = PLAN.byState[sig(state, me)] // which opponent answer actually happened?
       if (!nxt) { PLAN = null; return null } // opponent did something we didn't enumerate → re-plan
       PLAN = nxt
       continue // descend (usually to an 'act')
@@ -216,15 +369,89 @@ function opponentBoardReply(state: GameState, me: PlayerId, cfg: SearchConfig, d
     if (!children.length) break
     const pickMin = decider === foe // opponent minimises my eval; my prompts maximise
     let best = children[0]
-    let bestVal = pickMin ? Infinity : -Infinity
-    for (const c of children) {
-      const v = evaluate(c.next, me, cfg.weights)
-      if (pickMin ? v < bestVal : v > bestVal) { bestVal = v; best = c }
+    if (pickMin && opponentModelled(cfg)) {
+      best = foePick(children, me, cfg, deadline, (s) => expandActions(s, foe, { deadline, boardOnly: true }))
+    } else {
+      let bestVal = pickMin ? Infinity : -Infinity
+      for (const c of children) {
+        const v = evaluate(c.next, me, cfg.weights)
+        if (pickMin ? v < bestVal : v > bestVal) { bestVal = v; best = c }
+      }
     }
     if (best.action.t === 'endTurn' && decider === foe) return best.next // opponent chose to stop
     Object.assign(state, best.next)
   }
+  // never score a modelled turn with a prompt left half-answered (cost paid, effect not yet applied)
+  if (cfg.oppResolvePrompts) Object.assign(state, resolvePrompts(state, me, cfg, deadline))
   return state
+}
+
+/** any non-default opponent modelling switched on? (off → the original greedy one-step code path) */
+const opponentModelled = (cfg: SearchConfig): boolean => cfg.oppResolvePrompts || cfg.oppLookahead > 1
+
+/** Play out every open prompt — whoever it's addressed to — each side greedily (the opponent its
+ *  lowest-for-me answer, me my best), so a position is scored with its effects actually applied. */
+function resolvePrompts(state: GameState, me: PlayerId, cfg: SearchConfig, deadline: number): GameState {
+  let s = state
+  for (let guard = 0; guard < 8 && s.prompts[0] && s.winner === null && Date.now() < deadline; guard++) {
+    const decider = actingSeatFor(s, s.prompts[0].player)
+    const kids = expandActions(s, decider, { deadline })
+    NODES += kids.length
+    if (!kids.length) break
+    const mine = decider === me
+    let best = kids[0]
+    let bestV = mine ? -Infinity : Infinity
+    for (const c of kids) { const v = evaluate(c.next, me, cfg.weights); if (mine ? v > bestV : v < bestV) { bestV = v; best = c } }
+    s = best.next
+  }
+  return s
+}
+
+/** The opponent's choice among `kids` (its actions at one step of a modelled turn), per the opponent-model
+ *  options. Returns the chosen action with the position it leads to — prompts already resolved when
+ *  `oppResolvePrompts` is on, so the caller continues from the action's real effect. `expand` lists the
+ *  opponent's actions in a position, in the same mode as the caller (board-only reply / developing). */
+function foePick(
+  kids: { action: Action; next: GameState }[], me: PlayerId, cfg: SearchConfig, deadline: number,
+  expand: (s: GameState) => { action: Action; next: GameState }[],
+): { action: Action; next: GameState } {
+  const scored = scoreFoeOptions(kids, me, cfg, deadline)
+  let best = scored[0]
+  let bestV = Infinity
+  const width = cfg.oppLookahead > 1 ? cfg.oppLookaheadWidth : scored.length
+  for (const r of scored.slice(0, width)) {
+    const v = cfg.oppLookahead > 1 ? foeValue(r.next, me, cfg, deadline, expand, cfg.oppLookahead - 1, r.v) : r.v
+    if (v < bestV) { bestV = v; best = r }
+  }
+  return { action: best.action, next: best.next }
+}
+
+/** each option's (resolved) position and immediate value, best-for-the-opponent (lowest) first. */
+function scoreFoeOptions(kids: { action: Action; next: GameState }[], me: PlayerId, cfg: SearchConfig, deadline: number) {
+  return kids
+    .map((c) => {
+      const next = cfg.oppResolvePrompts ? resolvePrompts(c.next, me, cfg, deadline) : c.next
+      return { action: c.action, next, v: evaluate(next, me, cfg.weights) }
+    })
+    .sort((a, b) => a.v - b.v)
+}
+
+/** the value of `state` for me if the opponent, still acting, plays its best `depth` more actions
+ *  (looking at its `oppLookaheadWidth` most promising each time). `here` = the value of stopping now. */
+function foeValue(
+  state: GameState, me: PlayerId, cfg: SearchConfig, deadline: number,
+  expand: (s: GameState) => { action: Action; next: GameState }[], depth: number, here: number,
+): number {
+  const foe = opponent(me)
+  if (depth <= 0 || state.winner !== null || !controlMine(state, foe) || NODES > cfg.nodeBudget || Date.now() > deadline) return here
+  const kids = expand(state)
+  NODES += kids.length
+  let best = here
+  for (const r of scoreFoeOptions(kids, me, cfg, deadline).slice(0, cfg.oppLookaheadWidth)) {
+    const v = r.action.t === 'endTurn' ? r.v : foeValue(r.next, me, cfg, deadline, expand, depth - 1, r.v)
+    if (v < best) best = v
+  }
+  return best
 }
 
 /** How an action changed MY draws: how many extra cards I drew, and the ids of any newly drawn SPELLS.
@@ -251,7 +478,7 @@ function resolvedEval(state: GameState, me: PlayerId, cfg: SearchConfig, deadlin
   let s = state
   let guard = 0
   while (guard++ < 8 && s.prompts[0] && actingSeatFor(s, s.prompts[0].player) === me && Date.now() < deadline) {
-    const kids = expandActions(s, me, { deadline })
+    const kids = expandActions(s, me, { deadline, minionCasters: cfg.minionCasters })
     if (!kids.length) break
     let best = kids[0]
     let bestV = -Infinity
@@ -273,18 +500,23 @@ function greedyTurn(state: GameState, me: PlayerId, cfg: SearchConfig, deadline:
     if (state.winner !== null || Date.now() > deadline || NODES > cfg.nodeBudget) return
     const p = state.prompts[0]
     const decider = p ? actingSeatFor(state, p.player) : actingSeatFor(state, state.activePlayer)
-    const kids = preferPlaySite(expandActions(state, decider, decider === opponent(me) ? { deadline, noSpellCasts: true } : { deadline }))
+    const kids = preferPlaySite(expandActions(state, decider, decider === opponent(me) ? { deadline, noSpellCasts: true } : { deadline, minionCasters: cfg.minionCasters }))
     NODES += kids.length
     if (!kids.length) return
     const maximize = decider === me
     let best = kids[0]
-    let bestVal = maximize ? -Infinity : Infinity
-    // On MY turn, rank by resolved effect (so the rollout also plays spells/artifacts to their real
-    // outcome, not just minions). On the ENEMY's modeled turn, cheap positional eval is enough — no need
-    // to resolve their prompts, and it keeps the rollout affordable.
-    for (const c of kids) {
-      const v = maximize ? resolvedEval(c.next, me, cfg, deadline) : evaluate(c.next, me, cfg.weights)
-      if (maximize ? v > bestVal : v < bestVal) { bestVal = v; best = c }
+    if (!maximize && opponentModelled(cfg)) {
+      const foe = opponent(me)
+      best = foePick(kids, me, cfg, deadline, (s) => preferPlaySite(expandActions(s, foe, { deadline, noSpellCasts: true })))
+    } else {
+      let bestVal = maximize ? -Infinity : Infinity
+      // On MY turn, rank by resolved effect (so the rollout also plays spells/artifacts to their real
+      // outcome, not just minions). On the ENEMY's modeled turn, cheap positional eval is enough by
+      // default (the opponent-model options above refine it).
+      for (const c of kids) {
+        const v = maximize ? resolvedEval(c.next, me, cfg, deadline) : evaluate(c.next, me, cfg.weights)
+        if (maximize ? v > bestVal : v < bestVal) { bestVal = v; best = c }
+      }
     }
     Object.assign(state, best.next)
     if (best.action.t === 'endTurn') return
@@ -314,7 +546,16 @@ function rollForward(state: GameState, me: PlayerId, cfg: SearchConfig, deadline
  *   MAX (my control) → beam over my actions;  MIN (opponent defend) → all answers, worst for me;
  *   leaf (my turn over) → opponent board reply → eval.  A drawn SPELL turns its line into a leaf.
  */
-function search(state: GameState, me: PlayerId, cfg: SearchConfig, deadline: number, depth: number, drawBonus = 0): { val: number; plan: PlanNode } {
+function search(state: GameState, me: PlayerId, cfg: SearchConfig, deadline: number, depth: number, drawBonus = 0, path = ''): SubResult {
+  const hit = TREE.get(path)
+  // a root filtered by the anti-loop ward isn't the node the earlier pass cached (that one wasn't filtered)
+  if (hit && !(depth === ROOT_DEPTH && cfg.banned?.size)) return hit
+  const r = searchNode(state, me, cfg, deadline, depth, drawBonus, path)
+  if (NODES < cfg.nodeBudget && Date.now() <= deadline) TREE.set(path, r)
+  return r
+}
+
+function searchNode(state: GameState, me: PlayerId, cfg: SearchConfig, deadline: number, depth: number, drawBonus: number, path: string): SubResult {
   const w = cfg.weights
 
   if (state.winner !== null || state.phase === 'over') return { val: evaluate(state, me, w) + drawBonus, plan: { kind: 'end' } }
@@ -335,11 +576,11 @@ function search(state: GameState, me: PlayerId, cfg: SearchConfig, deadline: num
     let worst = Infinity
     for (const c of kids) {
       if (Date.now() > deadline) { TIMED_OUT = true; break }
-      const sub = search(c.next, me, cfg, deadline, depth + 1, drawBonus) // draws already folded into drawBonus downstream
+      const sub = search(c.next, me, cfg, deadline, depth + 1, drawBonus, `${path}|o${JSON.stringify(c.action)}`) // draws already folded into drawBonus downstream
       if (sub.val < worst) worst = sub.val
       // flatten chained opponent decisions so every branch key is a state where control RETURNS to me
       if (sub.plan.kind === 'branch') Object.assign(byState, sub.plan.byState)
-      else byState[sig(c.next)] = sub.plan
+      else byState[sig(c.next, me)] = sub.plan
     }
     if (worst === Infinity) return { val: evaluate(state, me, w) + drawBonus, plan: { kind: 'end' } }
     return { val: worst, plan: { kind: 'branch', byState } }
@@ -353,8 +594,8 @@ function search(state: GameState, me: PlayerId, cfg: SearchConfig, deadline: num
       return { val: evaluate(opponentBoardReply(ended, me, cfg, deadline), me, w) + drawBonus, plan: { kind: 'act', action: { t: 'endTurn' }, next: { kind: 'end' } } }
     }
     // can't end (an open prompt of mine) → fall back to the single shallow-best child, no recursion
-    let kids = expandActions(state, me, { deadline })
-    if (depth === 0 && cfg.banned?.size) kids = kids.filter((c) => !cfg.banned!.has(botActionKey(c.action)))
+    let kids = expandActions(state, me, { deadline, minionCasters: cfg.minionCasters })
+    if (depth === ROOT_DEPTH && cfg.banned?.size) kids = kids.filter((c) => !cfg.banned!.has(botActionKey(c.action)))
     if (!kids.length) return { val: evaluate(state, me, w) + drawBonus, plan: { kind: 'end' } }
     let best = kids[0], bestS = -Infinity
     for (const c of kids) { const s = evaluate(c.next, me, w); if (s > bestS) { bestS = s; best = c } }
@@ -362,10 +603,10 @@ function search(state: GameState, me: PlayerId, cfg: SearchConfig, deadline: num
   }
 
   // ── MAX node: beam over my actions (top-K by static eval, always keep the end-turn option) ──
-  let kids = preferPlaySite(expandActions(state, me, { deadline })) // draw a site only if none is playable
+  let kids = preferPlaySite(expandActions(state, me, { deadline, minionCasters: cfg.minionCasters })) // draw a site only if none is playable
   // anti-loop ward: at the ROOT, drop actions already known score-neutral this turn (the first move is
   // what actually gets applied and could otherwise loop). Deeper plies are unaffected.
-  if (depth === 0 && cfg.banned?.size) kids = kids.filter((c) => !cfg.banned!.has(botActionKey(c.action)))
+  if (depth === ROOT_DEPTH && cfg.banned?.size) kids = kids.filter((c) => !cfg.banned!.has(botActionKey(c.action)))
   NODES += kids.length
   const foeDD = cfg.avoidSiteAttacksAtDeathsDoor && avatarOf(state, opponent(me)).deathsDoor
   if (foeDD) kids = kids.filter((c) => !isSiteAttack(c.action))
@@ -405,6 +646,7 @@ function search(state: GameState, me: PlayerId, cfg: SearchConfig, deadline: num
   let bestVal = -Infinity
   let bestAction: Action = chosen[0].c.action
   let bestNext: PlanNode = { kind: 'end' }
+  let bestPick: { path: string; state: GameState; bonus: number } | null = null
   for (const r of chosen) {
     if (Date.now() > deadline) { TIMED_OUT = true; break }
     const childBonus = drawBonus + r.own
@@ -416,9 +658,11 @@ function search(state: GameState, me: PlayerId, cfg: SearchConfig, deadline: num
       next = clone(r.c.next)
       next.players[me].hand = next.players[me].hand.filter((id) => !r.di.spellIds.includes(id))
     }
-    const sub = search(next, me, cfg, deadline, depth + 1, childBonus)
-    if (sub.val > bestVal) { bestVal = sub.val; bestAction = r.c.action; bestNext = sub.plan }
+    const childPath = `${path}|${JSON.stringify(r.c.action)}`
+    const sub = search(next, me, cfg, deadline, depth + 1, childBonus, childPath)
+    if (sub.val > bestVal) { bestVal = sub.val; bestAction = r.c.action; bestNext = sub.plan; bestPick = { path: childPath, state: next, bonus: childBonus } }
   }
+  if (depth === ROOT_DEPTH) ROOT_PICK = bestPick
   return { val: bestVal, plan: { kind: 'act', action: bestAction, next: bestNext } }
 }
 
@@ -491,7 +735,7 @@ function isPathfinderLike(avatar: UnitState): boolean {
  *  any ability that doesn't lower the eval. Candidates come from a fresh expansion of the CURRENT state. */
 function endTurnCleanup(state: GameState, me: PlayerId, cfg: SearchConfig): Action | null {
   const w = cfg.weights
-  const scored = expandActions(state, me, {}).map((c) => ({ c, val: evaluate(c.next, me, w) }))
+  const scored = expandActions(state, me, { minionCasters: cfg.minionCasters }).map((c) => ({ c, val: evaluate(c.next, me, w) }))
   const bestOf = (pred: (a: Action) => boolean): { action: Action; next: GameState } | null =>
     scored.filter((s) => pred(s.c.action)).sort((a, b) => b.val - a.val)[0]?.c ?? null
 
@@ -562,7 +806,7 @@ function endTurnCleanup(state: GameState, me: PlayerId, cfg: SearchConfig): Acti
 function playSiteInFront(state: GameState, me: PlayerId): Action | null {
   const myFirstTurn = me === state.firstPlayer ? 1 : 2
   const myTurnIndex = Math.floor((state.turn - myFirstTurn) / 2) + 1
-  if (myTurnIndex !== 2 || state.players[me].usedAvatarSiteAbility) return null
+  if (myTurnIndex !== 2) return null
   const av = avatarOf(state, me)
   if (getScript(av.name)?.noStandardSiteAction) return null
   const fx = av.x
@@ -571,7 +815,10 @@ function playSiteInFront(state: GameState, me: PlayerId): Action | null {
     const def = getCard(state.cards[cardId].name)
     if (def.type !== 'Site') continue
     if (legalSiteSquares(state, me, def.name).some((s) => s.x === fx && s.y === fy)) {
-      return { t: 'avatarSite', mode: 'play', cardId, x: fx, y: fy }
+      // the square can open up only AFTER this turn's site is down (adjacency) — by then the avatar's
+      // site action is spent, so check the play is actually legal now, not just the square
+      const a: Action = { t: 'avatarSite', mode: 'play', cardId, x: fx, y: fy }
+      return legal(state, me, a) ? a : null
     }
   }
   return null
@@ -581,13 +828,17 @@ function playSiteInFront(state: GameState, me: PlayerId): Action | null {
  *  caches a contingency plan; subsequent actions replay it (instant) until reality diverges. */
 export function searchBotAction(state: GameState, me: PlayerId, cfg: SearchConfig = DEFAULT_SEARCH): Action {
   if (state.phase === 'mulligan') return { t: 'mulligan', back: mulliganTargets(state, me) }
+  // every judgement below is made on `me`'s fair copy of the game (hidden information); only legality
+  // checks and the "what happened" matching (sig) look at the real state
+  let fair: GameState | null = null
+  const view = (): GameState => (fair ??= fairView(state, me))
   // piloting the opponent's turn (Thaïs) stays with the existing policy for now
-  if (state.phase === 'main' && state.activePlayer !== me && !state.prompts[0]) return botAction(state, me, cfg.banned)
+  if (state.phase === 'main' && state.activePlayer !== me && !state.prompts[0]) return botAction(view(), me, cfg.banned)
   // OPTIONAL: delegate the draw-pile choice to the procedural policy (it balances spell vs site draws).
   // OFF by default — the search's own behaviour (mostly drawing spells) is fine for aggressive decks like
   // the Interrogator. Flip cfg.proceduralDraws to compare.
   const p0 = state.prompts[0]
-  if (cfg.proceduralDraws && p0 && p0.kind === 'drawDeck' && actingSeatFor(state, p0.player) === me) return botAction(state, me)
+  if (cfg.proceduralDraws && p0 && p0.kind === 'drawDeck' && actingSeatFor(state, p0.player) === me) return botAction(view(), me)
   // Guarantee mana development: on the bot's 3rd turn with no site drawn yet, force an atlas draw
   // (overriding the search's usual preference for spells). See forceAtlasDraw.
   if (p0 && p0.kind === 'drawDeck' && actingSeatFor(state, p0.player) === me && forceAtlasDraw(state, me)) {
@@ -604,7 +855,7 @@ export function searchBotAction(state: GameState, me: PlayerId, cfg: SearchConfi
     const a = advancePlan(state, me)
     // …unless the plan's next move is one the ward has since banned (score-neutral) — then drop the
     // plan and re-search so the banned action is excluded at the root below.
-    if (a && !(cfg.banned?.has(botActionKey(a)))) return withCleanup(state, me, cfg, a)
+    if (a && !(cfg.banned?.has(botActionKey(a)))) return withCleanup(view, me, cfg, a)
     if (a) PLAN = null
   }
 
@@ -613,28 +864,77 @@ export function searchBotAction(state: GameState, me: PlayerId, cfg: SearchConfi
   TIMED_OUT = false
   const start = Date.now()
   const deadline = start + cfg.timeBudgetMs
-  // search on a determinized copy (decks shuffled) so the bot can't exploit its own draw order; the
-  // chosen action is applied to the REAL state by the caller, and replay re-validates against it.
-  const { plan } = search(determinize(state, me), me, cfg, deadline, 0)
+  // continue a cut-off tree when reality is a position that tree reached (same seat and turn, no new card
+  // drawn); otherwise start a fresh turn plan.
+  const cont = findContinuation(state, me, deadline)
+  CONTS[me] = null
+  ROOT_PICK = null
+  if (!cont) TREES[me] = new Map()
+  TREE = TREES[me]
+  ROOT_DEPTH = cont ? cont.depth : 0
+  // search on the fair copy (hidden information); the chosen action is applied to the REAL state by the
+  // caller, and replay re-validates against it.
+  const { plan } = cont
+    ? search(clone(cont.state), me, cfg, deadline, cont.depth, cont.bonus, cont.path)
+    : search(view(), me, cfg, deadline, 0)
   PLAN = plan; PLAN_SEAT = me; PLAN_TURN = state.turn; PLAN_KNOWN = new Set(state.players[me].hand)
   if (typeof process !== 'undefined' && process.env.SEARCH_DEBUG) {
     // eslint-disable-next-line no-console
-    console.error(`t${state.turn} plan depth=${planDepth(plan)} nodes=${NODES} took=${Date.now() - start}ms budget=${cfg.timeBudgetMs} timedOut=${TIMED_OUT}`)
+    console.error(`t${state.turn} plan depth=${planDepth(plan)} nodes=${NODES} took=${Date.now() - start}ms budget=${cfg.timeBudgetMs} timedOut=${TIMED_OUT}${cont ? ` continued=d${cont.depth}${cont.answered ? '+answer' : ''}` : ''} cached=${TREE.size}`)
   }
   const a = advancePlan(state, me)
   // a partial (timed-out) tree isn't trustworthy past its first action — play that move, then drop the
   // tree so the NEXT decision rebuilds it with a fresh full budget. A completed tree stays cached.
-  if (TIMED_OUT) PLAN = null
-  if (a && !(cfg.banned?.has(botActionKey(a)))) return withCleanup(state, me, cfg, a)
-  return botAction(state, me, cfg.banned) // generator offered nothing legal → base policy (ban-aware)
+  if (TIMED_OUT) {
+    PLAN = null
+    const pick = ROOT_PICK as { path: string; state: GameState; bonus: number } | null // set inside search()
+    if (pick) CONTS[me] = { seat: me, turn: state.turn, path: pick.path, state: pick.state, depth: ROOT_DEPTH + 1, bonus: pick.bonus }
+  }
+  if (a &&!(cfg.banned?.has(botActionKey(a)))) return withCleanup(view, me, cfg, a)
+  return botAction(view(), me, cfg.banned) // generator offered nothing legal → base policy (ban-aware)
+}
+
+/** Where in the cut-off tree reality now stands. Usually it's exactly the chosen action's position; but
+ *  if that action made the opponent answer (a defend prompt), reality is one of the opponent's answers
+ *  below it — the same MIN-node children search() enumerated, keyed the same way, so the subtree under the
+ *  answer actually given is reused. Matching ignores deck order (sig), so it reveals nothing about it: a
+ *  real draw changes a hand and simply misses. Opponent answers can chain, so descend a few levels. */
+function findContinuation(state: GameState, me: PlayerId, deadline: number): Continuation | null {
+  const CONT = CONTS[me]
+  if (!CONT) return null
+  if (CONT.turn !== state.turn || handHasNewCard(state, me)) {
+    if (typeof process !== 'undefined' && process.env.SEARCH_DEBUG) {
+      // eslint-disable-next-line no-console
+      console.error(`cont-miss: ${CONT.turn !== state.turn ? 'the turn ended' : 'a new card was drawn'}`)
+    }
+    return null
+  }
+  const target = sig(state, me)
+  let frontier: Continuation[] = [CONT]
+  for (let level = 0; level < 4 && frontier.length; level++) {
+    const next: Continuation[] = []
+    for (const f of frontier) {
+      if (sig(f.state, me) === target) return f
+      if (!oppMustAnswer(f.state, me)) continue
+      for (const c of expandActions(f.state, opponent(me), { deadline })) {
+        next.push({ ...f, path: `${f.path}|o${JSON.stringify(c.action)}`, state: c.next, depth: f.depth + 1, answered: true })
+      }
+    }
+    frontier = next
+  }
+  if (typeof process !== 'undefined' && process.env.SEARCH_DEBUG) {
+    // eslint-disable-next-line no-console
+    console.error(`cont-miss: reality is not a position the cut-off tree reached (answering prompt: ${oppMustAnswer(CONT.state, me) ? CONT.state.prompts[0]?.kind : 'none'})`)
+  }
+  return null
 }
 
 /** If we're about to end the turn, first try the "don't waste it" cleanup (site play/draw, Pathfinder
  *  void-edge, harmless ability). If cleanup acts, drop the plan so the remainder is re-searched. */
-function withCleanup(state: GameState, me: PlayerId, cfg: SearchConfig, a: Action): Action {
+function withCleanup(view: () => GameState, me: PlayerId, cfg: SearchConfig, a: Action): Action {
   if (a.t !== 'endTurn') return a
-  const cleanup = endTurnCleanup(state, me, cfg)
-  if (cleanup) { PLAN = null; return cleanup }
+  const cleanup = endTurnCleanup(view(), me, cfg)
+  if (cleanup) { PLAN = null; CONTS[me] = null; return cleanup }
   return a
 }
 
@@ -648,3 +948,6 @@ function planDepth(p: PlanNode): number {
 }
 
 export const searchBotNeedsToAct = botNeedsToAct
+
+/** exported for tests: the fair copy and the point-of-view position signature. */
+export { fairView, sig as fairSignature }

@@ -1,6 +1,7 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { effectSummonUnit, revealCards } from '../../../engine/effects'
+import { noteSeenAtEnd } from '../../../engine/knowledge'
 
 // "At the start of your turn, reveal your topmost spell. If it's a minion, you may summon it here."
 registerScript('Mother Nature', {
@@ -10,6 +11,7 @@ registerScript('Mother Nature', {
     if (topId === undefined) return
     const name = ctx.state.cards[topId].name
     ctx.log(`Mother Nature reveals ${name}.`)
+    noteSeenAtEnd(ctx.state, 'both', ctx.controller, 'spellbook', 'top', [topId]) // a summon takes it off the top again
     // a non-minion is never summoned → reveal it to the opponent (a summon would show it itself).
     if (getCard(name).type !== 'Minion') { revealCards(ctx.state, ctx.controller, [name]); return }
     ctx.ask({ kind: 'yesNo', title: `Summon ${name} at Mother Nature's location?`, data: { reveal: name } }, 'summonTop')

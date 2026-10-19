@@ -246,10 +246,11 @@ export function siteSilenced(state: GameState, site: { x: number; y: number }): 
     return true
   }
   // units that silence specific sites (Sinterfee)
+  // hook first: disabledByEffect is a board-wide scan, and siteSilenced runs per site in hot loops
   for (const u of Object.values(state.units)) {
-    if (u.silenced || disabledByEffect(state, u)) continue // disabled → no abilities
     const f = getScript(u.name)?.unitSilencesSiteAt
-    if (f && f(state, u.id, site as { id: string; x: number; y: number })) return true
+    if (!f || u.silenced || disabledByEffect(state, u)) continue // disabled → no abilities
+    if (f(state, u.id, site as { id: string; x: number; y: number })) return true
   }
   // auras that silence covered sites: `true` silences every covered site (Acid Rain); a predicate
   // silences only the sites it accepts (Atlantean Fate silences its non-Ordinary sites only).
@@ -527,6 +528,10 @@ const pickAll = <T>(coll: Record<string, T>, ids: string[]): T[] => {
 }
 /** the entities that GRANT keywords/power, via the index when its gen stamp is current, else a full scan. */
 function grantSources(state: GameState): { units: UnitState[]; auras: AuraState[]; sites: SiteState[]; arts: ArtifactState[] } {
+  if (frozenState === state) return (frozenGrants ??= grantSourcesNow(state))
+  return grantSourcesNow(state)
+}
+function grantSourcesNow(state: GameState): { units: UnitState[]; auras: AuraState[]; sites: SiteState[]; arts: ArtifactState[] } {
   const ix = state.flow?.staticGrantIndex as StaticGrantIndex | undefined
   if (ix && ix.gen === state.nextId) {
     return { units: pickAll(state.units, ix.gUnits), auras: pickAll(state.auras, ix.gAuras), sites: pickAll(state.sites, ix.gSites), arts: pickAll(state.artifacts, ix.gArts) }
@@ -540,6 +545,10 @@ function grantSources(state: GameState): { units: UnitState[]; auras: AuraState[
 }
 /** the entities that REMOVE keywords, via the index when current, else a full scan. */
 function removeSources(state: GameState): { units: UnitState[]; sites: SiteState[]; arts: ArtifactState[]; auras: AuraState[] } {
+  if (frozenState === state) return (frozenRemovers ??= removeSourcesNow(state))
+  return removeSourcesNow(state)
+}
+function removeSourcesNow(state: GameState): { units: UnitState[]; sites: SiteState[]; arts: ArtifactState[]; auras: AuraState[] } {
   const ix = state.flow?.staticGrantIndex as StaticGrantIndex | undefined
   if (ix && ix.gen === state.nextId) {
     return { units: pickAll(state.units, ix.rUnits), sites: pickAll(state.sites, ix.rSites), arts: pickAll(state.artifacts, ix.rArts), auras: pickAll(state.auras, ix.rAuras) }
@@ -769,8 +778,43 @@ const disableEvalStack = new Set<string>()
 // Clearing per top-level call also preserves the old "mutual disablers resolve in the QUERIED unit's
 // favour" behaviour — each top-level query recomputes fresh.
 const disableMemo = new Map<string, boolean>()
+// While a caller promises the state won't change (the bot scoring a position: it asks every unit's keywords,
+// power and disabled-status, many times over), TOP-LEVEL answers are reused across queries. Only top-level
+// results are kept — they're a pure function of (state, unit); mid-traversal ones depend on query order
+// (mutual disablers resolve in the queried unit's favour), so those are never reused.
+let frozenState: GameState | null = null
+const frozenMemo = new Map<string, boolean>()
+// the static grant / keyword-remove SOURCES (grantSources/removeSources) — a full board scan whenever the
+// index is stale (any new id, e.g. an open prompt, invalidates it), and unchangeable while frozen
+let frozenGrants: ReturnType<typeof grantSourcesNow> | null = null
+let frozenRemovers: ReturnType<typeof removeSourcesNow> | null = null
+/** run `fn` with `state` frozen: disabledByEffect may reuse its top-level answers. `state` MUST NOT be
+ *  mutated inside `fn`. */
+export function withFrozenState<T>(state: GameState, fn: () => T): T {
+  const prev = frozenState
+  frozenState = state
+  frozenMemo.clear(); frozenGrants = null; frozenRemovers = null
+  try {
+    return fn()
+  } finally {
+    frozenState = prev
+    frozenMemo.clear(); frozenGrants = null; frozenRemovers = null
+  }
+}
 
 export function disabledByEffect(state: GameState, unit: UnitState): boolean {
+  const topLevel = disableEvalStack.size === 0
+  if (topLevel && frozenState === state) {
+    const known = frozenMemo.get(unit.id)
+    if (known !== undefined) return known
+    const r = disabledByEffectQuery(state, unit)
+    frozenMemo.set(unit.id, r)
+    return r
+  }
+  return disabledByEffectQuery(state, unit)
+}
+
+function disabledByEffectQuery(state: GameState, unit: UnitState): boolean {
   const topLevel = disableEvalStack.size === 0
   if (topLevel) disableMemo.clear()
   const cached = disableMemo.get(unit.id)
@@ -896,6 +940,12 @@ export function canExistIn(state: GameState, unit: UnitState, region: Region, x:
   // A disabled minion loses Burrowing/Submerge/Voidwalk like every other ability, so it can no longer
   // exist underground/underwater/void — checkStateBased then drowns/suffocates/banishes it. (Intended.)
   const kw = effKeywords(state, unit)
+  // "burrowed safely" (Awakened Mummies): safe there without Burrowing — lost with its abilities
+  if (getScript(unit.name)?.existsSafelyIn === region && !unit.silenced && !isDisabled(state, unit)) {
+    if (region === 'underground') return terrainAt(state, x, y) === 'land'
+    if (region === 'underwater') return terrainAt(state, x, y) === 'water'
+    return true
+  }
   if (region === 'void') return !!kw.voidwalk
   if (region === 'underground') return !!kw.burrowing && terrainAt(state, x, y) === 'land'
   if (region === 'underwater') return !!kw.submerge && terrainAt(state, x, y) === 'water'

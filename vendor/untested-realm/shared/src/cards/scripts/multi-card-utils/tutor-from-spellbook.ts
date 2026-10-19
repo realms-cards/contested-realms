@@ -1,7 +1,7 @@
 import { type EffectAPI } from '../registry'
 import { searchLimit } from '../../../engine/statics'
 import { pushLog, revealCards } from '../../../engine/effects'
-import { shuffleWithSeed } from '../../../engine/rng'
+import { shuffleDeck } from '../../../engine/knowledge'
 
 /** tutor: move matching cards from spellbook to hand via a chooseOption ask
  *  (Haystack: enemies of its controller only search the top three cards) */
@@ -13,7 +13,7 @@ export function tutorFromSpellbook(ctx: EffectAPI, label: string, filter: (name:
   const matches = [...new Set(pool.map((id) => ctx.state.cards[id].name).filter(filter))]
   if (!matches.length) {
     ctx.log('No matching card in the spellbook.')
-    ctx.state.seed = shuffleWithSeed(p.spellbook, ctx.state.seed)
+    shuffleDeck(ctx.state, p.id, 'spellbook')
     return
   }
   ctx.ask({ kind: 'chooseOption', title: label, data: { options: matches } }, 'tutorPick')
@@ -29,5 +29,5 @@ export const tutorCont = (filterCheck?: (name: string) => boolean) => (ctx: Effe
     pushLog(ctx.state, ctx.controller, `${p.name} reveals ${choice} and puts it into their hand.`)
     revealCards(ctx.state, ctx.controller, [String(choice)]) // opponent sees a "revealed" popup
   }
-  ctx.state.seed = shuffleWithSeed(p.spellbook, ctx.state.seed)
+  shuffleDeck(ctx.state, p.id, 'spellbook')
 }

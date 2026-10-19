@@ -1,4 +1,5 @@
 import { registerScript } from '../registry'
+import { noteAddedToEnd } from '../../../engine/knowledge'
 
 // 'Genesis → Look at your next four sites. Put three on the bottom of your atlas.'
 registerScript('Crossroads', {
@@ -20,9 +21,9 @@ registerScript('Crossroads', {
       const idx = Array.isArray(choice) ? choice[0] : -1
       if (idx >= 0 && pool[idx] !== undefined) {
         const [keep] = pool.splice(idx, 1)
-        p.atlas.unshift(keep)
+        noteAddedToEnd(ctx.state, ctx.controller, ctx.controller, 'atlas', 'top', [keep], () => p.atlas.unshift(keep))
       }
-      p.atlas.push(...pool)
+      noteAddedToEnd(ctx.state, ctx.controller, ctx.controller, 'atlas', 'bottom', pool, () => p.atlas.push(...pool))
     },
   },
 })

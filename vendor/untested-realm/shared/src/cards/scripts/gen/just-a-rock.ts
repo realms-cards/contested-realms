@@ -4,6 +4,8 @@ import { pushLog } from '../../../engine/effects'
 // 'May be cast into the hands of any unit already carrying an artifact to banish
 // that artifact.'
 registerScript('Just a Rock', {
+  // any unit — yours or an enemy's — that already carries an artifact
+  conjureToEnemy: (state, unit) => unit.carrying.some((id) => !!state.artifacts[id]),
   genesis: (ctx) => {
     const art = ctx.state.artifacts[ctx.sourceId]
     const holder = art?.carriedBy ? ctx.state.units[art.carriedBy] : null

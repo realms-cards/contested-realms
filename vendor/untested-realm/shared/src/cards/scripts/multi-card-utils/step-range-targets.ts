@@ -1,6 +1,6 @@
 import { type TargetRef } from '../registry'
 import { occupiedSquares, GRID_W, GRID_H } from '../../../engine/grid'
-import { realStepDistanceW } from '../../../engine/movement'
+import { realStepDistancesFromW } from '../../../engine/movement'
 import type { GameState, UnitState, SiteState } from '../../../engine/types'
 
 // Engine-authoritative legal-target sets for "up to N steps away" cards (CardScript.targetOptions).
@@ -13,12 +13,22 @@ import type { GameState, UnitState, SiteState } from '../../../engine/types'
 
 /** every in-bounds square within `maxSteps` REAL steps of the caster (nearest body square). */
 export function squaresWithinSteps(state: GameState, caster: UnitState, maxSteps: number): TargetRef[] {
-  const bodies = occupiedSquares(caster)
+  const near = nearestBodyDistances(state, caster)
   const out: TargetRef[] = []
   for (let x = 0; x < GRID_W; x++)
     for (let y = 0; y < GRID_H; y++)
-      if (bodies.some((b) => realStepDistanceW(state, b, { x, y }) <= maxSteps)) out.push({ square: { x, y } })
+      if (near(x, y) <= maxSteps) out.push({ square: { x, y } })
   return out
+}
+
+/** real step distance from the caster's NEAREST body square, one BFS per body square (not per target) */
+function nearestBodyDistances(state: GameState, caster: UnitState): (x: number, y: number) => number {
+  const maps = occupiedSquares(caster).map((b) => realStepDistancesFromW(state, b))
+  return (x, y) => {
+    let best = Infinity
+    for (const m of maps) best = Math.min(best, x >= 0 && x < GRID_W && y >= 0 && y < GRID_H ? m[y * GRID_W + x] : Infinity)
+    return best
+  }
 }
 
 /** every site within `maxSteps` REAL steps of the caster (nearest body square), optionally narrowed by
@@ -29,10 +39,10 @@ export function sitesWithinSteps(
   maxSteps: number,
   ok?: (site: SiteState) => boolean,
 ): TargetRef[] {
-  const bodies = occupiedSquares(caster)
+  const near = nearestBodyDistances(state, caster)
   const out: TargetRef[] = []
   for (const s of Object.values(state.sites)) {
-    if (!bodies.some((b) => realStepDistanceW(state, b, s) <= maxSteps)) continue
+    if (!(near(s.x, s.y) <= maxSteps)) continue
     if (ok && !ok(s)) continue
     out.push({ site: s.id })
   }

@@ -16,7 +16,7 @@ import type { Action, GameState, PlayerId, Region, UnitState } from '../engine/t
 import { applyAction, canActivate, actingSeatFor } from '../engine/game'
 import { reachableWithPaths } from '../engine/movement'
 import { canCast, legalSiteSquares, validateSummonAt, validateTarget } from '../engine/casting'
-import { grantedAbilities, effAttack, effDefence } from '../engine/statics'
+import { grantedAbilities, effAttack, effDefence, effKeywords, isCarriableArtifact } from '../engine/statics'
 import { orthAdjacentWrapped, siteAt, GRID_W, GRID_H } from '../engine/grid'
 import { getCard } from '../cards/db'
 import { getScript } from '../cards/scripts/registry'
@@ -36,7 +36,17 @@ function deepClone<T>(v: T): T {
   for (const k in v) o[k] = deepClone((v as Record<string, unknown>)[k])
   return o as T
 }
-export const cloneState = (s: GameState): GameState => deepClone(s)
+/** Deep clone, except the two parts that dominate the state's size and are never edited in place: the
+ *  log (append-only; entries are fresh objects, never changed after the push) and the card instances
+ *  (only the editor's avatar/art ops touch one, and those never run on a search copy). Those get a new
+ *  array / record of the SAME entries, so pushes and new tokens stay local to the clone. Key order — and
+ *  so JSON.stringify output — is identical to a full deep clone. */
+export const cloneState = (s: GameState): GameState => {
+  const out = {} as Record<string, unknown>
+  const src = s as unknown as Record<string, unknown>
+  for (const k in src) out[k] = k === 'log' ? s.log.slice() : k === 'cards' ? { ...s.cards } : deepClone(src[k])
+  return out as unknown as GameState
+}
 const REGIONS: Region[] = ['surface', 'underground', 'underwater']
 
 export interface Expansion {
@@ -227,7 +237,7 @@ function castTargetCombos(state: GameState, me: PlayerId, specs: { what?: string
  * Every legal action for `player` right now, with the resulting state.
  * Handles the three decision contexts: an open prompt, the mulligan, and the main phase.
  */
-export function expandActions(state: GameState, player: PlayerId, opts?: { deadline?: number; boardOnly?: boolean; noSpellCasts?: boolean }): Expansion[] {
+export function expandActions(state: GameState, player: PlayerId, opts?: { deadline?: number; boardOnly?: boolean; noSpellCasts?: boolean; minionCasters?: boolean }): Expansion[] {
   const out: Expansion[] = []
   const push = (a: Action) => { const next = tryAction(state, player, a); if (next) out.push({ action: a, next }) }
   // anytime generation: with a deadline set, stop between phases once time is up and return what we
@@ -304,17 +314,28 @@ export function expandActions(state: GameState, player: PlayerId, opts?: { deadl
       continue
     }
     if (opts?.noSpellCasts) continue // model development (sites) but not (unknown) spell casts — opponent rollout
-    if (!canCast(state, me, cardId, avatarId).ok) continue // affordability / threshold / timing pre-filter
+    // a MAGIC whose reach depends on WHERE it's cast from (a target nearby/adjacent/here the caster, or a
+    // projectile fired from the caster) may also be cast by any of my Spellcaster minions; a magic that
+    // can reach anywhere gains nothing from another caster, so it stays avatar-only (no duplicate casts)
+    const minionCasters = opts?.minionCasters && def.type === 'Magic' && casterPositionMatters(def.name)
+      ? spellcasterMinions(state, me).filter((id) => canCast(state, me, cardId, id).ok)
+      : []
+    if (!canCast(state, me, cardId, avatarId).ok && !minionCasters.length) continue // affordability / threshold / timing pre-filter
     if (def.type === 'Magic') {
       // enumerate valid target COMBINATIONS (Grapple Shot's ally, Bolt's victim…) — a targeted spell
       // cast without its targets fails "Missing targets." Projectile spells also need a direction.
       const script = getScript(def.name)
       const specs = (script?.targets ?? []) as { what?: string; count?: number; upTo?: boolean; whereOf?: number }[]
       const dirs: (string | undefined)[] = script?.shootsProjectile ? ['n', 's', 'e', 'w'] : [undefined]
-      const combos = specs.length ? castTargetCombos(state, me, specs, state.units[avatarId]) : [[]]
-      for (const targets of combos) for (const dir of dirs) {
-        push(dir ? { t: 'castSpell', cardId, casterId: avatarId, targets, extra: { direction: dir } } : { t: 'castSpell', cardId, casterId: avatarId, targets })
+      const casters = minionCasters.length ? [...(canCast(state, me, cardId, avatarId).ok ? [avatarId] : []), ...minionCasters] : [avatarId]
+      for (const casterId of casters) {
+        const combos = specs.length ? castTargetCombos(state, me, specs, state.units[casterId]) : [[]]
+        for (const targets of combos) for (const dir of dirs) {
+          push(dir ? { t: 'castSpell', cardId, casterId, targets, extra: { direction: dir } } : { t: 'castSpell', cardId, casterId, targets })
+        }
       }
+    } else if (!canCast(state, me, cardId, avatarId).ok) {
+      continue // a non-magic (minion / artifact / aura) is cast by the avatar only
     } else if (def.type === 'Minion') {
       // pre-filter with the SAME validator castSpell uses (pure, no clone) so we don't clone-and-fail
       // on the many illegal squares — the surviving set is byte-identical to trial-applying them all
@@ -356,11 +377,36 @@ export function expandActions(state: GameState, player: PlayerId, opts?: { deadl
   // ── pick up / drop artifacts & carried units (skipped in board-only mode) ──
   if (!opts?.boardOnly) for (const u of Object.values(state.units)) {
     if (u.controller !== me || u.carriedBy) continue
-    const arts = Object.values(state.artifacts).filter((a) => !a.carriedBy && a.x === u.x && a.y === u.y && a.region === u.region)
+    const arts = Object.values(state.artifacts).filter((a) => !a.carriedBy && isCarriableArtifact(a.name) && a.x === u.x && a.y === u.y && a.region === u.region)
     for (const a of arts) push({ t: 'pickUp', unitId: u.id, artifactIds: [a.id] })
     if (u.carrying.length) push({ t: 'drop', unitId: u.id, artifactIds: [...u.carrying] })
   }
   return out
+}
+
+/** does where this magic is cast FROM change what it can reach? — a target bounded nearby/adjacent/here the
+ *  CASTER (not anchored to another target via whereOf), a projectile (it flies from the caster), or rules
+ *  text that measures from the caster's location (an area "nearby", "steps away", a direction…). The text
+ *  test can over-include a spell whose "adjacent" relates two targets; that only widens the search a little
+ *  (the engine validates every cast). Card data is static → cached per name. */
+const casterPositionCache = new Map<string, boolean>()
+const CASTER_RELATIVE_TEXT = /\b(nearby|adjacent|here|steps? away|projectiles?|shoots?|in a line|direction)\b/i
+function casterPositionMatters(name: string): boolean {
+  let v = casterPositionCache.get(name)
+  if (v === undefined) {
+    const script = getScript(name)
+    const specs = (script?.targets ?? []) as { where?: string; whereOf?: number }[]
+    v = !!script?.shootsProjectile
+      || specs.some((s) => s.where !== undefined && s.where !== 'anywhere' && s.whereOf === undefined)
+      || CASTER_RELATIVE_TEXT.test(getCard(name).text ?? '')
+    casterPositionCache.set(name, v)
+  }
+  return v
+}
+
+/** my non-avatar units that can cast spells right now (Spellcaster keyword, not carried). */
+function spellcasterMinions(state: GameState, me: PlayerId): string[] {
+  return Object.values(state.units).filter((u) => u.controller === me && !u.isAvatar && !u.carriedBy && effKeywords(state, u).spellcaster).map((u) => u.id)
 }
 
 /** Just the legal actions (no resulting states) — thin wrapper over expandActions. */

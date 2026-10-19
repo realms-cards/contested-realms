@@ -38,11 +38,18 @@ function geomancerReclaim(ctx: EffectAPI, sq: { x: number; y: number } | null | 
   enterSite(ctx.state, ctx.controller, cardId, x, y)
 }
 
+// An earth site is one that provides (E). A Bloom provides its Genesis thresholds the turn it comes
+// down, so Desert Bloom (Genesis → Provides (A)(E)(W) this turn) is an earth site as it is played.
+function isEarthSiteAsPlayed(name: string): boolean {
+  const card = getCard(name)
+  return card.thresholds.earth > 0 || /Genesis\s*→\s*Provides[^.]*\(E\)[^.]*this turn/.test(card.text ?? '')
+}
+
 registerScript('Geomancer', {
   afterAvatarSitePlay: (ctx, siteId) => {
     const self = ctx.state.units[ctx.sourceId]
     const site = ctx.state.sites[siteId]
-    if (!self || !site || getCard(site.name).thresholds.earth === 0) return
+    if (!self || !site || !isEarthSiteAsPlayed(site.name)) return
     const voids = orthAdjacentWrapped(ctx.state, self.x, self.y).filter((s) => !siteAt(ctx.state, s.x, s.y))
     if (!voids.length) return
     // Only one void to fill → place it automatically, no prompt.

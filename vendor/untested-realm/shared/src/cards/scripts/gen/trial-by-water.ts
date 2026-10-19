@@ -5,8 +5,9 @@ import { submergeOrDrown } from '../multi-card-utils/submerge-or-drown'
 // 'An ally submerges target minion it's nearby.'
 registerScript('Trial by Water', {
   targets: [
-    { what: 'minion', count: 1, targeted: false, owner: 'ally', label: 'an ally' },
-    { what: 'minion', count: 1, targeted: true, label: 'target minion nearby them' },
+    // "an ally" — any unit you control, your Avatar included (not just minions)
+    { what: 'unit', count: 1, targeted: false, owner: 'ally', label: 'an ally' },
+    { what: 'minion', count: 1, targeted: true, where: 'nearby', whereOf: 0, label: 'target minion nearby them' },
   ],
   onCast: (ctx) => {
     const [t1, t2] = ctx.targets

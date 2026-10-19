@@ -3,11 +3,12 @@
 
 import { getCard, getKeywords, findCard } from '../cards/db'
 import { getScript, type DamageSource, type EffectAPI, type TargetRef, type TargetSpec } from '../cards/scripts/registry'
-import type { GameState, PlayerId, Region, UnitState, SiteState, Prompt, DeckName } from './types'
+import type { GameState, PlayerId, Region, UnitState, SiteState, AuraState, Prompt, DeckName } from './types'
 import { avatarOf, siteAt, unitsAt, edgesConnected, aura2x2Squares, occupiedSquares, inBounds, GRID_W, GRID_H, squareLabel, nearbySquaresW, orthAdjacentWrapped } from './grid'
 import { affinity, effAttack, effDefence, effKeywords, canExistIn, siteSilenced, artifactSilenced, artScript, isEvilUnit, isEvilUnitIntrinsic, isDisabled, isUnmodifiable, silenceImmune, footprintAllTerrain, terrainAt, buildStaticGrantIndex, isVoidAt, protectedFromSites } from './statics'
 import { siteEntryAllowed, multiSquareDestSquares, oversizedTeleportPlacements } from './movement' // runtime-only use (teleport closure); import cycle is safe
 import { awardAchievement } from './achievements.catalog' // types-only module → no cycle
+import { noteAddedToEnd, noteSeenAtEnd, carryKnownTopIntoHand } from './knowledge'
 
 export function newId(state: GameState, prefix: string): string {
   return `${prefix}${state.nextId++}`
@@ -580,10 +581,10 @@ registerCont('guard:applyRedirect', (state, ctx: { guardId: string }) => {
 
 /**
  * Ask `player` to arrange `ids` (revealed cards) into an order, then place the whole
- * group onto the `top` or `bottom` of `deck`. The answer is an index permutation whose
- * FIRST entry is the top-of-group: for 'top' that becomes the very next draw; for
- * 'bottom' the LAST entry becomes the absolute bottom of the deck (so it fully controls
- * e.g. Kelp Cavern's bottom-three). 0–1 cards need no prompt.
+ * group onto the `top` or `bottom` of `deck`. The answer is an index permutation, picked
+ * starting from the deck's EDGE: for 'top' the first pick becomes the very next draw; for
+ * 'bottom' the first pick becomes the absolute bottom of the deck, the next one sits on
+ * it, and so on (so it fully controls e.g. Kelp Cavern's bottom-three). 0–1 cards need no prompt.
  */
 export function askOrder(
   state: GameState,
@@ -596,8 +597,10 @@ export function askOrder(
   const zone = state.players[player][deck]
   if (ids.length === 0) return
   if (ids.length === 1) {
-    if (place === 'top') zone.unshift(ids[0])
-    else zone.push(ids[0])
+    noteAddedToEnd(state, player, player, deck, place, ids, () => {
+      if (place === 'top') zone.unshift(ids[0])
+      else zone.push(ids[0])
+    })
     return
   }
   pushPrompt(state, {
@@ -616,8 +619,11 @@ registerCont('deck:order', (state, ctx: { player: PlayerId; deck: 'spellbook' | 
   for (const i of order) if (ctx.ids[i] !== undefined && !seen.has(i)) { seen.add(i); group.push(ctx.ids[i]) }
   for (let i = 0; i < ctx.ids.length; i++) if (!seen.has(i)) group.push(ctx.ids[i]) // any unplaced keep shown order, at the end
   const zone = state.players[ctx.player][ctx.deck]
-  if (ctx.place === 'top') zone.unshift(...group)
-  else zone.push(...group)
+  const placed = ctx.place === 'top' ? group : [...group].reverse() // in deck order (top first)
+  noteAddedToEnd(state, ctx.player, ctx.player, ctx.deck, ctx.place, placed, () => {
+    if (ctx.place === 'top') zone.unshift(...placed)
+    else zone.push(...placed)
+  })
 })
 
 export function pushPrompt(state: GameState, prompt: Omit<Prompt, 'id'>): void {
@@ -651,6 +657,7 @@ registerCont('secondseer:gaze', (state, ctx: { controller: PlayerId }, choice) =
   const deck: 'spellbook' | 'atlas' = choice.includes('spell') ? 'spellbook' : 'atlas'
   const top = state.players[player][deck][0]
   if (top === undefined) return
+  noteSeenAtEnd(state, player, player, deck, 'top', [top])
   pushPrompt(state, {
     player,
     kind: 'chooseOption',
@@ -662,10 +669,13 @@ registerCont('secondseer:gaze', (state, ctx: { controller: PlayerId }, choice) =
 })
 
 registerCont('secondseer:bottom', (state, ctx: { controller: PlayerId; deck: 'spellbook' | 'atlas' }, choice) => {
-  if (choice !== 'put on bottom') return
   const zone = state.players[ctx.controller][ctx.deck]
+  if (choice !== 'put on bottom') {
+    if (zone[0] !== undefined) noteSeenAtEnd(state, ctx.controller, ctx.controller, ctx.deck, 'top', [zone[0]])
+    return
+  }
   const top = zone.shift()
-  if (top !== undefined) zone.push(top)
+  if (top !== undefined) noteAddedToEnd(state, ctx.controller, ctx.controller, ctx.deck, 'bottom', [top], () => zone.push(top))
   pushLog(state, ctx.controller, 'The Second Seer buries what they saw.')
 })
 
@@ -827,6 +837,7 @@ export function drawCards(state: GameState, player: PlayerId, deck: DeckName, n 
   for (let i = 0; i < n; i++) {
     // Garden of Eden: at most one spell draw per player per turn
     if (deck === 'spellbook' && !registerSpellDraw(state, player)) return
+    carryKnownTopIntoHand(state, player, deck)
     const id = p[deck].shift()
     if (id === undefined) {
       // drawing from an empty deck loses the game immediately
@@ -925,7 +936,7 @@ export function returnToDeck(state: GameState, cardId: string): PlayerId {
   const card = state.cards[cardId]
   const owner = card.owner
   const deck = getCard(card.name).type === 'Site' ? 'atlas' : 'spellbook'
-  state.players[owner][deck].push(cardId)
+  noteAddedToEnd(state, 'both', owner, deck, 'bottom', [cardId], () => state.players[owner][deck].push(cardId)) // it left a public zone
   return owner
 }
 
@@ -1467,9 +1478,8 @@ function finalizeAvatarDeath(state: GameState, avatarId: string, sourcePlayer: P
 function offerAvatarDeathSave(state: GameState, avatar: UnitState, sourcePlayer: PlayerId): boolean {
   const offers: DeathSaveOffer[] = []
   for (const site of Object.values(state.sites)) {
-    if (site.isRubble || site.controller !== avatar.controller || siteSilenced(state, site)) continue
     const hook = getScript(site.name)?.avatarDeathSave
-    if (!hook) continue
+    if (!hook || site.isRubble || site.controller !== avatar.controller || siteSilenced(state, site)) continue
     for (const uid of hook(state, site.id, avatar)) {
       const u = state.units[uid]
       if (u) offers.push({ siteId: site.id, unitId: uid, label: `${u.name} ${squareLabel(u.x, u.y)}` })
@@ -1729,7 +1739,8 @@ export function applyHealingModifier(state: GameState, n: number): number {
     if (mult !== undefined) n = Math.floor(n * mult)
   }
   for (const s of Object.values(state.sites)) {
-    if (!s.isRubble && s.controller !== null && !siteSilenced(state, s)) apply(getScript(s.name)?.healingMultiplier)
+    const mult = getScript(s.name)?.healingMultiplier
+    if (mult !== undefined && !s.isRubble && s.controller !== null && !siteSilenced(state, s)) apply(mult)
   }
   for (const u of Object.values(state.units)) {
     if (!u.silenced) apply(getScript(u.name)?.healingMultiplier)
@@ -1988,19 +1999,23 @@ export function emitEvent(
   ...args: any[]
 ): void {
   const listeners: { id: string; name: string; controller: PlayerId }[] = []
+  // hook first: only cards that handle this event can be listeners, so skip the silence/disable
+  // scans (board-wide, per entity) for everything else. Those checks are pure, so the snapshot of
+  // who listens — taken before any handler runs — is unchanged.
+  const handles = (name: string) => !!(getScript(name) as any)?.[hook]
   for (const u of Object.values(state.units)) {
     // a silenced OR disabled unit has no triggered abilities (Codex). isDisabled already exempts a unit
     // that is itself entering/acting/in a battle, so its own on-entry/strike triggers still fire.
-    if (!u.silenced && !isDisabled(state, u)) listeners.push({ id: u.id, name: u.name, controller: u.controller })
+    if (handles(u.name) && !u.silenced && !isDisabled(state, u)) listeners.push({ id: u.id, name: u.name, controller: u.controller })
   }
   for (const s of Object.values(state.sites)) {
-    if (s.controller !== null && !siteSilenced(state, s)) listeners.push({ id: s.id, name: s.name, controller: s.controller })
+    if (s.controller !== null && handles(s.name) && !siteSilenced(state, s)) listeners.push({ id: s.id, name: s.name, controller: s.controller })
   }
   for (const a of Object.values(state.artifacts)) {
     const controller = a.carriedBy ? state.units[a.carriedBy]?.controller : a.conjuredBy
-    if (controller !== undefined && !artifactSilenced(state, a)) listeners.push({ id: a.id, name: a.name, controller })
+    if (controller !== undefined && handles(a.name) && !artifactSilenced(state, a)) listeners.push({ id: a.id, name: a.name, controller })
   }
-  for (const r of Object.values(state.auras)) listeners.push({ id: r.id, name: r.name, controller: r.controller })
+  for (const r of Object.values(state.auras)) if (handles(r.name)) listeners.push({ id: r.id, name: r.name, controller: r.controller })
   // some cards listen from the cemetery (Bone Rabble, Scourge Zombies)
   for (const p of state.players) {
     const seen = new Set<string>()
@@ -2133,9 +2148,8 @@ export function applySummonTax(state: GameState, unit: UnitState): void {
   if (unit.isAvatar) return
   let tax = 0
   for (const s of Object.values(state.sites)) {
-    if (s.controller === null || siteSilenced(state, s)) continue
     const f = getScript(s.name)?.summonTax
-    if (f) tax += f(state, s, unit)
+    if (f && s.controller !== null && !siteSilenced(state, s)) tax += f(state, s, unit)
   }
   if (tax > 0) {
     state.flow = state.flow ?? {}
@@ -2212,20 +2226,29 @@ registerCont('summonTaxChoice', (state, c: { ids: string[]; each: number; player
  *  `unit.silenced` flag, which checkStateBased only sets on its next pass — this reads the statics
  *  LIVE. Used to block the Genesis of a minion entering an already-silenced location (a silenced
  *  minion has no abilities, so no Genesis fires), and by checkStateBased itself to set the flag. */
-export function hushedByStatic(state: GameState, u: UnitState): boolean {
+/** the sites / units / auras whose card has a `silencesUnit` static — found once, so a sweep over every unit
+ *  (checkStateBased) doesn't rescan the whole board per unit. Their live conditions (silenced, rubble,
+ *  controller) are still checked per query, in board order. */
+export function silencerSources(state: GameState): { sites: SiteState[]; units: UnitState[]; auras: AuraState[] } {
+  return {
+    sites: Object.values(state.sites).filter((s) => !!getScript(s.name)?.silencesUnit),
+    units: Object.values(state.units).filter((o) => !!getScript(o.name)?.silencesUnit),
+    auras: Object.values(state.auras).filter((r) => !!getScript(r.name)?.silencesUnit),
+  }
+}
+
+export function hushedByStatic(state: GameState, u: UnitState, src = silencerSources(state)): boolean {
   if (u.isAvatar) return false
-  for (const s of Object.values(state.sites)) {
-    const f = getScript(s.name)?.silencesUnit
-    if (f && s.controller !== null && !s.isRubble && !siteSilenced(state, s) && f(state, s.id, u)) return true
+  for (const s of src.sites) {
+    const f = getScript(s.name)!.silencesUnit!
+    if (s.controller !== null && !s.isRubble && !siteSilenced(state, s) && f(state, s.id, u)) return true
   }
-  for (const o of Object.values(state.units)) {
+  for (const o of src.units) {
     if (o.id === u.id || o.silenced) continue
-    const f = getScript(o.name)?.silencesUnit
-    if (f && f(state, o.id, u)) return true
+    if (getScript(o.name)!.silencesUnit!(state, o.id, u)) return true
   }
-  for (const r of Object.values(state.auras)) {
-    const f = getScript(r.name)?.silencesUnit
-    if (f && f(state, r.id, u)) return true
+  for (const r of src.auras) {
+    if (getScript(r.name)!.silencesUnit!(state, r.id, u)) return true
   }
   for (const artId of u.carrying) {
     const art = state.artifacts[artId]
@@ -2776,11 +2799,12 @@ export function checkStateBased(state: GameState): void {
   // continuous silencing statics (Bower of Bliss, Sisters of Silence): units
   // hushed by a silencesUnit hook carry a marker so the hush lifts when the
   // silencer leaves
+  const silencers = silencerSources(state)
   for (const u of Object.values(state.units)) {
     if (u.isAvatar) continue
     // a unit that "can't be silenced" (Monks of Kobalsa, Bedrock, an Onslaught'd ally…) — a silencing
     // static (Root Spider, Bower of Bliss, Sisters of Silence) simply doesn't touch it.
-    const hush = hushedByStatic(state, u) && !silenceImmune(state, u)
+    const hush = hushedByStatic(state, u, silencers) && !silenceImmune(state, u)
     if (hush && !u.silenced) {
       u.silenced = true
       u.counters = { ...u.counters, hushed: 1 }
@@ -2791,9 +2815,8 @@ export function checkStateBased(state: GameState): void {
   }
   // permanent Stealth-stripping statics from sites (Watchtower)
   for (const site of Object.values(state.sites)) {
-    if (site.isRubble || site.controller === null || siteSilenced(state, site)) continue
     const mode = getScript(site.name)?.stripStealth
-    if (!mode) continue
+    if (!mode || site.isRubble || site.controller === null || siteSilenced(state, site)) continue
     for (const u of Object.values(state.units)) {
       if (!u.stealth || u.controller === site.controller || u.region !== 'surface') continue
       const near = nearbySquaresW(state, site.x, site.y).some((s) => s.x === u.x && s.y === u.y)

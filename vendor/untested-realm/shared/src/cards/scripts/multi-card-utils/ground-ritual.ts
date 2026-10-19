@@ -8,7 +8,8 @@ import { isEvilU } from './is-evil-u'
 export function groundRitualScript(ground: string, needsEvil: boolean, strikesFirstText: boolean): CardScript {
   return {
     targets: [{
-      what: 'minion', count: 1, targeted: false, owner: 'ally', label: needsEvil ? 'an Evil ally' : 'an ally',
+      // "an ally" — any unit you control, your Avatar included
+      what: 'unit', count: 1, targeted: false, owner: 'ally', label: needsEvil ? 'an Evil ally' : 'an ally',
       filter: (state, u) => (needsEvil ? isEvilU(state, u) : true),
     }],
     onCast: (ctx) => {

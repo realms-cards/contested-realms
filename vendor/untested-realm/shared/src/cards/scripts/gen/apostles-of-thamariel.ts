@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { effectSummonUnit } from '../../../engine/effects'
-import { shuffleWithSeed } from '../../../engine/rng'
+import { shuffleDeck } from '../../../engine/knowledge'
 
 // Dhol Chants (tap nearby allies → reveal that many spells → cast one free) is
 // implemented in m36.ts via flow.freeCast.
@@ -18,7 +18,7 @@ registerScript('Apostles of Thamariel', {
     const top = p.spellbook.slice(0, 7)
     const angels = top.filter((id) => getCard(ctx.state.cards[id].name).subtypes.includes('Angel'))
     if (!angels.length) {
-      ctx.state.seed = shuffleWithSeed(p.spellbook, ctx.state.seed)
+      shuffleDeck(ctx.state, p.id, 'spellbook')
       return ctx.log('No Angel among the top seven.')
     }
     // peeked cards ride the prompt ctx (hidden from the opponent), never synced flow (see Browse)
@@ -49,7 +49,7 @@ registerScript('Apostles of Thamariel', {
         // the leash: banish the Angel if the Apostles leave the realm
         ctx.state.flow.leashes = [...(ctx.state.flow.leashes ?? []), { unitId, anchorId: self.id }]
       }
-      ctx.state.seed = shuffleWithSeed(p.spellbook, ctx.state.seed)
+      shuffleDeck(ctx.state, p.id, 'spellbook')
     },
   },
 })

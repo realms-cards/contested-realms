@@ -6,7 +6,9 @@ import { fightUnits } from '../../../engine/combat'
 // onto the ground above them, they unburrow and fight.'
 registerScript('Awakened Mummies', {
   mustSummonRegion: 'underground',
-  selfKeywords: () => ['burrowing'], // 'burrowed safely'
+  // 'burrowed safely' lets them EXIST underground — it is not Burrowing: they can't surface (or move
+  // underground) on their own, only via their own ambush below.
+  existsSafelyIn: 'underground',
   onUnitEntersSquare: (ctx, moved) => {
     const self = ctx.state.units[ctx.sourceId]
     if (!self || self.region !== 'underground') return

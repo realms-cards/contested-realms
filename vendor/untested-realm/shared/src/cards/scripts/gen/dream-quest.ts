@@ -1,8 +1,8 @@
 import { registerScript } from '../registry'
 import { pushLog } from '../../../engine/effects'
-import { shuffleWithSeed } from '../../../engine/rng'
 import { effKeywords, searchLimit } from '../../../engine/statics'
 import type { PlayerId } from '../../../engine/types'
+import { shuffleDeck } from '../../../engine/knowledge'
 
 // 'An allied Spellcaster falls asleep and is disabled until hurt. At the start
 //  of your next turn, if it's still asleep, you may wake it up to search your
@@ -10,7 +10,8 @@ import type { PlayerId } from '../../../engine/types'
 registerScript('Dream-Quest', {
   listensFromCemetery: true,
   targets: [{
-    what: 'minion', count: 1, targeted: false, owner: 'ally', label: 'an allied Spellcaster',
+    // any allied Spellcaster unit — your Avatar is a legal target (FAQ), it just can't be disabled
+    what: 'unit', count: 1, targeted: false, owner: 'ally', label: 'an allied Spellcaster',
     filter: (state, unit) => effKeywords(state, unit).spellcaster === true,
   }],
   onCast: (ctx) => {
@@ -18,6 +19,8 @@ registerScript('Dream-Quest', {
     if (!t || !('unit' in t)) return
     const u = ctx.state.units[t.unit]
     if (!u) return
+    // FAQ: "Your avatar can't be disabled … If you cast this on your Avatar, it will have no effect."
+    if (u.isAvatar) return ctx.log(`${u.name} can't be put to sleep — nothing happens.`)
     u.disabled = true
     u.counters = { ...u.counters, asleep: 1 }
     ctx.state.flow = ctx.state.flow ?? {}
@@ -60,7 +63,7 @@ registerScript('Dream-Quest', {
       if (typeof idx !== 'number' || idx < 0 || idx >= max) return
       const [id] = p.spellbook.splice(idx, 1)
       p.hand.push(id)
-      ctx.state.seed = shuffleWithSeed(p.spellbook, ctx.state.seed)
+      shuffleDeck(ctx.state, p.id, 'spellbook')
       pushLog(ctx.state, ctx.controller, `${ctx.state.cards[id].name} is carried back from the dream.`)
     },
   },

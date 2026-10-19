@@ -2,6 +2,7 @@ import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { GRID_H, sitesOf } from '../../../engine/grid'
 import { pushLog, checkStateBased, effectSummonUnit } from '../../../engine/effects'
+import { noteAddedToEnd } from '../../../engine/knowledge'
 
 // "Deal out your top spells, one to each site in your back row. Summon any that
 // are minions and put the rest at the bottom of your spellbook. If you're on
@@ -33,7 +34,7 @@ registerScript('Golden Dawn', {
         bottom.push(cardId)
       }
     }
-    p.spellbook.push(...bottom)
+    noteAddedToEnd(ctx.state, ctx.controller, ctx.controller, 'spellbook', 'bottom', bottom, () => p.spellbook.push(...bottom))
     checkStateBased(ctx.state)
   },
 })

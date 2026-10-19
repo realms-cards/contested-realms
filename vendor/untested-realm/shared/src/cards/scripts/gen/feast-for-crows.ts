@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { opponent, pushLog } from '../../../engine/effects'
-import { shuffleWithSeed } from '../../../engine/rng'
 import { cemeteryProtected } from '../../../engine/statics'
+import { shuffleDeck } from '../../../engine/knowledge'
 
 // 'Name a spell. Search an opponent's hand, spellbook and cemetery for cards
 // with that name, and banish them. They shuffle.'
@@ -27,7 +27,7 @@ registerScript('Feast for Crows', {
           }
         }
       }
-      ctx.state.seed = shuffleWithSeed(opp.spellbook, ctx.state.seed)
+      shuffleDeck(ctx.state, opp.id, 'spellbook')
       pushLog(ctx.state, ctx.controller, `Feast for Crows names "${name}" — ${taken} banished; the spellbook is shuffled.`)
     },
   },

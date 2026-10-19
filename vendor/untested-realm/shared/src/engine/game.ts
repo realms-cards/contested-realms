@@ -4,7 +4,7 @@ import type { Action, ActionResult, GameState, PlayerId, UnitState } from './typ
 import { doMulligan, keepHand } from './setup'
 import { endTurn, reconcileControlledMana } from './turn'
 import { activePrompt, resolvePrompt, pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkStateBased, killUnit, tapUnit, checkWard, luckyCandidates, bumpManaSpent, beginAreaReveal, sealAbilityReveal, revealAbility, setActionCredit, restoreActionCredit, reconcileSummonTax, completeDeferredDeaths, finishBattleCapture, runDamageEvent } from './effects'
-import { castSpell, playSite, affinity, validateTarget, legalTargetOptions, sameTargetRef, resolvePendingCast } from './casting'
+import { castSpell, playSite, affinity, validateTarget, legalTargetOptions, sameTargetRef, resolvePendingCast, resolveQueuedCopyCasts } from './casting'
 import { moveAttack, shootProjectile, pickUp, drop, enforceForcedAttacks, resolvePendingMoveAttack } from './combat'
 import { applyJudge } from './judge'
 import { abilityAnchor, avatarOf, unitsAt, nearbySquaresW, occupiedSquares } from './grid'
@@ -31,6 +31,8 @@ export function applyAction(state: GameState, player: PlayerId, action: Action):
   // A cast parked behind the Enchantress's animate-an-aura prompt now resolves — after the animate
   // fully resolved, so the freshly-animated aura minion is present for the spell (Death Dealer, etc.).
   if (state.prompts.length === 0) resolvePendingCast(state)
+  // Orb of Ba'al Berith: its copy is cast only once the original spell has fully resolved
+  if (state.prompts.length === 0) resolveQueuedCopyCasts(state)
   if (state.prompts.length === 0) reconcileSummonTax(state)
   // Resume a Move & Attack whose attack was parked while an entry trigger (Sold-out Cemetery, …)
   // resolved — the attack's target is declared/re-validated only now that all movement has settled.

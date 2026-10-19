@@ -2,6 +2,7 @@ import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog } from '../../../engine/effects'
 import { lend } from '../multi-card-utils/lend'
+import { noteSeenAtEnd } from '../../../engine/knowledge'
 
 // 'Any time during your turn, Merlin may look at your next spell and may cast
 //  it if it's a magic spell.'
@@ -15,6 +16,7 @@ registerScript('Merlin', {
       const p = ctx.state.players[ctx.controller]
       const top = p.spellbook[0]
       if (top === undefined) return ctx.log('The spellbook is empty.')
+      noteSeenAtEnd(ctx.state, ctx.controller, ctx.controller, 'spellbook', 'top', [top]) // taking it up drops this again
       const name = ctx.state.cards[top].name
       if (getCard(name).type !== 'Magic') {
         ctx.ask({ kind: 'chooseOption', title: `Next spell: ${name} (not a magic — it stays).`, data: { options: ['ok'] } }, 'noop')

@@ -24,10 +24,10 @@ registerScript('Browse', {
       if (idx >= 0 && pool[idx] !== undefined) {
         const [id] = pool.splice(idx, 1)
         p.hand.push(id)
-        pushLog(ctx.state, ctx.controller, `${p.name} takes ${ctx.state.cards[id].name}.`)
+        pushLog(ctx.state, ctx.controller, `${p.name} takes a spell.`) // a look, not a reveal: the log is public
       }
       // the rest go to the bottom in a player-chosen order (matters for Kelp Cavern etc.)
-      askOrder(ctx.state, ctx.controller, 'spellbook', pool, 'bottom', 'Browse: order the rest onto the bottom (last = very bottom)')
+      askOrder(ctx.state, ctx.controller, 'spellbook', pool, 'bottom', 'Browse: order the rest onto the bottom (first = very bottom)')
     },
   },
 })

@@ -1,7 +1,7 @@
 import { getCard, type ParsedKeywords } from '../cards/db'
-import type { GameState, PlayerId, Region, Step, UnitState, SiteState, ArtifactState } from './types'
+import type { GameState, PlayerId, Region, Step, UnitState, SiteState, ArtifactState, AuraState } from './types'
 import { GRID_H, GRID_W, inBounds, isOrthAdjacent, isDiagAdjacent, siteAt, isWaterSite, sameSquare, nearbySquaresW, orthAdjacentWrapped, occupiedSquares, edgesConnected } from './grid'
-import { emitUnitMoved, makeCtx, avatarTrapBlocksMove, recordMoveAnim } from './effects'
+import { emitUnitMoved, makeCtx, recordMoveAnim } from './effects'
 import { detachFromCarrier } from './carrying'
 import { getScript } from '../cards/scripts/registry'
 import { effKeywords, isDisabled, isUnmodifiable, immobilizeImmune, terrainAt, siteSilenced, artifactSilenced, protectedFromSites } from './statics'
@@ -123,8 +123,46 @@ export interface StepCtx {
   movingDisabled: boolean
   entryFilters: UnitState[] // active OTHER units with a unitEntryFilter hook (Undesirables)
   stepGranters: UnitState[] // active OTHER units with a grantsExtraSteps hook
-  siteGranters: SiteState[] // sites with an extraSteps hook
+  siteGranters: SiteState[] // non-silenced sites with an extraSteps hook
   artGranters: ArtifactState[] // non-silenced artifacts with an extraSteps hook
+  siteEntry: SiteState[] // active sites with an entryFilter hook (empty if the unit is protected from sites)
+  artEntry: ArtifactState[] // non-silenced artifacts with an entryFilter hook
+  siteGrid: (SiteState | null)[] // square (y*GRID_W+x) -> siteAt's answer, so steps skip the per-call site scan
+  bogSquares: { x: number; y: number }[] // Bog-immobilized sites (empty if the unit can't be immobilized)
+  walls: AuraState[] // border-wall auras with a wallBlocks hook
+  traps: AuraState[] // Sphere-style traps holding THIS avatar where it stands
+  selfFilter: ((state: GameState, unit: UnitState, from: Step, to: Step) => boolean) | undefined // own stepFilter, unless silenced
+  freeOwn: ((state: GameState, unit: UnitState, from: Step, to: Step) => boolean) | undefined // own freeStep, unless silenced
+  freeSites: SiteState[] // non-silenced sites with a siteFreeStep hook
+  freeArts: ArtifactState[] // non-silenced artifacts with an artifactFreeStep hook
+  extras: Map<string, HookExtras> // per FROM square: what the extra-step hooks grant (filled on first use)
+}
+
+/** The extra-step hooks' answers for one FROM square, in hook order. Shared by extraStepsFor (which lists
+ *  them as candidates) and isLegalStep (which accepts them), so each hook runs once per square, not per edge. */
+interface HookExtras {
+  own: Step[]
+  granted: Step[][] // parallel to ctx.stepGranters
+  site: Step[][] // parallel to ctx.siteGranters
+  art: Step[][] // parallel to ctx.artGranters
+  keys: Set<string> // every granted destination, for candidate pruning
+}
+
+const stepKey = (s: Step) => `${s.x},${s.y},${s.region}`
+
+function hookExtras(state: GameState, unit: UnitState, from: Step, ctx: StepCtx): HookExtras {
+  const k = stepKey(from)
+  const hit = ctx.extras.get(k)
+  if (hit) return hit
+  const own = (!unit.silenced && getScript(unit.name)?.extraSteps?.(state, unit, from, unit.id)) || []
+  const granted = ctx.stepGranters.map((g) => getScript(g.name)!.grantsExtraSteps!(state, g.id, unit, from))
+  const site = ctx.siteGranters.map((st) => getScript(st.name)!.extraSteps!(state, unit, from, st.id))
+  const art = ctx.artGranters.map((a) => getScript(a.name)!.extraSteps!(state, unit, from, a.id))
+  const keys = new Set<string>()
+  for (const list of [own, ...granted, ...site, ...art]) for (const t of list ?? []) keys.add(stepKey(t))
+  const out = { own, granted, site, art, keys }
+  ctx.extras.set(k, out)
+  return out
 }
 
 export function buildStepCtx(state: GameState, unit: UnitState): StepCtx {
@@ -144,10 +182,40 @@ export function buildStepCtx(state: GameState, unit: UnitState): StepCtx {
     }
   }
   const siteGranters: SiteState[] = []
-  for (const s of Object.values(state.sites)) if (getScript(s.name)?.extraSteps) siteGranters.push(s)
+  for (const s of Object.values(state.sites)) if (getScript(s.name)?.extraSteps && !siteSilenced(state, s)) siteGranters.push(s) // silenced → no ability
   const artGranters: ArtifactState[] = []
   for (const a of Object.values(state.artifacts)) if (!artifactSilenced(state, a) && getScript(a.name)?.extraSteps) artGranters.push(a)
-  return { kw, movingDisabled, entryFilters, stepGranters, siteGranters, artGranters }
+  // the non-forced half of siteEntryAllowed, resolved once per search instead of per edge
+  const siteEntry: SiteState[] = []
+  if (!protectedFromSites(state, unit)) {
+    for (const s of Object.values(state.sites)) if (getScript(s.name)?.entryFilter && !siteSilenced(state, s)) siteEntry.push(s)
+  }
+  const artEntry: ArtifactState[] = []
+  for (const a of Object.values(state.artifacts)) if (getScript(a.name)?.entryFilter && !artifactSilenced(state, a)) artEntry.push(a)
+  // first site per square in Object.values order: exactly what siteAt returns
+  const siteGrid: (SiteState | null)[] = new Array(GRID_W * GRID_H).fill(null)
+  for (const st of Object.values(state.sites)) {
+    if (inBounds(st.x, st.y) && !siteGrid[st.y * GRID_W + st.x]) siteGrid[st.y * GRID_W + st.x] = st
+  }
+  const bogSquares: { x: number; y: number }[] = []
+  if (!immobilizeImmune(state, unit)) {
+    for (const im of (state.flow?.immobileSites ?? []) as { siteId: string }[]) {
+      const st = state.sites[im.siteId]
+      if (st) bogSquares.push({ x: st.x, y: st.y })
+    }
+  }
+  const walls = Object.values(state.auras).filter((r) => r.edge && getScript(r.name)?.wallBlocks)
+  const traps = unit.isAvatar
+    ? Object.values(state.auras).filter((r) => getScript(r.name)?.auraTrapsAvatars && r.squares.some((q) => q.x === unit.x && q.y === unit.y))
+    : []
+  const selfFilter = unit.silenced ? undefined : getScript(unit.name)?.stepFilter
+  const freeOwn = unit.silenced ? undefined : getScript(unit.name)?.freeStep
+  const freeSites = Object.values(state.sites).filter((st) => getScript(st.name)?.siteFreeStep && !siteSilenced(state, st))
+  const freeArts = Object.values(state.artifacts).filter((a) => getScript(a.name)?.artifactFreeStep && !artifactSilenced(state, a))
+  return {
+    kw, movingDisabled, entryFilters, stepGranters, siteGranters, artGranters, siteEntry, artEntry,
+    siteGrid, bogSquares, walls, traps, selfFilter, freeOwn, freeSites, freeArts, extras: new Map(),
+  }
 }
 
 /** Is a single step legal for this unit right now? */
@@ -160,27 +228,23 @@ export function isLegalStep(state: GameState, unit: UnitState, from: Step, to: S
   if (!inBounds(to.x, to.y)) return false
   if (kw.immobile || ctx.movingDisabled) return false
   // Bog: units atop the marked site are Immobile — but a unit that "can't be immobilized" (Monks of
-  // Kobalsa, Gossamer Ghost, an Onslaught'd ally…) isn't held by it.
-  if (!immobilizeImmune(state, unit)) {
-    for (const im of (state.flow?.immobileSites ?? []) as { siteId: string }[]) {
-      const s = state.sites[im.siteId]
-      if (s && unit.region === 'surface' && from.x === s.x && from.y === s.y) return false
-    }
+  // Kobalsa, Gossamer Ghost, an Onslaught'd ally…) isn't held by it (ctx.bogSquares is empty then).
+  for (const b of ctx.bogSquares) {
+    if (unit.region === 'surface' && from.x === b.x && from.y === b.y) return false
   }
   // border walls (Wall of Air / Ice) block steps across their edge
   if (from.region === 'surface' && to.region === 'surface') {
-    for (const r of Object.values(state.auras)) {
-      if (!r.edge) continue
-      const blocks = getScript(r.name)?.wallBlocks
-      if (blocks && crossesEdge(from, to, r.edge) && blocks(state, r, unit)) return false
+    for (const r of ctx.walls) {
+      if (crossesEdge(from, to, r.edge!) && getScript(r.name)!.wallBlocks!(state, r, unit)) return false
     }
   }
 
   // the unit's own movement restrictions (Dalcean Phalanx, Sedge Crabs...)
-  const selfFilter = getScript(unit.name)?.stepFilter
-  if (selfFilter && !unit.silenced && !selfFilter(state, unit, from, to)) return false
-  // sites/artifacts that block entry or passage (Gnome Hollows, Great Wall...)
-  if (!siteEntryAllowed(state, unit, from, to)) return false
+  if (ctx.selfFilter && !ctx.selfFilter(state, unit, from, to)) return false
+  // sites/artifacts that block entry or passage (Gnome Hollows, Great Wall...) — siteEntryAllowed's
+  // non-forced check, with the active filter set precomputed in ctx
+  for (const s of ctx.siteEntry) if (!getScript(s.name)!.entryFilter!(state, s.id, unit, from, to)) return false
+  for (const a of ctx.artEntry) if (!getScript(a.name)!.entryFilter!(state, a.id, unit, from, to)) return false
   // units that filter other units' movement (Undesirables) — precomputed active set
   for (const u of ctx.entryFilters) {
     const f = getScript(u.name)?.unitEntryFilter
@@ -188,17 +252,10 @@ export function isLegalStep(state: GameState, unit: UnitState, from: Step, to: S
   }
   // Sphere of Animosity: a trapped avatar can't step to a square outside the trap (moving within
   // the trap's own squares is still fine — FAQ: "can't enter locations not occupied by the Sphere")
-  if (avatarTrapBlocksMove(state, unit, to.x, to.y)) return false
-  // card-granted extra steps (leaps, wraps, tunnels) are legal by definition. The unit's OWN extra steps
-  // (gated by its own silence), then OTHER units' grants (precomputed active set).
-  if (!unit.silenced) {
-    const own = getScript(unit.name)?.extraSteps?.(state, unit, from, unit.id) ?? []
-    if (own.some((s) => s.x === to.x && s.y === to.y && s.region === to.region)) return true
-  }
-  for (const grantor of ctx.stepGranters) {
-    const granted = getScript(grantor.name)?.grantsExtraSteps?.(state, grantor.id, unit, from) ?? []
-    if (granted.some((s) => s.x === to.x && s.y === to.y && s.region === to.region)) return true
-  }
+  for (const r of ctx.traps) if (!r.squares.some((q) => q.x === to.x && q.y === to.y)) return false // = avatarTrapBlocksMove
+  // card-granted extra steps (leaps, wraps, tunnels) are legal by definition: the unit's OWN extra steps
+  // (gated by its own silence), OTHER units', sites' and artifacts' grants, each hook run once per square.
+  if (hookExtras(state, unit, from, ctx).keys.has(stepKey(to))) return true
   // temporary adjacency webs (Marine Voyage, Minecart Madness, Waypoint Portal)
   if (from.region === 'surface' && to.region === 'surface') {
     for (const w of (state.flow?.tempAdjacency ?? []) as { player: PlayerId | null; turn: number; squares: { x: number; y: number }[] }[]) {
@@ -207,17 +264,9 @@ export function isLegalStep(state: GameState, unit: UnitState, from: Step, to: S
       if (
         w.squares.some((s) => s.x === from.x && s.y === from.y) &&
         w.squares.some((s) => s.x === to.x && s.y === to.y) &&
-        siteAt(state, to.x, to.y)
+        ctx.siteGrid[to.y * GRID_W + to.x]
       ) return true
     }
-  }
-  for (const s of ctx.siteGranters) {
-    const extra = getScript(s.name)?.extraSteps
-    if (extra && extra(state, unit, from, s.id).some((t) => t.x === to.x && t.y === to.y && t.region === to.region)) return true
-  }
-  for (const a of ctx.artGranters) {
-    const extra = getScript(a.name)?.extraSteps
-    if (extra && extra(state, unit, from, a.id).some((t) => t.x === to.x && t.y === to.y && t.region === to.region)) return true
   }
 
   // oversized: the anchor moves one orthogonal step; all four parts move with it
@@ -233,7 +282,7 @@ export function isLegalStep(state: GameState, unit: UnitState, from: Step, to: S
       let x = to.x + dx
       let y = to.y + dy
       if (wrap) { x = ((x % GRID_W) + GRID_W) % GRID_W; y = ((y % GRID_H) + GRID_H) % GRID_H }
-      if (!inBounds(x, y) || !siteAt(state, x, y)) return false
+      if (!inBounds(x, y) || !ctx.siteGrid[y * GRID_W + x]) return false
     }
     return true
   }
@@ -248,7 +297,7 @@ export function isLegalStep(state: GameState, unit: UnitState, from: Step, to: S
     const dx = to.x - from.x
     const dy = to.y - from.y
     for (const s of occupiedSquares(unit)) {
-      if (!inBounds(s.x + dx, s.y + dy) || !siteAt(state, s.x + dx, s.y + dy)) return false
+      if (!inBounds(s.x + dx, s.y + dy) || !ctx.siteGrid[(s.y + dy) * GRID_W + s.x + dx]) return false
     }
     return true
   }
@@ -256,7 +305,7 @@ export function isLegalStep(state: GameState, unit: UnitState, from: Step, to: S
   const sameSq = sameSquare(from, to)
   const orth = isOrthAdjacent(from, to)
   const diag = isDiagAdjacent(from, to)
-  const toSite = siteAt(state, to.x, to.y)
+  const toSite = ctx.siteGrid[to.y * GRID_W + to.x]
   const toWater = toSite ? isWaterSite(state, toSite, getCard) : false
 
   // An Avatar can never exist in the void (canExistIn: avatars are surface-only). So even if it gained
@@ -324,7 +373,14 @@ export function maxSteps(state: GameState, unit: UnitState): number {
 }
 
 /** does this step cost 0? ("moves freely", e.g. East-West Dragon sideways) */
-export function isFreeStep(state: GameState, unit: UnitState, from: Step, to: Step): boolean {
+export function isFreeStep(state: GameState, unit: UnitState, from: Step, to: Step, ctx?: StepCtx): boolean {
+  if (ctx) {
+    // the same three sources as below, pre-filtered once per search
+    if (ctx.freeOwn && ctx.freeOwn(state, unit, from, to)) return true
+    for (const s of ctx.freeSites) if (getScript(s.name)!.siteFreeStep!(state, s, unit, from, to)) return true
+    for (const a of ctx.freeArts) if (getScript(a.name)!.artifactFreeStep!(state, a.id, unit, from, to)) return true
+    return false
+  }
   const free = getScript(unit.name)?.freeStep
   if (free && !unit.silenced && free(state, unit, from, to)) return true
   // sites can grant free steps too (Updraft Ridge)
@@ -340,17 +396,14 @@ export function isFreeStep(state: GameState, unit: UnitState, from: Step, to: St
   return false
 }
 
-/** destinations granted by extraSteps hooks (leaps, wraps, tunnels) */
-function extraStepsFor(state: GameState, unit: UnitState, from: Step): Step[] {
-  const out: Step[] = []
-  const own = getScript(unit.name)?.extraSteps
-  if (own && !unit.silenced) out.push(...own(state, unit, from, unit.id))
+/** destinations granted by extraSteps hooks (leaps, wraps, tunnels), in hook order. The hook answers come
+ *  from ctx (one run per square, shared with isLegalStep), whose granters already dropped silenced/disabled
+ *  sources. */
+function extraStepsFor(state: GameState, unit: UnitState, from: Step, ctx: StepCtx): Step[] {
+  const hx = hookExtras(state, unit, from, ctx)
+  const out: Step[] = [...hx.own]
   // other units granting steps (Ruler of Thul's edge wrap)
-  for (const o of Object.values(state.units)) {
-    if (o.id === unit.id || o.silenced || isDisabled(state, o)) continue // a disabled granter grants nothing
-    const g = getScript(o.name)?.grantsExtraSteps
-    if (g) out.push(...g(state, o.id, unit, from))
-  }
+  for (const g of hx.granted) out.push(...g)
   // temporary adjacency webs (Marine Voyage, Minecart Madness, Waypoint Portal)
   for (const w of (state.flow?.tempAdjacency ?? []) as { player: PlayerId | null; turn: number; squares: { x: number; y: number }[] }[]) {
     if (w.turn !== state.turn) continue
@@ -361,14 +414,29 @@ function extraStepsFor(state: GameState, unit: UnitState, from: Step): Step[] {
       if (s.x !== from.x || s.y !== from.y) out.push({ x: s.x, y: s.y, region: 'surface' })
     }
   }
-  for (const s of Object.values(state.sites)) {
-    const extra = getScript(s.name)?.extraSteps
-    if (extra && !siteSilenced(state, s)) out.push(...extra(state, unit, from, s.id))
+  for (const e of hx.site) out.push(...e)
+  for (const e of hx.art) out.push(...e)
+  return out
+}
+
+/** The steps a search tries from `from`, in the original candidateSteps + extraStepsFor order, minus the
+ *  candidates isLegalStep must reject on geometry alone: a region the unit's keywords can't enter, a
+ *  diagonal without Airborne-from-the-surface, a same-square step that isn't vertical. Anything a hook or a
+ *  temporary-adjacency web may grant is kept, so pruning never changes the result or its order. */
+function searchSteps(state: GameState, unit: UnitState, from: Step, ctx: StepCtx): Step[] {
+  const { kw } = ctx
+  const extra = extraStepsFor(state, unit, from, ctx)
+  const granted = hookExtras(state, unit, from, ctx).keys
+  const webs = from.region === 'surface' && ((state.flow?.tempAdjacency ?? []) as unknown[]).length > 0
+  const regionOk = (r: Region) =>
+    r === 'surface' || (r === 'underground' && !!kw.burrowing) || (r === 'underwater' && !!kw.submerge) || (r === 'void' && !!kw.voidwalk && !unit.isAvatar)
+  const out: Step[] = []
+  for (const to of candidateSteps(from)) {
+    const d = Math.abs(to.x - from.x) + Math.abs(to.y - from.y)
+    const geom = regionOk(to.region) && (d === 0 ? from.region !== to.region : d === 1 || (!!kw.airborne && from.region === 'surface'))
+    if (geom || granted.has(stepKey(to)) || (webs && to.region === 'surface')) out.push(to)
   }
-  for (const a of Object.values(state.artifacts)) {
-    const extra = getScript(a.name)?.extraSteps
-    if (extra && !artifactSilenced(state, a)) out.push(...extra(state, unit, from, a.id))
-  }
+  out.push(...extra)
   return out
 }
 
@@ -389,9 +457,9 @@ export function reachableLocations(state: GameState, unit: UnitState): Step[] {
   while (deque.length) {
     const { s: from, cost } = deque.shift()!
     if ((best.get(key(from)) ?? Infinity) < cost) continue
-    for (const to of [...candidateSteps(from), ...extraStepsFor(state, unit, from)]) {
+    for (const to of searchSteps(state, unit, from, ctx)) {
       if (!isLegalStep(state, unit, from, to, ctx)) continue
-      const stepCost = isFreeStep(state, unit, from, to) ? 0 : 1
+      const stepCost = isFreeStep(state, unit, from, to, ctx) ? 0 : 1
       const total = cost + stepCost
       if (total > limit) continue
       if ((best.get(key(to)) ?? Infinity) <= total) continue
@@ -422,12 +490,12 @@ export function loopRoutes(state: GameState, unit: UnitState): Step[][] {
   const same = (a: Step, b: Step) => a.x === b.x && a.y === b.y && a.region === b.region
   const routes: Step[][] = []
   const seen = new Set<string>()
-  for (const n of [...candidateSteps(start), ...extraStepsFor(state, unit, start)]) {
+  for (const n of searchSteps(state, unit, start, ctx)) {
     if (same(n, start) || seen.has(`${n.x},${n.y},${n.region}`)) continue
     if (n.region !== start.region) continue // a loop is a lateral out-and-back in the unit's own region (no dive-and-surface)
     if (!isLegalStep(state, unit, start, n, ctx)) continue // can we step out to n…
     if (!isLegalStep(state, unit, n, start, ctx)) continue // …and straight back onto our own site?
-    const cost = (isFreeStep(state, unit, start, n) ? 0 : 1) + (isFreeStep(state, unit, n, start) ? 0 : 1)
+    const cost = (isFreeStep(state, unit, start, n, ctx) ? 0 : 1) + (isFreeStep(state, unit, n, start, ctx) ? 0 : 1)
     if (cost < 1 || cost > limit) continue
     seen.add(`${n.x},${n.y},${n.region}`)
     routes.push([{ ...n }, { ...start }])
@@ -482,10 +550,7 @@ export function enumeratePaths(
   // siteFreeStep, or an artifact's artifactFreeStep — matching isFreeStep's sources). When NONE
   // apply, every step costs 1, which unlocks an admissible distance prune below. Computed ONCE
   // (not per node) so it's cheap. The common board has no free-step source → the prune fires.
-  const freeStepPossible =
-    (!!getScript(unit.name)?.freeStep && !unit.silenced) ||
-    Object.values(state.sites).some((s) => getScript(s.name)?.siteFreeStep && !siteSilenced(state, s)) ||
-    Object.values(state.artifacts).some((a) => getScript(a.name)?.artifactFreeStep && !artifactSilenced(state, a))
+  const freeStepPossible = !!ctx.freeOwn || ctx.freeSites.length > 0 || ctx.freeArts.length > 0
   const dfs = (from: Step, path: Step[], cost: number): void => {
     if (bailed || all.length >= cap) return // stop once we have enough routes for the picker
     // Hard budget — the ONLY termination/speed guard. Free-step corridors make the number of distinct
@@ -497,11 +562,14 @@ export function enumeratePaths(
     // only the PICKER (the bot/engine use the BFS helpers, never this). A wall-clock cut is safe here for
     // exactly that reason: it can't perturb game logic or determinism.
     if (++visits > 1200 || Date.now() - t0 > 250) { bailed = true; if (opts?.report) opts.report.truncated = true; return }
-    if (dk(from) === goal && path.length > 0) { all.push([...path]); return } // reached dest — stop
+    // reached dest → that's a route; but keep exploring: with movement to spare a route may pass THROUGH
+    // the destination and come back to it (overshoot-and-return — a different set of entered squares)
+    if (dk(from) === goal && path.length > 0) all.push([...path])
+    if (all.length >= cap) return
     // Try steps that get CLOSER to the destination FIRST. This goal-directed ordering fills the route
     // cap quickly (the common case returns in a handful of visits) WITHOUT pruning anything — a free
     // step away from the goal is still explored, just later, so no glide route is ever dropped.
-    const cands = [...candidateSteps(from), ...extraStepsFor(state, unit, from)].sort((a, b) => minSteps(a) - minSteps(b))
+    const cands = searchSteps(state, unit, from, ctx).sort((a, b) => minSteps(a) - minSteps(b))
     for (const to of cands) {
       if (bailed) break // once the budget bails, unwind the whole stack WITHOUT re-evaluating candidates
       // Admissible distance prune: with NO free-step source every step costs 1, so reaching `to` (one
@@ -516,7 +584,7 @@ export function enumeratePaths(
       if (used.has(sk)) continue
       // a free step (Updraft Ridge glide, East-West Dragon, Arcade of Bones) costs 0, so a route may have
       // MORE steps than its cost limit; only COSTED over-budget steps are rejected here.
-      const c = isFreeStep(state, unit, from, to) ? 0 : 1
+      const c = isFreeStep(state, unit, from, to, ctx) ? 0 : 1
       if (cost + c > limit) continue
       used.add(sk); path.push(to)
       dfs(to, path, cost + c)
@@ -542,7 +610,7 @@ export function legalStepsFrom(state: GameState, unit: UnitState, from: Step): S
   const out: Step[] = []
   const seen = new Set<string>()
   const ctx = buildStepCtx(state, unit); const kw = ctx.kw
-  for (const to of [...candidateSteps(from), ...extraStepsFor(state, unit, from)]) {
+  for (const to of searchSteps(state, unit, from, ctx)) {
     if (!isLegalStep(state, unit, from, to, ctx)) continue
     const k = `${to.x},${to.y},${to.region}`
     if (seen.has(k)) continue
@@ -668,9 +736,9 @@ export function reachableWithPaths(state: GameState, unit: UnitState): { dest: S
   while (deque.length) {
     const { s: from, cost } = deque.shift()!
     if ((best.get(key(from)) ?? Infinity) < cost) continue
-    for (const to of [...candidateSteps(from), ...extraStepsFor(state, unit, from)]) {
+    for (const to of searchSteps(state, unit, from, ctx)) {
       if (!isLegalStep(state, unit, from, to, ctx)) continue
-      const stepCost = isFreeStep(state, unit, from, to) ? 0 : 1
+      const stepCost = isFreeStep(state, unit, from, to, ctx) ? 0 : 1
       const total = cost + stepCost
       if (total > limit) continue
       if ((best.get(key(to)) ?? Infinity) <= total) continue
@@ -706,9 +774,9 @@ export function findPath(state: GameState, unit: UnitState, dest: Step): Step[] 
   while (deque.length) {
     const { s: from, cost } = deque.shift()!
     if ((best.get(key(from)) ?? Infinity) < cost) continue
-    for (const to of [...candidateSteps(from), ...extraStepsFor(state, unit, from)]) {
+    for (const to of searchSteps(state, unit, from, ctx)) {
       if (!isLegalStep(state, unit, from, to, ctx)) continue
-      const stepCost = isFreeStep(state, unit, from, to) ? 0 : 1
+      const stepCost = isFreeStep(state, unit, from, to, ctx) ? 0 : 1
       const total = cost + stepCost
       if (total > limit) continue
       if ((best.get(key(to)) ?? Infinity) <= total) continue
@@ -767,6 +835,31 @@ export function stepDistanceW(state: GameState, a: { x: number; y: number }, b: 
  * the void. Intermediate squares must be sites; the destination itself may be a void location (you can
  * still lob an effect AT the void, you just can't path THROUGH it). Returns Infinity if unreachable.
  */
+/** realStepDistanceW from `a` to EVERY square at once (index y*GRID_W+x; Infinity = unreachable) — the same
+ *  BFS run to exhaustion, so each square gets the layer it is first reached at, exactly as a per-target call. */
+export function realStepDistancesFromW(state: GameState, a: { x: number; y: number }): number[] {
+  const dist: number[] = new Array(GRID_W * GRID_H).fill(Infinity)
+  if (inBounds(a.x, a.y)) dist[a.y * GRID_W + a.x] = 0
+  const seen = new Set<string>([`${a.x},${a.y}`])
+  let frontier: { x: number; y: number }[] = [{ x: a.x, y: a.y }]
+  let d = 0
+  while (frontier.length) {
+    d++
+    const next: { x: number; y: number }[] = []
+    for (const cur of frontier) {
+      for (const n of orthAdjacentWrapped(state, cur.x, cur.y)) {
+        const k = `${n.x},${n.y}`
+        if (seen.has(k)) continue
+        seen.add(k)
+        if (inBounds(n.x, n.y)) dist[n.y * GRID_W + n.x] = d
+        if (siteAt(state, n.x, n.y)) next.push(n) // can only continue the path across real locations
+      }
+    }
+    frontier = next
+  }
+  return dist
+}
+
 export function realStepDistanceW(state: GameState, a: { x: number; y: number }, b: { x: number; y: number }): number {
   if (a.x === b.x && a.y === b.y) return 0
   const seen = new Set<string>([`${a.x},${a.y}`])

@@ -2,7 +2,7 @@ import { registerScript, type EffectAPI } from '../registry'
 import { getCard } from '../../db'
 import { hasSubtype, searchLimit } from '../../../engine/statics'
 import { killUnit, revealCards } from '../../../engine/effects'
-import { shuffleWithSeed } from '../../../engine/rng'
+import { shuffleDeck } from '../../../engine/knowledge'
 
 // after the contract is sealed, offer the eligible spellbook cards to grant
 function demonGrant(ctx: EffectAPI, maxRank: number): void {
@@ -60,7 +60,7 @@ registerScript('Demonic Contract', {
         const [id] = p.spellbook.splice(idx, 1)
         p.hand.push(id)
       }
-      ctx.state.seed = shuffleWithSeed(p.spellbook, ctx.state.seed)
+      shuffleDeck(ctx.state, p.id, 'spellbook')
     },
   },
 })

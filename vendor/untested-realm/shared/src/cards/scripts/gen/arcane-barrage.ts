@@ -20,6 +20,12 @@ registerScript('Arcane Barrage', {
     return disc ? null : 'Arcane Barrage needs at least (1) mana to spend on X.'
   },
   onCast: (ctx) => {
+    // a copy (Orb of Ba'al Berith) keeps the original's X, already paid (FAQ)
+    const fixed = ctx.state.flow?.fixedX
+    if (fixed && fixed.player === ctx.controller) {
+      delete ctx.state.flow!.fixedX
+      return ctx.ask({ kind: 'chooseOption', title: 'Barrage in which direction?', data: { options: ['n', 's', 'e', 'w'] } }, 'barrage', { x: fixed.x })
+    }
     const p = ctx.state.players[ctx.controller]
     const d = ctx.state.flow?.xCostDiscount
     const disc = d && d.player === ctx.controller ? (d.amount ?? 0) : 0
@@ -38,6 +44,7 @@ registerScript('Arcane Barrage', {
       const toSpend = Math.max(0, x - disc) // "costs 3 less": free when X <= discount
       if (p.mana < toSpend) return
       if (toSpend > 0) ctx.spendMana(ctx.controller, toSpend)
+      ctx.state.flow!.lastX = { player: ctx.controller, name: 'Arcane Barrage', x, turn: ctx.state.turn }
       ctx.ask({ kind: 'chooseOption', title: 'Barrage in which direction?', data: { options: ['n', 's', 'e', 'w'] } }, 'barrage', { x })
     },
     barrage: (ctx, contCtx, dir) => {

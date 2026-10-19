@@ -1,17 +1,18 @@
 import { registerScript } from '../registry'
 import { pushLog } from '../../../engine/effects'
 import { nearbySquaresW } from '../../../engine/grid'
+import { isCarriableArtifact } from '../../../engine/statics'
 
 // 'Caster snatches and picks up target nearby artifact they can carry.'
 registerScript('Telekinesis', {
-  // 'they can carry' — automatons (artifact minions) are not carriable
-  targets: [{ what: 'artifact', count: 1, targeted: true, label: 'target nearby artifact', filter: (state, cand) => !!state.artifacts[cand?.id] }],
+  // 'they can carry' — Monuments and Automatons are not carriable
+  targets: [{ what: 'artifact', count: 1, targeted: true, label: 'target nearby artifact', filter: (state, cand) => !!state.artifacts[cand?.id] && isCarriableArtifact(state.artifacts[cand.id].name) }],
   onCast: (ctx) => {
     const t = ctx.targets[0]
     const caster = ctx.caster!
     if (!t || !('artifact' in t)) return
     const art = ctx.state.artifacts[t.artifact]
-    if (!art) return
+    if (!art || !isCarriableArtifact(art.name)) return
     if (!nearbySquaresW(ctx.state, caster.x, caster.y).some((s) => s.x === art.x && s.y === art.y)) return ctx.log('Not nearby.')
     if (art.carriedBy) {
       const holder = ctx.state.units[art.carriedBy]

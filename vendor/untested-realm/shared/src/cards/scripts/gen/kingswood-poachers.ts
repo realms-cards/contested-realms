@@ -1,8 +1,8 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog } from '../../../engine/effects'
-import { shuffleWithSeed } from '../../../engine/rng'
 import type { PlayerId } from '../../../engine/types'
+import { shuffleDeck } from '../../../engine/knowledge'
 
 // 'Stealth / Genesis → Search a spellbook for up to three Beasts, banish them, then shuffle.'
 registerScript('Kingswood Poachers', {
@@ -24,7 +24,7 @@ registerScript('Kingswood Poachers', {
         }
         return true
       })
-      ctx.state.seed = shuffleWithSeed(p.spellbook, ctx.state.seed)
+      shuffleDeck(ctx.state, p.id, 'spellbook')
       pushLog(ctx.state, ctx.controller, `${taken} Beast(s) poached from ${p.name}'s spellbook.`)
     },
   },

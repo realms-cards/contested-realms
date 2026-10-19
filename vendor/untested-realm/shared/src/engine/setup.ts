@@ -5,6 +5,7 @@ import type { ClockConfig, GameState, PlayerId, PlayerState, UnitState } from '.
 import { shuffleWithSeed } from './rng'
 import { newId, pushLog, drawCards, runSecondSeerPeek, deferTurnStep, registerCont } from './effects'
 import { GRID_W } from './grid'
+import { noteAddedToEnd } from './knowledge'
 
 export const STARTING_HAND_SITES = 3
 export const STARTING_HAND_SPELLS = 3
@@ -146,7 +147,7 @@ export function doMulligan(state: GameState, player: PlayerId, back: string[]): 
   for (const id of back) {
     p.hand.splice(p.hand.indexOf(id), 1)
     const deck = deckOf(id)
-    p[deck].push(id)
+    noteAddedToEnd(state, player, player, deck, 'bottom', [id], () => p[deck].push(id))
     if (deck === 'atlas') atlasBack++
     else spellbookBack++
   }

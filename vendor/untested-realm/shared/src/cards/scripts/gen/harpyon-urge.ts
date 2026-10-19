@@ -4,7 +4,7 @@ import { avgPow } from '../multi-card-utils/avg-pow'
 // 'An ally flies to target weaker minion and strikes it upon arrival.'
 registerScript('Harpyon Urge', {
   targets: [
-    { what: 'minion', count: 1, targeted: false, owner: 'ally', label: 'your flier' },
+    { what: 'unit', count: 1, targeted: false, owner: 'ally', label: 'your flier' }, // "an ally" — any unit you control, Avatar included
     { what: 'minion', count: 1, targeted: true, label: 'target weaker minion' },
   ],
   onCast: (ctx) => {

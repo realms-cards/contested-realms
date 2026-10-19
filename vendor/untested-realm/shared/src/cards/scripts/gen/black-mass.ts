@@ -1,17 +1,18 @@
 import { registerScript, type EffectAPI } from '../registry'
 import { getCard } from '../../db'
-import { pushLog, revealCards } from '../../../engine/effects'
+import { pushLog, revealCards, askOrder } from '../../../engine/effects'
 import { isEvilCardFor } from '../multi-card-utils/is-evil-card-for'
 
 // 'Search your top seven spells. You may reveal and draw three different Evil
 // minions from among them. Put the rest at the bottom of your spellbook.'
+// FAQ: "What order are the cards put on the bottom of my spellbook? You choose the order."
 registerScript('Black Mass', {
   onCast: (ctx) => {
     const p = ctx.state.players[ctx.controller]
     const top = p.spellbook.slice(0, 7)
     p.spellbook = p.spellbook.slice(top.length)
-    const names = top.map((id) => ctx.state.cards[id].name)
-    pushLog(ctx.state, ctx.controller, `Black Mass reveals: ${names.join(', ')}`)
+    // a SEARCH is private — only the Evil minions taken are revealed (in `took`)
+    pushLog(ctx.state, ctx.controller, `Black Mass searches the top ${top.length} spells.`)
     ctx.state.flow = ctx.state.flow ?? {}
     ctx.state.flow.blackMass = top
     ctx.state.flow.blackMassDrawn = []
@@ -32,13 +33,17 @@ registerScript('Black Mass', {
         }
       }
       if (choice && choice !== '(done)' && contCtx.left - 1 > 0) pickEvil(ctx, contCtx.left - 1)
-      else {
-        ctx.state.players[ctx.controller].spellbook.push(...(ctx.state.flow?.blackMass ?? []))
-        if (ctx.state.flow) { ctx.state.flow.blackMass = []; ctx.state.flow.blackMassDrawn = [] }
-      }
+      else bottomTheRest(ctx)
     },
   },
 })
+
+/** the searched spells not drawn go to the bottom, in the order the caster chooses */
+function bottomTheRest(ctx: EffectAPI) {
+  const rest: string[] = [...(ctx.state.flow?.blackMass ?? [])]
+  if (ctx.state.flow) { ctx.state.flow.blackMass = []; ctx.state.flow.blackMassDrawn = [] }
+  askOrder(ctx.state, ctx.controller, 'spellbook', rest, 'bottom', 'Black Mass: order the rest onto the bottom (first = very bottom)')
+}
 
 function pickEvil(ctx: EffectAPI, left: number) {
   const pool: string[] = ctx.state.flow?.blackMass ?? []
@@ -48,10 +53,6 @@ function pickEvil(ctx: EffectAPI, left: number) {
       .map((id) => ctx.state.cards[id].name)
       .filter((n) => !alreadyDrawn.includes(n) && getCard(n).type === 'Minion' && isEvilCardFor(ctx.state, ctx.controller, n))
   )]
-  if (!evil.length) {
-    ctx.state.players[ctx.controller].spellbook.push(...pool)
-    if (ctx.state.flow) { ctx.state.flow.blackMass = []; ctx.state.flow.blackMassDrawn = [] }
-    return
-  }
+  if (!evil.length) return bottomTheRest(ctx)
   ctx.ask({ kind: 'chooseOption', title: `Draw an Evil minion (${left} left)?`, data: { options: [...evil, '(done)'] } }, 'took', { left })
 }

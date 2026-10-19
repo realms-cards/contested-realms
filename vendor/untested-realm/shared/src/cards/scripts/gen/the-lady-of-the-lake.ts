@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog, effectSummonUnit, removeUnitFromRealm, returnToDeck } from '../../../engine/effects'
-import { shuffleWithSeed } from '../../../engine/rng'
+import { shuffleDeck } from '../../../engine/knowledge'
 
 // 'Genesis → You may summon a Mortal or artifact from your cemetery to Lady of
 //  the Lake's location. If you do, shuffle her into her owner's spellbook.'
@@ -51,7 +51,7 @@ registerScript('The Lady of the Lake', {
       if (removeUnitFromRealm(ctx.state, self.id)) delete ctx.state.units[self.id] // cargo stays (FAQ); avatars refuse removal
       if (herCard && !herCard.isToken) {
         const owner = returnToDeck(ctx.state, herCard.id) // her OWNER's deck, regardless of controller
-        ctx.state.seed = shuffleWithSeed(ctx.state.players[owner].spellbook, ctx.state.seed)
+        shuffleDeck(ctx.state, ctx.state.players[owner].id, 'spellbook')
       }
     },
   },

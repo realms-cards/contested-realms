@@ -3,6 +3,7 @@
 import { type CardScript } from '../registry'
 import { nearbySquaresW } from '../../../engine/grid'
 import { pushLog } from '../../../engine/effects'
+import { noteAddedToEnd, noteSeenAtEnd } from '../../../engine/knowledge'
 
 // 'Genesis → If this is the only <name> you control, gain ① this turn.'
 export function towerScript(name: string): CardScript {
@@ -79,6 +80,7 @@ export const riverScript: CardScript = {
     const topId = p.spellbook[0]
     if (topId === undefined) return
     const name = ctx.state.cards[topId].name
+    noteSeenAtEnd(ctx.state, ctx.controller, ctx.controller, 'spellbook', 'top', [topId])
     ctx.ask(
       { kind: 'chooseOption', title: `Your next spell is ${name}. Put it on the bottom?`, data: { options: ['keep on top', 'put on bottom'], reveal: name } },
       'scry',
@@ -86,11 +88,14 @@ export const riverScript: CardScript = {
   },
   conts: {
     scry: (ctx, contCtx, choice) => {
-      if (choice !== 'put on bottom') return
       const p = ctx.state.players[ctx.controller]
+      if (choice !== 'put on bottom') {
+        if (p.spellbook[0] !== undefined) noteSeenAtEnd(ctx.state, ctx.controller, ctx.controller, 'spellbook', 'top', [p.spellbook[0]])
+        return
+      }
       const id = p.spellbook.shift()
       if (id !== undefined) {
-        p.spellbook.push(id)
+        noteAddedToEnd(ctx.state, ctx.controller, ctx.controller, 'spellbook', 'bottom', [id], () => p.spellbook.push(id))
         pushLog(ctx.state, ctx.controller, 'The river carries the spell to the bottom.')
       }
     },

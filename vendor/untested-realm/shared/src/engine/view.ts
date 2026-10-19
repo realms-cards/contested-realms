@@ -15,6 +15,12 @@ export interface PlayerView extends Omit<GameState, 'players' | 'cards' | 'seed'
   you: PlayerId | null
 }
 
+/** Doomsday Cult — while a live (un-silenced, un-disabled) Cult sits in the realm, BOTH players'
+ *  spellbook-top cards are public. */
+export function spellbookTopsPublic(state: GameState): boolean {
+  return Object.values(state.units).some((u) => u.name === 'Doomsday Cult' && !u.silenced && !isDisabled(state, u))
+}
+
 export function viewFor(state: GameState, player: PlayerId | null, opts?: { revealAll?: boolean }): PlayerView {
   const visibleCardIds = new Set<string>()
 
@@ -44,9 +50,7 @@ export function viewFor(state: GameState, player: PlayerId | null, opts?: { reve
   // (un-silenced, un-disabled) Cult sits in the realm, BOTH players' spellbook-top cards are PUBLIC.
   // Expose each top's id (+ its card data below) so every viewer can see it — and the owner can take
   // up an Evil minion from it via the avatar's granted Cult ability.
-  const cultInPlay = Object.values(state.units).some(
-    (u) => u.name === 'Doomsday Cult' && !u.silenced && !isDisabled(state, u),
-  )
+  const cultInPlay = spellbookTopsPublic(state)
   const spellbookTops: (string | undefined)[] = state.players.map((p) => {
     const top = cultInPlay ? p.spellbook[0] : undefined
     if (top !== undefined) visibleCardIds.add(top)
@@ -137,19 +141,20 @@ export function viewFor(state: GameState, player: PlayerId | null, opts?: { reve
     interject: state.interject ?? null,
     // transient effect flags: needed client-side for board hints (Harbinger
     // portents, summon windows...). Card ids inside stay opaque — the cards
-    // map above is filtered to visible cards. The Dragonlord's set-aside dragon is
-    // HIDDEN info, so a viewer only ever sees their OWN pick (never the opponent's).
+    // map above is filtered to visible cards. The Dragonlord's set-aside dragon is PUBLIC ("a rules
+    // reference for both players", FAQ), so flow.dragonlordPick goes to everyone.
     flow: (() => {
       const f: any = { ...(state.flow ?? {}) }
-      if (f.dragonlordPick) {
-        const mine: Record<number, string> = {}
-        if (player !== null && f.dragonlordPick[player]) mine[player] = f.dragonlordPick[player]
-        f.dragonlordPick = mine
-      }
       // Achievement unlocks are attributed to a seat; a viewer only sees their OWN (the cheeky
       // unlock names could otherwise leak hidden info to the opponent mid-game online). Spectators
       // see none. The internal per-turn scratch tallies never leave the server.
       delete f.achvScratch
+      // deck knowledge (who has seen which cards on top/bottom) is private to each viewer
+      if (f.knownDeck) {
+        const mine: Record<string, string[]> = {}
+        for (const k in f.knownDeck) if (player !== null && k.startsWith(`${player}:`)) mine[k] = f.knownDeck[k]
+        f.knownDeck = mine
+      }
       if (Array.isArray(f.achievements)) f.achievements = f.achievements.filter((u: any) => u.seat === player)
       return f
     })(),

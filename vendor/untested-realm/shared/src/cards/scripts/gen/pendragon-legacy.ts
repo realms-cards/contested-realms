@@ -1,8 +1,8 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog, returnToDeck } from '../../../engine/effects'
-import { shuffleWithSeed } from '../../../engine/rng'
 import type { PlayerId } from '../../../engine/types'
+import { shuffleDeck } from '../../../engine/knowledge'
 
 // 'Shuffle any number of Unique cards from your cemetery into your decks. Draw a card.'
 registerScript('Pendragon Legacy', {
@@ -19,8 +19,8 @@ registerScript('Pendragon Legacy', {
       return true
     })
     for (const o of owners) {
-      ctx.state.seed = shuffleWithSeed(ctx.state.players[o].spellbook, ctx.state.seed)
-      ctx.state.seed = shuffleWithSeed(ctx.state.players[o].atlas, ctx.state.seed)
+      shuffleDeck(ctx.state, ctx.state.players[o].id, 'spellbook')
+      shuffleDeck(ctx.state, ctx.state.players[o].id, 'atlas')
     }
     if (moved) pushLog(ctx.state, ctx.controller, `${moved} Unique legacy card(s) return to the decks.`)
     ctx.drawCard(ctx.controller)

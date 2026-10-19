@@ -1,6 +1,7 @@
 import { registerScript, type EffectAPI } from '../registry'
 import { pushLog } from '../../../engine/effects'
 import { awardAchievement } from '../../../engine/achievements.catalog'
+import { isCarriableArtifact } from '../../../engine/statics'
 
 // "Can't drop artifacts. / At the end of your turn, Lord of Greed snatches an
 // artifact from elsewhere into his hands."
@@ -11,8 +12,8 @@ registerScript('Lord of Greed', {
     if (!self) return
     // every artifact NOT already his is snatchable (prefer ones off his own square).
     // "AN artifact from elsewhere" → the controller chooses which (board-click) when 2+.
-    const away = Object.values(ctx.state.artifacts).filter((a) => a.carriedBy !== self.id && !(a.x === self.x && a.y === self.y && !a.carriedBy))
-    const pool = away.length ? away : Object.values(ctx.state.artifacts).filter((a) => a.carriedBy !== self.id)
+    const away = Object.values(ctx.state.artifacts).filter((a) => isCarriableArtifact(a.name) && a.carriedBy !== self.id && !(a.x === self.x && a.y === self.y && !a.carriedBy))
+    const pool = away.length ? away : Object.values(ctx.state.artifacts).filter((a) => isCarriableArtifact(a.name) && a.carriedBy !== self.id)
     if (pool.length === 0) return
     if (pool.length === 1) return greedSnatch(ctx, self.id, pool[0].id)
     ctx.ask({ kind: 'chooseTargets', title: 'Lord of Greed — snatch which artifact?', data: { candidates: pool.map((a) => a.id), count: 1, kind: 'artifact' } }, 'greed', { self: self.id })
@@ -29,7 +30,7 @@ registerScript('Lord of Greed', {
 function greedSnatch(ctx: EffectAPI, selfId: string, artId: string): void {
   const self = ctx.state.units[selfId]
   const loot = ctx.state.artifacts[artId]
-  if (!self || !loot) return
+  if (!self || !loot || !isCarriableArtifact(loot.name)) return // Monuments/Automatons can't be carried
   if (loot.carriedBy) {
     const carrier = ctx.state.units[loot.carriedBy]
     if (carrier) carrier.carrying = carrier.carrying.filter((i) => i !== loot.id)

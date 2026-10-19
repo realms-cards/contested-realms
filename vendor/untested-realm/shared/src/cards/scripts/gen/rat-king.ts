@@ -2,6 +2,7 @@ import { registerScript, type EffectAPI } from '../registry'
 import { getCard } from '../../db'
 import { pushLog, effectSummonUnit } from '../../../engine/effects'
 import { orthAdjacentWrapped, siteAt, squareLabel } from '../../../engine/grid'
+import { noteAddedToEnd } from '../../../engine/knowledge'
 
 // 'Genesis & Deathrite → Search your top six spells. You may summon an Ordinary
 //  rat from among them to each other adjacent site. Put the rest at the bottom.'
@@ -32,7 +33,7 @@ registerScript('Rat King', {
         pushLog(ctx.state, ctx.controller, `${ctx.state.cards[cardId].name} scurries to ${squareLabel(spots[k].x, spots[k].y)}.`)
       }
       const rest = top.filter((id) => !used.includes(id))
-      p.spellbook.push(...rest)
+      noteAddedToEnd(ctx.state, ctx.controller, ctx.controller, 'spellbook', 'bottom', rest, () => p.spellbook.push(...rest))
     },
   },
 })
