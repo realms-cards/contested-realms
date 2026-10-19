@@ -30,13 +30,20 @@ function toMain(): EngineState {
     const who: PlayerId | null = botNeedsToAct(g, P0) ? P0 : botNeedsToAct(g, P1) ? P1 : null;
     if (who === null) break;
     const r = applyAction(g, who, botAction(g, who));
-    if (!r.ok) applyAction(g, who, g.prompts[0] ? { t: "prompt", promptId: g.prompts[0].id, choice: null } : { t: "endTurn" });
+    if (!r.ok) applyAction(g, who, g.prompts[0] ? { t: "prompt", promptId: g.prompts[0].id, choice: answerFor(g.prompts[0]) } : { t: "endTurn" });
   }
   throw new Error("could not reach main phase");
 }
 
+/** The engine only takes an offered answer: draw from the spellbook, the first site offered, otherwise decline. */
+const answerFor = (p: EngineState["prompts"][number]) =>
+  p.kind === "drawDeck" ? "spellbook" : p.kind === "firstSite" ? ((p.data as { ids?: string[] } | undefined)?.ids?.[0] ?? null) : null;
+
 const settle = (g: EngineState) => {
-  while (g.prompts.length) applyAction(g, g.prompts[0].player ?? P0, { t: "prompt", promptId: g.prompts[0].id, choice: null });
+  for (let i = 0; i < 20 && g.prompts.length; i++) {
+    const p = g.prompts[0];
+    expect(applyAction(g, p.player ?? P0, { t: "prompt", promptId: p.id, choice: answerFor(p) }).ok).toBe(true);
+  }
 };
 
 /** A controlled board, then the Brook played for real at engine (2,1). */

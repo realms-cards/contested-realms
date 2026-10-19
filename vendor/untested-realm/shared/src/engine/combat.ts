@@ -37,6 +37,7 @@ export function moveAttack(state: GameState, player: PlayerId, unitId: string, p
   state.flow.actingUnitId = unitId
   try {
     tapUnit(state, unit)
+    delete state.flow.lastStepFrom // set by resolveMovement only if THIS move takes a step
     const taken = resolveMovement(state, unit, path)
     // Blaze: when the runner stops, the trail detonates (2 damage along it)
     const blaze = (state.flow?.blazeTrail ?? []).find((e: any) => e.unitId === unitId && e.turn === state.turn)
@@ -413,11 +414,15 @@ function openDefendWindow(state: GameState, attacker: UnitState, target: { unitI
 
   let candidates: UnitState[] = []
   let undefendable = getScript(attacker.name)?.cantBeDefended && !attacker.silenced
-  // Dread Thicket: the first attack out of the site each turn can't be defended
+  // Dread Thicket: the first attack OUT OF the site each turn can't be defended. FAQ: "out of" = the
+  // attacker's last step left the Thicket (exactly one step away from it), then it attacks.
   {
-    const home = state.sites[Object.values(state.sites).find((s) => s.x === attacker.x && s.y === attacker.y && !s.isRubble)?.id ?? '']
-    const hook = home ? getScript(home.name)?.siteMakesAttackUndefended : undefined
-    if (home && hook && !siteSilencedC(state, home) && hook(state, home, attacker)) undefendable = true
+    const from = state.flow?.lastStepFrom
+    const left = from && from.unitId === attacker.id && from.turn === state.turn
+      ? Object.values(state.sites).find((s) => s.x === from.x && s.y === from.y && !s.isRubble)
+      : undefined
+    const hook = left ? getScript(left.name)?.siteMakesAttackUndefended : undefined
+    if (left && hook && !siteSilencedC(state, left) && hook(state, left, attacker)) undefendable = true
   }
   // Sphere of Animosity: trapped avatars can't be defended
   {
@@ -1678,6 +1683,8 @@ export function pickUp(state: GameState, player: PlayerId, unitId: string, artif
   if (Object.values(state.artifacts).some((a) => !a.carriedBy && a.x === unit.x && a.y === unit.y && artScript(state, a)?.blocksCarryingHere)) {
     return 'A strange magnetism prevents carrying artifacts here.'
   }
+  if (!Array.isArray(artifactIds) || !Array.isArray(unitIds)) return 'Choose what to pick up.'
+  if (new Set(artifactIds).size !== artifactIds.length || new Set(unitIds).size !== unitIds.length) return 'Each card can only be picked up once.'
   const stealsCarried = getScript(unit.name)?.stealsCarried
   for (const id of artifactIds) {
     const art = state.artifacts[id]

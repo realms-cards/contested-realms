@@ -48,6 +48,7 @@ import {
   type Step,
   actingSeatFor,
   cloneState,
+  underEnemySiteEater,
 } from '@sorcery/shared'
 
 export function botNeedsToAct(state: GameState, me: PlayerId): boolean {
@@ -661,7 +662,7 @@ function mainPhase(state: GameState, me: PlayerId, banned?: Set<string>): Action
   if (!avatar.tapped) {
     const siteCards = p.hand.filter((id) => getCard(state.cards[id].name).type === 'Site')
     if (siteCards.length > 0) {
-      const squares = legalSiteSquares(state, me)
+      const squares = legalSiteSquares(state, me).filter((s) => !underEnemySiteEater(state, me, s.x, s.y))
       if (squares.length > 0) {
         const best = [...squares].sort((a, b) => chebyshev(a, enemyAvatar) - chebyshev(b, enemyAvatar))[0]
         const play: Action = { t: 'avatarSite', mode: 'play', cardId: siteCards[0], x: best.x, y: best.y }

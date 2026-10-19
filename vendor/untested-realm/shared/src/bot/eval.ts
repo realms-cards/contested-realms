@@ -127,6 +127,15 @@ function predictedSiteLoss(state: GameState, owner: PlayerId): number {
 
 /** read-only estimate of a player's per-turn mana income from sites (mirrors turn.ts's core:
  *  1 per active controlled site + siteExtraMana + aura boosts + enemy providesForEveryone). */
+/** Is (x,y) where an ENEMY Realm-Eater stands? It destroys sites it successfully attacks, so a site played
+ *  under it is just a meal for its next turn: the bot never plants there (moves.ts, the fast bot, the
+ *  opening), and the home-territory penalty doesn't count that void as one it should be filling. */
+export function underEnemySiteEater(state: GameState, me: PlayerId, x: number, y: number): boolean {
+  for (const u of Object.values(state.units))
+    if (u.controller !== me && u.name === 'Realm-Eater' && u.x === x && u.y === y && u.region === 'surface' && !u.silenced) return true
+  return false
+}
+
 export function siteManaIncome(state: GameState, player: PlayerId): number {
   let m = 0
   for (const site of Object.values(state.sites)) {
@@ -445,7 +454,10 @@ function explainEvalRaw(state: GameState, me: PlayerId, w: EvalWeights): EvalBre
   // voids. A void that is an ENEMY harbinger slot doesn't count (I shouldn't plant there anyway).
   if (mySitesOutsideHome > 0 && getScript(myAv.name)?.noStandardSiteAction !== true) {
     let fillableHomeVoids = 0
-    for (const x of [1, 2, 3]) for (const y of homeRows) if (!siteAt(state, x, y) && !isEnemyHarbSlot(x, y)) fillableHomeVoids++
+    // a void under an enemy Realm-Eater isn't fillable either (the site would just be eaten) — when that's
+    // the only one left, building outside home is the right call, not "premature"
+    for (const x of [1, 2, 3]) for (const y of homeRows)
+      if (!siteAt(state, x, y) && !isEnemyHarbSlot(x, y) && !underEnemySiteEater(state, me, x, y)) fillableHomeVoids++
     if (fillableHomeVoids > 0) terms.homePremature = -w.homePremature * mySitesOutsideHome
   }
 

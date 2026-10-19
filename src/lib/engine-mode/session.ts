@@ -15,6 +15,7 @@ import {
   BY_ID as ACHIEVEMENTS_BY_ID,
   createGame,
   evaluate,
+  legalActions,
   viewFor,
 } from "@sorcery/shared";
 import type { Action, ActionResult, DeckList, GameState as EngineState, PlayerId, PlayerView } from "@sorcery/shared";
@@ -816,14 +817,23 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     };
     let result = attempt(action);
     if (!result.ok) {
-      const prompt = game.prompts[0];
-      const fallbacks: Action[] = prompt
-        ? [{ t: "prompt", promptId: prompt.id, choice: null }]
-        : game.phase === "mulligan"
-          ? [{ t: "keepHand" }]
-          : [{ t: "endTurn" }, { t: "concede" }];
+      const g = game;
+      const prompt = g.prompts[0];
+      // A prompt is first declined; one that must be answered (first site, draw pile) refuses a
+      // null choice, so then it gets the first answer the engine itself offers.
+      function* fallbacks(): Generator<Action> {
+        if (prompt) {
+          yield { t: "prompt", promptId: prompt.id, choice: null };
+          for (const a of legalActions(g, BOT_SEAT)) if (a.t === "prompt" && a.promptId === prompt.id) yield a;
+        } else if (g.phase === "mulligan") {
+          yield { t: "keepHand" };
+        } else {
+          yield { t: "endTurn" };
+          yield { t: "concede" };
+        }
+      }
       let taken: Action | null = null;
-      for (const fallback of fallbacks) {
+      for (const fallback of fallbacks()) {
         result = attempt(fallback);
         if (result.ok) {
           taken = fallback;

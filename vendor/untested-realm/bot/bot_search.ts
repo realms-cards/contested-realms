@@ -49,6 +49,7 @@ import {
   type PlayerId,
   type UnitState,
   type EvalWeights,
+  underEnemySiteEater,
 } from '@sorcery/shared'
 import { botAction, botNeedsToAct, forceAtlasDraw, botActionKey } from './bot'
 
@@ -811,6 +812,7 @@ function playSiteInFront(state: GameState, me: PlayerId): Action | null {
   if (getScript(av.name)?.noStandardSiteAction) return null
   const fx = av.x
   const fy = av.y + (me === 0 ? 1 : -1) // "in front" = one square toward the enemy half
+  if (underEnemySiteEater(state, me, fx, fy)) return null // an enemy Realm-Eater would just eat it
   for (const cardId of state.players[me].hand) {
     const def = getCard(state.cards[cardId].name)
     if (def.type !== 'Site') continue

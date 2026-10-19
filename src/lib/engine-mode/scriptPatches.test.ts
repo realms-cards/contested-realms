@@ -74,8 +74,8 @@ function endTurn(g: EngineState) {
   // answer any start-of-turn prompt (draw choice etc.) with its first option
   for (let i = 0; i < 5 && g.prompts.length; i++) {
     const p = g.prompts[0];
-    const data = p.data as { options?: unknown[] } | undefined;
-    const choice = p.kind === "drawDeck" ? "spellbook" : data?.options?.[0] ?? null;
+    const data = p.data as { options?: unknown[]; ids?: unknown[] } | undefined;
+    const choice = p.kind === "drawDeck" ? "spellbook" : data?.options?.[0] ?? data?.ids?.[0] ?? null;
     applyAction(g, p.player, { t: "prompt", promptId: p.id, choice });
   }
   expect(g.activePlayer).not.toBe(seat);

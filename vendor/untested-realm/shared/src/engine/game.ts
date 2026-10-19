@@ -4,9 +4,10 @@ import type { Action, ActionResult, GameState, PlayerId, UnitState } from './typ
 import { doMulligan, keepHand } from './setup'
 import { endTurn, reconcileControlledMana } from './turn'
 import { activePrompt, resolvePrompt, pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkStateBased, killUnit, tapUnit, checkWard, luckyCandidates, bumpManaSpent, beginAreaReveal, sealAbilityReveal, revealAbility, setActionCredit, restoreActionCredit, reconcileSummonTax, completeDeferredDeaths, finishBattleCapture, runDamageEvent } from './effects'
-import { castSpell, playSite, affinity, validateTarget, legalTargetOptions, sameTargetRef, resolvePendingCast, resolveQueuedCopyCasts } from './casting'
+import { castSpell, playSite, affinity, validateTarget, legalTargetOptions, sameTargetRef, resolvePendingCast, resolveQueuedCopyCasts, castExtrasProblem, isRegion } from './casting'
 import { moveAttack, shootProjectile, pickUp, drop, enforceForcedAttacks, resolvePendingMoveAttack } from './combat'
 import { applyJudge } from './judge'
+import { actionShapeProblem } from './action-shape'
 import { abilityAnchor, avatarOf, unitsAt, nearbySquaresW, occupiedSquares } from './grid'
 import { canTap, isDisabled, effKeywords, siteSilenced, artifactSilenced, artScript, grantedAbilities, attackBlockedAt } from './statics'
 import { reachableLocations } from './movement'
@@ -18,6 +19,9 @@ export { createGame } from './setup'
  * Every legal mutation bumps state.version so clients can sync.
  */
 export function applyAction(state: GameState, player: PlayerId, action: Action): ActionResult {
+  // raw input from any client: refuse malformed shapes before anything reads them (see action-shape.ts)
+  const shapeErr = actionShapeProblem(action)
+  if (shapeErr) return { ok: false, error: shapeErr }
   const err = dispatch(state, player, action)
   if (err) return { ok: false, error: err }
   // once the action (and any effect chain) has fully settled, reckon the batch of Mock-Court summon
@@ -78,7 +82,9 @@ function dispatch(state: GameState, player: PlayerId, action: Action): string | 
   // (like concede), never routed through Thaïs. You can only add to the OTHER seat.
   if (action.t === 'addTime') {
     if (!state.clock) return 'This game has no clock.'
+    if (action.player !== 0 && action.player !== 1) return 'No such player.'
     if (action.player === player) return 'You can only add time to your opponent.'
+    if (!Number.isFinite(action.ms)) return 'Add a number of milliseconds.'
     const ms = Math.max(0, Math.min(Math.round(action.ms), 3_600_000)) // cap a single gift at 1h
     state.clock.remaining[action.player] = Math.max(0, state.clock.remaining[action.player] + ms)
     pushLog(state, player, `${state.players[player].name} grants ${state.players[action.player].name} +${Math.round(ms / 1000)}s.`)
@@ -416,7 +422,10 @@ function activateAbility(
     if (!['n', 's', 'e', 'w'].includes(dir)) return 'Choose a direction.'
     // an oversized / Rack-stretched shooter occupies several squares → it picks which one the shot flies from
     const shooter = state.units[action.sourceId]
-    if (shooter && action.extra?.origin === undefined) {
+    const origin = action.extra?.origin
+    if (origin !== undefined && !(shooter && occupiedSquares(shooter).some((q) => q.x === origin?.x && q.y === origin?.y)))
+      return 'It shoots from one of its own squares.'
+    if (shooter && origin === undefined) {
       const squares = occupiedSquares(shooter)
       if (squares.length > 1) {
         pushPrompt(state, { player, kind: 'chooseSquare', title: `${shooter.name} shoots from which square?`, data: { squares }, cont: 'ranged:origin', ctx: { unitId: action.sourceId, player, dir } })
@@ -448,7 +457,7 @@ function activateAbility(
   // validate targets
   const targets = (action.targets ?? []).map((r) =>
     r.startsWith('sq:')
-      ? { square: { x: Number(r.slice(3).split(',')[0]), y: Number(r.slice(3).split(',')[1]), region: r.slice(3).split(',')[2] as any } }
+      ? { square: { x: Number(r.slice(3).split(',')[0]), y: Number(r.slice(3).split(',')[1]), region: isRegion(r.slice(3).split(',')[2]) ? r.slice(3).split(',')[2] as any : undefined } }
       : r.startsWith('u')
         ? { unit: r }
         : r.startsWith('s')
@@ -481,6 +490,9 @@ function activateAbility(
     }
     if (!spec.upTo && ti < spec.count) return 'Missing targets.'
   }
+  if (targets.length > ti) return 'Too many targets.'
+  const extraErr = castExtrasProblem(state, action.sourceId, action.extra)
+  if (extraErr) return extraErr
 
   // pay costs
   if (ability.cost.tap) {

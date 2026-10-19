@@ -400,7 +400,8 @@ export interface CardScript {
   auraDisablesUnit?: (state: GameState, aura: { id: string; squares: { x: number; y: number }[] }, unit: UnitState) => boolean
   /** a site was played; fires for all cards in play (Cursed Land, Boulevard of Bones) */
   onSitePlayed?: (ctx: EffectAPI, by: PlayerId, site: { id: string; x: number; y: number; name: string }) => void
-  /** on a site: the first attack out of here each turn can't be defended (Dread Thicket) */
+  /** on a site: the first attack out of here each turn can't be defended (Dread Thicket). Asked of the
+   *  site the attacker's last step LEFT (flow.lastStepFrom), not the site it attacks on. */
   siteMakesAttackUndefended?: (state: GameState, site: { id: string; x: number; y: number }, attacker: UnitState) => boolean
   /** striker is Lethal against matching targets only (Intrepid Hero: Evil) */
   lethalVs?: (state: GameState, striker: UnitState, target: UnitState) => boolean

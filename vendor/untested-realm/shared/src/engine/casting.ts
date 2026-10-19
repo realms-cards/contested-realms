@@ -825,15 +825,49 @@ function validateTargetCore(
   if ('square' in ref) {
     if (spec.what !== 'square') return 'Wrong target type.'
     if (!inBounds(ref.square.x, ref.square.y)) return 'Out of bounds.'
+    // "target location" is region-locked like a target unit: a surface caster can't blast underground.
+    // A SITE caster is exempt — it picks the region it casts into afterwards (castRegion overrides it).
+    if (spec.targeted && ref.square.region && ref.square.region !== caster.region && !state.sites[caster.id]) {
+      return 'Targets must be in the same region as the caster.'
+    }
     // enforce the spatial bound (Draconian Bonekite's "target nearby location") — the unit/site
     // branches already do this; without it a `where:'nearby'` SQUARE spec validated the whole board.
     if (spec.where && spec.where !== 'anywhere') {
       const squares = spec.where === 'here' ? [{ x: wa.x, y: wa.y }] : spec.where === 'adjacent' ? adjacentSquaresW(state, wa.x, wa.y) : nearbySquaresW(state, wa.x, wa.y)
       if (!squares.some((s) => s.x === ref.square.x && s.y === ref.square.y)) return `Target must be ${spec.where}.`
+      // "nearby/adjacent/here" is same-region (Blink can't hop a surface ally underground): measured from the
+      // earlier-picked unit (whereOf) or a real-unit caster; a site / positional source reaches subsurface.
+      const prior = spec.whereOf != null ? picked?.[spec.whereOf] : undefined
+      const anchorUnit = prior && 'unit' in prior ? state.units[prior.unit] : prior ? undefined : state.units[caster.id]
+      if (anchorUnit && ref.square.region && ref.square.region !== anchorUnit.region) return 'Target must be in the same region.'
     }
     return null
   }
   return 'Invalid target.'
+}
+
+const REGIONS: readonly Region[] = ['surface', 'underground', 'underwater', 'void']
+export const isRegion = (r: unknown): r is Region => REGIONS.includes(r as Region)
+
+/** The regions a SITE caster may cast from: its surface and the subsurface under it (cast:region). */
+function siteCastRegions(state: GameState, siteId: string): Region[] {
+  const site = state.sites[siteId]
+  if (!site) return []
+  return ['surface', terrainAt(state, site.x, site.y) === 'water' ? 'underwater' : 'underground']
+}
+
+/** Authoritative check of the positional `extra` fields a client may send with a cast or an activated
+ *  ability. The UI only offers legal values, but the engine resolves them AFTER target validation, so a
+ *  raw action could otherwise re-region (castRegion) or relocate (castOrigin) an already-validated spell. */
+export function castExtrasProblem(state: GameState, casterId: string, extra: any): string | null {
+  if (extra?.castRegion !== undefined && !siteCastRegions(state, casterId).includes(extra.castRegion))
+    return 'Only a site caster picks the region it casts from.'
+  if (extra?.castOrigin !== undefined) {
+    const u = state.units[casterId]
+    const o = extra.castOrigin
+    if (!u || !occupiedSquares(u).some((q) => q.x === o?.x && q.y === o?.y)) return 'The caster must act from one of its own squares.'
+  }
+  return null
 }
 
 function parseTargetRefs(raw: string[] | undefined): TargetRef[] {
@@ -841,7 +875,7 @@ function parseTargetRefs(raw: string[] | undefined): TargetRef[] {
   for (const r of raw ?? []) {
     if (r.startsWith('sq:')) {
       const [x, y, region] = r.slice(3).split(',')
-      out.push({ square: { x: Number(x), y: Number(y), region: region as Region | undefined } })
+      out.push({ square: { x: Number(x), y: Number(y), region: isRegion(region) ? region : undefined } })
     } else if (r.startsWith('u')) out.push({ unit: r })
     else if (r.startsWith('s')) out.push({ site: r })
     else if (r.startsWith('a')) out.push({ artifact: r })
@@ -1059,15 +1093,19 @@ export function resolvePendingCast(state: GameState): void {
 
 // A site caster picked the region to blast from → stamp it onto the parked cast; the applyAction
 // boundary (game.ts) then runs resolvePendingCast to finish the spell in that region.
-registerCont('cast:region', (state, _ctx, choice) => {
+registerCont('cast:region', (state, ctx: { casterId?: string }, choice) => {
   const pc = state.flow?.pendingCast as any
-  if (pc) pc.extra = { ...(pc.extra ?? {}), castRegion: typeof choice === 'string' ? choice : 'surface' }
+  if (!pc) return
+  const offered = siteCastRegions(state, ctx.casterId ?? pc.casterId)
+  pc.extra = { ...(pc.extra ?? {}), castRegion: offered.includes(choice) ? choice : 'surface' }
 })
 
 // An oversized caster picked which of its squares to fire from → stamp it onto the parked cast.
-registerCont('cast:origin', (state, _ctx, choice) => {
+registerCont('cast:origin', (state, ctx: { casterId?: string }, choice) => {
   const pc = state.flow?.pendingCast as any
-  if (pc && isSquare(choice)) pc.extra = { ...(pc.extra ?? {}), castOrigin: { x: choice.x, y: choice.y } }
+  const u = pc && state.units[ctx.casterId ?? pc.casterId]
+  if (!u || !isSquare(choice) || !occupiedSquares(u).some((q) => q.x === choice.x && q.y === choice.y)) return
+  pc.extra = { ...(pc.extra ?? {}), castOrigin: { x: choice.x, y: choice.y } }
 })
 
 export function castSpell(
@@ -1112,7 +1150,7 @@ export function castSpell(
   // (Gargantula drags an adjacent minion to its own square). Validate those against a
   // pseudo-caster placed at `at`. Magic spells keep the real caster as the anchor.
   const targetAnchor: UnitState =
-    def.type === 'Magic' || !at ? caster : { ...caster, x: at.x, y: at.y, region: at.region ?? caster.region }
+    def.type === 'Magic' || !at ? caster : { ...caster, x: at.x, y: at.y, region: at.region ?? 'surface' } // lands where summonCastMinion puts it
   let ti = 0
   for (let si = 0; si < specs.length; si++) {
     const spec = specs[si]
@@ -1142,6 +1180,8 @@ export function castSpell(
       }
     }
   }
+  // picks past the card's declared specs were never validated — scripts index targets by position
+  if (targets.length > ti) return 'Too many targets.'
 
   // The Malleus Maleficarum: its collection-casts must aim at an enemy
   // Spellcaster, or their location or site
@@ -1188,6 +1228,7 @@ export function castSpell(
   if (def.type === 'Artifact') {
     if (!at && !extra?.giveTo) return 'Choose where to conjure the artifact.'
     if (at) {
+      if (at.region !== undefined && at.region !== 'surface') return 'Artifacts are conjured atop a site, on the surface.'
       const site = siteAt(state, at.x, at.y)
       // Dwarven Forge: anyone may conjure (matching) artifacts here
       const forge = site && !siteSilenced(state, site) && (() => {
@@ -1223,6 +1264,9 @@ export function castSpell(
       if (err) return err
     }
   }
+
+  const extraErr = castExtrasProblem(state, caster.id, extra)
+  if (extraErr) return extraErr
 
   // canCast's threshold pass is optimistic for position-bound waivers; verify
   // with the real square now
@@ -1372,7 +1416,7 @@ export function castSpell(
     if (siteCaster && extra?.castRegion === undefined) {
       const sub = terrainAt(state, siteCaster.x, siteCaster.y) === 'water' ? 'underwater' : 'underground'
       state.flow.pendingCast = { type: 'magic', cardId, castName, player, casterId, at, targets, extra, fromCemetery }
-      pushPrompt(state, { player, kind: 'chooseOption', title: `Cast ${castName} from which region?`, data: { options: ['surface', sub] }, cont: 'cast:region', ctx: {} })
+      pushPrompt(state, { player, kind: 'chooseOption', title: `Cast ${castName} from which region?`, data: { options: ['surface', sub] }, cont: 'cast:region', ctx: { casterId: caster.id } })
       return null
     }
     // An OVERSIZED / Rack-stretched caster occupies several squares → it picks which one it acts FROM.
@@ -1382,7 +1426,7 @@ export function castSpell(
       const squares = occupiedSquares(realCaster)
       if (squares.length > 1) {
         state.flow.pendingCast = { type: 'magic', cardId, castName, player, casterId, at, targets, extra, fromCemetery }
-        pushPrompt(state, { player, kind: 'chooseSquare', title: `Cast ${castName} from which square?`, data: { squares }, cont: 'cast:origin', ctx: {} })
+        pushPrompt(state, { player, kind: 'chooseSquare', title: `Cast ${castName} from which square?`, data: { squares }, cont: 'cast:origin', ctx: { casterId: caster.id } })
         return null
       }
     }
@@ -1413,6 +1457,8 @@ export function castSpell(
 }
 
 export function validateSummonAt(state: GameState, player: PlayerId, cardName: string, at: { x: number; y: number; region?: Region }): string | null {
+  if (!Number.isInteger(at.x) || !Number.isInteger(at.y) || !inBounds(at.x, at.y)) return 'Out of bounds.'
+  if (at.region !== undefined && !isRegion(at.region)) return 'No such region.'
   const def = getCard(cardName)
   // spread: summonsGainKeywords mutates kw below, so it must be a private copy
   const kw = { ...getKeywords(def.name) }

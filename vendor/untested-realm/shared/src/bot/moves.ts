@@ -20,6 +20,7 @@ import { grantedAbilities, effAttack, effDefence, effKeywords, isCarriableArtifa
 import { orthAdjacentWrapped, siteAt, GRID_W, GRID_H } from '../engine/grid'
 import { getCard } from '../cards/db'
 import { getScript } from '../cards/scripts/registry'
+import { underEnemySiteEater } from './eval'
 
 /** Fast state clone for hypothetical moves. GameState is pure JSON (no Map/Set/Date/functions — scripts
  *  are looked up by name, never stored), so a hand-rolled structural clone is ~3.25x faster than a
@@ -125,6 +126,7 @@ function promptChoices(prompt: any, state: GameState): any[] {
       break
     case 'chooseSquare':
       for (const sq of d.squares ?? []) add({ x: sq.x, y: sq.y })
+      for (const e of d.edges ?? []) add(e.key) // a wall-border pick (Displace, Scatter) answers with the edge key
       break
     case 'nameCard':
       for (const n of d.names ?? []) add(n)
@@ -310,7 +312,8 @@ export function expandActions(state: GameState, player: PlayerId, opts?: { deadl
     const def = getCard(state.cards[cardId].name)
     if (def.type === 'Avatar') continue
     if (def.type === 'Site') {
-      for (const sq of legalSiteSquares(state, me, def.name)) push({ t: 'avatarSite', mode: 'play', cardId, x: sq.x, y: sq.y })
+      for (const sq of legalSiteSquares(state, me, def.name))
+        if (!underEnemySiteEater(state, me, sq.x, sq.y)) push({ t: 'avatarSite', mode: 'play', cardId, x: sq.x, y: sq.y })
       continue
     }
     if (opts?.noSpellCasts) continue // model development (sites) but not (unknown) spell casts — opponent rollout

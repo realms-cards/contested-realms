@@ -40,7 +40,10 @@ function thaisGenesis(g: EngineState, caster: PlayerId) {
 /** Answer whatever start-of-turn prompts are up, as `seat`. */
 function clearPrompts(g: EngineState, seat: PlayerId) {
   for (let i = 0; i < 20 && g.prompts[0]; i++) {
-    expect(applyAction(g, seat, { t: "prompt", promptId: g.prompts[0].id, choice: null }).ok).toBe(true);
+    const p = g.prompts[0];
+    // the engine only takes an offered answer: draw from the spellbook, otherwise decline
+    const choice = p.kind === "drawDeck" ? "spellbook" : null;
+    expect(applyAction(g, seat, { t: "prompt", promptId: p.id, choice }).ok).toBe(true);
   }
 }
 

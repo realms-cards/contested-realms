@@ -4,6 +4,7 @@
 import { getCard, getKeywords, findCard } from '../cards/db'
 import { getScript, type DamageSource, type EffectAPI, type TargetRef, type TargetSpec } from '../cards/scripts/registry'
 import type { GameState, PlayerId, Region, UnitState, SiteState, AuraState, Prompt, DeckName } from './types'
+import { isLocation } from './action-shape'
 import { avatarOf, siteAt, unitsAt, edgesConnected, aura2x2Squares, occupiedSquares, inBounds, GRID_W, GRID_H, squareLabel, nearbySquaresW, orthAdjacentWrapped } from './grid'
 import { affinity, effAttack, effDefence, effKeywords, canExistIn, siteSilenced, artifactSilenced, artScript, isEvilUnit, isEvilUnitIntrinsic, isDisabled, isUnmodifiable, silenceImmune, footprintAllTerrain, terrainAt, buildStaticGrantIndex, isVoidAt, protectedFromSites } from './statics'
 import { siteEntryAllowed, multiSquareDestSquares, oversizedTeleportPlacements } from './movement' // runtime-only use (teleport closure); import cycle is safe
@@ -745,10 +746,108 @@ function breakWardOnChosen(state: GameState, prompt: Prompt, choice: any): any {
   return wasArray ? kept : kept[0] ?? null
 }
 
+const isObjLike = (v: unknown) => typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/** The id an offered candidate stands for (most are plain ids; a few prompts offer {id}/{unitId} objects). */
+const candidateId = (c: unknown): string | undefined =>
+  typeof c === 'string' ? c : (c as { id?: string; unitId?: string } | null)?.id ?? (c as { unitId?: string } | null)?.unitId
+
+/** Is `choice` one of the answers `prompt` offered? The UI and the bot only ever answer from
+ *  `prompt.data`, but continuations trust the raw choice — so without this a raw action could
+ *  allocate a strike onto any unit on the board, defend with a unit that can never defend, place a
+ *  site on any square… Checked only against the lists a prompt actually carries: a prompt without a
+ *  `candidates` / `options` / `squares` list is free-form and left to its continuation. */
+export function promptAnswerProblem(prompt: Prompt, choice: any): string | null {
+  const d = prompt.data ?? {}
+  const bad = 'That is not one of the offered choices.'
+  const skippable = !!(d.optional || d.upTo)
+  if ((choice === null || choice === undefined) && skippable) return null
+  const ids = (list: unknown): Set<string> | null => {
+    if (!Array.isArray(list)) return null
+    const out = new Set<string>()
+    for (const c of list) { const id = candidateId(c); if (id === undefined) return null; out.add(id) }
+    return out
+  }
+  const sameJson = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y)
+  switch (prompt.kind) {
+    case 'yesNo':
+    case 'stayInFight':
+      return typeof choice === 'boolean' ? null : 'Answer yes or no.'
+    case 'chooseOption':
+    case 'drawDeck':
+      if (Array.isArray(d.options) && !d.options.some((o: unknown) => sameJson(o, choice))) return bad
+      return null
+    case 'firstSite':
+      if (Array.isArray(d.ids) && !d.ids.includes(choice)) return bad
+      return null
+    case 'chooseSquare': {
+      // a wall-border pick (Displace, wall builders) answers with one of the offered edge keys
+      if (Array.isArray(d.edges)) return d.edges.some((e: { key?: string }) => e.key === choice) ? null : bad
+      if (!choice || !Number.isInteger(choice.x) || !Number.isInteger(choice.y)) return 'Choose a square.'
+      if (Array.isArray(d.squares) && !d.squares.some((q: { x: number; y: number }) => q.x === choice.x && q.y === choice.y)) return bad
+      return null
+    }
+    case 'teleportPlace': {
+      const idx = Array.isArray(choice) ? choice[0] : choice
+      if (Array.isArray(d.placements) && !(Number.isInteger(idx) && idx >= 0 && idx < d.placements.length)) return bad
+      return null
+    }
+    case 'intercept': {
+      if (choice === null || choice === undefined) return null // declining is always allowed
+      const offered = ids(d.candidates)
+      const id = Array.isArray(choice) ? choice[0] : choice
+      if (offered && !offered.has(id)) return bad
+      return null
+    }
+    case 'chooseTargets':
+    case 'defend': {
+      const offered = ids(d.candidates)
+      if (!offered) return null
+      const picks: unknown[] = Array.isArray(choice) ? choice : choice === null || choice === undefined ? [] : [choice]
+      const picked = picks.map(candidateId)
+      if (picked.some((id) => id === undefined || !offered.has(id))) return bad
+      // a declared defender route ({unitId, path}) must be a list of real locations
+      if (picks.some((pk) => isObjLike(pk) && (pk as { path?: unknown }).path !== undefined && !(Array.isArray((pk as { path?: unknown }).path) && ((pk as { path: unknown[] }).path).every(isLocation))))
+        return 'Malformed defender route.'
+      if (new Set(picked).size !== picked.length) return 'Each choice can only be picked once.'
+      if (prompt.kind === 'chooseTargets') {
+        if (typeof d.count === 'number' && picked.length > d.count) return `Choose at most ${d.count}.`
+        if (d.upTo === false && picked.length === 0 && offered.size > 0) return 'Choose a target.'
+      }
+      return null
+    }
+    case 'allocateDamage': {
+      if (!choice || typeof choice !== 'object' || !choice.allocation || typeof choice.allocation !== 'object') return 'Allocate the damage.'
+      if (d.strikerId !== undefined && choice.strikerId !== d.strikerId) return 'That is not the striking unit.'
+      const offered = ids(d.candidates)
+      let total = 0
+      for (const [id, n] of Object.entries(choice.allocation)) {
+        if (offered && !offered.has(id)) return 'Damage can only go to units in the fight.'
+        if (!Number.isInteger(n) || (n as number) < 0) return 'Damage must be a whole number.'
+        total += n as number
+      }
+      if (typeof d.power === 'number' && total > d.power) return `Only ${d.power} damage to divide.`
+      return null
+    }
+    case 'chooseCards':
+    case 'orderCards': {
+      if (!Array.isArray(d.cards)) return null
+      if (!Array.isArray(choice) || choice.some((i) => !Number.isInteger(i) || i < 0 || i >= d.cards.length)) return bad
+      if (new Set(choice).size !== choice.length) return 'Each card can only be picked once.'
+      if (prompt.kind === 'chooseCards' && typeof d.pick === 'number' && choice.length > d.pick) return `Choose at most ${d.pick}.`
+      return null
+    }
+    default:
+      return null
+  }
+}
+
 export function resolvePrompt(state: GameState, promptId: string, player: PlayerId, choice: any): string | null {
   const prompt = state.prompts[0]
   if (!prompt || prompt.id !== promptId) return 'That is not the active prompt.'
   if (prompt.player !== player) return 'This prompt is not yours to answer.'
+  const answerErr = promptAnswerProblem(prompt, choice)
+  if (answerErr) return answerErr
   state.prompts.shift()
   // A cont is a continuation of the SAME card resolution the prompt interrupted, so its synchronous
   // segment is one simultaneous damage event too — a directional area spell (Lava Flow, Cone of Flame)
@@ -3449,7 +3548,11 @@ export function makeCtx(
       if (!push && (u.size === '2x2' || (u.extraSquares?.length ?? 0) > 0) && state.flow?.teleportPlace) {
         const pl = state.flow.teleportPlace as { x: number; y: number; shape?: { dx: number; dy: number }[] }
         delete state.flow.teleportPlace
-        x = pl.x; y = pl.y; shape = pl.shape
+        // only a placement the engine itself offers at this destination (raw actions could otherwise move
+        // the body anywhere, or reshape it); anything else falls back to the default placement
+        const legal = oversizedTeleportPlacements(state, u, { x, y })
+          .find((o) => o.x === pl?.x && o.y === pl?.y && JSON.stringify(o.shape ?? null) === JSON.stringify(pl.shape ?? null))
+        if (legal) { x = legal.x; y = legal.y; shape = legal.shape }
       }
       // Cage of Sidrak (golden rule): a locked minion can only leave via TELEPORTATION-based forced
       // movement. A push/pull/drag (River Rapids, Riptide, Scatter…) can't take it out; a genuine

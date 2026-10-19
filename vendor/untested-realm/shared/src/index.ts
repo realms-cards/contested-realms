@@ -28,6 +28,7 @@ export * from './cards/sorcerytcg'
 export * from './cards/printings'
 export * from './cards/scripts/registry'
 export { starterDecks } from './cards/starterDecks'
+export { PRECONS, matchPrecon, type PreconDeck, type PreconSet } from './cards/precons'
 export { coneSquares, type BlowDirection } from './cards/scripts/gen/special-helpers'
 export { default as curioCardNames } from './cards/curios.json'
 // registering scripts happens on import

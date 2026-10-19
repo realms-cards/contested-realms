@@ -710,6 +710,13 @@ export function resolveMovement(state: GameState, unit: UnitState, path: Step[])
   // animate the walk for ANY actual move — including a single hop into an adjacent empty site, which used
   // to snap instantly and so read as "only attacks animate" (an attack is usually a multi-step approach).
   if (taken >= 1 && state.units[unit.id]) recordMoveAnim(state, unit.id, unit.name, visited)
+  // the location its LAST step left — "an attack out of <site>" = one step away from it, then attack
+  // (Dread Thicket, FAQ). Cleared by moveAttack before it moves, so it only describes this move.
+  if (taken >= 1 && visited.length >= 2) {
+    const from = visited[visited.length - 2]
+    state.flow = state.flow ?? {}
+    state.flow.lastStepFrom = { unitId: unit.id, turn: state.turn, x: from.x, y: from.y, region: from.region }
+  }
   return taken
 }
 

@@ -130,6 +130,8 @@ export function doMulligan(state: GameState, player: PlayerId, back: string[]): 
   const p = state.players[player]
   if (state.phase !== 'mulligan') return 'Mulligans are only allowed before the game starts.'
   if (p.keptHand) return 'You already kept your hand.'
+  if (!Array.isArray(back)) return 'Choose the cards to return.'
+  if (new Set(back).size !== back.length) return 'Each card can only be returned once.'
   if (back.length > 3) return 'You may return at most 3 cards.'
   for (const id of back) {
     if (!p.hand.includes(id)) return 'You can only return cards from your hand.'

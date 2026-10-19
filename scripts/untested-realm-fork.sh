@@ -25,7 +25,7 @@
 # fixes, the next `sync` merge simply finds the change already there.
 #
 # Nothing reaches upstream or `realms` without `check` passing for that exact commit: upstream's
-# typecheck, its full vitest suite and its three script/cast/combat fuzzers.
+# typecheck, its full vitest suite and its script/cast/combat/raw-action fuzzers.
 #
 # The clone lives in .untested-realm-fork/ and is gitignored: it is a checkout, not content.
 set -euo pipefail
@@ -38,11 +38,11 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$ROOT/.untested-realm-fork"
 BRANCH="realms"
 VENDOR_JSON="$ROOT/vendor/untested-realm/UPSTREAM.json"
-PATCHES="$ROOT/src/lib/engine-mode/scriptPatches.ts"
+PATCHES="$ROOT/shared/engine/scriptPatches.ts"
 # keep in step with the sparse checkout in scripts/vendor-untested-realm.sh
 VENDORED_PATHS=(packages/shared/src packages/shared/package.json packages/shared/tsconfig.json
   packages/client/src/bot.ts packages/client/src/bot_search.ts packages/client/src/bot.worker.ts)
-FUZZERS=(fuzz_scripts fuzz_cast fuzz_combat)
+FUZZERS=(fuzz_scripts fuzz_cast fuzz_combat fuzz_raw)
 TEST_TIMEOUT="${UR_TEST_TIMEOUT:-600}"
 STAMPS="$WORK/.git/ur-check"
 
@@ -138,17 +138,21 @@ EOF
   out="$(grep -E "Tests  " "$log/vitest.txt" | sed "s/^ *Tests *//")"
 
   # the fuzzers always exit 0; their verdict is the "N crashes" in the summary line
+  # (fuzz_raw arrived in 0.5.4 and says "N distinct crashes"; an older ref simply lacks it)
+  local ran=()
   for f in "${FUZZERS[@]}"; do
+    [[ -f "$dir/scripts/$f.ts" ]] || continue
+    ran+=("$f")
     echo "  $f ..." >&2
     with_timeout 300 run_fuzzer "$dir" "$f" "$log/$f.txt" || true
-    n="$(sed -n 's/^=== .*, \([0-9]*\) crashes ===$/\1/p' "$log/$f.txt" | head -1)"
+    n="$(sed -n 's/^=== .*, \([0-9]*\) \(distinct \)*crashes ===$/\1/p' "$log/$f.txt" | head -1)"
     if [[ "$n" != "0" ]]; then
       grep -A15 "^===" "$log/$f.txt" | head -30 >&2
       echo "FAILED: $f reported ${n:-no summary} crashes (log: $log/$f.txt)" >&2; return 1
     fi
   done
   rm -rf "$log"
-  echo "tsc clean; vitest $out; fuzzers ${FUZZERS[*]}: 0 crashes"
+  echo "tsc clean; vitest $out; fuzzers ${ran[*]}: 0 crashes"
 }
 
 # Check commit $1 (default HEAD). A passing commit gets a stamp, so pr/land do not re-run it.
@@ -264,7 +268,7 @@ case "${1:-}" in
     done
 
     echo
-    echo "== Runtime workarounds in src/lib/engine-mode/scriptPatches.ts (each should become a fix branch):"
+    echo "== Runtime workarounds in shared/engine/scriptPatches.ts (each should become a fix branch):"
     grep -E '^ \* [A-Z].* — WORKAROUND' "$PATCHES" | sed 's/^ \* /   /; s/ — WORKAROUND for vendor / → /; s/:.*//' || echo "   none"
     ;;
 
