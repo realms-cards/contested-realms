@@ -218,8 +218,7 @@ services:
       - >-
         sleep 120;
         while true; do
-          wget -q -O - --post-data='' --header="Authorization: Bearer $${CRON_SECRET}"
-            http://frontend:3000/api/pricing/refresh || echo "[price-refresh] failed";
+          wget -q -O - --post-data='' --header="Authorization: Bearer $${CRON_SECRET}" http://frontend:3000/api/pricing/refresh || echo "[price-refresh] failed";
           echo; sleep 86400;
         done
     logging:
@@ -247,8 +246,7 @@ services:
       - >-
         sleep 180;
         while true; do
-          wget -q -O - --post-data='' --header="Authorization: Bearer $${CRON_SECRET}"
-            http://frontend:3000/api/summit/top-decks || echo "[top-decks-refresh] failed";
+          wget -q -O - --post-data='' --header="Authorization: Bearer $${CRON_SECRET}" http://frontend:3000/api/summit/top-decks || echo "[top-decks-refresh] failed";
           echo; sleep 604800;
         done
     logging:
