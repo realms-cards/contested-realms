@@ -470,18 +470,18 @@ export default function OnlineDeckSelector({
                   label: `${deck.name} (${deck.format})`,
                   group: "Your decks",
                 })),
-                ...(includePublic || isGuest
-                  ? publicDecks.map((deck) => ({
-                      value: deck.id,
-                      label: `${deck.name} (${deck.format})`,
-                      group: "Precons",
-                    }))
-                  : []),
                 ...(topDecks
                   ? topDecks.decks.map((deck) => ({
                       value: top8Value(deck),
                       label: top8Label(deck),
                       group: top8Title(topDecks),
+                    }))
+                  : []),
+                ...(includePublic || isGuest
+                  ? publicDecks.map((deck) => ({
+                      value: deck.id,
+                      label: `${deck.name} (${deck.format})`,
+                      group: "Precons",
                     }))
                   : []),
                 ...(otherPublic === null

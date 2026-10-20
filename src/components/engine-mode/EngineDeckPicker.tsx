@@ -83,10 +83,10 @@ export function deckOptions(lists: DeckLists, allowRandom: boolean): CustomSelec
   const top = lists.top;
   return [
     ...lists.mine.map((d) => ({ value: `saved:${d.id}`, label: withAvatar(d), group: "Your decks" })),
+    ...(top ? top.decks.map((d) => ({ value: top8Value(d), label: top8Label(d), group: top8Title(top) })) : []),
     ...(allowRandom ? [{ value: RANDOM_PRECON, label: "Random Beta precon", group: "Precons" }] : []),
     ...enginePrecons.map((d) => ({ value: `builtin:${d.id}`, label: `${d.name} — ${d.avatar}`, group: "Precons" })),
     ...lists.publicDecks.map((d) => ({ value: `saved:${d.id}`, label: withAvatar(d), group: "Precons" })),
-    ...(top ? top.decks.map((d) => ({ value: top8Value(d), label: top8Label(d), group: top8Title(top) })) : []),
     ...(others === undefined
       ? []
       : others === null

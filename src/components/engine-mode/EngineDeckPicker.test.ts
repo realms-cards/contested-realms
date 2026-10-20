@@ -20,9 +20,9 @@ const lists = (extra: Partial<DeckLists> = {}): DeckLists => ({
 });
 
 describe("engine deck picker categories", () => {
-  it("sections your decks, precons, the latest top 8 and other players' public decks", () => {
+  it("sections your decks, the latest top 8, precons and other players' public decks", () => {
     const groups = [...new Set(deckOptions(lists(), true).map((o) => o.group))];
-    expect(groups).toEqual(["Your decks", "Precons", "Top 8 — Grand Contest X", "Public decks", "Other"]);
+    expect(groups).toEqual(["Your decks", "Top 8 — Grand Contest X", "Precons", "Public decks", "Other"]);
     // other players' decks are only listed once loaded
     expect(deckOptions(lists(), true).filter((o) => o.group === "Public decks").map((o) => o.label)).toEqual([
       "Show other players' public decks…",

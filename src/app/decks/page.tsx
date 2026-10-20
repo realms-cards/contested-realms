@@ -617,6 +617,8 @@ export default function DecksPage() {
             </section>
           )}
 
+          {topDecks && <TopDecksSection top={topDecks} onImported={() => void fetchDecks(true)} />}
+
           {publicDecks.length > 0 && (
             <section className="rc-panel">
               <PanelHeader
@@ -645,8 +647,6 @@ export default function DecksPage() {
               </div>
             </section>
           )}
-
-          {topDecks && <TopDecksSection top={topDecks} onImported={() => void fetchDecks(true)} />}
 
           <section className="rc-panel">
             <PanelHeader

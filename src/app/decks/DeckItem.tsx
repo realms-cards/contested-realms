@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { RcButton } from "@/components/ui/rc-button";
+import { RcDialog } from "@/components/ui/rc-dialog";
 
 type DeckItemProps = {
   deck: {
@@ -44,6 +45,7 @@ export default function DeckItem({
 }: DeckItemProps) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [updatingPublic, setUpdatingPublic] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [isPublicState, setIsPublicState] = useState<boolean>(
@@ -70,14 +72,17 @@ export default function DeckItem({
     };
   }, [mobileActionsOpen]);
 
-  async function handleDelete(e: MouseEvent) {
+  // An in-app confirm, not window.confirm: once a browser's "don't allow more dialogs" box is
+  // ticked, confirm() returns false without asking and the delete silently never happens.
+  function handleDelete(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     if (deleting) return;
-    const ok = window.confirm(
-      `Delete deck "${deck.name}"? This cannot be undone.`
-    );
-    if (!ok) return;
+    setConfirmingDelete(true);
+  }
+
+  async function confirmDelete() {
+    setConfirmingDelete(false);
 
     // Optimistic update - remove from UI immediately
     if (onDelete) {
@@ -241,6 +246,7 @@ export default function DeckItem({
   // List view - compact single row with full actions
   if (variant === "list") {
     return (
+      <>
       <Link
         href={`/decks/editor-3d?id=${encodeURIComponent(deck.id)}`}
         className="group relative flex items-center gap-3 rounded-rc-md border border-rc-line/12 bg-black/30 px-3 py-2 transition-colors hover:border-rc-accent/30 hover:bg-rc-accent/6"
@@ -631,11 +637,32 @@ export default function DeckItem({
           </div>
         </div>
       </Link>
+      {confirmingDelete && (
+        <RcDialog
+          title="Delete deck?"
+          size="sm"
+          onClose={() => setConfirmingDelete(false)}
+          actions={
+            <>
+              <RcButton variant="outline" onClick={() => setConfirmingDelete(false)}>
+                Cancel
+              </RcButton>
+              <RcButton variant="destructive" onClick={() => void confirmDelete()}>
+                Delete
+              </RcButton>
+            </>
+          }
+        >
+          Delete deck &ldquo;{deck.name}&rdquo;? This cannot be undone.
+        </RcDialog>
+      )}
+      </>
     );
   }
 
   // Grid view - card with full hover overlay
   return (
+    <>
     <Link
       href={`/decks/editor-3d?id=${encodeURIComponent(deck.id)}`}
       className="group relative block rounded-rc-md border border-rc-line/12 bg-black/30 p-3 transition-colors hover:border-rc-accent/30 hover:bg-rc-accent/6"
@@ -1043,5 +1070,25 @@ export default function DeckItem({
         )}
       </div>
     </Link>
+    {confirmingDelete && (
+      <RcDialog
+        title="Delete deck?"
+        size="sm"
+        onClose={() => setConfirmingDelete(false)}
+        actions={
+          <>
+            <RcButton variant="outline" onClick={() => setConfirmingDelete(false)}>
+              Cancel
+            </RcButton>
+            <RcButton variant="destructive" onClick={() => void confirmDelete()}>
+              Delete
+            </RcButton>
+          </>
+        }
+      >
+        Delete deck &ldquo;{deck.name}&rdquo;? This cannot be undone.
+      </RcDialog>
+    )}
+    </>
   );
 }

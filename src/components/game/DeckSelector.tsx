@@ -86,15 +86,15 @@ export default function DeckSelector({ onPrepareComplete }: DeckSelectorProps) {
     }
   };
 
-  /** Your decks, the precons, the latest top 8 and other players' public decks (once asked for). */
+  /** Your decks, the latest top 8, the precons and other players' public decks (once asked for). */
   const options = useMemo(
     () => [
       ...myDecks.map((d) => ({ value: d.id, label: `${d.name} (${d.format})`, group: "Your decks" })),
-      ...(includePublic
-        ? publicDecks.map((d) => ({ value: d.id, label: `${d.name} (${d.format})`, group: "Precons" }))
-        : []),
       ...(topDecks
         ? topDecks.decks.map((d) => ({ value: top8Value(d), label: top8Label(d), group: top8Title(topDecks) }))
+        : []),
+      ...(includePublic
+        ? publicDecks.map((d) => ({ value: d.id, label: `${d.name} (${d.format})`, group: "Precons" }))
         : []),
       ...(otherPublic === null
         ? [{
