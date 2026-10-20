@@ -53,7 +53,7 @@ if ! "${compose[@]}" up -d --no-build --no-deps --wait --wait-timeout 180 server
   "${compose[@]}" logs --no-color --tail 100 server1 frontend
   exit 1
 fi
-"${compose[@]}" up -d --no-build --no-deps --wait --wait-timeout 120 db-backup price-refresh discord-bot caddy turn
+"${compose[@]}" up -d --no-build --no-deps --wait --wait-timeout 120 db-backup price-refresh top-decks-refresh discord-bot caddy turn
 
 # Reload mounted routing configuration even when Caddy was not recreated.
 "${compose[@]}" exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
