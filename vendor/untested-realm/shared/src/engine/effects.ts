@@ -456,6 +456,14 @@ export function deferTurnStep(state: GameState, cont: string, ctx: any): void {
   ;(state.flow.turnSteps = state.flow.turnSteps ?? []).push({ cont, ctx })
 }
 
+/** Resume the effect that is resolving now once every decision it set off has been made (Codex,
+ *  Storyline: a triggered event interrupts the rest of the event that set it off — Hotwheel waits on a
+ *  Troll Bridge's toll before it rolls on). Parked AHEAD of any turn step: it is still the current event. */
+export function resumeWhenSettled(state: GameState, cont: string, ctx: any): void {
+  state.flow = state.flow ?? {}
+  ;(state.flow.turnSteps = state.flow.turnSteps ?? []).unshift({ cont, ctx })
+}
+
 /** Drain parked turn steps while no prompt is pending. A step may push its own
  *  prompt (e.g. the draw prompt), which stops the drain until that too resolves. */
 export function runTurnSteps(state: GameState): void {
@@ -849,11 +857,26 @@ export function resolvePrompt(state: GameState, promptId: string, player: Player
   const answerErr = promptAnswerProblem(prompt, choice)
   if (answerErr) return answerErr
   state.prompts.shift()
+  // STORYLINE (Codex "New Events Interrupt The Storyline"): whatever this answer sets off is inserted
+  // BEFORE the events still waiting, so it resolves first. Set the older prompts aside while it
+  // resolves and put them back behind anything it asked (a follow-up question, a trigger's choice).
+  const waiting = state.prompts.splice(0)
+  // Codex, Storyline: "If the source of a storyline event was in the realm but then leaves the realm
+  // before the event resolves, the event is ignored."
+  if (prompt.ctx?.__fromRealm && !inRealm(state, prompt.ctx.sourceId)) {
+    pushLog(state, null, `${prompt.ctx.__fromRealm} has left the realm, so its effect is ignored.`)
+    state.prompts.push(...waiting)
+    checkStateBased(state)
+    runTurnSteps(state)
+    refreshActivePrompt(state)
+    return null
+  }
   // A cont is a continuation of the SAME card resolution the prompt interrupted, so its synchronous
   // segment is one simultaneous damage event too — a directional area spell (Lava Flow, Cone of Flame)
   // deals its whole blast in the cont AFTER the direction prompt, and must resolve every victim's
   // reduction/prevention before a single death settles, exactly like a spell that damages inline.
   let err: string | null = null
+  try {
   runDamageEvent(state, () => {
     if (prompt.cont.startsWith('script:')) {
       // script:<cardName>:<key> — card names never contain ':', cont keys may
@@ -881,11 +904,30 @@ export function resolvePrompt(state: GameState, promptId: string, player: Player
       fn(state, prompt.ctx, choice)
     }
   })
+  } finally {
+    state.prompts.push(...waiting)
+  }
   if (err) return err
   checkStateBased(state)
   runTurnSteps(state)
   refreshActivePrompt(state)
   return null
+}
+
+/** Is this object in the realm right now? (A razed site is rubble: the site itself has left.) */
+function inRealm(state: GameState, id: string | undefined): boolean {
+  if (!id) return false
+  const site = state.sites[id]
+  return !!(state.units[id] || (site && !site.isRubble) || state.artifacts[id] || state.auras[id])
+}
+
+/** For a question a card in the realm asks about its OWN ability: its name, so the question can be
+ *  ignored if the card leaves before it is answered. A magic's questions (routed by the spell's name)
+ *  and those of a card acting from a zone are not tied to a card in the realm; neither is a source that
+ *  was already gone when it asked (sacrificed as the cost). */
+function askedFromRealm(state: GameState, sourceId: string, meta?: { name?: string }): string | undefined {
+  if (meta?.name || !inRealm(state, sourceId)) return undefined
+  return (state.units[sourceId] ?? state.sites[sourceId] ?? state.artifacts[sourceId] ?? state.auras[sourceId])?.name
 }
 
 /** The prompt now waiting may have been queued before the answers just given (two triggers off one
@@ -3857,7 +3899,7 @@ export function makeCtx(
         title: prompt.title,
         data,
         cont: `script:${cardName}:${contKey}`,
-        ctx: { sourceId, controller, targets, at, extra, __meta: meta, ...ctx },
+        ctx: { sourceId, controller, targets, at, extra, __meta: meta, __fromRealm: askedFromRealm(state, sourceId, meta), ...ctx },
       })
     },
     lucky: (options, contKey, display = 'options', ctxExtra = {}) => {
@@ -3871,7 +3913,7 @@ export function makeCtx(
         title: r.chooser === controller ? 'Lucky Charm: choose an outcome' : 'Determine the outcome',
         data: display === 'cards' ? { cards: r.options.map((o) => o.label), pick: 1, upTo: false } : { options: r.options.map((o) => o.label) },
         cont: `script:${cardName}:${contKey}`,
-        ctx: { sourceId, controller, targets, at, extra, __meta: meta, ...ctxExtra, __opts: r.options.map((o) => o.payload), __labels: r.options.map((o) => o.label) },
+        ctx: { sourceId, controller, targets, at, extra, __meta: meta, __fromRealm: askedFromRealm(state, sourceId, meta), ...ctxExtra, __opts: r.options.map((o) => o.payload), __labels: r.options.map((o) => o.label) },
       })
       return undefined
     },

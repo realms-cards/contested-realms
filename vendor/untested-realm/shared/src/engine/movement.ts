@@ -659,12 +659,21 @@ export function crossesEdge(
   return (same(from, edge.a) && same(to, edge.b)) || (same(from, edge.b) && same(to, edge.a))
 }
 
-export function resolveMovement(state: GameState, unit: UnitState, path: Step[]): number {
+/** A walk that may stop between steps (Codex, Storyline: "each step is resolved one at a time"). After
+ *  each step `pauseWhen` is asked; if it says stop and steps remain, the walk ends there and leaves the
+ *  rest in `remaining` for the caller to resume once the step's triggers have resolved. */
+export interface Walk {
+  pauseWhen?: () => boolean
+  remaining?: Step[]
+}
+
+export function resolveMovement(state: GameState, unit: UnitState, path: Step[], walk?: Walk): number {
   let taken = 0
   const usedSteps = new Set<string>()
   let current: Step = { x: unit.x, y: unit.y, region: unit.region }
   const visited: Step[] = [{ x: unit.x, y: unit.y, region: unit.region }] // for the client step-by-step animation
-  for (const step of path) {
+  for (let i = 0; i < path.length; i++) {
+    const step = path[i]
     const k = `${current.x},${current.y},${current.region}->${step.x},${step.y},${step.region}`
     if (usedSteps.has(k)) continue // may not repeat specific steps
     if (!isLegalStep(state, unit, current, step)) continue
@@ -716,6 +725,11 @@ export function resolveMovement(state: GameState, unit: UnitState, path: Step[])
     current = step
     visited.push({ x: unit.x, y: unit.y, region: unit.region })
     taken++
+    // a trigger of this step is waiting on a decision: it resolves before the next step does
+    if (i < path.length - 1 && walk?.pauseWhen?.()) {
+      walk.remaining = path.slice(i + 1)
+      break
+    }
   }
   // animate the walk for ANY actual move — including a single hop into an adjacent empty site, which used
   // to snap instantly and so read as "only attacks animate" (an attack is usually a multi-step approach).
