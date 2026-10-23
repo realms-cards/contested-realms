@@ -3,7 +3,7 @@ import { getCard } from '../../db'
 import { unitsAt } from '../../../engine/grid'
 import { realStepDistanceW } from '../../../engine/movement'
 import { pushLog } from '../../../engine/effects'
-import { payZoneToll } from '../../../engine/statics'
+import { canTapForCost, payZoneToll } from '../../../engine/statics'
 import { squaresWithinSteps } from '../multi-card-utils/step-range-targets'
 import type { GameState, PlayerId } from '../../../engine/types'
 
@@ -42,8 +42,8 @@ registerScript('Corpse Catapult', {
     available: (state, sourceId) => {
       const art = state.artifacts[sourceId]
       const bearer = art?.carriedBy ? state.units[art.carriedBy] : null
-      if (!bearer || bearer.tapped) return false
-      const helper = unitsAt(state, art!.x, art!.y, art!.region).some((u) => u.id !== bearer.id && u.controller === bearer.controller && !u.tapped)
+      if (!bearer || !canTapForCost(state, bearer)) return false
+      const helper = unitsAt(state, art!.x, art!.y, art!.region).some((u) => u.id !== bearer.id && u.controller === bearer.controller && canTapForCost(state, u))
       return helper && corpseCatapultCorpses(state).length > 0
     },
     targets: [{ what: 'square', count: 1, targeted: true, label: 'target location (≤3 steps)' }],
@@ -53,8 +53,8 @@ registerScript('Corpse Catapult', {
       if (!art || !t || !('square' in t)) return
       if (realStepDistanceW(ctx.state, art, t.square) > 3) return ctx.log('Out of range.') // "up to three steps away" (def. 1)
       const bearer = art.carriedBy ? ctx.state.units[art.carriedBy] : null
-      if (!bearer || bearer.tapped) return ctx.log('The bearer must be untapped.')
-      const helpers = unitsAt(ctx.state, art.x, art.y, art.region).filter((u) => u.id !== bearer.id && u.controller === ctx.controller && !u.tapped)
+      if (!bearer || !canTapForCost(ctx.state, bearer)) return ctx.log('The bearer cannot be tapped to pay for this.')
+      const helpers = unitsAt(ctx.state, art.x, art.y, art.region).filter((u) => u.id !== bearer.id && u.controller === ctx.controller && canTapForCost(ctx.state, u))
       if (!helpers.length) return ctx.log('Another untapped ally is needed here.')
       if (!corpseCatapultCorpses(ctx.state).length) return ctx.log('No corpse to fling.')
       // 1) choose which ally helps (auto only when there is exactly one)
@@ -73,7 +73,7 @@ registerScript('Corpse Catapult', {
       const helperId = Array.isArray(choice) ? choice[0] : choice
       if (typeof helperId !== 'string') return
       const helper = ctx.state.units[helperId]
-      if (!helper || helper.controller !== ctx.controller || helper.tapped) return
+      if (!helper || helper.controller !== ctx.controller || !canTapForCost(ctx.state, helper)) return
       askCorpseCatapult(ctx, helperId)
     },
     // 2) banish the chosen corpse (from whichever cemetery holds it) and fling it
@@ -85,7 +85,7 @@ registerScript('Corpse Catapult', {
       const art = ctx.state.artifacts[ctx.sourceId]
       const bearer = art?.carriedBy ? ctx.state.units[art.carriedBy] : null
       const helper = ctx.state.units[c.helperId as string]
-      if (!dead || !t || !('square' in t) || !art || !bearer || bearer.tapped || !helper || helper.tapped) return
+      if (!dead || !t || !('square' in t) || !art || !bearer || !canTapForCost(ctx.state, bearer) || !helper || !canTapForCost(ctx.state, helper)) return
       if (!ctx.state.players.some((pl) => pl.cemetery.includes(dead))) return
       if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
       // remove the corpse from its cemetery → its owner's banished pile

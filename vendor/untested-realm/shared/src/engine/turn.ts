@@ -3,7 +3,7 @@ import { getCard } from '../cards/db'
 import type { GameState, PlayerId } from './types'
 import { pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkStateBased, killUnit, deferTurnStep, tapUnit, noAtlasDrawChoice, recordManaGain, siteStillFlooded, beginAreaReveal, sealAbilityReveal, snapshotRealm, recordTouchedSites, turnFingerprint } from './effects'
 import { sitesOf, unitsOf, avatarOf, siteAt } from './grid'
-import { siteSilenced, artifactSilenced, siteDisabledByArtifact, canTap, isDisabled, artifactController, artifactActor } from './statics'
+import { siteSilenced, artifactSilenced, siteDisabled, canTap, isDisabled, artifactController, artifactActor } from './statics'
 import { playSite } from './casting'
 import { noteAddedToEnd } from './knowledge'
 
@@ -14,10 +14,10 @@ export function sourceMana(state: GameState, player: PlayerId): number {
   let mana = 0
   for (const site of Object.values(state.sites)) {
     if (site.isRubble || site.controller === player || site.controller === null) continue
-    if (getScript(site.name)?.providesForEveryone && !siteDisabledByArtifact(state, site)) mana += 1
+    if (getScript(site.name)?.providesForEveryone && !siteDisabled(state, site)) mana += 1
   }
   for (const site of sitesOf(state, player)) {
-    if (site.isRubble || siteDisabledByArtifact(state, site)) continue
+    if (site.isRubble || siteDisabled(state, site)) continue
     const silenced = siteSilenced(state, site)
     const gate = getScript(site.name)?.siteProvides
     if (gate && !silenced && !gate(state, site)) continue
@@ -172,13 +172,13 @@ export function beginTurn(state: GameState, player: PlayerId): void {
   // enemy sites that provide for everyone (Avalon)
   for (const site of Object.values(state.sites)) {
     if (site.isRubble || site.controller === player || site.controller === null) continue
-    if (getScript(site.name)?.providesForEveryone && !siteDisabledByArtifact(state, site)) {
+    if (getScript(site.name)?.providesForEveryone && !siteDisabled(state, site)) {
       mana += 1
       recordManaGain(state, site.x, site.y, 'surface', 1)
     }
   }
   for (const site of sitesOf(state, player)) {
-    if (site.isRubble || siteDisabledByArtifact(state, site)) continue
+    if (site.isRubble || siteDisabled(state, site)) continue
     const silenced = siteSilenced(state, site)
     const gate = getScript(site.name)?.siteProvides
     if (gate && !silenced && !gate(state, site)) continue

@@ -964,7 +964,7 @@ function runFightPass(state: GameState, ctx: FightCtx): void {
     const survivor = state.units[blow.target.id]
     if (survivor) {
       const script = getScript(survivor.name)
-      if (script?.onSelfStruck && !survivor.silenced) {
+      if (script?.onSelfStruck && !survivor.silenced && !isDisabled(state, survivor)) {
         script.onSelfStruck(makeCtx(state, survivor.id, survivor.controller, []), blow.striker)
       }
     }

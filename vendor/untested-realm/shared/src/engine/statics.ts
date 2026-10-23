@@ -49,7 +49,7 @@ export function affinity(state: GameState, player: PlayerId): Thresholds {
   // sites that provide for everyone (Avalon), even under enemy control
   for (const site of Object.values(state.sites)) {
     if (site.isRubble || site.controller === player || site.controller === null) continue
-    if (!getScript(site.name)?.providesForEveryone || siteDisabledByArtifact(state, site)) continue
+    if (!getScript(site.name)?.providesForEveryone || siteDisabled(state, site)) continue
     const th = getCard(site.name).thresholds
     // Drought dries even "provides for everyone" water sites — no water threshold while covered
     const dried = Object.values(state.auras).some(
@@ -61,7 +61,7 @@ export function affinity(state: GameState, player: PlayerId): Thresholds {
     total.water += dried ? 0 : th.water
   }
   for (const site of sitesOf(state, player)) {
-    if (site.isRubble || siteDisabledByArtifact(state, site)) continue
+    if (site.isRubble || siteDisabled(state, site)) continue
     // conditional sites (Glastonbury Tor: back row only) and threshold
     // suppression by units atop (Granary Rats)
     const gate = getScript(site.name)?.siteProvides
@@ -261,6 +261,8 @@ export function siteSilenced(state: GameState, site: { x: number; y: number }): 
   if (siteSilenceStack.has(sKey)) return false
   siteSilenceStack.add(sKey)
   try {
+  // a DISABLED site has no abilities (Codex) — the same as a silenced one for everything that asks
+  if (here && siteDisabled(state, here)) return true
   for (const ss of (state.flow?.siteSilences ?? []) as { siteId: string }[]) {
     const src = state.sites[ss.siteId]
     if (src && nearbySquaresW(state, src.x, src.y).some((q) => q.x === site.x && q.y === site.y)) return true
@@ -356,7 +358,9 @@ export function effKeywords(state: GameState, unit: UnitState, seen: Set<string>
   if (!unit.isAvatar && !inDisableCheck) {
     inDisableCheck = true
     let dis = false
-    try { dis = disabledByEffect(state, unit) } finally { inDisableCheck = false }
+    // isDisabled, not disabledByEffect: a [X]bound minion off its terrain and a Court minion under an
+    // Overflowing Court are disabled too, and a disabled minion has no keyword abilities either (Codex)
+    try { dis = isDisabled(state, unit) } finally { inDisableCheck = false }
     if (dis) return {}
   }
   seen.add(unit.id)
@@ -906,6 +910,20 @@ export function isDisabled(state: GameState, unit: UnitState): boolean {
   return false
 }
 
+/** Codex: a disabled minion "cannot be tapped to pay for costs" (effects may still tap it). Use this for
+ *  every unit a cost taps — a bearer, a helper, "tap an allied X", "tap any number of allies". */
+export function canTapForCost(state: GameState, unit: UnitState): boolean {
+  return !unit.tapped && !isDisabled(state, unit)
+}
+
+/** Codex: a disabled site "has no abilities and cannot provide any mana or affinity". Disabled by an
+ *  artifact atop it (Blightstone), or — a Court — while an Overflowing Court has disabled the OTHER Courts. */
+export function siteDisabled(state: GameState, site: { id?: string; name?: string; x: number; y: number }): boolean {
+  if (siteDisabledByArtifact(state, site)) return true
+  if (!site.name || !/\bCourt\b/.test(site.name)) return false
+  return ((state.flow?.courtDisables ?? []) as { sourceId: string }[]).some((d) => d.sourceId !== site.id)
+}
+
 /** can this unit currently exist in the given region at (x,y)? */
 export function canExistIn(state: GameState, unit: UnitState, region: Region, x: number, y: number): boolean {
   if (unit.isAvatar) return region === 'surface'
@@ -961,7 +979,9 @@ export function hasRegionKeyword(state: GameState, unit: UnitState, key: 'burrow
   if (!unit.isAvatar && !inDisableCheck) {
     inDisableCheck = true
     let dis = false
-    try { dis = disabledByEffect(state, unit) } finally { inDisableCheck = false }
+    // isDisabled, not disabledByEffect: a [X]bound minion off its terrain and a Court minion under an
+    // Overflowing Court are disabled too, and a disabled minion has no keyword abilities either (Codex)
+    try { dis = isDisabled(state, unit) } finally { inDisableCheck = false }
     if (dis) return false
   }
   return true

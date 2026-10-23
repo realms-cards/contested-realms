@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { unitsAt } from '../../../engine/grid'
-import { hasSubtype } from '../../../engine/statics'
+import { canTapForCost, hasSubtype } from '../../../engine/statics'
 import { fireVolleyProjectiles } from '../../../engine/combat'
 
 // 'Tap an allied Faerie here → Shoot a projectile. It deals 1 damage.'
@@ -15,7 +15,7 @@ registerScript('Fae City', {
       // "a Faerie here" — a site's "here" spans its subsurface too (a Faerie is normally Airborne and
       // can't dive, but honor the rule if some effect put one under).
       const faeries = unitsAt(ctx.state, self.x, self.y).filter(
-        (u) => u.controller === ctx.controller && !u.tapped && hasSubtype(ctx.state, u, 'Faerie'),
+        (u) => u.controller === ctx.controller && canTapForCost(ctx.state, u) && hasSubtype(ctx.state, u, 'Faerie'),
       )
       if (faeries.length === 0) return ctx.log('No untapped Faerie here.')
       if (faeries.length === 1) {
@@ -31,7 +31,7 @@ registerScript('Fae City', {
     pickFae: (ctx, _c, choice) => {
       const id = Array.isArray(choice) ? choice[0] : choice
       const fae = id ? ctx.state.units[id] : null
-      if (!fae) return
+      if (!fae || !canTapForCost(ctx.state, fae)) return
       fae.tapped = true
       ctx.ask({ kind: 'chooseOption', title: 'Shoot in which direction?', data: { options: ['n', 's', 'e', 'w'] } }, 'bolt')
     },

@@ -2,6 +2,7 @@ import { registerScript } from '../registry'
 import { pushLog, revealCards } from '../../../engine/effects'
 import { nearbySquaresW, unitsAt } from '../../../engine/grid'
 import { noteAddedToEnd } from '../../../engine/knowledge'
+import { canTapForCost } from '../../../engine/statics'
 
 // 'Tap any number of nearby allies. Reveal that many spells from the top of
 //  your spellbook and cast one for free. Put the rest at the bottom.'
@@ -11,7 +12,7 @@ registerScript('Dhol Chants', {
     const allies = nearbySquaresW(ctx.state, caster.x, caster.y)
       // nearby minion is region-locked to the source
       .flatMap((s) => unitsAt(ctx.state, s.x, s.y, caster.region))
-      .filter((u) => u.controller === ctx.controller && !u.tapped)
+      .filter((u) => u.controller === ctx.controller && canTapForCost(ctx.state, u))
       .map((u) => u.id)
     if (!allies.length) return ctx.log('No untapped allies to chant.')
     ctx.ask({ kind: 'chooseTargets', title: 'Which allies join the chant (tap them)?', data: { candidates: allies, count: allies.length, upTo: true, kind: 'unit' } }, 'chant')
@@ -22,7 +23,7 @@ registerScript('Dhol Chants', {
       let n = 0
       for (const id of ids) {
         const u = ctx.state.units[id]
-        if (u && !u.tapped && u.controller === ctx.controller) {
+        if (u && canTapForCost(ctx.state, u) && u.controller === ctx.controller) {
           u.tapped = true
           n++
         }

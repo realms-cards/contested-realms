@@ -1,4 +1,5 @@
 import { registerScript, type EffectAPI } from '../registry'
+import type { GameState, PlayerId } from '../../../engine/types'
 import { pushLog, toCemetery, isCasterLocked } from '../../../engine/effects'
 import { unitsAt } from '../../../engine/grid'
 
@@ -21,13 +22,23 @@ registerScript('Troll Bridge', {
     ctx.state.flow[key] = ctx.state.turn
     // caster-locked cards (Morgana's / an Omphalos's own spells) aren't a free part of the hand, so the
     // toll can't take them. Resolve by captured id, not hand index, since the list is now filtered.
-    const ids = ctx.state.players[moved.controller].hand.filter((id) => !isCasterLocked(ctx.state, id))
+    const ids = tollableHand(ctx.state, moved.controller)
     if (!ids.length) return trollStrike(ctx, moved.id)
     ctx.ask(
-      { kind: 'chooseCards', title: 'Pay the toll: discard a card? (skip to be struck)', data: { cards: ids.map((id) => ctx.state.cards[id].name), pick: 1, upTo: true }, player: moved.controller },
+      { kind: 'chooseCards', title: TOLL_TITLE, data: { cards: ids.map((id) => ctx.state.cards[id].name), pick: 1, upTo: true }, player: moved.controller },
       'toll',
       { unitId: moved.id, ids },
     )
+  },
+  // Two bridges crossed in one move (Hotwheel's roll) queue two tolls at once: the second is rebuilt
+  // from the hand as it is when its turn comes, so a card paid to the first is not offered again.
+  refreshPrompts: {
+    toll: (state, prompt) => {
+      const ids = tollableHand(state, prompt.player)
+      prompt.ctx.ids = ids
+      prompt.data = { ...prompt.data, cards: ids.map((id) => state.cards[id].name) }
+      if (!ids.length) prompt.title = 'No card left to pay the toll: the troll strikes.'
+    },
   },
   conts: {
     toll: (ctx, c, choice) => {
@@ -47,6 +58,13 @@ registerScript('Troll Bridge', {
     },
   },
 })
+
+const TOLL_TITLE = 'Pay the toll: discard a card? (skip to be struck)'
+
+// caster-locked cards (Morgana's / an Omphalos's own spells) aren't a free part of the hand
+function tollableHand(state: GameState, player: PlayerId): string[] {
+  return state.players[player].hand.filter((id) => !isCasterLocked(state, id))
+}
 
 function trollStrike(ctx: EffectAPI, unitId: string): void {
   const site = ctx.state.sites[ctx.sourceId]

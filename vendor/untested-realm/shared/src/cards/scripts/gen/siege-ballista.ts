@@ -1,6 +1,7 @@
 import { registerScript } from '../registry'
 import { unitsAt } from '../../../engine/grid'
 import { realStepDistanceW } from '../../../engine/movement'
+import { canTapForCost } from '../../../engine/statics'
 
 // 'Tap bearer and another ally here → Deal 3 damage to target unit up to two steps away.'
 registerScript('Siege Ballista', {
@@ -12,9 +13,9 @@ registerScript('Siege Ballista', {
       const art = ctx.state.artifacts[ctx.sourceId]
       const bearer = art?.carriedBy ? ctx.state.units[art.carriedBy] : null
       if (!art || !bearer) return ctx.log('No one mans the ballista.')
-      if (bearer.tapped) return ctx.log('The bearer is already tapped.')
+      if (!canTapForCost(ctx.state, bearer)) return ctx.log('The bearer cannot be tapped to pay for this.')
       const crew = unitsAt(ctx.state, bearer.x, bearer.y, bearer.region).filter(
-        (u) => u.id !== bearer.id && u.controller === ctx.controller && !u.tapped,
+        (u) => u.id !== bearer.id && u.controller === ctx.controller && canTapForCost(ctx.state, u),
       )
       if (!crew.length) return ctx.log('The ballista needs a second crew member here.')
       ctx.ask({ kind: 'chooseTargets', title: 'Who helps crank the ballista?', data: { candidates: crew.map((u) => u.id), count: 1, upTo: false, kind: 'unit' } }, 'crew')
@@ -26,7 +27,7 @@ registerScript('Siege Ballista', {
       const art = ctx.state.artifacts[ctx.sourceId]
       const bearer = art?.carriedBy ? ctx.state.units[art.carriedBy] : null
       const helper = typeof id === 'string' ? ctx.state.units[id] : null
-      if (!bearer || !helper || helper.tapped || bearer.tapped) return
+      if (!bearer || !helper || !canTapForCost(ctx.state, helper) || !canTapForCost(ctx.state, bearer)) return
       bearer.tapped = true
       helper.tapped = true
       const targets = Object.values(ctx.state.units).filter((u) => u.region === bearer.region && realStepDistanceW(ctx.state, u, bearer) <= 2 && u.id !== bearer.id).map((u) => u.id) // "up to two steps away" (def. 1); region-locked to the bearer

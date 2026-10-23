@@ -3,6 +3,7 @@ import { getCard } from '../../db'
 import { toCemetery, discardableHandIds } from '../../../engine/effects'
 import { GRID_H, GRID_W, unitsAt } from '../../../engine/grid'
 import { stepDistanceW } from '../../../engine/movement'
+import { canTapForCost } from '../../../engine/statics'
 import type { Region } from '../../../engine/types'
 
 // 'Tap bearer and another ally here, Discard a card → Deal damage equal to the
@@ -15,9 +16,9 @@ registerScript('Payload Trebuchet', {
     effect: (ctx) => {
       const art = ctx.state.artifacts[ctx.sourceId]
       const bearer = art?.carriedBy ? ctx.state.units[art.carriedBy] : null
-      if (!art || !bearer || bearer.tapped) return ctx.log('No ready bearer.')
+      if (!art || !bearer || !canTapForCost(ctx.state, bearer)) return ctx.log('No ready bearer.')
       const crew = unitsAt(ctx.state, bearer.x, bearer.y, bearer.region).filter(
-        (u) => u.id !== bearer.id && u.controller === ctx.controller && !u.tapped,
+        (u) => u.id !== bearer.id && u.controller === ctx.controller && canTapForCost(ctx.state, u),
       )
       const hand = discardableHandIds(ctx.state, ctx.controller) // a caster-locked card (Morgana/Omphalos) can't be launched
       if (!crew.length || !hand.length) return ctx.log('Need a second crew member and a card to launch.')
@@ -30,7 +31,7 @@ registerScript('Payload Trebuchet', {
       const art = ctx.state.artifacts[ctx.sourceId]
       const bearer = art?.carriedBy ? ctx.state.units[art.carriedBy] : null
       const helper = typeof id === 'string' ? ctx.state.units[id] : null
-      if (!bearer || !helper || bearer.tapped || helper.tapped) return
+      if (!bearer || !helper || !canTapForCost(ctx.state, bearer) || !canTapForCost(ctx.state, helper)) return
       bearer.tapped = true
       helper.tapped = true
       const ids = discardableHandIds(ctx.state, ctx.controller) // exclude caster-locked cards; resolve by id

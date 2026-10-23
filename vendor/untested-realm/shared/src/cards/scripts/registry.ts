@@ -1,7 +1,7 @@
 // Card script registry. A script teaches the engine what a card's rules text
 // does. Cards whose text is only engine-native keywords need no script.
 
-import type { GameState, UnitState, SiteState, AuraState, PlayerId, Thresholds, Region, Duration } from '../../engine/types'
+import type { GameState, UnitState, SiteState, AuraState, PlayerId, Thresholds, Region, Duration, Prompt } from '../../engine/types'
 import { scriptedNames, getCard } from '../db'
 import type { KeywordGrant, KeywordKey, ModifierKeyword } from '../../engine/keywords'
 
@@ -807,6 +807,11 @@ export interface CardScript {
   teleportPlacement?: (state: GameState, targets: TargetRef[]) => { unitId: string; dest: { x: number; y: number }; from?: { x: number; y: number } } | null
   /** continuations for ask(); key → handler */
   conts?: Record<string, (ctx: EffectAPI, contCtx: any, choice: any) => void>
+  /** rebuild an ask()'s choices when it becomes the ACTIVE prompt, keyed like `conts`. Several asks
+   *  queued by one action (Hotwheel rolling over two Troll Bridges) are built at the same moment, so
+   *  a later one would offer what an earlier answer already spent (a card discarded to the first
+   *  toll). Edits `prompt.data` / `prompt.ctx` in place; may run more than once. */
+  refreshPrompts?: Record<string, (state: GameState, prompt: Prompt) => void>
   /** UI hint: how to pick `at` when casting (minions default to own sites) */
   castAt?: 'ownSite' | 'anySite' | 'anySquare'
   /** the card may be cast from the cemetery (e.g. Ghostfire, Recurring Specter) */
