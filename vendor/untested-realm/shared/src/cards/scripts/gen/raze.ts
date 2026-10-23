@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { siteAt, unitsAt } from '../../../engine/grid'
-import { isArtifactUnit } from '../../../engine/statics'
+import { isArtifactUnit, isDisabled } from '../../../engine/statics'
 
 // 'An ally destroys its site and all artifacts there.'
 registerScript('Raze', {
@@ -11,6 +11,8 @@ registerScript('Raze', {
     if (!t || !('unit' in t)) return
     const ally = ctx.state.units[t.unit]
     if (!ally) return
+    // the ALLY razes; a disabled minion cannot take an action another card grants it (Codex)
+    if (isDisabled(ctx.state, ally)) return ctx.log(`${ally.name} is disabled and cannot raze.`)
     const site = siteAt(ctx.state, ally.x, ally.y)
     if (!site) return ctx.log('No site beneath them to raze.')
     for (const u2 of unitsAt(ctx.state, site.x, site.y)) {

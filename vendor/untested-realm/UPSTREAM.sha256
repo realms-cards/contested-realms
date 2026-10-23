@@ -711,7 +711,7 @@ fd981e1c5d64f7f0da2e043e003d7e949f4fa7a6f5c639e647b8179ebb15009a  shared/src/car
 c0d30be2a6f5b3e6dda700fc05d216fcb6039da2352f85501cb07cd6b2020bed  shared/src/cards/scripts/gen/raise-dead.ts
 93c8e3aaaefb452ae9b41a4761ca64c0513eae65d15c1bb9c7fbe6e0bbebf05a  shared/src/cards/scripts/gen/raise-militia.ts
 814883fd97be276252df8e128f9af38b353e562d86abb4aa00039baf084e94e4  shared/src/cards/scripts/gen/rat-king.ts
-b0f744d587c8d65214485bbe516967b166257af206961be6a9cbdd77a4c0c90a  shared/src/cards/scripts/gen/raze.ts
+500674f6e4da78e1b4a853cfb9bd7e40270987909cd85819123cf1d782d8ca56  shared/src/cards/scripts/gen/raze.ts
 ec7f2dcf1a805250244716c631ea940e51a548975ad53e495fbe06582cd84324  shared/src/cards/scripts/gen/realm-eater.ts
 34787059051debb12ed44ef27946a3fcd02c37c09d19d83fb0905f61280268c8  shared/src/cards/scripts/gen/rebecks.ts
 165f5cff016e96b11c1a7951d2cd641afbbfa8720632694a59a8a645b66c9d88  shared/src/cards/scripts/gen/recall.ts
@@ -794,7 +794,7 @@ a3335e6c4ba791503e9483322480943666328c4c4048fda2c3f61374e2eb7a77  shared/src/car
 7bddbdb7417c42f4a51024f816a60049fc0a78eec40ca45dbb1b6db7470315bd  shared/src/cards/scripts/gen/shallow-grave.ts
 d589e766449d62430c7a4abac2e32d16b93b555fe86a92f766c2396f0e3eb843  shared/src/cards/scripts/gen/shameless-squire.ts
 a79bf0b2362ae2d1e8d925523086a4a133775fa4eeb9a5bf0057704e225bd22c  shared/src/cards/scripts/gen/shapeshift.ts
-eb3947d27184037bc5c55d7eb14b69ea2d853f41c4f141254567f34b86999f2c  shared/src/cards/scripts/gen/shatter-strike.ts
+1026ba1b0f89ee08791437c16250278afcfca38fc53fa4b9238a0857d497d28e  shared/src/cards/scripts/gen/shatter-strike.ts
 2f803a62f2b3572b255ff869dad98b6db3e8e94528644acc21a6ea99e53a7efd  shared/src/cards/scripts/gen/shellycoat.ts
 a388e3f721fd471341a37b2458a53adb1e6a1e6b1307d0e510355a384f919084  shared/src/cards/scripts/gen/shield-maidens.ts
 7cd4204b230dac57ac7900e1045636ebefbaffca43f908b1f6e31445ec113cff  shared/src/cards/scripts/gen/shield-wall.ts
@@ -950,7 +950,7 @@ a0e502baeb5b9bf27172912da09bd790318eda13fb932c4600223f9ba2dd63f6  shared/src/car
 a27aa32ff5e227b826cf454b50656fc81d00730cc72fa858253c14f69e1eafa2  shared/src/cards/scripts/gen/tragedy-worrywart.ts
 a54f2842857b4a159cd0816f0e013d126fbd9262d22c8b84654587b9ef32ee6b  shared/src/cards/scripts/gen/treetop-hideout.ts
 e5323801ed6de4360c0423b41764fef5550dd9b218d0d6ff0df32f2ab141a9bf  shared/src/cards/scripts/gen/trial-by-fire.ts
-cf5f90a751a16d16bb69566ff6c692f087f9622b624506e1a2c46a793dbd8718  shared/src/cards/scripts/gen/trial-by-water.ts
+50da94315529e5605ca9a456ceb3e419effb08d08e34f614eebbf28f9c8bf179  shared/src/cards/scripts/gen/trial-by-water.ts
 9c7369db9529b188441684a8d8c04b013e1776161125960bc525afde83ab336e  shared/src/cards/scripts/gen/tringh-constrictor.ts
 1bb4b086e90faa2d75c3c7fcea7ce1309154f759e918d56c3cb71688f13ed575  shared/src/cards/scripts/gen/troll-bridge.ts
 7a1d168b09b77f7039cdd0245e278ba87dd8f4e1815cf487c57753b8df9e1a97  shared/src/cards/scripts/gen/troubled-town.ts
@@ -1105,7 +1105,7 @@ d4f16ac3bcf6b7cf09d4a5283450425520e4249bbe122c9c092e0b6a82cf469b  shared/src/eng
 666ce9ee82019b029561213a5c079e13a84a1bc00d4b980472b72205d1c524db  shared/src/engine/clock.ts
 6265c6fec9860cfc452f303f5a2e00e0bd0e6db92571344d408f663d6a1588f6  shared/src/engine/combat.ts
 33d65e2334a9520da8645f01e5a3d772a022a68e96f6608f2de3702fc5a58a39  shared/src/engine/decks.ts
-68cb0b613b803ad8d46aed91ae54db710fd0923539ac88b4a9f7e1225bc03919  shared/src/engine/effects.ts
+eeeff7cfa4a747ccab283587e66d4c83c970748908d747648ec39cf02f40085e  shared/src/engine/effects.ts
 b3db144ee5b984ce7ac0acf99332a0bebe89afebf26f619341186891f58b0093  shared/src/engine/game.ts
 5d3b98693dc04181eec63f8133d4dda0692d22040794f51bdcc6ae1f7a72d96a  shared/src/engine/grid.ts
 2d048fc15c4c7c46e5b3f2e4596a4f344ead5e70e30c7af05d3cde0ad25e3702  shared/src/engine/judge.ts

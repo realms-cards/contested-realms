@@ -1,5 +1,6 @@
 import { registerScript, type EffectAPI } from '../registry'
 import { isAdjacentW } from '../../../engine/grid'
+import { isDisabled } from '../../../engine/statics'
 
 // 'An ally targets an enemy adjacent to them, destroying an artifact they're
 //  carrying and then striking them.'
@@ -15,6 +16,8 @@ registerScript('Shatter Strike', {
     const ally = ctx.state.units[t1.unit]
     const foe = ctx.state.units[t2.unit]
     if (!ally || !foe) return
+    // the ALLY does both the shattering and the strike; a disabled minion can take neither action (Codex)
+    if (isDisabled(ctx.state, ally)) return ctx.log(`${ally.name} is disabled and cannot strike.`)
     if (!isAdjacentW(ctx.state, ally.x, ally.y, foe.x, foe.y)) return ctx.log('They are not adjacent.') // "adjacent" includes the SAME site (rulebook)
     const arts = foe.carrying.filter((id) => ctx.state.artifacts[id])
     if (arts.length <= 1) return shatterResolve(ctx, ally.id, foe.id, arts[0])

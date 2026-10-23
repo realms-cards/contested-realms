@@ -1793,7 +1793,8 @@ export function trySubmerge(state: GameState, unit: UnitState): boolean {
  *  De-dupe the caller's list first if the same unit could appear twice (each is struck once). */
 export function strikeAllSimultaneous(state: GameState, strikerId: string, targetIds: string[], controller: PlayerId): void {
   const striker = state.units[strikerId]
-  if (!striker) return
+  // a disabled unit cannot strike, for any effect (Codex) — the same rule as ctx.strike
+  if (!striker || isDisabled(state, striker)) return
   const targets = [...new Set(targetIds)].filter((id) => id !== strikerId && state.units[id]).map((id) => state.units[id]!)
   if (!targets.length) return
   const kw = effKeywords(state, striker)
@@ -3470,6 +3471,9 @@ export function makeCtx(
       // strike (Hotwheel's roll, Wraetannis Titan's genesis, …) fires the SAME
       // consequences a melee blow does: "whenever this strikes", the enemy-Avatar
       // trigger (Interrogator), "when struck", and kill triggers (Stygian Archers).
+      // Codex: a disabled minion "cannot strike or deal damage", nor take an action another card
+      // grants it — so no effect (Shatter Strike's ally, Smite…) makes it strike, not even for 0.
+      if (isDisabled(state, attacker)) return
       const kw = effKeywords(state, attacker)
       const power = effAttack(state, attacker)
       if (!('unit' in target)) {

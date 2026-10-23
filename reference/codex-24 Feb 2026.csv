@@ -479,14 +479,14 @@ or sacrifice that card fails. That card still only triggers its Deathrite abilit
 Cards that are sacrificed also count as being destroyed. They are marked for death following the 
 same process outlined above.",""
 "Disabled","While disabled, a minion has no abilities (including basic abilities), cannot strike or deal damage, 
-cannot take steps itself, cannot shoot projectiles, and cannot be tapped to pay for costs. They also 
-cannot take any action granted by another card or effect (e.g. [[Raze]], [[Trial by Water]]), though 
-they can be moved by force.
-A disabled minion may be ))moved(( forcefully as long the disabled minion does not take one of its 
-own steps. A disabled minion may still be tapped by effects as long as it isn't tapping to pay for 
-costs.
-Disabled is not an ability itself and is not removed by silenced effects (e.g. [[Silence]]). If a 
-site is disabled, it has no abilities and cannot provide any mana or affinity.",""
+cannot take steps itself, cannot shoot projectiles, loses Stealth and Ward marks, and cannot be tapped to pay 
+for costs. They also cannot take any action granted by another card or effect (e.g. [[Raze]], [[Trial by Water]]), 
+though they can be moved by force.
+A disabled minion may be ))moved(( forcefully as long the disabled minion does not take its own steps. 
+A disabled minion may still be tapped by effects as long as it isn't tapping to pay for costs.
+Disabled is not an ability itself and is not removed by silenced effects (e.g. [[Silence]]).
+If a site is disabled, it has no abilities and cannot provide any mana or affinity.
+If an artifact or aura is disabled, it has no abilities.",""
 "Dispel","Dispel means to 'die,' for auras. See the 'die' codex entry for more details.",""
 "Drop","Drop is a basic, activated ability with the following text: Once on your turn, if this unit hasn't 
 interacted with the realm, it may drop any number of artifacts it's carrying. Each unit can use its 

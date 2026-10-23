@@ -135,6 +135,23 @@ async function main() {
 
   console.log(`Merged into ${entryMap.size} unique entries`);
 
+  // --only "<Title>" (repeatable): write just those entries, so a single corrected entry can be
+  // pushed to a database without rewriting entries that may have been edited there since
+  const only = process.argv
+    .map((a, i, all) => (a === "--only" ? all[i + 1] : null))
+    .filter(Boolean);
+  if (only.length) {
+    for (const title of [...entryMap.keys()]) {
+      if (!only.includes(title)) entryMap.delete(title);
+    }
+    const missing = only.filter((t) => !entryMap.has(t));
+    if (missing.length) {
+      console.error(`Not in the codex file: ${missing.join(", ")}`);
+      process.exit(1);
+    }
+    console.log(`Only: ${[...entryMap.keys()].join(", ")}`);
+  }
+
   // Preview mode - just show what we'd insert
   if (process.argv.includes("--preview")) {
     console.log("\n--- Preview (first 10 entries) ---");
