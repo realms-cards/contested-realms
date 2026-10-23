@@ -1,3 +1,4 @@
+import type { KeywordGrant, ModifierKeyword } from './keywords'
 // Core game state types. Everything here must stay JSON-serializable:
 // the server persists/replays state and ships redacted copies to clients.
 
@@ -52,7 +53,7 @@ export type Duration = 'endOfTurn' | 'untilYourNextTurn' | 'permanent'
 export interface Modifier {
   kind: 'power' | 'keyword' | 'text'
   amount?: number
-  keyword?: string
+  keyword?: ModifierKeyword
   /** a keyword modifier that STRIPS the keyword instead of granting it (editor tool) */
   remove?: boolean
   note?: string
@@ -342,7 +343,7 @@ export type JudgeOp =
   | { k: 'moveArtifact'; artifactId: string; x: number; y: number; region: Region }
   | { k: 'tap'; id: string; tapped: boolean }
   | { k: 'power'; unitId: string; amount: number; duration: Duration }
-  | { k: 'keyword'; unitId: string; keyword: string; duration: Duration; remove?: boolean }
+  | { k: 'keyword'; unitId: string; keyword: KeywordGrant; duration: Duration; remove?: boolean }
   | { k: 'setAvatar'; player: PlayerId; name: string }
   | { k: 'setController'; unitId: string; player: PlayerId } // editor: hand a minion to a player
   | { k: 'setArtifactController'; artifactId: string; player: PlayerId } // editor: hand a ground artifact/monument to a player

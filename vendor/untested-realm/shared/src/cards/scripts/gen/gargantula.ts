@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { pushLog, checkWard } from '../../../engine/effects'
+import { pushLog } from '../../../engine/effects'
 
 // 'Genesis → Gargantula may drag an adjacent minion here, disabling it in a
 //  cocoon until a unit at its location taps to free it.'
@@ -13,12 +13,7 @@ registerScript('Gargantula', {
     if (!self || !t || !('unit' in t)) return
     const prey = ctx.state.units[t.unit]
     if (!prey) return
-    // Cocooning is a hostile special ability aimed at the prey: a warded enemy's Ward breaks instead,
-    // and the silk never touches it (codex Ward — no drag, no disable).
-    if (checkWard(ctx.state, prey, ctx.controller, prey.controller, 'target')) {
-      pushLog(ctx.state, ctx.controller, `${prey.name}'s ward tears through the silk.`)
-      return
-    }
+    // The drag doesn't target (no "target" in its text), so neither Ward nor Stealth stops it.
     ctx.teleport(prey.id, self.x, self.y, self.region, { push: true }) // forced drag: Cage/push-ban/no-void aware
     prey.disabled = true
     prey.counters = { ...prey.counters, cocooned: 1 }

@@ -1,4 +1,5 @@
 import type { EffectAPI } from '../registry'
+import { payZoneToll } from '../../../engine/statics'
 import type { PlayerId } from '../../../engine/types'
 
 // "Banish N cards from a cemetery" lets the ACTIVE player pick WHICH cards — a cemetery is a public,
@@ -37,6 +38,12 @@ export function resolveBanishFromCemetery(ctx: EffectAPI, c: { pid: PlayerId; id
   const picks = (Array.isArray(choice) ? choice : []) as number[]
   const chosen = picks.map((i) => ids[i]).filter((id): id is string => typeof id === 'string')
   const p = ctx.state.players[c.pid]
+  // the banish is cemetery access: one Bureau of Occult Control toll per effect, paid by its
+  // controller at the commit (each caller resolves exactly once); unpaid → nothing is banished
+  if (chosen.some((id) => p.cemetery.includes(id)) && !payZoneToll(ctx.state, ctx.controller)) {
+    ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
+    return []
+  }
   for (const id of chosen) {
     const idx = p.cemetery.indexOf(id)
     if (idx >= 0) {

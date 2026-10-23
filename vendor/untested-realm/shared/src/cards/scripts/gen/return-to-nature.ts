@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { pushLog, opponent, returnToDeck } from '../../../engine/effects'
-import { cemeteryProtected } from '../../../engine/statics'
+import { cemeteryProtected, payZoneToll } from '../../../engine/statics'
 import type { PlayerId } from '../../../engine/types'
 
 // 'Return up to three cards from a cemetery to the bottom of their decks. Draw a spell.'
@@ -31,7 +31,10 @@ registerScript('Return to Nature', {
       const who = c.who as PlayerId
       const p = ctx.state.players[who]
       const idxs = (Array.isArray(choice) ? choice : []).filter((i): i is number => typeof i === 'number').sort((a, b) => b - a)
-      for (const i of idxs.slice(0, 3)) {
+      // the return is cemetery access (Bureau of Occult Control); unpaid → only the draw happens
+      const open = !idxs.length || payZoneToll(ctx.state, ctx.controller)
+      if (!open) pushLog(ctx.state, ctx.controller, 'The Bureau of Occult Control demands (2) for cemetery access.')
+      for (const i of open ? idxs.slice(0, 3) : []) {
         const [id] = p.cemetery.splice(i, 1)
         if (id === undefined) continue
         returnToDeck(ctx.state, id) // always to the OWNER's deck, never the cemetery-holder's

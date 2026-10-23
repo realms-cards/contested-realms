@@ -2,6 +2,7 @@
 // granted by printed text, modifiers, carried artifacts, and scripted statics.
 
 import { getCard, findCard, getKeywords, type ParsedKeywords } from '../cards/db'
+import { applyGrant, grantsFlag, isStatusMarker, keywordKeyOf, removeKeyword, type KeywordGrant, type KeywordKey, type ModifierKeyword } from './keywords'
 import { getScript, type AbilityDef } from '../cards/scripts/registry'
 import type { GameState, UnitState, Region, PlayerId, AuraState, SiteState, ArtifactState, Thresholds } from './types'
 import { siteAt, isWaterSite, nearbySquaresW, adjacentSquaresW, orthAdjacentWrapped, occupiedSquares, sitesOf } from './grid'
@@ -139,7 +140,7 @@ export function affinity(state: GameState, player: PlayerId): Thresholds {
     }
   }
   for (const art of Object.values(state.artifacts)) {
-    const controller = art.carriedBy ? state.units[art.carriedBy]?.controller : art.conjuredBy
+    const controller = artifactController(state, art)
     if (controller === player) addBonus(artScript(state, art)?.affinityBonus) // silenced artifact grants no affinity
   }
   // a negative judge override (or any future negative source) can't drop affinity
@@ -157,6 +158,27 @@ export function affinity(state: GameState, player: PlayerId): Thresholds {
 export function isCarriableArtifact(name: string): boolean {
   const st = getCard(name).subtypes
   return !st.includes('Monument') && !st.includes('Automaton')
+}
+
+/** Who controls an artifact (rulebook, "Controlling Artifacts"): a CARRIED one → its bearer's controller;
+ *  one that can't be carried (Monument, Automaton) → the player who conjured it; a carriable one lying
+ *  on the ground → NOBODY. An uncontrolled artifact gives no one mana, affinity, "you"/"your opponent"
+ *  effects or abilities — only effects that name no player keep working (see `actsUncontrolled`). */
+export function artifactController(
+  state: { units: Record<string, { controller: PlayerId }> }, // a GameState or a player's view
+  art: Pick<ArtifactState, 'carriedBy' | 'name' | 'conjuredBy'>,
+): PlayerId | null {
+  if (art.carriedBy) return state.units[art.carriedBy]?.controller ?? null
+  return isCarriableArtifact(art.name) ? null : art.conjuredBy
+}
+
+/** the player an artifact's triggered effects run for: its controller — or, for an UNCONTROLLED artifact
+ *  whose effects name no player (`actsUncontrolled`: Doomsday Device, Thumb Screws…), the active player
+ *  (only a stand-in for logs and prompts; nobody gains from it). null → the artifact does nothing. */
+export function artifactActor(state: GameState, art: ArtifactState): PlayerId | null {
+  const c = artifactController(state, art)
+  if (c !== null) return c
+  return getScript(art.name)?.actsUncontrolled ? state.activePlayer : null
 }
 
 /** Haystack: an enemy site caps how deep this player may search decks */
@@ -197,10 +219,19 @@ export function collectionBanned(state: GameState, player: PlayerId, name: strin
   return ((state.flow?.collectionBans?.[player] ?? []) as string[]).includes(name)
 }
 
+/** this player already paid the access toll for the effect now resolving (a cemetery-activated ability
+ *  carries it in its cost) — further payZoneToll calls in the same effect are free. Cleared by applyAction
+ *  once the effect has fully resolved. */
+export function markZoneTollPaid(state: GameState, player: PlayerId): void {
+  state.flow = state.flow ?? {}
+  state.flow.zoneTollPaid = player
+}
+
 /** pay the zone-access toll if affordable; false means the vault stays shut */
 export function payZoneToll(state: GameState, player: PlayerId): boolean {
   const toll = zoneAccessToll(state)
   if (!toll) return true
+  if (state.flow?.zoneTollPaid === player) return true // already paid for this effect (FAQ: one (2) grants the entire effect access)
   const p = state.players[player]
   if (p.mana < toll) return false
   p.mana -= toll
@@ -338,7 +369,7 @@ export function effKeywords(state: GameState, unit: UnitState, seen: Set<string>
   const kw: ParsedKeywords = silenced ? {} : { ...getKeywords(unit.name) }
   if (unit.isAvatar && !silenced) kw.spellcaster = true // innate avatar Spellcaster — silence revokes it
   for (const mod of unit.modifiers) {
-    if (mod.kind === 'keyword' && mod.keyword && !mod.remove) applyKeywordString(kw, mod.keyword)
+    if (mod.kind === 'keyword' && mod.keyword && !mod.remove) applyGrant(kw, mod.keyword)
   }
   // a carrier confers its movement-region abilities to what it carries
   if (unit.carriedBy) {
@@ -357,24 +388,24 @@ export function effKeywords(state: GameState, unit: UnitState, seen: Set<string>
     if (!art) continue
     const script = getScript(art.name)
     if (script?.bearerKeywords) {
-      for (const k of script.bearerKeywords) applyKeywordString(kw, k)
+      for (const k of script.bearerKeywords) applyGrant(kw, k)
     }
   }
   // self-granted conditional keywords (Realm-Eater's post-meal torpor) are the card's OWN ability →
   // removed by silence (printed-only rule); external grants below still apply.
   if (!silenced) {
     const selfKw = getScript(unit.name)?.selfKeywords
-    if (selfKw) for (const k of selfKw(state, unit)) applyKeywordString(kw, k)
+    if (selfKw) for (const k of selfKw(state, unit)) applyGrant(kw, k)
   }
   // (Evil Twin's strike-first is NOT a blanket keyword: it applies only when the
   // twin fights the minion it copied — handled target-aware in combat.ts.)
   // scripted global/static keyword grants
-  for (const grant of collectStaticGrants(state, unit)) applyKeywordString(kw, grant)
+  for (const grant of collectStaticGrants(state, unit)) applyGrant(kw, grant)
   // removal layer LAST — strips beat grants (Sky Baron, Entangle Terrain)
-  for (const gone of collectKeywordRemovals(state, unit)) removeKeywordString(kw, gone)
+  for (const gone of collectKeywordRemovals(state, unit)) removeKeyword(kw, gone)
   // editor-applied negative keyword modifiers strip too (after every grant layer)
   for (const mod of unit.modifiers) {
-    if (mod.kind === 'keyword' && mod.keyword && mod.remove) removeKeywordString(kw, mod.keyword)
+    if (mod.kind === 'keyword' && mod.keyword && mod.remove && !isStatusMarker(mod.keyword)) removeKeyword(kw, keywordKeyOf(mod.keyword))
   }
   // "can't be immobilized" (Gossamer Ghost, an unmodifiable unit, or an Onslaught grant) strips the
   // Immobile keyword itself — printed OR granted — so the unit may move. Centralised here so every
@@ -388,21 +419,8 @@ export function effKeywords(state: GameState, unit: UnitState, seen: Set<string>
   return kw
 }
 
-function removeKeywordString(kw: ParsedKeywords, keyword: string): void {
-  const low = keyword.toLowerCase()
-  const map: Record<string, keyof ParsedKeywords> = {
-    airborne: 'airborne', burrowing: 'burrowing', submerge: 'submerge', voidwalk: 'voidwalk',
-    charge: 'charge', lethal: 'lethal', stealth: 'stealth', ward: 'ward',
-    'strike first': 'strikeFirst', spellcaster: 'spellcaster', ranged: 'ranged',
-    movement: 'movement', immobile: 'immobile',
-  }
-  // tolerate parametric forms ("ranged 1", "movement +1") by falling back to the base word
-  const key = map[low] ?? map[low.split(/\s+/)[0]]
-  if (key) delete (kw as any)[key]
-}
-
-function collectKeywordRemovals(state: GameState, unit: UnitState): string[] {
-  const out: string[] = []
+function collectKeywordRemovals(state: GameState, unit: UnitState): KeywordKey[] {
+  const out: KeywordKey[] = []
   const src = removeSources(state) // index-driven (small); same iteration/gating as before
   for (const other of src.units) {
     if (other.silenced || disabledByEffect(state, other)) continue // disabled → strips nothing
@@ -423,64 +441,6 @@ function collectKeywordRemovals(state: GameState, unit: UnitState): string[] {
     if (f) out.push(...f(state, r.id, unit))
   }
   return out
-}
-
-export function applyKeywordString(kw: ParsedKeywords, keyword: string) {
-  const low = keyword.toLowerCase()
-  // "movement +N" grants steps; "movement -N" (editor / debuffs) takes them away
-  const m = low.match(/^movement ([+-]\d+)$/)
-  if (m) {
-    kw.movement = (kw.movement ?? 0) + Number(m[1])
-    return
-  }
-  const r = low.match(/^ranged(?: (\d+))?$/)
-  if (r) {
-    kw.ranged = Math.max(kw.ranged ?? 0, r[1] ? Number(r[1]) : 1)
-    return
-  }
-  const sc = low.match(/^(air|earth|fire|water) spellcaster$/)
-  if (sc) {
-    kw.spellcaster = true
-    kw.spellcasterElement = sc[1]
-    return
-  }
-  const msc = low.match(/^(air|earth|fire|water) and (air|earth|fire|water) spellcaster$/)
-  if (msc) {
-    kw.spellcaster = true
-    kw.spellcasterElements = [msc[1], msc[2]]
-    return
-  }
-  // arbitrary element-set spellcaster grant (Vivien inheriting several locked spellcasters):
-  // "spellcaster:air,fire,water" → a spellcaster restricted to those elements.
-  const scset = low.match(/^spellcaster:([a-z,]+)$/)
-  if (scset) {
-    kw.spellcaster = true
-    const els = scset[1].split(',').filter((e) => ['air', 'earth', 'fire', 'water'].includes(e))
-    if (els.length) kw.spellcasterElements = [...new Set([...(kw.spellcasterElements ?? []), ...els])]
-    return
-  }
-  const nsc = low.match(/^non-(air|earth|fire|water) spellcaster$/)
-  if (nsc) {
-    kw.spellcaster = true
-    kw.spellcasterExclude = nsc[1]
-    return
-  }
-  const map: Record<string, keyof ParsedKeywords> = {
-    airborne: 'airborne',
-    burrowing: 'burrowing',
-    submerge: 'submerge',
-    voidwalk: 'voidwalk',
-    charge: 'charge',
-    immobile: 'immobile',
-    lethal: 'lethal',
-    stealth: 'stealth',
-    ward: 'ward',
-    'strike first': 'strikeFirst',
-    spellcaster: 'spellcaster',
-    waterbound: 'waterbound',
-    landbound: 'landbound',
-  }
-  if (map[low]) (kw as any)[map[low]] = true
 }
 
 // ── static GRANT / REMOVE source index ────────────────────────────────────────────────────────────
@@ -561,8 +521,8 @@ function removeSourcesNow(state: GameState): { units: UnitState[]; sites: SiteSt
   }
 }
 
-function collectStaticGrants(state: GameState, unit: UnitState): string[] {
-  const out: string[] = []
+function collectStaticGrants(state: GameState, unit: UnitState): KeywordGrant[] {
+  const out: KeywordGrant[] = []
   // "Can't be modified" (Monks of Kobalsa, Bedrock…): the unit can't GAIN abilities from external
   // sources. It keeps only its OWN self-grants (Angel Ascendant's Airborne-while-warded).
   const unmod = isUnmodifiable(state, unit)
@@ -574,10 +534,14 @@ function collectStaticGrants(state: GameState, unit: UnitState): string[] {
   if (unmod) return out // auras/sites/artifacts/other units are all external — an unmodifiable unit ignores them
   // (2) cross-unit grants from OTHER entities (self handled above → skip it).
   const src = grantSources(state)
+  // Grant hooks are pure lookups, so each is asked FIRST and the source's (board-scanning) disabled /
+  // silenced check is paid only when it actually grants THIS unit something — most grants reach few units.
   for (const other of src.units) {
-    if (other.id === unit.id || other.silenced || disabledByEffect(state, other)) continue
+    if (other.id === unit.id || other.silenced) continue
     const g = getScript(other.name)?.grantsKeywords
-    if (g) for (const k of g(state, other, unit)) out.push(k)
+    if (!g) continue
+    const ks = g(state, other, unit)
+    if (ks.length && !disabledByEffect(state, other)) out.push(...ks)
   }
   for (const aura of src.auras) {
     const g = getScript(aura.name)?.auraGrantsKeywords
@@ -585,11 +549,15 @@ function collectStaticGrants(state: GameState, unit: UnitState): string[] {
   }
   if (!protectedFromSites(state, unit)) for (const site of src.sites) { // Key to the City: the bearer ignores site abilities
     const g = getScript(site.name)?.siteGrantsKeywords
-    if (g && !siteSilenced(state, site)) for (const k of g(state, site, unit)) out.push(k)
+    if (!g) continue
+    const ks = g(state, site, unit)
+    if (ks.length && !siteSilenced(state, site)) out.push(...ks)
   }
   for (const art of src.arts) {
     const g = getScript(art.name)?.artifactGrantsKeywords
-    if (g && !artifactSilenced(state, art)) for (const k of g(state, art.id, unit)) out.push(k)
+    if (!g) continue
+    const ks = g(state, art.id, unit)
+    if (ks.length && !artifactSilenced(state, art)) out.push(...ks)
   }
   return out
 }
@@ -803,6 +771,10 @@ export function withFrozenState<T>(state: GameState, fn: () => T): T {
 }
 
 export function disabledByEffect(state: GameState, unit: UnitState): boolean {
+  // only a unit IN THE REALM can be disabled. A spellcaster artifact or site casts through a positioned
+  // stand-in (resolveCaster / makeCtx), which is not a minion — Root Spider's "minions directly above it"
+  // must not strip an Omphalos above it of Spellcaster. (Automatons ARE in state.units, so still count.)
+  if (!state.units[unit.id]) return false
   const topLevel = disableEvalStack.size === 0
   if (topLevel && frozenState === state) {
     const known = frozenMemo.get(unit.id)
@@ -937,18 +909,61 @@ export function isDisabled(state: GameState, unit: UnitState): boolean {
 /** can this unit currently exist in the given region at (x,y)? */
 export function canExistIn(state: GameState, unit: UnitState, region: Region, x: number, y: number): boolean {
   if (unit.isAvatar) return region === 'surface'
+  // anything can exist on the surface — no keyword needed (this used to build the unit's whole keyword
+  // set first; checkStateBased asks it for EVERY unit after EVERY action — a third of the bot's search)
+  if (region === 'surface') return true
   // A disabled minion loses Burrowing/Submerge/Voidwalk like every other ability, so it can no longer
   // exist underground/underwater/void — checkStateBased then drowns/suffocates/banishes it. (Intended.)
-  const kw = effKeywords(state, unit)
   // "burrowed safely" (Awakened Mummies): safe there without Burrowing — lost with its abilities
   if (getScript(unit.name)?.existsSafelyIn === region && !unit.silenced && !isDisabled(state, unit)) {
     if (region === 'underground') return terrainAt(state, x, y) === 'land'
     if (region === 'underwater') return terrainAt(state, x, y) === 'water'
     return true
   }
-  if (region === 'void') return !!kw.voidwalk
-  if (region === 'underground') return !!kw.burrowing && terrainAt(state, x, y) === 'land'
-  if (region === 'underwater') return !!kw.submerge && terrainAt(state, x, y) === 'water'
+  if (region === 'void') return hasRegionKeyword(state, unit, 'voidwalk')
+  if (region === 'underground') return terrainAt(state, x, y) === 'land' && hasRegionKeyword(state, unit, 'burrowing')
+  if (region === 'underwater') return terrainAt(state, x, y) === 'water' && hasRegionKeyword(state, unit, 'submerge')
+  return true
+}
+
+/** `!!effKeywords(state, unit)[key]` for the three region keywords, without building the whole keyword
+ *  set: the same layers in the same order, but it stops at the first source that grants the keyword, and
+ *  pays the (board-scanning) removal and disabled checks only when something does grant it — disable and
+ *  removal can only TAKE a keyword away. Proven equal to effKeywords by a differential harness. */
+export function hasRegionKeyword(state: GameState, unit: UnitState, key: 'burrowing' | 'submerge' | 'voidwalk', seen: Set<string> = new Set()): boolean {
+  if (isBlanked(unit) || seen.has(unit.id)) return false
+  seen.add(unit.id)
+  const grants = (g: ModifierKeyword): boolean => grantsFlag(g, key)
+  const silenced = !!unit.silenced
+  let has = !silenced && !!getKeywords(unit.name)[key]
+  if (!has) has = unit.modifiers.some((m) => m.kind === 'keyword' && !!m.keyword && !m.remove && grants(m.keyword))
+  // a carrier confers its movement-region abilities to what it carries
+  if (!has && unit.carriedBy) {
+    const carrier = state.units[unit.carriedBy]
+    if (carrier) has = hasRegionKeyword(state, carrier, key, seen)
+  }
+  if (!has) {
+    for (const artId of unit.carrying) {
+      const kws = state.artifacts[artId] ? getScript(state.artifacts[artId].name)?.bearerKeywords : undefined
+      if (kws?.some(grants)) { has = true; break }
+    }
+  }
+  if (!has && !silenced) {
+    const selfKw = getScript(unit.name)?.selfKeywords
+    if (selfKw) has = selfKw(state, unit).some(grants)
+  }
+  if (!has) has = collectStaticGrants(state, unit).some(grants)
+  if (!has) return false
+  // the removal layers (static removers, then editor-applied negative modifiers) — applied last, as in effKeywords
+  if (collectKeywordRemovals(state, unit).includes(key)) return false
+  if (unit.modifiers.some((m) => m.kind === 'keyword' && !!m.keyword && m.remove && !isStatusMarker(m.keyword) && keywordKeyOf(m.keyword) === key)) return false
+  // a DISABLED minion has no abilities at all (same re-entrancy guard as effKeywords)
+  if (!unit.isAvatar && !inDisableCheck) {
+    inDisableCheck = true
+    let dis = false
+    try { dis = disabledByEffect(state, unit) } finally { inDisableCheck = false }
+    if (dis) return false
+  }
   return true
 }
 
@@ -1114,10 +1129,9 @@ export function effElements(state: GameState, unit: UnitState): string[] {
 }
 
 /** The from-cemetery activatable abilities a specific card in a cemetery offers `player`: its own
- *  `cemeteryAbilities` (Grigori Rasputin). For a card that copies abilities "wherever it is" (Vivien),
- *  its cemeteryAbilities hook itself folds in the realm sources' `usableFromCemetery` activated
- *  abilities — so an ORDINARY dead minion never offers a from-realm ability, only Vivien does. Used
- *  by the GUI cemetery list/glow and by grantedAbilities below, so the same keys drive both. */
+ *  `cemeteryAbilities` (Grigori Rasputin; a dead Vivien offers her sources' cemetery abilities, never
+ *  their realm ones). Used by the GUI cemetery list/glow and by grantedAbilities below, so the same
+ *  keys drive both. */
 export function cardCemeteryAbilities(state: GameState, cardId: string, player: PlayerId): AbilityDef[] {
   const sc = getScript(state.cards[cardId]?.name ?? '')
   return sc?.cemeteryAbilities ? sc.cemeteryAbilities(state, cardId, player) : []
@@ -1216,9 +1230,10 @@ export function grantedAbilities(state: GameState, unit: UnitState): AbilityDef[
     const toll = zoneAccessToll(state)
     for (const cardId of owner.cemetery ?? []) {
       const name = state.cards[cardId]?.name ?? ''
-      // cemeteryAbilities + usableFromCemetery activated abilities (Savior via a cemetery Vivien)
+      // cemetery-activated abilities (Grigori Rasputin, or the same copied by a dead Vivien)
       const ab = cardCemeteryAbilities(state, cardId, unit.controller)
-      if (ab.length) out.push(...tag(ab, name).map((a) => (toll ? { ...a, cost: { ...a.cost, mana: (a.cost.mana ?? 0) + toll } } : a)))
+      // the toll rides in the cost, so the effect itself (and its prompts) must not charge it again
+      if (ab.length) out.push(...tag(ab, name).map((a) => (toll ? { ...a, cost: { ...a.cost, mana: (a.cost.mana ?? 0) + toll }, effect: (ctx: Parameters<typeof a.effect>[0]) => { markZoneTollPaid(ctx.state, unit.controller); return a.effect(ctx) } } : a)))
     }
     // ... and spellbook cards seen by the enemy (The Inquisition)
     for (const cardId of owner.spellbook ?? []) {

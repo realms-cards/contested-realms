@@ -6,6 +6,7 @@ import { nearbySquaresW, unitsAt } from '../../../engine/grid'
 //  player's turn, if Magnetic Muzzle is abandoned, that player attaches it to a
 //  nearby minion.'
 registerScript('Magnetic Muzzle', {
+  actsUncontrolled: true, // names no player: works on the ground, uncontrolled
   cantDrop: true,
   silencesUnit: (state, selfId, unit) => state.artifacts[selfId]?.carriedBy === unit.id,
   endOfEveryTurn: (ctx) => {

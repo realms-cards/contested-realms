@@ -1,6 +1,6 @@
 import { registerScript, type AbilityDef, type EffectAPI } from '../registry'
 import { siteAt } from '../../../engine/grid'
-import { cardCemeteryAbilities } from '../../../engine/statics'
+import { cardCemeteryAbilities, zoneAccessToll } from '../../../engine/statics'
 import { BONE_RAISERS, sacrificeSkeletonAndRaise } from '../multi-card-utils/bone-raisers'
 
 // "Can't move to defend." (Skeleton token)
@@ -25,7 +25,9 @@ registerScript('Skeleton', {
       const vivienCopy = cost === undefined && cardCemeteryAbilities(state, cardId, self.controller).some((a) => a.key.startsWith('boneRaise:'))
       if (cost === undefined && !vivienCopy) continue
       seen.add(cardId)
-      const c = cost ?? 0
+      // the raise leaves the cemetery → the Bureau of Occult Control's (2) rides on the cost, exactly as
+      // grantedAbilities adds it to the raiser's own from-cemetery route
+      const c = (cost ?? 0) + zoneAccessToll(state)
       out.push({
         key: `bones:${cardId}`,
         label: `(${c}), sacrifice → raise ${nm} here`,

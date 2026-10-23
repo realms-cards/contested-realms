@@ -7,7 +7,7 @@ import type { GameState, PlayerId, Region, Step, UnitState, AttackTarget } from 
 import { pushLog, pushPrompt, registerCont, dealDamageToUnit, dealDamage, checkStateBased, opponent, makeCtx, emitUnitMoved, gainLife, tapUnit, emitEvent, drawCards, askDrawCard, recordAreaReveal, markRevealShoots, beginAreaReveal, sealAbilityReveal, beginBattleCapture, finishBattleCapture, avatarTrappedAt, isMagicProtected } from './effects'
 import { effAttack, effKeywords, isDisabled, canTap, projectileCanHit, attackBlockedAt, interceptBlockedAt, siteSilenced as siteSilencedC, artScript, regionPresentAt, carriedInside, isBlanked, isCarriableArtifact } from './statics'
 import { findPath, isFreeStep, isLegalStep, maxSteps, reachableLocations, reachableWithPaths, resolveMovement } from './movement'
-import { unitsAt, occupies, occupiedSquares, inBounds, edgesConnected, GRID_W, GRID_H, squareLabel } from './grid'
+import { unitsAt, occupies, occupiedSquares, sharedLocation, inBounds, edgesConnected, GRID_W, GRID_H, squareLabel } from './grid'
 
 // ---------- entry: the Move and Attack basic ability ----------
 
@@ -103,7 +103,7 @@ function attackTargetPresent(state: GameState, unit: UnitState, attack: AttackTa
   if ('unit' in attack) {
     const t = state.units[attack.unit]
     if (!t || carriedInside(state, t)) return false
-    return t.region === unit.region && occupiedSquares(unit).some((a) => occupies(t, a.x, a.y))
+    return !!sharedLocation(unit, t)
   }
   const site = state.sites[attack.site]
   return !!site && !site.isRubble && occupies(unit, site.x, site.y, 'surface')
@@ -201,7 +201,9 @@ export function beginAttack(
     if (carriedInside(state, target)) return 'that unit is swallowed — it is out of reach' // in a belly
     if (target.controller === player && !opts?.allowAllied) return 'you cannot attack your own unit'
     if (target.id === attacker.id) return 'it cannot attack itself'
-    // shared square + same region (either combatant may be oversized)
+    // shared square + same region (either combatant may be oversized, or a moeba whose parts sit in
+    // different regions — compare each part's own region, not the anchor's)
+    const shared = sharedLocation(attacker, target)
     const sameSquare = occupiedSquares(attacker).some((a) => occupies(target, a.x, a.y))
     // Putrid Presence: the subsurface of nearby sites can be attacked from above
     const digDown =
@@ -214,16 +216,18 @@ export function beginAttack(
       })
     // allowSubsurface: a SITE-sourced attacker (Free City) reaches down into its own subsurface — it may
     // strike a burrowed/submerged enemy sharing its square without needing a Putrid-Presence dig.
-    const overlap = sameSquare && (target.region === attacker.region || digDown || !!opts?.allowSubsurface)
+    const overlap = !!shared || (sameSquare && (digDown || !!opts?.allowSubsurface))
     if (!overlap) return 'target is not at your location'
+    // where the fight happens: the shared location, else (dig-down / site attacker) the target's own
+    const where = shared ?? { x: target.x, y: target.y, region: target.region }
     const tkw = effKeywords(state, target)
-    if (tkw.airborne && !kw.airborne && target.region === 'surface') return 'only Airborne units can attack an Airborne unit'
+    if (tkw.airborne && !kw.airborne && where.region === 'surface') return 'only Airborne units can attack an Airborne unit'
     const truesight = attacker.carrying.some((id) => getScript(state.artifacts[id]?.name ?? '')?.bearerTruesight)
     if (target.stealth && !truesight) return 'that minion has Stealth'
-    if (target.region === 'surface' && attackBlockedAt(state, target.x, target.y, target)) return 'that location is protected from attacks'
+    if (where.region === 'surface' && attackBlockedAt(state, where.x, where.y, target)) return 'that location is protected from attacks'
     // start the two-sided battle reveal BEFORE the declaration log so it's captured. The snapshot
     // survives the defend / allocate prompts in flow.pendingBattle.
-    beginBattleCapture(state, attacker, { x: target.x, y: target.y }, target.id)
+    beginBattleCapture(state, attacker, { x: where.x, y: where.y }, target.id)
     pushLog(state, player, `${attacker.name} attacks ${target.name}!`)
     // Stealth is NOT broken yet: a Stealth minion's attack can't be defended and the
     // attacker can't be targeted by the opponent's "when attacked" abilities. Stealth
@@ -398,9 +402,12 @@ function openDefendWindow(state: GameState, attacker: UnitState, target: { unitI
   // target's size. (There is no privileged "main body" square.)
   const tUnit = target.unitId ? state.units[target.unitId] : null
   const tSite = target.siteId ? state.sites[target.siteId] : null
-  const engaged = tUnit ? occupiedSquares(attacker).find((a) => occupies(tUnit, a.x, a.y)) : undefined
+  // the shared location (each part in its own region — a moeba straddles void and sites); a dig-down
+  // attack (Putrid Presence) shares only the square, and is fought in the target's region
+  const shared = tUnit ? sharedLocation(attacker, tUnit) : null
+  const engaged = tUnit ? shared ?? occupiedSquares(attacker).find((a) => occupies(tUnit, a.x, a.y)) : undefined
   const loc: Step = tUnit
-    ? { x: engaged?.x ?? tUnit.x, y: engaged?.y ?? tUnit.y, region: tUnit.region }
+    ? { x: engaged?.x ?? tUnit.x, y: engaged?.y ?? tUnit.y, region: shared?.region ?? tUnit.region }
     : tSite
       ? { x: tSite.x, y: tSite.y, region: 'surface' }
       : { x: attacker.x, y: attacker.y, region: attacker.region }
@@ -747,7 +754,7 @@ function fightSides(state: GameState, ctx: FightCtx): { attackers: UnitState[]; 
     if (t) {
       // either side may be oversized; cross-region digs (Putrid Presence) overlap
       const shares = !atk || occupiedSquares(atk).some((a) => occupies(t, a.x, a.y))
-      const regionOk = !atk || atk.region === t.region ||
+      const regionOk = !atk || !!sharedLocation(atk, t) ||
         (atk.region === 'surface' && (t.region === 'underground' || t.region === 'underwater'))
       if (shares && regionOk) defenders.push(t)
     }

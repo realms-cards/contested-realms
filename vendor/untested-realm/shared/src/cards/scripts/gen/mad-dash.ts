@@ -6,6 +6,6 @@ registerScript('Mad Dash', {
   onCast: (ctx) => {
     ctx.drawCard(ctx.controller)
     const t = ctx.targets[0]
-    if ('unit' in t) ctx.grantKeyword(t.unit, 'movement +1', 'endOfTurn')
+    if ('unit' in t) ctx.grantKeyword(t.unit, { movement: 1 }, 'endOfTurn')
   },
 })

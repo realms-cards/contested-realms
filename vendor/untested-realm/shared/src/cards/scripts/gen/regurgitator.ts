@@ -2,7 +2,7 @@ import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog } from '../../../engine/effects'
 import { inBounds, unitsAt } from '../../../engine/grid'
-import { projectileCanHit, regionPresentAt } from '../../../engine/statics'
+import { projectileCanHit, regionPresentAt, payZoneToll } from '../../../engine/statics'
 
 // 'At the end of your turn, Regurgitator must either fill its empty belly by
 //  banishing a dead minion, or empty its full belly by shooting a projectile
@@ -23,6 +23,8 @@ registerScript('Regurgitator', {
       }
     }
     if (!dead.length) return
+    // mandatory, but an unpaid Bureau of Occult Control toll leaves the belly empty
+    if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
     ctx.ask({ kind: 'chooseCards', title: 'The Regurgitator swallows which corpse?', data: { cards: dead.map((d) => ctx.state.cards[d.id].name), pick: 1, upTo: false } }, 'gulp', { dead })
   },
   conts: {

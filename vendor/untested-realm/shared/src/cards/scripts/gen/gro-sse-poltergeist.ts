@@ -3,6 +3,7 @@ import { getCard } from '../../db'
 import { pushLog } from '../../../engine/effects'
 import { nearbySquaresW } from '../../../engine/grid'
 import type { PlayerId, UnitState } from '../../../engine/types'
+import { artifactController } from '../../../engine/statics'
 
 /** animate an artifact into an Automaton unit; returns the new unit */
 function animate(ctx: EffectAPI, artId: string, controller: PlayerId, extraCounters: Record<string, number> = {}): UnitState | null {
@@ -77,7 +78,7 @@ registerScript('Grösse Poltergeist', {
         (a) => a.name === choice && nearbySquaresW(ctx.state, self.x, self.y).some((s) => s.x === a.x && s.y === a.y),
       )
       if (!art) return
-      const original = art.carriedBy ? ctx.state.units[art.carriedBy]?.controller ?? art.conjuredBy : art.conjuredBy
+      const original = artifactController(ctx.state, art) ?? art.conjuredBy // who gets it back when the haunting ends
       const u = animate(ctx, art.id, ctx.controller, {
         hauntedBy: Number(ctx.sourceId.slice(1)),
         hauntedFrom: original as unknown as number,

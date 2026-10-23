@@ -1,11 +1,16 @@
 import { registerScript, type EffectAPI } from '../registry'
 import { getCard } from '../../db'
 import { pushLog, effectSummonUnit } from '../../../engine/effects'
+import { payZoneToll } from '../../../engine/statics'
 import type { PlayerId } from '../../../engine/types'
 
 // 'Genesis â†’ Each player may summon a minion from their cemetery here.'
 registerScript('Boneyard', {
   genesis: (ctx) => {
+    // the Bureau of Occult Control tolls the Boneyard's controller once for the whole effect
+    // (FAQ: paid as it goes on the storyline), and only if some cemetery holds a minion to raise
+    const anyDead = ctx.state.players.some((p) => p.cemetery.some((id) => getCard(ctx.state.cards[id].name).type === 'Minion'))
+    if (anyDead && !payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
     // controller first, then the opponent (each optional)
     askPlayerPick(ctx, ctx.controller, true)
   },

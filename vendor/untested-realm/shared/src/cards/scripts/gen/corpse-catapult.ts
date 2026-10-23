@@ -3,6 +3,7 @@ import { getCard } from '../../db'
 import { unitsAt } from '../../../engine/grid'
 import { realStepDistanceW } from '../../../engine/movement'
 import { pushLog } from '../../../engine/effects'
+import { payZoneToll } from '../../../engine/statics'
 import { squaresWithinSteps } from '../multi-card-utils/step-range-targets'
 import type { GameState, PlayerId } from '../../../engine/types'
 
@@ -85,6 +86,8 @@ registerScript('Corpse Catapult', {
       const bearer = art?.carriedBy ? ctx.state.units[art.carriedBy] : null
       const helper = ctx.state.units[c.helperId as string]
       if (!dead || !t || !('square' in t) || !art || !bearer || bearer.tapped || !helper || helper.tapped) return
+      if (!ctx.state.players.some((pl) => pl.cemetery.includes(dead))) return
+      if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
       // remove the corpse from its cemetery → its owner's banished pile
       let banished = false
       for (const pl of [0, 1] as PlayerId[]) {

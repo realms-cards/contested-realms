@@ -5,7 +5,6 @@ import { noteAddedToEnd, noteSeenAtEnd } from '../../../engine/knowledge'
 // 'At the start of your turn, look at your topmost site or spell. You may put it
 // on the bottom of its deck.'
 registerScript('Seer', {
-  turnTriggersFromCemetery: true, // its deck-peek needs no realm position → Vivien fires it from the cemetery
   startOfTurn: (ctx) => {
     const p = ctx.state.players[ctx.controller]
     const options: string[] = []

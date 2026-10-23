@@ -1,4 +1,5 @@
 import { registerScript, type EffectAPI } from '../registry'
+import type { KeywordGrant } from '../../../engine/keywords'
 import { pushLog, luckyChoiceIndex } from '../../../engine/effects'
 
 // 'At the start of your turn, Boggart gains a random mutation until the end of
@@ -22,6 +23,7 @@ function ribbleMutate(ctx: EffectAPI, roll: number): void {
   if (!self) return
   const names = ['Airborne', 'Ranged', 'Lethal', '+3 power']
   pushLog(ctx.state, ctx.controller, `The Boggart writhes — today it is ${names[roll]}!`)
+  const grants: KeywordGrant[] = ['airborne', { ranged: 1 }, 'lethal']
   if (roll === 3) ctx.addPower(self.id, 3, 'endOfTurn')
-  else ctx.grantKeyword(self.id, names[roll].toLowerCase(), 'endOfTurn')
+  else ctx.grantKeyword(self.id, grants[roll], 'endOfTurn')
 }

@@ -1,6 +1,7 @@
 import { registerScript } from '../registry'
 import { unitsAt } from '../../../engine/grid'
 import { pushLog } from '../../../engine/effects'
+import { artifactController } from '../../../engine/statics'
 
 // 'Destroy a minion or artifact you own or control. It explodes, dealing 3 damage
 // to each unit at its location.'
@@ -12,7 +13,7 @@ registerScript('Detonate', {
     const mine = Object.values(ctx.state.units)
       .filter((u) => !u.isAvatar && (u.controller === ctx.controller || owns(u.cardId))).map((u) => u.id)
     const arts = Object.values(ctx.state.artifacts)
-      .filter((a) => (a.carriedBy ? ctx.state.units[a.carriedBy]?.controller : a.conjuredBy) === ctx.controller || owns(a.cardId))
+      .filter((a) => artifactController(ctx.state, a) === ctx.controller || owns(a.cardId))
       .map((a) => a.id)
     const candidates = [...mine, ...arts]
     if (!candidates.length) return

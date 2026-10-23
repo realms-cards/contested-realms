@@ -1,6 +1,8 @@
 import { registerScript, type EffectAPI } from '../registry'
 import { getCard } from '../../db'
 import { noteAddedToEnd, noteSeenAtEnd } from '../../../engine/knowledge'
+import { cemeteryProtected, payZoneToll } from '../../../engine/statics'
+import type { PlayerId } from '../../../engine/types'
 
 // 'Ward / Once on your turn, you may banish a dead minion to look at your top
 // spell. You may put it at the bottom.'
@@ -10,15 +12,21 @@ registerScript('Clairvoyant', {
     label: 'Banish a dead minion → peek at your top spell',
     cost: {},
     oncePerTurn: true,
-    usableFromCemetery: true, // banishes a dead minion + peeks your top spell (cemetery/spellbook only, no self-position) → Vivien can do it from the grave
     effect: (ctx) => {
-      const p = ctx.state.players[ctx.controller]
-      const corpses = p.cemetery.filter((id) => getCard(ctx.state.cards[id].name).type === 'Minion')
+      // "a dead minion" is unqualified → a minion in EITHER cemetery counts
+      const corpses: string[] = []
+      for (const pid of [0, 1] as PlayerId[]) {
+        if (cemeteryProtected(ctx.state, pid, ctx.controller)) continue // Wormelow Tump
+        for (const id of ctx.state.players[pid].cemetery) {
+          if (getCard(ctx.state.cards[id].name).type === 'Minion') corpses.push(id)
+        }
+      }
       if (!corpses.length) return ctx.log('No dead minion to burn.')
+      if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
       if (corpses.length === 1) return clairvoyantBurn(ctx, corpses[0])
       // several corpses → the controller chooses which to banish
       ctx.ask(
-        { kind: 'chooseCards', title: 'Banish which dead minion?', data: { cards: corpses.map((id) => ctx.state.cards[id].name), pick: 1, upTo: false } },
+        { kind: 'chooseCards', title: 'Banish which dead minion?', data: { cards: corpses.map((id) => `${ctx.state.cards[id].name} (${ctx.state.players[ctx.state.cards[id].owner].name})`), pick: 1, upTo: false } },
         'burn',
         { corpseIds: corpses },
       )
@@ -46,10 +54,12 @@ registerScript('Clairvoyant', {
 // banish the chosen corpse, then offer the top-spell peek.
 function clairvoyantBurn(ctx: EffectAPI, corpseId: string) {
   const p = ctx.state.players[ctx.controller]
-  const idx = p.cemetery.indexOf(corpseId)
-  if (idx < 0) return
-  const [dead] = p.cemetery.splice(idx, 1)
-  p.banished.push(dead)
+  // the corpse may lie in either cemetery → banished to its owner's pile
+  const holder = ([0, 1] as PlayerId[]).find((pid) => ctx.state.players[pid].cemetery.includes(corpseId))
+  if (holder === undefined) return
+  const cem = ctx.state.players[holder].cemetery
+  cem.splice(cem.indexOf(corpseId), 1)
+  ctx.state.players[ctx.state.cards[corpseId].owner].banished.push(corpseId)
   const topId = p.spellbook[0]
   if (topId === undefined) return
   noteSeenAtEnd(ctx.state, ctx.controller, ctx.controller, 'spellbook', 'top', [topId])

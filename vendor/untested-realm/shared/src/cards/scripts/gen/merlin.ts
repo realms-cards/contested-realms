@@ -11,7 +11,6 @@ registerScript('Merlin', {
     key: 'foresee',
     label: 'Look at your next spell (cast it if magic)',
     cost: {},
-    usableFromCemetery: true, // only peeks/casts from your own spellbook; no activator position → usable from the grave
     effect: (ctx) => {
       const p = ctx.state.players[ctx.controller]
       const top = p.spellbook[0]

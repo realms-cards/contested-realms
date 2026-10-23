@@ -1,6 +1,7 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog } from '../../../engine/effects'
+import { payZoneToll } from '../../../engine/statics'
 
 // 'Genesis â†’ Conjure a broken Weapon or Armor here.'
 registerScript('Battlefield', {
@@ -15,6 +16,8 @@ registerScript('Battlefield', {
       }
     }
     if (!options.length) return
+    // the broken Weapon/Armor leaves a cemetery → Bureau of Occult Control toll
+    if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
     ctx.ask({ kind: 'chooseOption', title: 'Conjure which broken Weapon or Armor?', data: { options: [...new Set(options)] } }, 'raise')
   },
   conts: {

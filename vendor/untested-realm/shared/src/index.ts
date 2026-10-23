@@ -1,4 +1,5 @@
 export * from './engine/types'
+export * from './engine/keywords'
 export * from './engine/grid'
 export * from './engine/game'
 export * from './engine/setup'

@@ -12,7 +12,7 @@
 import type { GameState, PlayerId, Action, UnitState } from './types'
 import { getCard } from '../cards/db'
 import { avatarOf, occupiedSquares } from './grid'
-import { effAttack, cardSubtypesFor } from './statics'
+import { effAttack, cardSubtypesFor, artifactController } from './statics'
 import { affinity } from './casting'
 import { BY_ID, type AchvUnlock } from './achievements.catalog'
 
@@ -138,7 +138,7 @@ function detect(prev: GameState, next: GameState, actor: PlayerId, action: Actio
       if (total < 10) continue
       const mine =
         units.filter((u) => u.controller === seat).length +
-        arts.filter((a) => (a.carriedBy ? next.units[a.carriedBy]?.controller : a.conjuredBy) === seat).length +
+        arts.filter((a) => artifactController(next, a) === seat).length +
         auras.filter((a) => a.controller === seat).length
       if (mine >= 6) add('the-reunion', seat)
     }

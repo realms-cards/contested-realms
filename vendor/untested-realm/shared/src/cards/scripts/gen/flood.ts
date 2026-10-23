@@ -4,6 +4,8 @@ import { checkStateBased, applyFlood } from '../../../engine/effects'
 
 // 'Affected sites are flooded. They're water sites.' (2x2 aura)
 registerScript('Flood', {
+  // rubble floods too — flooded rubble becomes a body of water
+  auraFloodsSite: () => true,
   genesis: (ctx) => {
     const aura = ctx.state.auras[ctx.sourceId]
     if (!aura) return

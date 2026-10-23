@@ -12,7 +12,7 @@ registerScript('Blaze', {
     if (!t || !('unit' in t)) return
     const u = ctx.state.units[t.unit]
     if (!u) return
-    ctx.grantKeyword(u.id, 'movement +2', 'endOfTurn')
+    ctx.grantKeyword(u.id, { movement: 2 }, 'endOfTurn')
     ctx.state.flow = ctx.state.flow ?? {}
     ctx.state.flow.noIntercept = [...(ctx.state.flow.noIntercept ?? []), { unitId: u.id, turn: ctx.state.turn }]
     ctx.state.flow.blazeTrail = [...(ctx.state.flow.blazeTrail ?? []), { unitId: u.id, turn: ctx.state.turn, squares: [] }]

@@ -6,7 +6,7 @@ import { getScript, type DamageSource, type EffectAPI, type TargetRef, type Targ
 import type { GameState, PlayerId, Region, UnitState, SiteState, AuraState, Prompt, DeckName } from './types'
 import { isLocation } from './action-shape'
 import { avatarOf, siteAt, unitsAt, edgesConnected, aura2x2Squares, occupiedSquares, inBounds, GRID_W, GRID_H, squareLabel, nearbySquaresW, orthAdjacentWrapped } from './grid'
-import { affinity, effAttack, effDefence, effKeywords, canExistIn, siteSilenced, artifactSilenced, artScript, isEvilUnit, isEvilUnitIntrinsic, isDisabled, isUnmodifiable, silenceImmune, footprintAllTerrain, terrainAt, buildStaticGrantIndex, isVoidAt, protectedFromSites } from './statics'
+import { affinity, effAttack, effDefence, effKeywords, canExistIn, siteSilenced, artifactSilenced, artScript, isEvilUnit, isEvilUnitIntrinsic, isDisabled, isUnmodifiable, silenceImmune, footprintAllTerrain, terrainAt, buildStaticGrantIndex, isVoidAt, protectedFromSites, artifactController, artifactActor } from './statics'
 import { siteEntryAllowed, multiSquareDestSquares, oversizedTeleportPlacements } from './movement' // runtime-only use (teleport closure); import cycle is safe
 import { awardAchievement } from './achievements.catalog' // types-only module → no cycle
 import { noteAddedToEnd, noteSeenAtEnd, carryKnownTopIntoHand } from './knowledge'
@@ -867,7 +867,7 @@ export function resolvePrompt(state: GameState, promptId: string, player: Player
       if (!fn) { err = `No continuation ${prompt.cont}`; return }
       // __meta keeps magic-spell name routing and damage attribution alive
       // across chained prompts (Earthquake's swap loop, Ghostfire...)
-      const ctx = makeCtx(state, prompt.ctx.sourceId ?? '', prompt.ctx.controller, prompt.ctx.targets ?? [], prompt.ctx.at, prompt.ctx.extra, prompt.ctx.__meta)
+      const ctx = makeCtx(state, prompt.ctx.sourceId ?? '', prompt.ctx.controller, prompt.ctx.targets ?? [], prompt.ctx.at, prompt.ctx.extra, prompt.ctx.__meta, cardName)
       // Codex: a Ward breaks when its bearer is TARGETED by an opponent's spell or ability. A
       // triggered/activated ability that picks its object through a chooseTargets prompt (Tooth
       // Faeries' start-of-turn tap, and every similar effect) is such targeting: an enemy warded
@@ -1097,7 +1097,7 @@ function entityOwner(state: GameState, id: string): PlayerId | null {
   const u = state.units[id]
   if (u) return u.controller
   const a = state.artifacts[id]
-  if (a) return a.carriedBy ? (state.units[a.carriedBy]?.controller ?? null) : a.conjuredBy
+  if (a) return artifactController(state, a)
   return null
 }
 
@@ -2044,7 +2044,7 @@ function trackDeathAchievements(state: GameState, unit: UnitState, death: DeathR
     if (unit.name === 'Root Spider' && (unit.region === 'underground' || unit.region === 'underwater')) {
       for (const kid of death.creditIds) {
         const k = state.units[kid]
-        const grantedBurrow = (k?.modifiers ?? []).some((m) => m.kind === 'keyword' && !m.remove && /burrow/i.test(m.keyword ?? ''))
+        const grantedBurrow = (k?.modifiers ?? []).some((m) => m.kind === 'keyword' && !m.remove && m.keyword === 'burrowing')
         if (k && grantedBurrow) awardAchievement(state, 'all-just-for-this', k.controller)
       }
     }
@@ -2111,8 +2111,8 @@ export function emitEvent(
     if (s.controller !== null && handles(s.name) && !siteSilenced(state, s)) listeners.push({ id: s.id, name: s.name, controller: s.controller })
   }
   for (const a of Object.values(state.artifacts)) {
-    const controller = a.carriedBy ? state.units[a.carriedBy]?.controller : a.conjuredBy
-    if (controller !== undefined && handles(a.name) && !artifactSilenced(state, a)) listeners.push({ id: a.id, name: a.name, controller })
+    const controller = artifactActor(state, a) // an uncontrolled artifact only listens if its effect names no player
+    if (controller !== null && handles(a.name) && !artifactSilenced(state, a)) listeners.push({ id: a.id, name: a.name, controller })
   }
   for (const r of Object.values(state.auras)) if (handles(r.name)) listeners.push({ id: r.id, name: r.name, controller: r.controller })
   // some cards listen from the cemetery (Bone Rabble, Scourge Zombies)
@@ -3268,6 +3268,17 @@ export function checkStateBased(state: GameState): void {
         art.region = 'surface'
         changed = true
       }
+      // Subsurface terrain flip for GROUND artifacts too: the underground and underwater levels are the
+      // same subsurface, so a buried artifact becomes sunken when its site floods, and vice versa under
+      // Drought. (Artifacts never drown — they just follow the label. Carried ones ride their carrier.)
+      if (!art.carriedBy && (art.region === 'underground' || art.region === 'underwater')) {
+        const terrain = terrainAt(state, art.x, art.y)
+        const flipTo = terrain === 'water' ? 'underwater' : terrain === 'land' ? 'underground' : null
+        if (flipTo && art.region !== flipTo) {
+          art.region = flipTo
+          changed = true
+        }
+      }
     }
   }
   // Monuments that break from ABSORBED damage (Makeshift Barricade) settle at the OUTERMOST state check —
@@ -3293,7 +3304,7 @@ function settleAbsorbBreak(state: GameState): void {
     const absorbed = art.counters?.absorbed ?? 0
     if (absorbed <= 0) continue
     if (absorbed >= threshold) {
-      const owner = art.carriedBy ? state.units[art.carriedBy]?.controller : art.conjuredBy
+      const owner = artifactController(state, art)
       if (art.carriedBy) {
         const carrier = state.units[art.carriedBy]
         if (carrier) carrier.carrying = carrier.carrying.filter((id) => id !== art.id)
@@ -3350,7 +3361,7 @@ export function summonToken(state: GameState, name: string, owner: PlayerId, x: 
 function artifactCasterUnit(state: GameState, sourceId: string, controller: PlayerId): UnitState | undefined {
   const art = state.artifacts[sourceId]
   if (!art || artifactSilenced(state, art) || !getKeywords(art.name).spellcaster) return undefined
-  const ctrl = art.carriedBy ? state.units[art.carriedBy]?.controller : art.conjuredBy
+  const ctrl = artifactController(state, art)
   return {
     id: art.id, cardId: art.cardId, name: art.name,
     owner: state.cards[art.cardId]?.owner ?? controller, controller: ctrl ?? controller,
@@ -3382,7 +3393,15 @@ export function makeCtx(
   at?: { x: number; y: number; region?: Region },
   extra?: any,
   meta?: { kind: DamageSource['kind']; name?: string; elements?: string[] },
+  /** the card whose script this effect belongs to, for routing its follow-up prompts when the source has
+   *  already left play (resolvePrompt passes the name it parsed from the `script:<card>:<key>` cont). */
+  routeName?: string,
 ): EffectAPI {
+  // Resolved NOW, while the source is (usually) still in play: an effect that removes its own card and
+  // THEN asks something (Ferryman's Coin banishes itself, then asks which cemetery) must still route that
+  // prompt to its script — a lookup at ask-time finds nothing and the answer hit "No continuation script::…".
+  const routeCardName = state.units[sourceId]?.name ?? state.artifacts[sourceId]?.name ?? state.sites[sourceId]?.name
+    ?? state.auras[sourceId]?.name ?? state.cards[sourceId]?.name ?? routeName ?? ''
   // A spellcaster ARTIFACT (Dank Omphalos & other Omphaloi, Vivien-as-artifact) casts as a
   // pseudo-unit positioned at the artifact — so a spell that fires from `ctx.caster` (Magic
   // Missiles, Ball Lightning, any projectile) has a real origin instead of crashing on undefined.
@@ -3546,11 +3565,13 @@ export function makeCtx(
       // it, so a shove elsewhere in the same cast can't steal the choice.
       let shape = opts?.shape
       if (!push && (u.size === '2x2' || (u.extraSquares?.length ?? 0) > 0) && state.flow?.teleportPlace) {
-        const pl = state.flow.teleportPlace as { x: number; y: number; shape?: { dx: number; dy: number }[] }
+        const pl = state.flow.teleportPlace as { x: number; y: number; shape?: { dx: number; dy: number }[]; from?: { x: number; y: number } }
         delete state.flow.teleportPlace
         // only a placement the engine itself offers at this destination (raw actions could otherwise move
-        // the body anywhere, or reshape it); anything else falls back to the default placement
-        const legal = oversizedTeleportPlacements(state, u, { x, y })
+        // the body anywhere, or reshape it) — rotated about the anchor PART the player picked (`from`, which
+        // must be one of the body's squares); anything else falls back to the default placement
+        const from = pl?.from && Number.isInteger(pl.from.x) && Number.isInteger(pl.from.y) ? { x: pl.from.x, y: pl.from.y } : undefined
+        const legal = oversizedTeleportPlacements(state, u, { x, y }, from)
           .find((o) => o.x === pl?.x && o.y === pl?.y && JSON.stringify(o.shape ?? null) === JSON.stringify(pl.shape ?? null))
         if (legal) { x = legal.x; y = legal.y; shape = legal.shape }
       }
@@ -3735,8 +3756,8 @@ export function makeCtx(
       if (!art) return
       // artifact Deathrites fire when it breaks (e.g. Clay Golem)
       const script = getScript(art.name)
-      const artController = art.carriedBy ? state.units[art.carriedBy]?.controller ?? art.conjuredBy : art.conjuredBy
-      if (script?.deathrite) script.deathrite(makeCtx(state, art.id, artController, []))
+      const actor = artifactActor(state, art) // an uncontrolled artifact's deathrite benefits no one
+      if (script?.deathrite && actor !== null) script.deathrite(makeCtx(state, art.id, actor, []))
       if (!state.artifacts[artifactId]) return
       if (art.carriedBy) {
         const carrier = state.units[art.carriedBy]
@@ -3799,7 +3820,7 @@ export function makeCtx(
       // caster's (meta.name carries the spell name through cont chains). For a card
       // acting from a zone (hand/cemetery response spells — Valor, Dodge Roll), the
       // source isn't in play, so fall back to the card's own name by its id.
-      const cardName = meta?.name ?? source?.name ?? state.cards[sourceId]?.name ?? ''
+      const cardName = meta?.name ?? source?.name ?? routeCardName
       let data = prompt.data ?? {}
       // GENERALIZED direction-picker preview: ANY cardinal-direction chooseOption prompt (Snowball,
       // Lava Flow, Cone of Flame, Rampage, Rolling Boulder…) automatically gets each direction's
@@ -3827,7 +3848,7 @@ export function makeCtx(
       const r = luckyCandidates(state, controller, options)
       if (!r.choose) return r.payload
       const source = state.units[sourceId] ?? state.artifacts[sourceId] ?? state.sites[sourceId] ?? state.auras[sourceId]
-      const cardName = meta?.name ?? source?.name ?? ''
+      const cardName = meta?.name ?? source?.name ?? routeCardName
       pushPrompt(state, {
         player: r.chooser,
         kind: display === 'cards' ? 'chooseCards' : 'chooseOption',

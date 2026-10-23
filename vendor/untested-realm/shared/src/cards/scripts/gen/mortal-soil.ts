@@ -1,6 +1,7 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog, pushPrompt, toCemetery } from '../../../engine/effects'
+import { payZoneToll } from '../../../engine/statics'
 
 // ---------- site damage ----------
 
@@ -15,7 +16,11 @@ registerScript('Mortal Soil', {
     if (!aura.squares.some((s) => s.x === site.x && s.y === site.y)) return false // not an affected site
     const p = state.players[aura.controller]
     const minions = p.cemetery.filter((id) => getCard(state.cards[id].name).type === 'Minion')
-    if (minions.length === 0) {
+    // banishing from the cemetery is access → the Bureau of Occult Control tolls it; failing to pay
+    // means you can't banish, so the soil gives out just as with an empty cemetery
+    const tollUnpaid = minions.length > 0 && !payZoneToll(state, aura.controller)
+    if (tollUnpaid) pushLog(state, aura.controller, 'The Bureau of Occult Control demands (2) for cemetery access.')
+    if (minions.length === 0 || tollUnpaid) {
       // "If you can't, dispel this." — the soil gives out; the damage proceeds
       const card = state.cards[aura.cardId]
       if (card) toCemetery(state, card.id)

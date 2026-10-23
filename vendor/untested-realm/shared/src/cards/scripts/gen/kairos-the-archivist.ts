@@ -1,7 +1,6 @@
 import { registerScript } from '../registry'
 import { pushLog, newId, checkStateBased, sinkSquareIntoVoid } from '../../../engine/effects'
 import { siteAt } from '../../../engine/grid'
-import { cemeteryProtected } from '../../../engine/statics'
 import type { GameState, PlayerId, Region } from '../../../engine/types'
 
 /** Banishment is permanent: a card that has been banished is OUT OF THE GAME and is never restored. */
@@ -20,12 +19,13 @@ type ArtRec = { x: number; y: number; region: Region; conjuredBy: PlayerId; carr
 
 type AuraRec = { squares: { x: number; y: number }[]; controller: PlayerId; name: string }
 
-function removeFromZones(state: GameState, cardId: string, actor: PlayerId): void {
+/** The archive itself pulls the card back — no PLAYER accesses a zone, so neither the Bureau of Occult
+ *  Control's toll nor Wormelow Tump's seal applies (user ruling, 2026-10-21). The card always leaves the
+ *  zone it is in, so it can never be both restored and still in a cemetery. */
+function removeFromZones(state: GameState, cardId: string): void {
   for (const p of Object.values(state.players)) {
     // NB: p.banished is NOT here — banishment is permanent, the archive can't pull a card back from it.
     for (const zone of [p.hand, p.cemetery, p.spellbook, p.atlas]) {
-      // Wormelow Tump: an opponent's restore can't reach into a sealed cemetery
-      if (zone === p.cemetery && cemeteryProtected(state, p.id, actor)) continue
       const at = zone.indexOf(cardId)
       if (at >= 0) zone.splice(at, 1)
     }
@@ -84,7 +84,7 @@ registerScript('Kairos the Archivist', {
           pushLog(s, ctx.controller, `${there.name} is banished — the archive reclaims its square.`)
         }
       }
-      removeFromZones(s, cardId, ctx.controller)
+      removeFromZones(s, cardId)
       const siteId = newId(s, 's')
       s.sites[siteId] = { id: siteId, cardId, name: r.name, owner: r.owner, controller: r.controller, x: r.x, y: r.y, tapped: false, isRubble: false, flooded: r.flooded, ward: r.ward }
     }
@@ -98,7 +98,7 @@ registerScript('Kairos the Archivist', {
       }
       if (r.isAvatar) continue // a gone avatar means the game already ended
       if (isBanished(s, cardId)) continue // banished since the archive → permanently out, not restored
-      removeFromZones(s, cardId, ctx.controller)
+      removeFromZones(s, cardId)
       const unitId = newId(s, 'u')
       s.units[unitId] = {
         id: unitId, cardId, name: r.name, owner: s.cards[cardId]?.owner ?? r.controller, controller: r.controller,
@@ -124,7 +124,7 @@ registerScript('Kairos the Archivist', {
         continue
       }
       if (isBanished(s, cardId)) continue // banished since the archive → permanently out, not restored
-      removeFromZones(s, cardId, ctx.controller)
+      removeFromZones(s, cardId)
       const artId = newId(s, 'a')
       s.artifacts[artId] = {
         id: artId, cardId, name: r.name, conjuredBy: r.conjuredBy,
@@ -141,7 +141,7 @@ registerScript('Kairos the Archivist', {
         continue
       }
       if (isBanished(s, cardId)) continue // banished since the archive → permanently out, not restored
-      removeFromZones(s, cardId, ctx.controller)
+      removeFromZones(s, cardId)
       const auraId = newId(s, 'r')
       s.auras[auraId] = { id: auraId, cardId, name: r.name, controller: r.controller, squares: r.squares.map((q) => ({ ...q })) }
     }

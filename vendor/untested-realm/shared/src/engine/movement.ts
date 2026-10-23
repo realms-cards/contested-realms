@@ -63,7 +63,7 @@ export function multiSquareDestSquares(
   return out
 }
 
-export type TeleportPlacement = { x: number; y: number; shape?: { dx: number; dy: number }[]; squares: { x: number; y: number }[] }
+export type TeleportPlacement = { x: number; y: number; shape?: { dx: number; dy: number }[]; squares: { x: number; y: number }[]; from?: { x: number; y: number } }
 
 /** The DISTINCT, LEGAL placements a multi-square unit can be teleported to with the clicked square `to`
  *  as its ANCHOR (the spell validates `to` is in reach — e.g. Blink's "nearby") — the choices a player
@@ -74,8 +74,11 @@ export type TeleportPlacement = { x: number; y: number; shape?: { dx: number; dy
  *  Each placement carries the engine args: the anchor (x,y) and, for a rigid body, the rotated `shape`
  *  (offsets from the anchor; a 2x2 is size-based and converts to its top-left anchor instead — no shape).
  *  Symmetric/coincident rotations collapse to one entry; illegal ones (a part off-board or over void) are
- *  dropped. A single-square unit yields its one square. */
-export function oversizedTeleportPlacements(state: GameState, unit: UnitState, to: { x: number; y: number }): TeleportPlacement[] {
+ *  dropped. A single-square unit yields its one square.
+ *  `from` picks WHICH part of the body is the anchor that lands on `to` (the player chooses it first, then a
+ *  destination nearby that part, then the rotation); default: the unit's own anchor square. A `from` that
+ *  isn't one of the unit's squares yields no placement. */
+export function oversizedTeleportPlacements(state: GameState, unit: UnitState, to: { x: number; y: number }, from?: { x: number; y: number }): TeleportPlacement[] {
   const out: TeleportPlacement[] = []
   const seen = new Set<string>()
   const add = (x: number, y: number, shape: { dx: number; dy: number }[] | undefined) => {
@@ -84,14 +87,21 @@ export function oversizedTeleportPlacements(state: GameState, unit: UnitState, t
     const key = squares.map((s) => `${s.x},${s.y}`).sort().join('|')
     if (seen.has(key)) return
     seen.add(key)
-    out.push({ x, y, shape, squares })
+    out.push(from ? { x, y, shape, squares, from: { x: from.x, y: from.y } } : { x, y, shape, squares })
   }
   const is2x2 = unit.size === '2x2'
   if (!is2x2 && (unit.extraSquares?.length ?? 0) === 0) { add(to.x, to.y, undefined); return out } // single-square
 
+  const parts = occupiedSquares(unit)
+  const pivot = from ?? { x: unit.x, y: unit.y }
+  if (!parts.some((p) => p.x === pivot.x && p.y === pivot.y)) return out
+  // the body as offsets from the anchor PART, so that part is the one landing on `to` (a 2x2's part offset
+  // is taken modulo the board, so an edge-wrapped block under Magellan Globe still reads as 0/1)
+  const pdx = is2x2 ? (((pivot.x - unit.x) % GRID_W) + GRID_W) % GRID_W : 0
+  const pdy = is2x2 ? (((pivot.y - unit.y) % GRID_H) + GRID_H) % GRID_H : 0
   const base = is2x2
-    ? [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }]
-    : occupiedSquares(unit).map((s) => ({ dx: s.x - unit.x, dy: s.y - unit.y }))
+    ? [{ dx: 0, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }].map((o) => ({ dx: o.dx - pdx, dy: o.dy - pdy }))
+    : parts.map((s) => ({ dx: s.x - pivot.x, dy: s.y - pivot.y }))
   const rots: ((o: { dx: number; dy: number }) => { dx: number; dy: number })[] = [
     (o) => ({ dx: o.dx, dy: o.dy }),       // 0°
     (o) => ({ dx: -o.dy, dy: o.dx }),      // 90° CW

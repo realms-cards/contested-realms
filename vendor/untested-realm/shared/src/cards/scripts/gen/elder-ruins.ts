@@ -2,7 +2,7 @@ import { registerScript } from '../registry'
 import { killUnit, checkStateBased } from '../../../engine/effects'
 import { avatarOf, unitsAt } from '../../../engine/grid'
 import { collectionBanned } from '../../../engine/statics'
-import { castFromCollection, affordable } from '../../../engine/casting'
+import { castFromCollection, affordableWithToll } from '../../../engine/casting'
 
 // 'Sacrifice a minion here → Cast a Shoggoth submerged here from your collection.'
 registerScript('Elder Ruins', {
@@ -17,7 +17,7 @@ registerScript('Elder Ruins', {
       // let the player sacrifice a minion when the Shoggoth can't actually be cast
       if ((ctx.state.players[ctx.controller].collection['Shoggoth'] ?? 0) <= 0) return ctx.log('No Shoggoth in your collection.')
       if (collectionBanned(ctx.state, ctx.controller, 'Shoggoth')) return ctx.log('Every Shoggoth was banished by the Legion of Gall.')
-      if (!affordable(ctx.state, ctx.controller, 'Shoggoth', avatarOf(ctx.state, ctx.controller))) return ctx.log("You can't afford a Shoggoth.")
+      if (!affordableWithToll(ctx.state, ctx.controller, 'Shoggoth', avatarOf(ctx.state, ctx.controller))) return ctx.log("You can't afford a Shoggoth.")
       const offerings = unitsAt(ctx.state, self.x, self.y)
         .filter((u) => !u.isAvatar && u.controller === ctx.controller)
         .map((u) => u.id)

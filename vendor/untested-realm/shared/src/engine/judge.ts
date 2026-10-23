@@ -3,6 +3,7 @@
 // logged with the acting player's name.
 
 import { findCard, getKeywords } from '../cards/db'
+import { isStatusMarker, keywordLabel, toModifierKeyword } from './keywords'
 import type { GameState, JudgeOp, PlayerId, UnitState } from './types'
 import {
   pushLog,
@@ -22,7 +23,7 @@ import {
   toCemetery,
 } from './effects'
 import { avatarOf, inBounds, siteAt, squareLabel } from './grid'
-import { terrainAt } from './statics'
+import { terrainAt, artifactController } from './statics'
 import { syncCarried, detachFromCarrier } from './carrying'
 import { getScript } from '../cards/scripts/registry'
 
@@ -145,8 +146,11 @@ export function applyJudge(state: GameState, player: PlayerId, op: JudgeOp): str
     case 'keyword': {
       const u = state.units[op.unitId]
       if (!u) return 'No such unit.'
-      u.modifiers.push({ kind: 'keyword', keyword: op.keyword, duration: op.duration, turn: state.turn, sourcePlayer: player, remove: op.remove || undefined })
-      j(`${u.name} ${op.remove ? 'loses' : 'gains'} ${op.keyword} (${op.duration})`)
+      // replays recorded before typed keywords carry the keyword as text — convert it once, here
+      const keyword = toModifierKeyword(op.keyword)
+      if (keyword === undefined || isStatusMarker(keyword)) return 'Unknown keyword.'
+      u.modifiers.push({ kind: 'keyword', keyword, duration: op.duration, turn: state.turn, sourcePlayer: player, remove: op.remove || undefined })
+      j(`${u.name} ${op.remove ? 'loses' : 'gains'} ${keywordLabel(keyword)} (${op.duration})`)
       checkStateBased(state)
       return null
     }
@@ -506,7 +510,7 @@ export function applyJudge(state: GameState, player: PlayerId, op: JudgeOp): str
       for (const u of Object.values(state.units)) if (u.controller === op.player && u.tapped) { u.tapped = false; n++ }
       for (const s of Object.values(state.sites)) if (s.controller === op.player && s.tapped) { s.tapped = false; n++ }
       for (const a of Object.values(state.artifacts)) {
-        const controller = a.carriedBy ? state.units[a.carriedBy]?.controller ?? a.conjuredBy : a.conjuredBy
+        const controller = artifactController(state, a)
         if (controller === op.player && a.tapped) { a.tapped = false; n++ }
       }
       j(`untapped all of ${state.players[op.player].name}'s cards (${n})`)

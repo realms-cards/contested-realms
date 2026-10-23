@@ -2,6 +2,8 @@ import { registerScript, type EffectAPI } from '../registry'
 import { getCard } from '../../db'
 import { pushLog } from '../../../engine/effects'
 import { GRID_H, GRID_W, siteAt, unitsAt, aura2x2Squares, edgesConnected, squareLabel } from '../../../engine/grid'
+import { cemeteryProtected, payZoneToll } from '../../../engine/statics'
+import type { PlayerId } from '../../../engine/types'
 
 // 'Deal a dead minion to each site in a two-by-two area. Deal damage equal to
 //  each corpse's power to units there, then banish the corpses.'
@@ -31,13 +33,14 @@ registerScript('Corpse Explosion', {
       const idx = Array.isArray(choice) ? choice[0] : choice
       const cells = c.cells as { x: number; y: number }[]
       const n = c.n as number
-      const p = ctx.state.players[ctx.controller]
       if (typeof idx === 'number') {
         const cardId = (c.dead as string[])[idx]
-        if (cardId && p.cemetery.includes(cardId)) {
+        // the corpse lies in its owner's cemetery (either player's) → banished to its owner's pile
+        const owner = cardId ? ctx.state.players[ctx.state.cards[cardId].owner] : null
+        if (cardId && owner && owner.cemetery.includes(cardId)) {
           const power = getCard(ctx.state.cards[cardId].name).attack ?? 0
-          p.cemetery.splice(p.cemetery.indexOf(cardId), 1)
-          p.banished.push(cardId)
+          owner.cemetery.splice(owner.cemetery.indexOf(cardId), 1)
+          owner.banished.push(cardId)
           for (const u of unitsAt(ctx.state, cells[n].x, cells[n].y)) ctx.dealDamage({ unit: u.id }, power)
           pushLog(ctx.state, ctx.controller, `${ctx.state.cards[cardId].name} detonates for ${power} at ${squareLabel(cells[n].x, cells[n].y)}!`)
         }
@@ -49,11 +52,19 @@ registerScript('Corpse Explosion', {
 
 function dealCorpse(ctx: EffectAPI, cells: { x: number; y: number }[], n: number): void {
   if (n >= cells.length) return
-  const p = ctx.state.players[ctx.controller]
-  const dead = p.cemetery.filter((id) => getCard(ctx.state.cards[id].name).type === 'Minion')
+  // corpses come from ANY cemetery (FAQ: "taking minions from any cemetery")
+  const dead: string[] = []
+  for (const pid of [0, 1] as PlayerId[]) {
+    if (cemeteryProtected(ctx.state, pid, ctx.controller)) continue // Wormelow Tump
+    for (const id of ctx.state.players[pid].cemetery) {
+      if (getCard(ctx.state.cards[id].name).type === 'Minion') dead.push(id)
+    }
+  }
   if (!dead.length) return
+  // one Bureau of Occult Control toll covers the whole explosion — paid before the first corpse
+  if (n === 0 && !payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
   ctx.ask(
-    { kind: 'chooseCards', title: `Corpse for ${squareLabel(cells[n].x, cells[n].y)}? (skip to stop)`, data: { cards: dead.map((id) => ctx.state.cards[id].name), pick: 1, upTo: true } },
+    { kind: 'chooseCards', title: `Corpse for ${squareLabel(cells[n].x, cells[n].y)}? (skip to stop)`, data: { cards: dead.map((id) => `${ctx.state.cards[id].name} (${ctx.state.players[ctx.state.cards[id].owner].name})`), pick: 1, upTo: true } },
     'corpse',
     { cells, n, dead },
   )

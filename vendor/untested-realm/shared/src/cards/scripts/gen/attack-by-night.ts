@@ -17,7 +17,7 @@ registerScript('Attack by Night', {
         }
         u.carrying = []
       } else {
-        ctx.grantKeyword(u.id, 'strike first', 'endOfTurn')
+        ctx.grantKeyword(u.id, 'strikeFirst', 'endOfTurn')
       }
     }
     pushLog(ctx.state, ctx.controller, 'The night attack begins!')

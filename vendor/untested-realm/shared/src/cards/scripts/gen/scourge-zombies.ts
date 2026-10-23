@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { pushLog, effectSummonUnit } from '../../../engine/effects'
 import { siteAt } from '../../../engine/grid'
-import { effSubtypes, terrainAt } from '../../../engine/statics'
+import { effSubtypes, terrainAt, payZoneToll } from '../../../engine/statics'
 
 // 'Whenever an allied Mortal dies on land, you may summon Scourge Zombies from
 //  your cemetery to its location, tapped.'
@@ -23,6 +23,7 @@ registerScript('Scourge Zombies', {
       const p = ctx.state.players[ctx.controller]
       if (!yes || !p.cemetery.includes(ctx.sourceId)) return
       if (!siteAt(ctx.state, c.x as number, c.y as number)) return
+      if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
       p.cemetery.splice(p.cemetery.indexOf(ctx.sourceId), 1)
       const unitId = `u${ctx.state.nextId++}`
       // it enters the realm from the cemetery → Genesis fires (FAQ 1242). The summoned card is the

@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { effKeywords } from '../../../engine/statics'
+import { effKeywords, artifactController } from '../../../engine/statics'
 
 // "Enemies can't move to here on the ground." (Bailey, an artifact)
 // A forced PUSH/pull/drag is still ground movement (a step between surface sites — not Airborne, not
@@ -11,7 +11,7 @@ registerScript('Bailey', {
   entryFilter: (state, selfId, unit, from, to) => {
     const art = state.artifacts[selfId]
     if (!art) return true
-    const controller = art.carriedBy ? state.units[art.carriedBy]?.controller : art.conjuredBy
+    const controller = artifactController(state, art)
     if (unit.controller === controller) return true
     if (to.x !== art.x || to.y !== art.y || to.region !== 'surface') return true
     if (effKeywords(state, unit).airborne) return true // airborne enemies fly in — not "on the ground"

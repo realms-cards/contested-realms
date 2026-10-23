@@ -6,7 +6,7 @@ import { projectileCanHit, regionPresentAt } from '../../../engine/statics'
 // 'Bearer strikes first and has "Tap → Throw Rhongomyniad as a piercing
 //  projectile. Deal 3 damage to each hit unit."'
 registerScript('Rhongomyniad', {
-  bearerKeywords: ['strike first'],
+  bearerKeywords: ['strikeFirst'],
   abilities: [{
     key: 'hurl',
     label: 'Throw Rhongomyniad (piercing, 3 dmg each)',

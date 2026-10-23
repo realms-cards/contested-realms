@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { pushLog } from '../../../engine/effects'
 import { unitsAt } from '../../../engine/grid'
-import { collectionBanned, takeFromCollection, isUnmodifiable } from '../../../engine/statics'
+import { collectionBanned, takeFromCollection, isUnmodifiable, payZoneToll } from '../../../engine/statics'
 
 // '(W)(W)(W)(W) → Transform a minion here into a Horrible Hybrids from your collection.'
 registerScript('Gilman House', {
@@ -31,6 +31,7 @@ registerScript('Gilman House', {
       if (collectionBanned(ctx.state, ctx.controller, 'Horrible Hybrids')) {
         return pushLog(ctx.state, ctx.controller, 'Every Horrible Hybrids in the collection was banished by the Legion of Gall.')
       }
+      if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for collection access.')
       takeFromCollection(ctx.state, ctx.controller, 'Horrible Hybrids')
       const cardId = `c${ctx.state.nextId++}`
       ctx.state.cards[cardId] = { id: cardId, name: 'Horrible Hybrids', owner: u.owner }

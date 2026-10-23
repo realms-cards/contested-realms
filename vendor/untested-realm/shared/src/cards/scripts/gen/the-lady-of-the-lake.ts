@@ -2,6 +2,7 @@ import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog, effectSummonUnit, removeUnitFromRealm, returnToDeck } from '../../../engine/effects'
 import { shuffleDeck } from '../../../engine/knowledge'
+import { payZoneToll } from '../../../engine/statics'
 
 // 'Genesis → You may summon a Mortal or artifact from your cemetery to Lady of
 //  the Lake's location. If you do, shuffle her into her owner's spellbook.'
@@ -27,6 +28,7 @@ registerScript('The Lady of the Lake', {
       const self = ctx.state.units[ctx.sourceId]
       const p = ctx.state.players[ctx.controller]
       if (!self || !p.cemetery.includes(cardId)) return
+      if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
       p.cemetery.splice(p.cemetery.indexOf(cardId), 1)
       const name = ctx.state.cards[cardId].name
       const def = getCard(name)

@@ -1,5 +1,6 @@
 import { registerScript } from '../registry'
 import { unitsAt } from '../../../engine/grid'
+import { oversizedTeleportPlacements } from '../../../engine/movement'
 
 // 'Teleport any number of allies at one location to another location a chess
 // knight's move away. Draw a card.'
@@ -9,12 +10,13 @@ registerScript('Flanking Maneuver', {
     { what: 'square', count: 1, targeted: false, label: "a knight's move away" },
   ],
   // if a MULTI-SQUARE ally is in the stack being flanked, let the client offer its placement/rotation at
-  // the destination (ctx.teleport applies the choice via flow.teleportPlace to that oversized unit).
+  // the destination (ctx.teleport applies the choice via flow.teleportPlace to that oversized unit). Its
+  // part ON the chosen location is the anchor that lands a knight's move away.
   teleportPlacement: (state, targets) => {
     if (!('square' in targets[0]) || !('square' in targets[1])) return null
     const src = targets[0].square, dst = targets[1].square
     const u = unitsAt(state, src.x, src.y, src.region ?? 'surface').find((x) => x.size === '2x2' || (x.extraSquares?.length ?? 0) > 0)
-    return u ? { unitId: u.id, dest: { x: dst.x, y: dst.y } } : null
+    return u ? { unitId: u.id, dest: { x: dst.x, y: dst.y }, from: { x: src.x, y: src.y } } : null
   },
   onCast: (ctx) => {
     const [t1, t2] = ctx.targets
@@ -25,7 +27,14 @@ registerScript('Flanking Maneuver', {
     const srcRegion = t1.square.region ?? 'surface'
     const dstRegion = t2.square.region ?? srcRegion
     for (const u of unitsAt(ctx.state, t1.square.x, t1.square.y, srcRegion)) {
-      if (u.controller === ctx.controller) ctx.teleport(u.id, t2.square.x, t2.square.y, dstRegion)
+      if (u.controller !== ctx.controller) continue
+      // an oversized ally with no placement chosen (bot): its part here lands on the destination
+      const multi = u.size === '2x2' || (u.extraSquares?.length ?? 0) > 0
+      if (multi && !ctx.state.flow?.teleportPlace) {
+        const pl = oversizedTeleportPlacements(ctx.state, u, t2.square, t1.square)[0]
+        if (pl) ctx.state.flow.teleportPlace = { x: pl.x, y: pl.y, shape: pl.shape, from: pl.from }
+      }
+      ctx.teleport(u.id, t2.square.x, t2.square.y, dstRegion)
     }
     ctx.drawCard(ctx.controller)
   },

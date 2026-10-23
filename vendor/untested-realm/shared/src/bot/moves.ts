@@ -16,7 +16,7 @@ import type { Action, GameState, PlayerId, Region, UnitState } from '../engine/t
 import { applyAction, canActivate, actingSeatFor } from '../engine/game'
 import { reachableWithPaths } from '../engine/movement'
 import { canCast, legalSiteSquares, validateSummonAt, validateTarget } from '../engine/casting'
-import { grantedAbilities, effAttack, effDefence, effKeywords, isCarriableArtifact } from '../engine/statics'
+import { grantedAbilities, effAttack, effDefence, effKeywords, isCarriableArtifact, artifactController } from '../engine/statics'
 import { orthAdjacentWrapped, siteAt, GRID_W, GRID_H } from '../engine/grid'
 import { getCard } from '../cards/db'
 import { getScript } from '../cards/scripts/registry'
@@ -362,7 +362,7 @@ export function expandActions(state: GameState, player: PlayerId, opts?: { deadl
     ...Object.values(state.units).filter((u) => u.controller === me).map((u) => ({ id: u.id, name: u.name })),
     ...Object.values(state.sites).filter((s) => s.controller === me && !s.isRubble).map((s) => ({ id: s.id, name: s.name })),
     ...Object.values(state.artifacts)
-      .filter((a) => (a.carriedBy ? state.units[a.carriedBy]?.controller === me : a.conjuredBy === me))
+      .filter((a) => artifactController(state, a) === me)
       .map((a) => ({ id: a.id, name: a.name })),
   ]
   for (const src of sources) {

@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { nearbySquaresW, siteAt } from '../../../engine/grid'
-import { cardSubtypesFor } from '../../../engine/statics'
+import { cardSubtypesFor, payZoneToll } from '../../../engine/statics'
 import { effectSummonUnit } from '../../../engine/effects'
 import type { PlayerId } from '../../../engine/types'
 
@@ -17,6 +17,7 @@ registerScript('Carrionette', {
       }
     }
     if (!options.length) return ctx.log('No Undead to raise.')
+    if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
     ctx.ask({ kind: 'chooseOption', title: 'Raise which Undead?', data: { options: [...new Set(options)] } }, 'raise')
   },
   conts: {

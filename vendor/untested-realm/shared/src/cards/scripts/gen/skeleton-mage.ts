@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog } from '../../../engine/effects'
-import { cemeteryProtected } from '../../../engine/statics'
+import { cemeteryProtected, payZoneToll } from '../../../engine/statics'
 import { effectCastSpell } from '../../../engine/casting'
 import type { PlayerId } from '../../../engine/types'
 
@@ -35,6 +35,7 @@ registerScript('Skeleton Mage', {
       const owner = ctx.state.players[pick.owner]
       const at = owner.cemetery.indexOf(pick.cardId)
       if (at < 0) return
+      if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
       const name = ctx.state.cards[pick.cardId].name
       owner.cemetery.splice(at, 1)
       if (!ctx.state.cards[pick.cardId].isToken) owner.banished.push(pick.cardId) // "banishing it afterward"

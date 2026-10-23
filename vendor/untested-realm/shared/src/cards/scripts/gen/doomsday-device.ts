@@ -5,6 +5,7 @@ import { applyGrid, diamondCells } from '../multi-card-utils/apply-grid'
 // 'Enters with 6 counters, loses one at the end of each turn, then detonates:
 // 5x5 diamond [_,2,4,2,_ / 2,4,8,4,2 / 4,8,20,8,4 / 2,4,8,4,2 / _,2,4,2,_]'
 registerScript('Doomsday Device', {
+  actsUncontrolled: true, // names no player: works on the ground, uncontrolled
   genesis: (ctx) => {
     const art = ctx.state.artifacts[ctx.sourceId]
     if (art) art.counters = { fuse: 6 }

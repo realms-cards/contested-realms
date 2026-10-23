@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
-import { cardSubtypesFor } from '../../../engine/statics'
+import { cardSubtypesFor, payZoneToll } from '../../../engine/statics'
 import { pushLog } from '../../../engine/effects'
 
 // 'Genesis → Banish up to three cards from cemeteries. If any are Demons, this
@@ -20,6 +20,7 @@ registerScript('Redmane Hyena', {
     gnaw: (ctx, c, choice) => {
       const idxs = (Array.isArray(choice) ? choice : []).filter((i): i is number => typeof i === 'number')
       const pool = c.pool as string[]
+      if (idxs.length && !payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
       let demon = false
       for (const i of idxs.slice(0, 3)) {
         const cardId = pool[i]

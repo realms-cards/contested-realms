@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { opponent, pushLog } from '../../../engine/effects'
-import { cemeteryProtected } from '../../../engine/statics'
+import { cemeteryProtected, payZoneToll } from '../../../engine/statics'
 import { shuffleDeck } from '../../../engine/knowledge'
 
 // 'Name a spell. Search an opponent's hand, spellbook and cemetery for cards
@@ -15,10 +15,14 @@ registerScript('Feast for Crows', {
       const oppId = opponent(ctx.controller)
       const opp = ctx.state.players[oppId]
       let taken = 0
-      // Wormelow Tump can seal the cemetery against the crows
-      const zones = cemeteryProtected(ctx.state, oppId, ctx.controller)
-        ? [opp.hand, opp.spellbook]
-        : [opp.hand, opp.spellbook, opp.cemetery]
+      // Wormelow Tump can seal the cemetery against the crows; banishing from it is access, so
+      // the Bureau of Occult Control tolls it (only when the name is actually there to take)
+      let cemOpen = !cemeteryProtected(ctx.state, oppId, ctx.controller)
+      if (cemOpen && opp.cemetery.some((id) => ctx.state.cards[id]?.name === name) && !payZoneToll(ctx.state, ctx.controller)) {
+        pushLog(ctx.state, ctx.controller, 'The Bureau of Occult Control demands (2) for cemetery access.')
+        cemOpen = false
+      }
+      const zones = cemOpen ? [opp.hand, opp.spellbook, opp.cemetery] : [opp.hand, opp.spellbook]
       for (const zone of zones) {
         for (let i = zone.length - 1; i >= 0; i--) {
           if (ctx.state.cards[zone[i]]?.name === name) {

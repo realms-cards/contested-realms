@@ -1,6 +1,7 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { effectSummonUnit } from '../../../engine/effects'
+import { payZoneToll } from '../../../engine/statics'
 import type { PlayerId } from '../../../engine/types'
 
 // 'Voidwalk / Whenever Ghost Ship enters a site from the void, you may summon a
@@ -31,6 +32,7 @@ registerScript('Ghost Ship', {
       const p = ctx.state.players[pick.pid]
       const ci = p.cemetery.indexOf(pick.cardId)
       if (ci < 0) return
+      if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
       p.cemetery.splice(ci, 1)
       const cardId = pick.cardId
       const unitId = `u${ctx.state.nextId++}`

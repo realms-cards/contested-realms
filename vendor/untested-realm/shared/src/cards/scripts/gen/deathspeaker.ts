@@ -57,7 +57,6 @@ registerScript('Deathspeaker', {
     oncePerTurn: true,
     deferUse: true, // the turn's use is spent only when the echo SUMMONS — so you can back out of the
     // "which minion / where / genesis target" prompts freely until then (nothing is committed early)
-    usableFromCemetery: true, // banish/copy a dead minion + summon at a player-chosen square; no activator position → Vivien can do it from the grave
     // Gate the ability on there being a dead minion in EITHER cemetery. canActivate + the GUI
     // re-evaluate available() live (every render), so the button greys when both cemeteries hold
     // no minion and re-lights the instant one dies into either — "checked at every cemetery update".

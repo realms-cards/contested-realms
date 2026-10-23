@@ -3,7 +3,7 @@ import { getCard } from '../cards/db'
 import type { GameState, PlayerId } from './types'
 import { pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkStateBased, killUnit, deferTurnStep, tapUnit, noAtlasDrawChoice, recordManaGain, siteStillFlooded, beginAreaReveal, sealAbilityReveal, snapshotRealm, recordTouchedSites, turnFingerprint } from './effects'
 import { sitesOf, unitsOf, avatarOf, siteAt } from './grid'
-import { siteSilenced, artifactSilenced, siteDisabledByArtifact, canTap, isDisabled } from './statics'
+import { siteSilenced, artifactSilenced, siteDisabledByArtifact, canTap, isDisabled, artifactController, artifactActor } from './statics'
 import { playSite } from './casting'
 import { noteAddedToEnd } from './knowledge'
 
@@ -40,7 +40,7 @@ export function sourceMana(state: GameState, player: PlayerId): number {
     mana += extraOf(unit.name, unit.id)
   }
   for (const art of Object.values(state.artifacts)) {
-    const controller = art.carriedBy ? state.units[art.carriedBy]?.controller : art.conjuredBy
+    const controller = artifactController(state, art)
     if (controller !== player) continue
     mana += extraOf(art.name, art.id)
   }
@@ -160,8 +160,9 @@ export function beginTurn(state: GameState, player: PlayerId): void {
   }
   for (const site of sitesOf(state, player)) site.tapped = false
   for (const art of Object.values(state.artifacts)) {
-    const carrier = art.carriedBy ? state.units[art.carriedBy] : null
-    if (carrier ? carrier.controller === player : art.conjuredBy === player) art.tapped = false
+    // yours untap; an uncontrolled (ground, carriable) artifact belongs to no one, so it untaps every turn
+    const controller = artifactController(state, art)
+    if (controller === player || controller === null) art.tapped = false
   }
   p.usedAvatarSiteAbility = false
 
@@ -205,7 +206,7 @@ export function beginTurn(state: GameState, player: PlayerId): void {
     recordManaGain(state, unit.x, unit.y, unit.region, e) // Dryads / Finwife next to the enemy avatar
   }
   for (const art of Object.values(state.artifacts)) {
-    const controller = art.carriedBy ? state.units[art.carriedBy]?.controller : art.conjuredBy
+    const controller = artifactController(state, art)
     if (controller !== player) continue
     const e = extraOf(art.name, art.id)
     mana += e
@@ -308,8 +309,8 @@ function finishBeginTurn(state: GameState, player: PlayerId): void {
   }
   for (const art of Object.values(state.artifacts)) {
     const script = getScript(art.name)
-    const controller = art.carriedBy ? state.units[art.carriedBy]?.controller : art.conjuredBy
-    if (script?.startOfEachTurn && controller !== undefined && !artifactSilenced(state, art)) script.startOfEachTurn(makeCtx(state, art.id, controller, []), player)
+    const actor = artifactActor(state, art)
+    if (script?.startOfEachTurn && actor !== null && !artifactSilenced(state, art)) script.startOfEachTurn(makeCtx(state, art.id, actor, []), player)
   }
   checkStateBased(state)
   if ((state.phase as string) === 'over') return
@@ -487,9 +488,9 @@ function finishEndTurn(state: GameState, player: PlayerId): void {
     if (script?.endOfEveryTurn && !siteSilenced(state, site)) script.endOfEveryTurn(makeCtx(state, site.id, site.controller, []))
   }
   for (const art of Object.values(state.artifacts)) {
-    const controller = art.carriedBy ? state.units[art.carriedBy]?.controller : art.conjuredBy
+    const actor = artifactActor(state, art)
     const script = getScript(art.name)
-    if (script?.endOfEveryTurn && controller !== undefined && !artifactSilenced(state, art)) script.endOfEveryTurn(makeCtx(state, art.id, controller, []))
+    if (script?.endOfEveryTurn && actor !== null && !artifactSilenced(state, art)) script.endOfEveryTurn(makeCtx(state, art.id, actor, []))
   }
   // auras too — Wildfire moves + burns at the end of each turn (was never dispatched,
   // so Wildfire "did not move"). Snapshot ids first: a hook may add/remove auras.
@@ -662,7 +663,7 @@ function collectTurnTriggers(state: GameState, player: PlayerId, hook: 'startOfT
     if (!siteSilenced(state, site) && getScript(site.name)?.[hook]) refs.push({ kind: 'site', sourceId: site.id })
   }
   for (const art of Object.values(state.artifacts)) {
-    const controller = art.carriedBy ? state.units[art.carriedBy]?.controller : art.conjuredBy
+    const controller = artifactController(state, art)
     if (controller === player && getScript(art.name)?.[hook] && !artifactSilenced(state, art)) refs.push({ kind: 'artifact', sourceId: art.id })
   }
   for (const aura of Object.values(state.auras)) {
@@ -694,7 +695,7 @@ function runTurnTrigger(state: GameState, player: PlayerId, ref: TriggerRef, hoo
     if (s && s.controller === player && !siteSilenced(state, s)) { srcId = s.id; srcName = s.name; fire = () => getScript(s.name)?.[hook]?.(makeCtx(state, s.id, player, [])) }
   } else if (ref.kind === 'artifact') {
     const a = state.artifacts[ref.sourceId]
-    const controller = a?.carriedBy ? state.units[a.carriedBy]?.controller : a?.conjuredBy
+    const controller = a ? artifactController(state, a) : null
     if (a && controller === player && !artifactSilenced(state, a)) { srcId = a.id; srcName = a.name; fire = () => getScript(a.name)?.[hook]?.(makeCtx(state, a.id, player, [])) }
   } else if (ref.kind === 'aura') {
     const r = state.auras[ref.sourceId]

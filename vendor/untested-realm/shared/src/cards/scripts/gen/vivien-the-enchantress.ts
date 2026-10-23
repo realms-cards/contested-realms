@@ -1,4 +1,5 @@
 import { registerScript, getScript, type EffectAPI, type AbilityDef } from '../registry'
+import type { Element } from '../../../engine/types'
 import { getCard, getKeywords } from '../../db'
 import { pushLog, makeCtx, noAtlasDraw, drawCards } from '../../../engine/effects'
 import { awardAchievement } from '../../../engine/achievements.catalog'
@@ -88,7 +89,14 @@ function vivienZoneAbilities(state: GameState, cardId: string, owner: PlayerId, 
   for (const name of vivienUnitSourceNames(state)) {
     const fn = (getScript(name) as any)?.[hook] as ((s: GameState, c: string, o: PlayerId) => AbilityDef[]) | undefined
     if (!fn) continue
-    for (const a of fn(state, cardId, owner)) out.push({ ...a, label: `${a.label} (${name})`, contOwner: a.contOwner ?? name })
+    for (const a of fn(state, cardId, owner)) {
+      // Ghost Vivien — a dead Vivien activating a copied cemetery ability
+      const base = a.effect
+      const effect = hook === 'cemeteryAbilities' && base
+        ? (ctx: EffectAPI) => { awardAchievement(ctx.state, 'ghost-vivien', ctx.controller); return base(ctx) }
+        : base
+      out.push({ ...a, label: `${a.label} (${name})`, contOwner: a.contOwner ?? name, effect })
+    }
   }
   return out
 }
@@ -126,12 +134,12 @@ registerScript('Vivien the Enchantress', {
     if (self.silenced) return []
     let unrestricted = false
     let any = false
-    const els = new Set<string>()
+    const els = new Set<Element>()
     const consider = (kw: ReturnType<typeof effKeywords> | undefined) => {
       if (!kw?.spellcaster) return
       any = true
-      if (kw.spellcasterElements?.length) kw.spellcasterElements.forEach((e) => els.add(e))
-      else if (kw.spellcasterElement) els.add(kw.spellcasterElement)
+      if (kw.spellcasterElements?.length) kw.spellcasterElements.forEach((e) => els.add(e as Element))
+      else if (kw.spellcasterElement) els.add(kw.spellcasterElement as Element)
       else unrestricted = true
     }
     for (const u of Object.values(state.units)) {
@@ -143,25 +151,20 @@ registerScript('Vivien the Enchantress', {
     }
     if (!any) return []
     if (unrestricted || els.size === 0) return ['spellcaster']
-    return [`spellcaster:${[...els].join(',')}`]
+    return [{ addSpellcasterElements: [...els] }]
   },
   // Copies the ACTIVATED abilities of every Avatar and Spellcaster in the realm — units in play,
-  // spellcaster ARTIFACTS (Omphaloi), and spellcasters that act from a cemetery — plus the
+  // spellcaster ARTIFACTS (Omphaloi) — plus the
   // avatar's native site action. Never another Vivien. Abilities activate ON Vivien (ctx.sourceId
   // = her), so self-references resolve to her.
   grantsAbilities: (state, selfId, unit): AbilityDef[] => {
     if (unit.id !== selfId) return []
     const out: AbilityDef[] = []
-    const add = (name: string, fromCemetery = false) => {
+    const add = (name: string) => {
       if (name === 'Vivien the Enchantress') return // never copy another Vivien (FAQ)
       for (const a of getScript(name)?.abilities ?? []) {
         if (out.some((b) => b.key === a.key)) continue
-        // Ghost Vivien — activating an ability Vivien copied from a CEMETERY spellcaster
-        const base = a.effect
-        const effect = fromCemetery && base
-          ? (ctx: EffectAPI) => { awardAchievement(ctx.state, 'ghost-vivien', ctx.controller); return base(ctx) }
-          : base
-        out.push({ ...a, label: `${a.label} (${name})`, contOwner: a.contOwner ?? name, effect })
+        out.push({ ...a, label: `${a.label} (${name})`, contOwner: a.contOwner ?? name })
       }
     }
     for (const u of Object.values(state.units)) {
@@ -172,15 +175,7 @@ registerScript('Vivien the Enchantress', {
     for (const a of Object.values(state.artifacts)) {
       if (!artifactSilenced(state, a) && getKeywords(a.name).spellcaster) add(a.name)
     }
-    for (const p of state.players) {
-      const seen = new Set<string>()
-      for (const cid of p.cemetery) {
-        const nm = state.cards[cid]?.name
-        if (!nm || seen.has(nm)) continue
-        seen.add(nm)
-        if (getScript(nm)?.listensFromCemetery && getKeywords(nm).spellcaster) add(nm, true)
-      }
-    }
+    // (only sources IN THE REALM — a dead spellcaster's abilities aren't hers: "Spellcasters in the realm")
     // the avatar's native "Tap → play or draw a site" (synthesised, not a scripted ability)
     if (Object.values(state.units).some((u) => u.isAvatar && !getScript(u.name)?.noStandardSiteAction)) out.push(VIVIEN_SITE_ABILITY)
     return out
@@ -190,20 +185,10 @@ registerScript('Vivien the Enchantress', {
   // its minions must summon at HER square (separate from the Omphalos's own draw). Unit-source
   // hooks are re-run with sourceId = Vivien (safe: they read state.units[sourceId] = her).
   endOfTurn: (ctx) => {
+    // out of the realm she has only her sources' abilities that work from there (zone abilities);
+    // a realm turn trigger (Seer's peek, Xeraphine's bargain) is not one of them
     const self = ctx.state.units[ctx.sourceId]
-    if (!self) {
-      // from the cemetery she fires only LOCATION-INDEPENDENT source end-of-turn triggers; the
-      // Omphalos-style draw below needs her realm square, so it is skipped here.
-      if (!ctx.state.players.some((pl) => pl.cemetery.includes(ctx.sourceId))) return
-      const cemDone = new Set<string>()
-      for (const name of vivienUnitSourceNames(ctx.state)) {
-        if (!getScript(name)?.turnTriggersFromCemetery) continue
-        const hook = getScript(name)?.endOfTurn
-        if (hook && !cemDone.has(name)) { cemDone.add(name); hook(makeCtx(ctx.state, ctx.sourceId, ctx.controller, [])) }
-      }
-      return
-    }
-    if (self.silenced) return
+    if (!self || self.silenced) return
     const p = ctx.state.players[ctx.controller]
     const done = new Set<string>()
     for (const a of Object.values(ctx.state.artifacts)) {
@@ -227,13 +212,9 @@ registerScript('Vivien the Enchantress', {
   },
   startOfTurn: (ctx) => {
     const self = ctx.state.units[ctx.sourceId]
-    const cem = !self && ctx.state.players.some((pl) => pl.cemetery.includes(ctx.sourceId))
-    if (!self && !cem) return
-    if (self?.silenced) return
+    if (!self || self.silenced) return // realm turn triggers only work from the realm
     const done = new Set<string>()
     for (const name of vivienUnitSourceNames(ctx.state)) {
-      // from the cemetery she only fires LOCATION-INDEPENDENT turn triggers (Seer's deck peek)
-      if (cem && !getScript(name)?.turnTriggersFromCemetery) continue
       const hook = getScript(name)?.startOfTurn
       if (hook && !done.has(name)) { done.add(name); hook(makeCtx(ctx.state, ctx.sourceId, ctx.controller, [])) }
     }
@@ -282,17 +263,9 @@ registerScript('Vivien the Enchantress', {
   },
   // Zone-scoped activated abilities of realm sources, offered on HER card in that zone:
   handAbilities: (state, cardId, owner) => vivienZoneAbilities(state, cardId, owner, 'handAbilities'),
-  cemeteryAbilities: (state, cardId, owner) => {
-    const out = vivienZoneAbilities(state, cardId, owner, 'cemeteryAbilities')
-    // + each realm source's LOCATION-INDEPENDENT activated abilities (Savior's ward), which don't
-    //   need the activator on a square, so Vivien can use them straight from the cemetery.
-    for (const name of vivienUnitSourceNames(state)) {
-      for (const a of getScript(name)?.abilities ?? []) {
-        if (a.usableFromCemetery) out.push({ ...a, key: `${a.key}:${cardId}`, label: `${a.label} (${name})`, contOwner: a.contOwner ?? name })
-      }
-    }
-    return out
-  },
+  // Out of the realm she can use ONLY abilities that are themselves hand/cemetery/spellbook abilities
+  // (Grigori Rasputin's) — never a realm ability like Savior's ward, Seer's peek or Imposter's mask.
+  cemeteryAbilities: (state, cardId, owner) => vivienZoneAbilities(state, cardId, owner, 'cemeteryAbilities'),
   spellbookAbilities: (state, cardId, owner) => vivienZoneAbilities(state, cardId, owner, 'spellbookAbilities'),
   // Cast restrictions: she inherits each realm source's "where I can be cast" rule (Lugbog Cat's
   // "water sites only"), even when detrimental — every source's filter must pass.

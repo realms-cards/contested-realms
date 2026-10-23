@@ -1,4 +1,5 @@
 import { registerScript } from '../registry'
+import { payZoneToll } from '../../../engine/statics'
 import type { PlayerId } from '../../../engine/types'
 
 // 'Genesis → Banish two identical spells from cemeteries to draw a spell.'
@@ -15,6 +16,7 @@ registerScript('Sphinx Sarcophagus', {
   conts: {
     pair: (ctx, _c, choice) => {
       if (typeof choice !== 'string' || choice === '(none)') return
+      if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
       let banished = 0
       for (const p of ctx.state.players) {
         while (banished < 2) {

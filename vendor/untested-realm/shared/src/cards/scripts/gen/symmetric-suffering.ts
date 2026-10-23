@@ -1,6 +1,7 @@
 import { registerScript, type EffectAPI } from '../registry'
 import { killUnit, checkStateBased, opponent, toCemetery } from '../../../engine/effects'
 import type { PlayerId } from '../../../engine/types'
+import { artifactController } from '../../../engine/statics'
 
 // 'Sacrifice up to one minion, artifact, and aura. Your opponent must sacrifice the same.'
 registerScript('Symmetric Suffering', {
@@ -54,7 +55,7 @@ function sufferNext(ctx: EffectAPI, who: PlayerId, done: { minion: boolean; arti
     done = { ...done, minion: true }
   }
   if (!done.artifact) {
-    const mine = Object.values(state.artifacts).filter((a) => (a.carriedBy ? state.units[a.carriedBy]?.controller : a.conjuredBy) === who)
+    const mine = Object.values(state.artifacts).filter((a) => artifactController(state, a) === who)
     if (mine.length && (who === ctx.controller || kinds.includes('artifact'))) {
       ctx.ask({ kind: 'chooseOption', title: `${state.players[who].name}: sacrifice which artifact?`, data: { options: [...mine.map((a) => a.id), ...(who === ctx.controller ? ['(none)'] : [])] }, player: who }, 'pickArtifact', { who, done, kinds })
       return

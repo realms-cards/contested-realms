@@ -3,6 +3,7 @@ import { siteAt } from '../../../engine/grid'
 
 // "At the end of their turn, this site's controller loses life equal to their unspent mana."
 registerScript('Nadir Seed', {
+  actsUncontrolled: true, // names no player: works on the ground, uncontrolled
   endOfEveryTurn: (ctx) => {
     const art = ctx.state.artifacts[ctx.sourceId]
     if (!art) return

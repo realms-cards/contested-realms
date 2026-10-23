@@ -1,5 +1,6 @@
 import { registerScript } from '../registry'
 import { pushLog } from '../../../engine/effects'
+import { artifactController } from '../../../engine/statics'
 
 // 'If one or more allies here would take damage, prevent it. If the damage was
 //  3 or more, the barricade breaks.'
@@ -14,7 +15,7 @@ registerScript('Makeshift Barricade', {
     const art = state.artifacts[selfId]
     // "allies here" includes your Avatar — it's a unit and an ally, so the Barricade shields it too.
     if (!art || amount <= 0) return amount
-    const controller = art.carriedBy ? state.units[art.carriedBy]?.controller : art.conjuredBy
+    const controller = artifactController(state, art)
     if (victim.controller !== controller) return amount
     if (victim.x !== art.x || victim.y !== art.y || victim.region !== art.region) return amount
     art.counters = art.counters ?? {}

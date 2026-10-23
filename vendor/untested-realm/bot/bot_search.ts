@@ -99,6 +99,9 @@ export interface SearchConfig {
   /** also consider casting a MAGIC from my Spellcaster minions, not just my avatar — for magics whose reach
    *  depends on where they're cast from (a target nearby/adjacent/here the caster, or a projectile). ON. */
   minionCasters: boolean
+  /** transposition table: reuse a subtree already searched when a different move ORDER reaches the same
+   *  position at the same depth (A-then-B ≡ B-then-A). Exact — see `ttKey`. ON; off only for A/B checks. */
+  transpositions?: boolean
   weights: EvalWeights
   /** anti-loop ward (driver-fed): action keys (botActionKey) that already proved score-neutral this
    *  turn. They're excluded from the ROOT of the search + the plan replay, so the bot can't re-pick a
@@ -122,6 +125,7 @@ export const DEFAULT_SEARCH: SearchConfig = {
   oppLookahead: 1,
   oppLookaheadWidth: 3,
   minionCasters: true,
+  transpositions: true,
   weights: DEFAULT_WEIGHTS,
 }
 
@@ -290,6 +294,55 @@ type Continuation = { seat: PlayerId; turn: number; path: string; state: GameSta
 /** per seat, so one bot seat's search never wipes the other's tree (bot-vs-bot in one worker). */
 const TREES: Map<string, SubResult>[] = [new Map(), new Map()]
 let TREE = TREES[0]
+
+// ── transposition table ─────────────────────────────────────────────────────
+// TREE is keyed by the action PATH, so two move orders reaching one position are searched twice. TT keys
+// by the POSITION itself (+ depth, which sets the beam width and horizon below it). A subtree's value is
+// `g(position, depth) + drawBonus` — the draw bonus is threaded additively and never steers a choice — so
+// the entry stores the value WITHOUT the bonus and a hit re-adds the current line's. Same lifetime and
+// exactness rule as TREE (one turn plan per seat; stored only when no budget/deadline bail fired inside).
+// Any difference between two positions — even key order or a minted id — just misses (safe); only a
+// 53-bit hash collision could give a false hit, and that would cost search quality, never game state.
+type TTEntry = { v: number; plan: PlanNode }
+const TTS: Map<string, TTEntry>[] = [new Map(), new Map()]
+let TT = TTS[0]
+let TT_HITS = 0
+
+/** cyrb53: a fast, well-mixed 53-bit string hash */
+function hash53(str: string): number {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i)
+    h1 = Math.imul(h1 ^ ch, 2654435761)
+    h2 = Math.imul(h2 ^ ch, 1597334677)
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0)
+}
+
+/** DISPLAY-ONLY flow entries: animation / reveal captions the engine writes for clients and never reads
+ *  back for rules (each is only read by its own writer, to bump its counter). They record the ORDER things
+ *  happened in, so leaving them in the key would make every transposition miss. */
+const COSMETIC_FLOW = [
+  'areaReveal', 'battleReveal', 'manaGains', 'manaGainSeq', 'levelUps', 'levelUpSeq', 'ticks', 'tickSeq',
+  'moveAnim', 'moveSeq', 'teleportAnim', 'teleSeq', 'rip', 'ripSeq', 'reveals', 'revealN',
+] as const
+
+/** The position key. Everything in the state can steer the rest of the turn EXCEPT the message log (only
+ *  read for cosmetic battle/animation captions), the sync `version` counter and the COSMETIC_FLOW
+ *  entries — all of which differ between move orders without changing the game. */
+function ttKey(state: GameState, depth: number): string {
+  const flow: Record<string, unknown> = { ...(state.flow ?? {}) }
+  for (const k of COSMETIC_FLOW) delete flow[k]
+  // derived caches, rebuilt whenever their generation stamp is stale — never change a rule outcome
+  delete flow.disablerIndex
+  delete flow.staticGrantIndex
+  // where the last mover stepped from: only a "first attack OUT of this site" site (Dread Thicket) reads it
+  if (!Object.values(state.sites).some((s) => !s.isRubble && getScript(s.name)?.siteMakesAttackUndefended)) delete flow.lastStepFrom
+  const json = JSON.stringify({ ...state, log: undefined, version: 0, flow })
+  return `${depth}:${hash53(json)}:${json.length}`
+}
 /** where each seat's next decision continues after a cut-off: the chosen root child, as the search saw it. */
 const CONTS: (Continuation | null)[] = [null, null]
 /** depth of the current search's root (0 for a fresh turn plan; deeper when continuing a cut-off tree). */
@@ -551,8 +604,20 @@ function search(state: GameState, me: PlayerId, cfg: SearchConfig, deadline: num
   const hit = TREE.get(path)
   // a root filtered by the anti-loop ward isn't the node the earlier pass cached (that one wasn't filtered)
   if (hit && !(depth === ROOT_DEPTH && cfg.banned?.size)) return hit
+  // the root is never served from TT (it may be ward-filtered, and it's the one node always searched)
+  const key = cfg.transpositions && depth !== ROOT_DEPTH ? ttKey(state, depth) : null
+  const t = key ? TT.get(key) : undefined
+  if (t) {
+    TT_HITS++
+    const r = { val: t.v + drawBonus, plan: t.plan }
+    TREE.set(path, r)
+    return r
+  }
   const r = searchNode(state, me, cfg, deadline, depth, drawBonus, path)
-  if (NODES < cfg.nodeBudget && Date.now() <= deadline) TREE.set(path, r)
+  if (NODES < cfg.nodeBudget && Date.now() <= deadline) {
+    TREE.set(path, r)
+    if (key) TT.set(key, { v: r.val - drawBonus, plan: r.plan })
+  }
   return r
 }
 
@@ -871,8 +936,10 @@ export function searchBotAction(state: GameState, me: PlayerId, cfg: SearchConfi
   const cont = findContinuation(state, me, deadline)
   CONTS[me] = null
   ROOT_PICK = null
-  if (!cont) TREES[me] = new Map()
+  if (!cont) { TREES[me] = new Map(); TTS[me] = new Map() }
   TREE = TREES[me]
+  TT = TTS[me]
+  TT_HITS = 0
   ROOT_DEPTH = cont ? cont.depth : 0
   // search on the fair copy (hidden information); the chosen action is applied to the REAL state by the
   // caller, and replay re-validates against it.
@@ -882,7 +949,7 @@ export function searchBotAction(state: GameState, me: PlayerId, cfg: SearchConfi
   PLAN = plan; PLAN_SEAT = me; PLAN_TURN = state.turn; PLAN_KNOWN = new Set(state.players[me].hand)
   if (typeof process !== 'undefined' && process.env.SEARCH_DEBUG) {
     // eslint-disable-next-line no-console
-    console.error(`t${state.turn} plan depth=${planDepth(plan)} nodes=${NODES} took=${Date.now() - start}ms budget=${cfg.timeBudgetMs} timedOut=${TIMED_OUT}${cont ? ` continued=d${cont.depth}${cont.answered ? '+answer' : ''}` : ''} cached=${TREE.size}`)
+    console.error(`t${state.turn} plan depth=${planDepth(plan)} nodes=${NODES} took=${Date.now() - start}ms budget=${cfg.timeBudgetMs} timedOut=${TIMED_OUT}${cont ? ` continued=d${cont.depth}${cont.answered ? '+answer' : ''}` : ''} cached=${TREE.size} tt=${TT.size}/${TT_HITS}hits`)
   }
   const a = advancePlan(state, me)
   // a partial (timed-out) tree isn't trustworthy past its first action — play that move, then drop the
@@ -950,6 +1017,19 @@ function planDepth(p: PlanNode): number {
 }
 
 export const searchBotNeedsToAct = botNeedsToAct
+
+/** the last planning search's counters + plan (tests / A-B checks). */
+export function lastSearchStats(): { nodes: number; ttHits: number; ttSize: number; timedOut: boolean; plan: PlanNode | null } {
+  return { nodes: NODES, ttHits: TT_HITS, ttSize: TT.size, timedOut: TIMED_OUT, plan: PLAN }
+}
+
+/** forget every cached plan / tree / continuation, so the next call plans from scratch (tests / A-B checks). */
+export function resetSearchState(): void {
+  PLAN = null; PLAN_SEAT = null; PLAN_TURN = -1
+  CONTS[0] = CONTS[1] = null
+  TREES[0] = new Map(); TREES[1] = new Map()
+  TTS[0] = new Map(); TTS[1] = new Map()
+}
 
 /** exported for tests: the fair copy and the point-of-view position signature. */
 export { fairView, sig as fairSignature }

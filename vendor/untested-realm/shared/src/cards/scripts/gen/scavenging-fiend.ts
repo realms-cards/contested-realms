@@ -1,5 +1,6 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
+import { payZoneToll } from '../../../engine/statics'
 
 // 'Genesis → Conjure a broken artifact to this location.'
 registerScript('Scavenging Fiend', {
@@ -11,6 +12,8 @@ registerScript('Scavenging Fiend', {
       }
     }
     if (!options.length) return
+    // the broken artifact leaves a cemetery → Bureau of Occult Control toll
+    if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
     ctx.ask({ kind: 'chooseOption', title: 'Scavenge which broken artifact?', data: { options: [...new Set(options)] } }, 'scavenge')
   },
   conts: {

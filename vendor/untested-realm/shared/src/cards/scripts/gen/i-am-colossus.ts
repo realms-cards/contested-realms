@@ -1,6 +1,7 @@
 import { registerScript, type EffectAPI } from '../registry'
 import { getCard } from '../../db'
 import { pushLog } from '../../../engine/effects'
+import { payZoneToll } from '../../../engine/statics'
 
 // 'You may banish minions under your control, or from your hand or cemetery,
 //  to help cast the Colossus. It costs (1) less to cast for each.'
@@ -50,6 +51,7 @@ registerScript('I Am Colossus!', {
       for (const zone of [p.hand, p.cemetery]) {
         const at = zone.indexOf(id)
         if (at >= 0) {
+          if (zone === p.cemetery && !payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
           p.banished.push(zone.splice(at, 1)[0])
           colossusCredit(ctx)
           return

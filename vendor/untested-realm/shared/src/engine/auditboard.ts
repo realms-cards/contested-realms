@@ -24,6 +24,7 @@ import { newId } from './effects'
 import { starterDecks } from '../cards/starterDecks'
 import { allCards, getCard } from '../cards/db'
 import { getScript } from '../cards/scripts/registry'
+import { isCarriableArtifact } from './statics'
 import type { GameState, PlayerId } from './types'
 import type { DeckList } from './decks'
 
@@ -251,10 +252,16 @@ export function placeInPlay(g: GameState, name: string): string | null {
   if (def.type === 'Artifact') {
     const id = `fza${g.nextId++}`; const cid = `fz${g.nextId++}`
     g.cards[cid] = { id: cid, name, owner: 0 } as any
-    // standalone artifacts sit on a site square — place it at (4,3) (the site spot) so
-    // it renders as a ground artifact in the client (the engine ignores x/y for a
-    // standalone artifact's activation, so audit_playable is unaffected).
-    g.artifacts[id] = { id, cardId: cid, name, owner: 0, conjuredBy: 0, x: 4, y: 3, region: 'surface', carriedBy: null, tapped: false, counters: {} } as any
+    // Monuments/Automatons sit on a site square — place it at (4,3) (the site spot) so it renders as
+    // a ground artifact in the client. A CARRIABLE artifact on the ground is uncontrolled (nobody can
+    // use it), so it is handed to a bearer minion of player 0 on that square instead.
+    const bearer = isCarriableArtifact(name) ? newId(g, 'u') : null
+    if (bearer) {
+      const bcid = `fz${g.nextId++}`
+      g.cards[bcid] = { id: bcid, name: 'Bone Jumble', owner: 0 } as any
+      g.units[bearer] = { id: bearer, cardId: bcid, name: 'Bone Jumble', owner: 0, controller: 0, isAvatar: false, x: 4, y: 3, region: 'surface', tapped: false, damage: 0, enteredTurn: -1, modifiers: [], carrying: [id], carryingUnits: [], usedThisTurn: {} } as any
+    }
+    g.artifacts[id] = { id, cardId: cid, name, owner: 0, conjuredBy: 0, x: 4, y: 3, region: 'surface', carriedBy: bearer, tapped: false, counters: {} } as any
     return id
   }
   return null

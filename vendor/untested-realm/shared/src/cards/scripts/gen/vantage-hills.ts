@@ -6,6 +6,6 @@ registerScript('Vantage Hills', {
   siteGrantsKeywords: (state, site, unit) => {
     if (unit.x !== site.x || unit.y !== site.y || unit.region !== 'surface') return []
     const printed = getKeywords(unit.name).ranged
-    return printed ? [`ranged ${printed + 1}`] : []
+    return printed ? [{ ranged: printed + 1 }] : []
   },
 })

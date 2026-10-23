@@ -6,7 +6,7 @@ import { isEvilU } from '../multi-card-utils/is-evil-u'
 //  following they are: Evil, artifact bearers, spellcasters, voidwalkers,
 //  submergers, burrowers, and Frogs.'
 registerScript('Peacemaker Arbalest', {
-  bearerKeywords: ['ranged'],
+  bearerKeywords: [{ ranged: 1 }],
   damageModifier: (state, selfId, victim, amount, source) => {
     if ((source?.kind !== 'strike' && source?.kind !== 'projectile') || !source.attackerId) return amount
     const art = state.artifacts[selfId]

@@ -1,7 +1,7 @@
 import { registerScript, getScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog } from '../../../engine/effects'
-import { collectionNames, takeFromCollection } from '../../../engine/statics'
+import { collectionNames, takeFromCollection, payZoneToll } from '../../../engine/statics'
 
 // 'You can play an Exceptional site from your collection here, banishing this site.'
 registerScript('Ersatz Platz', {
@@ -24,6 +24,7 @@ registerScript('Ersatz Platz', {
       const def = getCard(name)
       if (def.type !== 'Site' || def.rarity !== 'Exceptional') return
       if ((ctx.state.players[ctx.controller].collection[name] ?? 0) <= 0) return // must own it
+      if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for collection access.')
       takeFromCollection(ctx.state, ctx.controller, name)
       const old = ctx.state.cards[self.cardId]
       if (old && !old.isToken) ctx.state.players[old.owner].banished.push(old.id)

@@ -2,7 +2,7 @@
 
 import { type EffectAPI } from '../registry'
 import { GRID_W, GRID_H, unitsAt, siteAt, squareLabel } from '../../../engine/grid'
-import { effAttack, collectionNames, takeFromCollection } from '../../../engine/statics'
+import { effAttack, collectionNames, takeFromCollection, payZoneToll } from '../../../engine/statics'
 import { mulberry32 } from '../../../engine/rng'
 import { pushLog } from '../../../engine/effects'
 import { awardAchievement } from '../../../engine/achievements.catalog'
@@ -93,6 +93,7 @@ export function applyLanding(ctx: EffectAPI, minionId: string, landing: { x: num
 /** take one copy of `name` from the caster's collection into their hand (no shared-log name leak). */
 export function curiosaDraw(ctx: EffectAPI, name: string): void {
   if (!collectionNames(ctx.state, ctx.controller).includes(name)) return
+  if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for collection access.')
   takeFromCollection(ctx.state, ctx.controller, name)
   const cardId = `c${ctx.state.nextId++}`
   ctx.state.cards[cardId] = { id: cardId, name, owner: ctx.controller }

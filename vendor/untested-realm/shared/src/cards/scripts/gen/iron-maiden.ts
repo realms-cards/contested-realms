@@ -5,6 +5,7 @@ import { pushLog } from '../../../engine/effects'
 // 'Whenever a nearby Avatar draws a card, they lose life equal to the number of
 // cards they've drawn this turn.'
 registerScript('Iron Maiden', {
+  actsUncontrolled: true, // names no player: works on the ground, uncontrolled
   onCardDrawn: (ctx, player) => {
     const art = ctx.state.artifacts[ctx.sourceId]
     if (!art) return

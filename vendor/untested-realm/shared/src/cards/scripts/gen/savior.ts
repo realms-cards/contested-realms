@@ -7,7 +7,6 @@ registerScript('Savior', {
     key: 'save',
     label: '① → Ward a minion summoned this turn',
     cost: { mana: 1 },
-    usableFromCemetery: true, // wards a summoned minion regardless of where the Savior is → Vivien can do it from the cemetery
     targets: [{
       what: 'minion', count: 1, targeted: false, label: 'a minion summoned this turn',
       filter: (state, u) => u.enteredTurn === state.turn,

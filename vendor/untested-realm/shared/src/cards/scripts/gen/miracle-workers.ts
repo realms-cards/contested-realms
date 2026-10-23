@@ -1,6 +1,7 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog } from '../../../engine/effects'
+import { payZoneToll } from '../../../engine/statics'
 import type { PlayerId } from '../../../engine/types'
 
 // 'Genesis → You may return a minion that died this turn from your cemetery to your hand.'
@@ -27,6 +28,7 @@ registerScript('Miracle Workers', {
       const p = ctx.state.players[ctx.controller]
       const at = p.cemetery.indexOf(id)
       if (at >= 0) {
+        if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
         p.cemetery.splice(at, 1)
         p.hand.push(id)
         pushLog(ctx.state, ctx.controller, `${ctx.state.cards[id].name} is miraculously restored.`)

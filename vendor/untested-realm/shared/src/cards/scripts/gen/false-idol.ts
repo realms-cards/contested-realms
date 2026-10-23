@@ -4,6 +4,7 @@ import type { PlayerId } from '../../../engine/types'
 
 // 'Whenever a nearby minion taps, its opponent draws a spell.'
 registerScript('False Idol', {
+  actsUncontrolled: true, // names no player: works on the ground, uncontrolled
   onUnitTapped: (ctx, tapped) => {
     const art = ctx.state.artifacts[ctx.sourceId]
     if (!art || tapped.isAvatar) return

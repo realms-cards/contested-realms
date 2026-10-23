@@ -96,7 +96,13 @@ with_timeout() {
 # $1 = checkout, $2 = vitest config, $3 = log file
 run_vitest() { cd "$1/packages/shared" && exec "$WORK/node_modules/.bin/vitest" run --config "$2" --root . > "$3" 2>&1; }
 # $1 = checkout, $2 = fuzzer name, $3 = log file
-run_fuzzer() { cd "$1" && exec "$ROOT/node_modules/.bin/tsx" "scripts/$2.ts" > "$3" 2>&1; }
+# The clone has no tsconfig of its own at the root, so tsx would walk up to OURS — whose path alias
+# sends `@sorcery/shared` to vendor/, i.e. the bot would run against the engine we vendored last
+# time, not the commit being checked. An empty config keeps every import inside the checkout.
+run_fuzzer() {
+  echo '{}' > "$3.tsconfig.json"
+  cd "$1" && TSX_TSCONFIG_PATH="$3.tsconfig.json" exec "$ROOT/node_modules/.bin/tsx" "scripts/$2.ts" > "$3" 2>&1
+}
 
 # Run upstream's own checks in directory $1. Prints a one-line summary on success.
 run_checks() {

@@ -49,6 +49,7 @@ import {
   actingSeatFor,
   cloneState,
   underEnemySiteEater,
+  artifactController,
 } from '@sorcery/shared'
 
 export function botNeedsToAct(state: GameState, me: PlayerId): boolean {
@@ -989,8 +990,8 @@ function magicIsBeneficial(state: GameState, me: PlayerId, action: Action): bool
   const allyUnitsB = Object.values(state.units).filter((u) => u.controller === me).length
   const allyUnitsA = Object.values(after.units).filter((u) => u.controller === me).length
   if (allyUnitsA > allyUnitsB) return true
-  const allyArtB = Object.values(state.artifacts).filter((a) => (a.carriedBy ? state.units[a.carriedBy]?.controller : a.conjuredBy) === me).length
-  const allyArtA = Object.values(after.artifacts).filter((a) => (a.carriedBy ? after.units[a.carriedBy]?.controller : a.conjuredBy) === me).length
+  const allyArtB = Object.values(state.artifacts).filter((a) => artifactController(state, a) === me).length
+  const allyArtA = Object.values(after.artifacts).filter((a) => artifactController(after, a) === me).length
   if (allyArtA > allyArtB) return true
   const myAuraB = Object.values(state.auras).filter((r) => r.controller === me).length
   const myAuraA = Object.values(after.auras).filter((r) => r.controller === me).length
@@ -1017,7 +1018,7 @@ function magicIsBeneficial(state: GameState, me: PlayerId, action: Action): bool
     if (r.controller === opp && !after.auras[r.id]) return true
   }
   for (const a of Object.values(state.artifacts)) {
-    const ctrl = a.carriedBy ? state.units[a.carriedBy]?.controller : a.conjuredBy
+    const ctrl = artifactController(state, a)
     if (ctrl === opp && !after.artifacts[a.id]) return true
   }
 
@@ -1489,7 +1490,7 @@ function tryActivateAbilities(state: GameState, me: PlayerId): Action | null {
     if (s.controller === me && !s.isRubble) sources.push({ id: s.id, name: s.name, anchor: siteAnchor(s, me) })
   }
   for (const a of Object.values(state.artifacts)) {
-    const controller = a.carriedBy ? state.units[a.carriedBy]?.controller : a.conjuredBy
+    const controller = artifactController(state, a)
     if (controller === me) sources.push({ id: a.id, name: a.name, anchor: artifactAnchor(state, a, me) })
   }
 
@@ -1582,7 +1583,7 @@ function damageAbilityAtAvatar(state: GameState, me: PlayerId, enemyAvatar: Unit
   for (const u of Object.values(state.units)) if (u.controller === me) sources.push({ id: u.id, name: u.name, anchor: u })
   for (const s of Object.values(state.sites)) if (s.controller === me && !s.isRubble) sources.push({ id: s.id, name: s.name, anchor: siteAnchor(s, me) })
   for (const a of Object.values(state.artifacts)) {
-    const controller = a.carriedBy ? state.units[a.carriedBy]?.controller : a.conjuredBy
+    const controller = artifactController(state, a)
     if (controller === me) sources.push({ id: a.id, name: a.name, anchor: artifactAnchor(state, a, me) })
   }
   for (const src of sources) {

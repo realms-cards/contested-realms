@@ -1,6 +1,7 @@
 import { registerScript } from '../registry'
 import { luckyChoiceIndex, effectSummonUnit } from '../../../engine/effects'
 import { getCard } from '../../db'
+import { payZoneToll } from '../../../engine/statics'
 import { raiseAsk } from './magic-helpers'
 
 // 'Summon a random dead minion.'
@@ -13,6 +14,7 @@ registerScript('Raise Dead', {
       }
     }
     if (!dead.length) return ctx.log('No dead minions to raise.')
+    if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
     // which dead minion is chosen is random → Lucky Charm / Kythera may bend it
     const pick = ctx.lucky(dead.map((id) => ({ label: ctx.state.cards[id].name, payload: id })), 'raisePick', 'cards')
     if (pick !== undefined) raiseAsk(ctx, pick as string)

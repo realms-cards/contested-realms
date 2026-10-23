@@ -11,6 +11,7 @@ registerScript('Atlantean Fate', {
   // not water-limited). Rubble is Ordinary, so it's spared too (siteRarity).
   auraSilencesSites: (state, site) => siteRarity(state, site) !== 'Ordinary',
   auraLimitsToWaterThreshold: true,
+  auraFloodsSite: (state, site) => siteRarity(state, site) !== 'Ordinary',
   genesis: (ctx) => {
     const aura = ctx.state.auras[ctx.sourceId]
     if (!aura) return

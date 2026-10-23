@@ -1,4 +1,5 @@
 import { registerScript, getScript, type EffectAPI } from '../registry'
+import type { KeywordGrant } from '../../../engine/keywords'
 import { allCards, getCard, getKeywords } from '../../db'
 import { pushLog, pushPrompt } from '../../../engine/effects'
 import { affinity, meetsThreshold } from '../../../engine/casting'
@@ -34,19 +35,19 @@ registerScript('Dragonlord', {
     const form = state.flow?.dragonForm
     if (!form || form.player !== self.controller || form.turn !== state.turn) return []
     const kw = getKeywords(form.name)
-    const out: string[] = []
+    const out: KeywordGrant[] = []
     if (kw.airborne) out.push('airborne')
     if (kw.charge) out.push('charge')
     if (kw.lethal) out.push('lethal')
     // NOT stealth — FAQ (Dragonlord): "Can the Dragonlord gain Stealth? A: No.
     // Avatars cannot gain Stealth." (Draco Corvus is the only Stealth Dragon.)
-    if (kw.strikeFirst) out.push('strike first')
-    if (kw.ranged) out.push(`ranged ${kw.ranged}`)
+    if (kw.strikeFirst) out.push('strikeFirst')
+    if (kw.ranged) out.push({ ranged: kw.ranged })
     if (kw.burrowing) out.push('burrowing')
     if (kw.submerge) out.push('submerge')
     if (kw.voidwalk) out.push('voidwalk')
     if (kw.spellcaster) out.push('spellcaster')
-    if (kw.movement) out.push(`movement +${kw.movement}`)
+    if (kw.movement) out.push({ movement: kw.movement })
     return out
   },
   // "Gain its abilities this turn" means the Dragon's PASSIVE hooks too, not just its activated

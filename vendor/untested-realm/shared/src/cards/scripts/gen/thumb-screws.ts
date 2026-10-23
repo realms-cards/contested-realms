@@ -5,6 +5,7 @@ import { nearbySquaresW } from '../../../engine/grid'
 // 'Whenever a nearby Avatar casts a spell, they lose life equal to the number
 //  of spells they've cast this turn.'
 registerScript('Thumb Screws', {
+  actsUncontrolled: true, // names no player: works on the ground, uncontrolled
   onSpellCast: (ctx, by) => {
     const art = ctx.state.artifacts[ctx.sourceId]
     if (!art) return

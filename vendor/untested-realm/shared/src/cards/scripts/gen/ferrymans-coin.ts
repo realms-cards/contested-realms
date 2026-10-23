@@ -4,13 +4,15 @@ import type { PlayerId } from '../../../engine/types'
 import { askBanishFromCemetery, resolveBanishFromCemetery } from './cemetery-choose'
 
 // 'Banish this coin → Gain (1), or banish up to three cards from any cemetery.'
+const GAIN = 'Gain ①'
+const BANISH = 'Banish up to three cards from a cemetery'
 registerScript("Ferryman's Coin", {
   abilities: [{
     key: 'toll',
-    label: 'Banish the coin → mana or grave-hate',
+    label: 'Banish the coin → gain ① or banish cards from a cemetery',
     cost: {},
     effect: (ctx) => {
-      ctx.ask({ kind: 'chooseOption', title: "The Ferryman's price:", data: { options: ['gain ①', 'banish 3 from a cemetery'] } }, 'pay')
+      ctx.ask({ kind: 'chooseOption', title: "The Ferryman's price:", data: { options: [GAIN, BANISH] } }, 'pay')
     },
   }],
   conts: {
@@ -25,10 +27,10 @@ registerScript("Ferryman's Coin", {
       const card = ctx.state.cards[art.cardId]
       if (card && !card.isToken) ctx.state.players[card.owner].banished.push(card.id)
       delete ctx.state.artifacts[art.id]
-      if (choice === 'gain ①') {
+      if (choice === GAIN) {
         ctx.state.players[ctx.controller].mana += 1
       } else {
-        ctx.ask({ kind: 'chooseOption', title: 'Which cemetery?', data: { options: ['yours', "opponent's"] } }, 'ferry')
+        ctx.ask({ kind: 'chooseOption', title: 'Banish cards from which cemetery?', data: { options: ['yours', "opponent's"] } }, 'ferry')
       }
     },
     ferry: (ctx, _c, choice) => {

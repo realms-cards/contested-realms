@@ -1,6 +1,7 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog } from '../../../engine/effects'
+import { payZoneToll } from '../../../engine/statics'
 import type { PlayerId } from '../../../engine/types'
 
 // 'Once on your turn, you may banish a dead minion. Assimilator Snail becomes a
@@ -19,6 +20,7 @@ registerScript('Assimilator Snail', {
         }
       }
       if (!options.length) return ctx.log('No dead minion to assimilate.')
+      if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
       ctx.ask({ kind: 'chooseOption', title: 'Assimilate which corpse?', data: { options: [...new Set(options)] } }, 'slurp')
     },
   }],

@@ -1,25 +1,24 @@
-import { type EffectAPI } from '../registry'
+import { type EffectAPI, getScript } from '../registry'
 import { siteAt } from '../../../engine/grid'
 import { realStepDistanceW } from '../../../engine/movement'
 import { pushLog, checkStateBased, toCemetery } from '../../../engine/effects'
 import { squaresWithinSteps } from './step-range-targets'
 import type { GameState } from '../../../engine/types'
 
-// Auras whose flood is part of their continuous effect (Atlantean Fate, Flood):
+// Auras whose flood is part of their continuous effect (auraFloodsSite: Atlantean Fate, Flood):
 // covered sites are flooded while the aura is in play and MUST un-flood when the
 // aura leaves (dispel / destroy / banish). `applyFlood` sets a sticky per-site flag,
 // so the removal paths call this to revert sites this aura flooded -- unless another
 // flooding aura still covers them.
-const FLOODING_AURAS = new Set(['Atlantean Fate', 'Flood'])
-
 export function unfloodOnAuraLeave(state: GameState, leaving: { id: string; name: string; squares: { x: number; y: number }[] }) {
-  if (!FLOODING_AURAS.has(leaving.name)) return
+  const floods = getScript(leaving.name)?.auraFloodsSite
+  if (!floods) return
   for (const sq of leaving.squares) {
     const site = siteAt(state, sq.x, sq.y)
-    if (!site || !site.flooded) continue
+    if (!site || !site.flooded || !floods(state, site)) continue // not one this aura flooded
     // keep flooded if some OTHER flooding aura still covers this square
     const stillFlooded = Object.values(state.auras).some(
-      (a) => a.id !== leaving.id && FLOODING_AURAS.has(a.name) && a.squares.some((s) => s.x === site.x && s.y === site.y),
+      (a) => a.id !== leaving.id && a.squares.some((s) => s.x === site.x && s.y === site.y) && !!getScript(a.name)?.auraFloodsSite?.(state, site),
     )
     if (!stillFlooded) site.flooded = undefined
   }

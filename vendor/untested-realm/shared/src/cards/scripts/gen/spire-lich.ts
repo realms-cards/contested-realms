@@ -10,7 +10,7 @@ const isTower = (site: { name: string; counters?: Record<string, number> } | nul
 
 registerScript('Spire Lich', {
   selfKeywords: (state, self) => {
-    return isTower(siteAt(state, self.x, self.y)) && self.region === 'surface' ? ['ranged', 'spellcaster'] : []
+    return isTower(siteAt(state, self.x, self.y)) && self.region === 'surface' ? [{ ranged: 1 }, 'spellcaster'] : []
   },
   grantsPower: (state, self, other) => {
     if (other.id !== self.id || self.region !== 'surface') return 0

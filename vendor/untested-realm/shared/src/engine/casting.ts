@@ -1,10 +1,11 @@
 import { getCard, cardSupport, getKeywords } from '../cards/db'
 import { getScript, type CardScript, type TargetRef, type TargetSpec } from '../cards/scripts/registry'
 import type { GameState, PlayerId, Region, Thresholds, UnitState } from './types'
-import { adjacentSquares, adjacentSquaresW, avatarOf, chebyshev, chebyshevW, orthAdjacentWrapped, nearbySquares, nearbySquaresW, siteAt, sitesOf, inBounds, unitsAt, occupies, occupiedSquares, GRID_W, GRID_H, edgesConnected, aura2x2Squares } from './grid'
-import { newId, pushLog, makeCtx, checkStateBased, opponent, emitUnitEnters, directionReach, emitEvent, isMagicProtected, loseLife, checkWard, pushPrompt, registerCont, runCont, toCemetery, bumpManaSpent, beginAreaReveal, recordAffectedSites, snapshotRealm, recordTouchedSites, sealSpellReveal, setActionCredit, restoreActionCredit, firesGenesisOnEntry, recordManaGain, deferTurnStep, settleEntering, runDamageEvent, notifySilencerEntered } from './effects'
-import { affinity, effKeywords, isDisabled, disabledByEffect, canExistIn, siteSilenced, siteDisabledByArtifact, artifactSilenced, artScript, zoneAccessToll, applyKeywordString, isArtifactUnit, isEvilUnit, isEvilUnitIntrinsic, isEvilCardName, isEvilCardNameFor, cardSubtypesFor, collectionBanned, payZoneToll, takeFromCollection, carriedInside, isBlanked, isCarriableArtifact, terrainAt } from './statics'
+import { occupiedLocations, adjacentSquares, adjacentSquaresW, avatarOf, chebyshev, chebyshevW, orthAdjacentWrapped, nearbySquares, nearbySquaresW, siteAt, sitesOf, inBounds, unitsAt, occupies, occupiedSquares, GRID_W, GRID_H, edgesConnected, aura2x2Squares } from './grid'
+import { newId, pushLog, makeCtx, checkStateBased, opponent, emitUnitEnters, directionReach, emitEvent, isMagicProtected, loseLife, checkWard, pushPrompt, registerCont, runCont, toCemetery, bumpManaSpent, beginAreaReveal, recordAffectedSites, snapshotRealm, recordTouchedSites, sealSpellReveal, setActionCredit, restoreActionCredit, firesGenesisOnEntry, recordManaGain, deferTurnStep, settleEntering, runDamageEvent, notifySilencerEntered, applyFlood } from './effects'
+import { affinity, effKeywords, isDisabled, disabledByEffect, canExistIn, siteSilenced, siteDisabledByArtifact, artifactSilenced, artScript, zoneAccessToll, isArtifactUnit, isEvilUnit, isEvilUnitIntrinsic, isEvilCardName, isEvilCardNameFor, cardSubtypesFor, collectionBanned, payZoneToll, takeFromCollection, carriedInside, isBlanked, isCarriableArtifact, terrainAt, artifactController } from './statics'
 import { siteEntryAllowed } from './movement'
+import { applyGrant } from './keywords'
 import { TRAP_DISGUISE, trapElementOf } from './traps'
 import { isKnightSirDame } from '../cards/scripts/multi-card-utils/knightly'
 
@@ -241,6 +242,17 @@ export function enterSite(
   pushLog(state, player, `${p.name} plays ${displayName} at (${x + 1},${y + 1}).`)
   state.lastPlay = { name: displayName, player, n: (state.lastPlay?.n ?? 0) + 1 }
 
+  // a flooding aura over this square (Flood, Atlantean Fate) floods the site the moment it's in play — the
+  // aura's effect is continuous, not just its Genesis (FAQ: "Atlantean Fate only affects the site once it's
+  // already in play"). Before the site's Genesis, so a silenced one stays quiet.
+  {
+    const placed = state.sites[siteId]
+    for (const r of Object.values(state.auras)) {
+      const floods = getScript(r.name)?.auraFloodsSite
+      if (floods && !placed.flooded && r.squares.some((q) => q.x === x && q.y === y) && floods(state, placed)) applyFlood(state, placed, r.controller)
+    }
+  }
+
   // a square with a site has no void: any units that were in the void here are placed
   // atop the new site (rulebook: "Any cards in that void are now placed atop the site").
   // Without this their region stays 'void', so effects reading it (e.g. summoning a Frog
@@ -349,7 +361,7 @@ export function resolveCaster(state: GameState, casterId: string, player: Player
   // `granted`: a caster-lock that GRANTS this artifact the cast (Orb of Ba'al Berith casting its copy on
   // behalf of the spell's controller) — it needn't be a Spellcaster, and it casts for `player`.
   if (art && !artifactSilenced(state, art) && (granted || getKeywords(art.name).spellcaster)) {
-    const controller = granted ? player : art.carriedBy ? state.units[art.carriedBy]?.controller : art.conjuredBy
+    const controller = granted ? player : artifactController(state, art)
     return {
       id: art.id, cardId: art.cardId, name: art.name,
       owner: state.cards[art.cardId]?.owner ?? player, controller: controller ?? player,
@@ -422,7 +434,7 @@ export function canCast(state: GameState, player: PlayerId, cardId: string, cast
       // "which only IT can cast" — the Omphalos (a spellcaster artifact) casts its OWN drawn
       // spells itself; no other caster is legal, so the client offers no picker.
       if (casterId !== lock.casterId) return { ok: false, reason: `Only ${lockedArt.name} may cast that.` }
-      const artController = lockedArt.carriedBy ? state.units[lockedArt.carriedBy]?.controller : lockedArt.conjuredBy
+      const artController = artifactController(state, lockedArt)
       // a GRANT-lock (Orb of Ba'al Berith) casts for whoever controls the copied spell, not the Orb's owner
       if (!lock.grantsCasting && artController !== player) return { ok: false, reason: `Only ${lockedArt.name} may cast that.` }
       if (artifactSilenced(state, lockedArt)) return { ok: false, reason: `${lockedArt.name} can't cast right now.` }
@@ -494,6 +506,14 @@ export function canCast(state: GameState, player: PlayerId, cardId: string, cast
 /** Can `player` afford to cast `name` right now — cheapest position cost within mana,
  *  and elemental threshold met (or waived this turn)? Used to only offer "cast from
  *  your collection" spells you can actually pay for (Silver Bullet, Toolbox, Malleus). */
+/** affordable AND the Bureau of Occult Control's (2) access toll on top (a cast from the collection pays both) */
+export function affordableWithToll(state: GameState, player: PlayerId, name: string, caster: UnitState): boolean {
+  const toll = zoneAccessToll(state)
+  const p = state.players[player]
+  p.mana -= toll
+  try { return affordable(state, player, name, caster) } finally { p.mana += toll }
+}
+
 export function affordable(state: GameState, player: PlayerId, name: string, caster: UnitState): boolean {
   const def = getCard(name)
   const p = state.players[player]
@@ -535,7 +555,7 @@ export function ignoresThreshold(state: GameState, player: PlayerId, cardId: str
   if (state.flow?.noThreshold?.[player] === state.turn) return true
   // artifacts waiving threshold for their controller (De Vermis Mysteriis)
   for (const a of Object.values(state.artifacts)) {
-    const controller = a.carriedBy ? state.units[a.carriedBy]?.controller : a.conjuredBy
+    const controller = artifactController(state, a)
     if (controller !== player) continue
     const f = getScript(a.name)?.grantsNoThreshold
     if (f && f(state, a.id, cardId)) return true
@@ -735,19 +755,32 @@ function targetCompulsion(
   return null
 }
 
-/** the x/y a `where` bound is measured from: a previously-picked target (spec.whereOf) if given, else the
- *  caster — so Blink's square is checked against the ally you selected, not the caster. */
-function whereAnchor(state: GameState, spec: TargetSpec, caster: UnitState, picked?: TargetRef[]): { x: number; y: number } {
+/** the locations a `where` bound is measured from: a previously-picked target (spec.whereOf) if given, else
+ *  the caster — so Blink's square is checked against the ally you selected, not the caster. A UNIT is
+ *  measured from EVERY square it occupies (an oversized ally is "nearby" anything nearby any of its parts),
+ *  each with that part's own region; a site/positional source has no region (it reaches subsurface). */
+function whereAnchors(state: GameState, spec: TargetSpec, caster: UnitState, picked?: TargetRef[]): { x: number; y: number; region?: Region }[] {
   const ref = spec.whereOf != null ? picked?.[spec.whereOf] : undefined
   if (ref) {
-    if ('unit' in ref) { const u = state.units[ref.unit]; if (u) return { x: u.x, y: u.y } }
-    else if ('site' in ref) { const s = state.sites[ref.site]; if (s) return { x: s.x, y: s.y } }
-    else if ('artifact' in ref) { const a = state.artifacts[ref.artifact]; if (a) return { x: a.x, y: a.y } }
-    else if ('aura' in ref) { const r = state.auras[ref.aura]; const sq = r?.squares?.[0]; if (sq) return { x: sq.x, y: sq.y } }
-    else if ('square' in ref) return { x: ref.square.x, y: ref.square.y }
+    if ('unit' in ref) { const u = state.units[ref.unit]; if (u) return occupiedLocations(u) }
+    else if ('site' in ref) { const s = state.sites[ref.site]; if (s) return [{ x: s.x, y: s.y }] }
+    else if ('artifact' in ref) { const a = state.artifacts[ref.artifact]; if (a) return [{ x: a.x, y: a.y }] }
+    else if ('aura' in ref) { const r = state.auras[ref.aura]; const sq = r?.squares?.[0]; if (sq) return [{ x: sq.x, y: sq.y }] }
+    else if ('square' in ref) return [{ x: ref.square.x, y: ref.square.y }]
+    return [{ x: caster.x, y: caster.y }]
   }
-  return { x: caster.x, y: caster.y }
+  // a real unit caster at its own square: all its parts; a stand-in moved elsewhere: just that square
+  const real = state.units[caster.id]
+  if (real && real.x === caster.x && real.y === caster.y) return occupiedLocations(real)
+  return [real ? { x: caster.x, y: caster.y, region: caster.region } : { x: caster.x, y: caster.y }]
 }
+
+/** the squares a here/adjacent/nearby bound reaches from one anchor location */
+function reachFrom(state: GameState, where: string, a: { x: number; y: number }): { x: number; y: number }[] {
+  return where === 'here' ? [{ x: a.x, y: a.y }] : where === 'adjacent' ? adjacentSquaresW(state, a.x, a.y) : nearbySquaresW(state, a.x, a.y)
+}
+const inReach = (state: GameState, where: string, anchors: { x: number; y: number }[], x: number, y: number) =>
+  anchors.some((a) => reachFrom(state, where, a).some((s) => s.x === x && s.y === y))
 
 function validateTargetCore(
   state: GameState,
@@ -757,7 +790,7 @@ function validateTargetCore(
   player: PlayerId,
   picked?: TargetRef[],
 ): string | null {
-  const wa = whereAnchor(state, spec, caster, picked)
+  const anchors = whereAnchors(state, spec, caster, picked)
   if ('unit' in ref) {
     const unit = state.units[ref.unit]
     if (!unit) return 'No such unit.'
@@ -785,8 +818,7 @@ function validateTargetCore(
       }
     }
     if (spec.where && spec.where !== 'anywhere') {
-      const squares = spec.where === 'here' ? [{ x: wa.x, y: wa.y }] : spec.where === 'adjacent' ? adjacentSquaresW(state, wa.x, wa.y) : nearbySquaresW(state, wa.x, wa.y)
-      if (!squares.some((s) => s.x === unit.x && s.y === unit.y)) return `Target must be ${spec.where}.`
+      if (!inReach(state, spec.where, anchors, unit.x, unit.y)) return `Target must be ${spec.where}.`
       // a here/nearby/adjacent UNIT target is region-locked to a real-UNIT source's region (a card
       // that reaches across regions says so and targets imperatively, e.g. Lacuna Entity). A SITE /
       // positional pseudo-caster (not in state.units) still reaches sub-surface targets.
@@ -802,8 +834,7 @@ function validateTargetCore(
     if (spec.owner === 'ally' && site.controller !== player) return 'Must choose your own site.'
     if (spec.owner === 'enemy' && (site.controller === player || site.controller === null)) return 'Must choose an enemy site.'
     if (spec.where && spec.where !== 'anywhere') {
-      const squares = spec.where === 'here' ? [{ x: wa.x, y: wa.y }] : spec.where === 'adjacent' ? adjacentSquaresW(state, wa.x, wa.y) : nearbySquaresW(state, wa.x, wa.y)
-      if (!squares.some((s) => s.x === site.x && s.y === site.y)) return `Target must be ${spec.where}.`
+      if (!inReach(state, spec.where, anchors, site.x, site.y)) return `Target must be ${spec.where}.`
     }
     if (spec.filter && !spec.filter(state, site, caster)) return 'Not a legal target.'
     return null
@@ -833,13 +864,13 @@ function validateTargetCore(
     // enforce the spatial bound (Draconian Bonekite's "target nearby location") — the unit/site
     // branches already do this; without it a `where:'nearby'` SQUARE spec validated the whole board.
     if (spec.where && spec.where !== 'anywhere') {
-      const squares = spec.where === 'here' ? [{ x: wa.x, y: wa.y }] : spec.where === 'adjacent' ? adjacentSquaresW(state, wa.x, wa.y) : nearbySquaresW(state, wa.x, wa.y)
-      if (!squares.some((s) => s.x === ref.square.x && s.y === ref.square.y)) return `Target must be ${spec.where}.`
+      const near = anchors.filter((a) => reachFrom(state, spec.where!, a).some((s) => s.x === ref.square.x && s.y === ref.square.y))
+      if (!near.length) return `Target must be ${spec.where}.`
       // "nearby/adjacent/here" is same-region (Blink can't hop a surface ally underground): measured from the
-      // earlier-picked unit (whereOf) or a real-unit caster; a site / positional source reaches subsurface.
-      const prior = spec.whereOf != null ? picked?.[spec.whereOf] : undefined
-      const anchorUnit = prior && 'unit' in prior ? state.units[prior.unit] : prior ? undefined : state.units[caster.id]
-      if (anchorUnit && ref.square.region && ref.square.region !== anchorUnit.region) return 'Target must be in the same region.'
+      // part of the earlier-picked unit (whereOf) / real-unit caster it's nearby; a site / positional source
+      // has no region and reaches subsurface.
+      const sq = ref.square
+      if (sq.region && !near.some((a) => !a.region || a.region === sq.region)) return 'Target must be in the same region.'
     }
     return null
   }
@@ -999,24 +1030,48 @@ function resolveMagicCast(state: GameState, cardId: string, castName: string, pl
   // a client-chosen oversized placement (anchor + rotation) rides in `extra`; ctx.teleport consumes it
   // for the relocation — so ANY teleport spell (not just Blink) respects it. Clear any leftover after.
   if (extra?.teleportPlace) state.flow = { ...(state.flow ?? {}), teleportPlace: extra.teleportPlace }
+  const promptsBefore = state.prompts.length
   if (script?.onCast) {
     // one simultaneous damage event: any minion the spell hurts (an area blast) resolves all its
     // reduction/prevention before a single death is settled (see runDamageEvent).
     runDamageEvent(state, () => script.onCast!(makeCtx(state, caster.id, player, targets, at, extra, { kind: 'magic', name: castName, elements: def.elements })))
   }
   if (state.flow?.teleportPlace) delete state.flow.teleportPlace
-  const forcedBanish = (state.flow?.banishAfterCast ?? []).includes(cardId)
-  if (forcedBanish) state.flow.banishAfterCast = state.flow.banishAfterCast.filter((id: string) => id !== cardId)
-  if ((fromCemetery && script?.castFromCemetery?.banishAfter) || forcedBanish) {
-    state.players[card.owner].banished.push(cardId)
-    pushLog(state, player, `${card.name} burns away for good.`)
+  // A Magic goes to the cemetery only once it has FULLY resolved. If it is still waiting on a choice
+  // (Return to Nature asking which cemetery), it stays in limbo — so it can't pick itself — and is put
+  // away at the applyAction boundary once the prompt queue clears (settleResolvedMagics).
+  if (state.prompts.length > promptsBefore) {
+    state.flow = state.flow ?? {}
+    state.flow.resolvingMagics = [...(state.flow.resolvingMagics ?? []), { cardId, player, banishAfter: !!(fromCemetery && script?.castFromCemetery?.banishAfter) }]
   } else {
-    toCemetery(state, cardId) // honors Mismanaged Mortuary / Kor Crematory
+    finishMagic(state, cardId, player, !!(fromCemetery && script?.castFromCemetery?.banishAfter))
   }
   checkStateBased(state)
   restoreActionCredit(state, prevCredit)
   recordTouchedSites(state, snap)
   sealSpellReveal(state)
+}
+
+/** a resolved Magic leaves the stack: to the cemetery, or banished if it burns away */
+function finishMagic(state: GameState, cardId: string, player: PlayerId, banishAfter: boolean): void {
+  const card = state.cards[cardId]
+  if (!card) return
+  const forcedBanish = (state.flow?.banishAfterCast ?? []).includes(cardId)
+  if (forcedBanish) state.flow.banishAfterCast = state.flow.banishAfterCast.filter((id: string) => id !== cardId)
+  if (banishAfter || forcedBanish) {
+    state.players[card.owner].banished.push(cardId)
+    pushLog(state, player, `${card.name} burns away for good.`)
+  } else {
+    toCemetery(state, cardId) // honors Mismanaged Mortuary / Kor Crematory
+  }
+}
+
+/** Magics whose resolution waited on prompts are now fully resolved (the queue is clear) — put them away. */
+export function settleResolvedMagics(state: GameState): void {
+  const pend = (state.flow?.resolvingMagics ?? []) as { cardId: string; player: PlayerId; banishAfter: boolean }[]
+  if (!pend.length) return
+  state.flow.resolvingMagics = []
+  for (const m of pend) finishMagic(state, m.cardId, m.player, m.banishAfter)
 }
 
 /** Conjure a just-cast Artifact (+ its Genesis). Split out for the same deferral. */
@@ -1036,8 +1091,9 @@ function resolveArtifactCast(state: GameState, cardId: string, castName: string,
   const provides = getScript(card.name)?.extraManaEachTurn
   if (provides) {
     const n = typeof provides === 'function' ? provides(state, artId) : provides
-    const controller = holder ? holder.controller : player
-    if (n > 0) {
+    // only a CONTROLLED source provides: a Core conjured onto the ground is uncontrolled → no mana
+    const controller = artifactController(state, state.artifacts[artId])
+    if (n > 0 && controller !== null) {
       state.players[controller].mana += n
       const art = state.artifacts[artId]
       if (art) recordManaGain(state, holder?.x ?? art.x, holder?.y ?? art.y, holder?.region ?? art.region, n)
@@ -1483,7 +1539,7 @@ export function validateSummonAt(state: GameState, player: PlayerId, cardName: s
   for (const s2 of Object.values(state.sites)) {
     const g = getScript(s2.name)?.summonsGainKeywords
     if (g && !s2.isRubble && s2.controller !== null && !siteSilenced(state, s2)) {
-      for (const k of g(state, s2.id, player)) applyKeywordString(kw, k)
+      for (const k of g(state, s2.id, player)) applyGrant(kw, k)
     }
   }
   // A minion "being summoned nearby" gains a site's static keywords the instant it
@@ -1500,7 +1556,7 @@ export function validateSummonAt(state: GameState, player: PlayerId, cardName: s
     for (const s2 of Object.values(state.sites)) {
       const g = getScript(s2.name)?.siteGrantsKeywords
       if (g && !s2.isRubble && s2.controller !== null && !siteSilenced(state, s2)) {
-        for (const k of g(state, s2, probe)) applyKeywordString(kw, k)
+        for (const k of g(state, s2, probe)) applyGrant(kw, k)
       }
     }
   }
@@ -1782,7 +1838,7 @@ export function castFromCollection(state: GameState, player: PlayerId, name: str
     return false
   }
   if ((p.collection[name] ?? 0) <= 0) return false // must own a copy
-  if (!affordable(state, player, name, avatarOf(state, player))) return false // "may cast" only if payable
+  if (!affordableWithToll(state, player, name, avatarOf(state, player))) return false // "may cast" only if payable — toll included
   if (!payZoneToll(state, player)) {
     pushLog(state, player, 'The Bureau of Occult Control demands (2) for collection access.')
     return false

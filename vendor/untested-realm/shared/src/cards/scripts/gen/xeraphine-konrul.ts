@@ -1,11 +1,11 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog } from '../../../engine/effects'
+import { payZoneToll } from '../../../engine/statics'
 
 // 'At the end of your turn, you may choose three of your dead minions. Banish
 //  two to return the remaining one to hand.'
 registerScript('Xeraphine Konrul', {
-  turnTriggersFromCemetery: true, // its end-of-turn bargain touches only your cemetery → Vivien fires it from the grave
   endOfTurn: (ctx) => {
     const p = ctx.state.players[ctx.controller]
     const dead = p.cemetery.filter((id) => getCard(ctx.state.cards[id].name).type === 'Minion')
@@ -22,6 +22,7 @@ registerScript('Xeraphine Konrul', {
       if (idxs.length !== 3) return
       const dead = c.dead as string[]
       const p = ctx.state.players[ctx.controller]
+      if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
       const [keep, ...burn] = idxs.map((i) => dead[i])
       for (const id of burn) {
         const at = p.cemetery.indexOf(id)

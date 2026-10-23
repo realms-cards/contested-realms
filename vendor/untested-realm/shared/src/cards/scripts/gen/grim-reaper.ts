@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { pushLog, removeUnitFromRealm } from '../../../engine/effects'
-import { cemeteryProtected } from '../../../engine/statics'
+import { cemeteryProtected, payZoneToll } from '../../../engine/statics'
 import { shuffleDeck } from '../../../engine/knowledge'
 
 // ---------- killer tracking ----------
@@ -30,7 +30,12 @@ registerScript('Grim Reaper', {
       }
     }
     // the owner's zones (Wormelow Tump can seal the cemetery)
-    const sealed = cemeteryProtected(state, dying.owner, reaper.controller)
+    let sealed = cemeteryProtected(state, dying.owner, reaper.controller)
+    // reaping cemetery copies is access → Bureau of Occult Control toll, only if a copy lies there
+    if (!sealed && owner.cemetery.some((id) => state.cards[id]?.name === name) && !payZoneToll(state, reaper.controller)) {
+      pushLog(state, reaper.controller, 'The Bureau of Occult Control demands (2) for cemetery access.')
+      sealed = true
+    }
     let reaped = 0
     for (const zone of (sealed ? [owner.hand, owner.spellbook] : [owner.cemetery, owner.hand, owner.spellbook]) as string[][]) {
       for (let i = zone.length - 1; i >= 0; i--) {

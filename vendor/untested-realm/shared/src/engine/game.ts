@@ -4,12 +4,12 @@ import type { Action, ActionResult, GameState, PlayerId, UnitState } from './typ
 import { doMulligan, keepHand } from './setup'
 import { endTurn, reconcileControlledMana } from './turn'
 import { activePrompt, resolvePrompt, pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkStateBased, killUnit, tapUnit, checkWard, luckyCandidates, bumpManaSpent, beginAreaReveal, sealAbilityReveal, revealAbility, setActionCredit, restoreActionCredit, reconcileSummonTax, completeDeferredDeaths, finishBattleCapture, runDamageEvent } from './effects'
-import { castSpell, playSite, affinity, validateTarget, legalTargetOptions, sameTargetRef, resolvePendingCast, resolveQueuedCopyCasts, castExtrasProblem, isRegion } from './casting'
+import { castSpell, playSite, affinity, validateTarget, legalTargetOptions, sameTargetRef, resolvePendingCast, resolveQueuedCopyCasts, castExtrasProblem, isRegion, settleResolvedMagics } from './casting'
 import { moveAttack, shootProjectile, pickUp, drop, enforceForcedAttacks, resolvePendingMoveAttack } from './combat'
 import { applyJudge } from './judge'
 import { actionShapeProblem } from './action-shape'
 import { abilityAnchor, avatarOf, unitsAt, nearbySquaresW, occupiedSquares } from './grid'
-import { canTap, isDisabled, effKeywords, siteSilenced, artifactSilenced, artScript, grantedAbilities, attackBlockedAt } from './statics'
+import { canTap, isDisabled, effKeywords, siteSilenced, artifactSilenced, artScript, grantedAbilities, attackBlockedAt, artifactController } from './statics'
 import { reachableLocations } from './movement'
 
 export { createGame } from './setup'
@@ -35,6 +35,8 @@ export function applyAction(state: GameState, player: PlayerId, action: Action):
   // A cast parked behind the Enchantress's animate-an-aura prompt now resolves — after the animate
   // fully resolved, so the freshly-animated aura minion is present for the spell (Death Dealer, etc.).
   if (state.prompts.length === 0) resolvePendingCast(state)
+  // a Magic that waited on prompts has now fully resolved → only now does it reach the cemetery
+  if (state.prompts.length === 0) settleResolvedMagics(state)
   // Orb of Ba'al Berith: its copy is cast only once the original spell has fully resolved
   if (state.prompts.length === 0) resolveQueuedCopyCasts(state)
   if (state.prompts.length === 0) reconcileSummonTax(state)
@@ -51,6 +53,8 @@ export function applyAction(state: GameState, player: PlayerId, action: Action):
     state.flow.endPhaseNow = false
     endTurn(state)
   }
+  // a prepaid Bureau toll covers one effect only — it's over once nothing is left to resolve
+  if (state.prompts.length === 0 && state.flow?.zoneTollPaid !== undefined) delete state.flow.zoneTollPaid
   state.version++
   return { ok: true }
 }
@@ -374,9 +378,8 @@ export function canActivate(
   } else {
     const art = state.artifacts[sourceId]
     // a CARRIED artifact is controlled by its BEARER (so a stolen Toolbox, now carried by your unit,
-    // is yours to use); only a ground/conjured artifact falls back to conjuredBy. Matches entityOwner.
-    const controller = state.sites[sourceId]?.controller
-      ?? (art?.carriedBy ? state.units[art.carriedBy]?.controller : art?.conjuredBy)
+    // is yours to use); a Monument/Automaton by its conjurer; a carriable one on the ground by NOBODY.
+    const controller = state.sites[sourceId]?.controller ?? (art ? artifactController(state, art) : null)
     if (controller !== player) return 'You do not control that.'
     const site = state.sites[sourceId]
     if (site && siteSilenced(state, site)) return `${site.name} is silenced.`

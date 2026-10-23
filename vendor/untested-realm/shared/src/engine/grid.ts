@@ -224,6 +224,21 @@ export function occupiedSquares(unit: UnitState): { x: number; y: number }[] {
   return out
 }
 
+/** every location a unit occupies, with that part's own region — a moeba straddling void and a site
+ *  is in the void on one square and on the surface of the other. */
+export function occupiedLocations(unit: UnitState): { x: number; y: number; region: Region }[] {
+  const main = occupiedSquares({ ...unit, extraSquares: undefined }).map((s) => ({ ...s, region: unit.region }))
+  for (const e of unit.extraSquares ?? []) {
+    if (inBounds(e.x, e.y) && !main.some((m) => m.x === e.x && m.y === e.y)) main.push({ x: e.x, y: e.y, region: e.region ?? unit.region })
+  }
+  return main
+}
+
+/** a location both units occupy (same square AND same region), or null — where they can fight */
+export function sharedLocation(a: UnitState, b: UnitState): { x: number; y: number; region: Region } | null {
+  return occupiedLocations(a).find((l) => occupies(b, l.x, l.y, l.region)) ?? null
+}
+
 export function occupies(unit: UnitState, x: number, y: number, region?: Region): boolean {
   // extra body squares carry their own region tag (a moeba can straddle void and site)
   if (

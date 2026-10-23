@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { getCard, getKeywords } from '../../db'
+import { effKeywords } from '../../../engine/statics'
 import { pushLog, siteStillFlooded } from '../../../engine/effects'
 import { nearbySquaresW, siteAt, unitsAt, avatarOf } from '../../../engine/grid'
 import { bodyOfWaterCells } from '../multi-card-utils/body-of-water'
@@ -54,8 +54,9 @@ registerScript('Waveshaper', {
       }
       ctx.floodSite(site.id)
       for (const u of unitsAt(ctx.state, site.x, site.y, 'surface')) {
-        const kw = getKeywords(u.name)
-        if (u.isAvatar || kw.submerge) continue
+        // CURRENT keywords: a silenced/disabled minion has lost its printed Submerge (so it IS tapped), and
+        // one granted Submerge by another card has it (so it isn't)
+        if (u.isAvatar || effKeywords(ctx.state, u).submerge) continue
         // "Tap minions without submerge there. They don't untap the next time they would."
         // The untap-skip applies to every non-submerge minion here — including one already tapped
         // (it still must miss its next untap), so the skip marker is set regardless of tap state.

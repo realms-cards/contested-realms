@@ -11,7 +11,6 @@ registerScript('Archimago', {
     key: 'echo',
     label: 'Banish 3 dead magics → recast one',
     cost: {},
-    usableFromCemetery: true, // operates on the cemetery + recasts; no activator position → usable from the grave
     effect: (ctx) => {
       const p = ctx.state.players[ctx.controller]
       const magics = p.cemetery.filter((id) => getCard(ctx.state.cards[id].name).type === 'Magic')
