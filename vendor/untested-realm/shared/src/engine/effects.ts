@@ -3,6 +3,7 @@
 
 import { getCard, getKeywords, findCard } from '../cards/db'
 import { getScript, type DamageSource, type EffectAPI, type TargetRef, type TargetSpec, type TeleportOpts } from '../cards/scripts/registry'
+import { cloneState } from './clone'
 import type { GameState, PlayerId, Region, UnitState, SiteState, AuraState, Prompt, DeckName } from './types'
 import { isLocation } from './action-shape'
 import { avatarOf, siteAt, unitsAt, edgesConnected, aura2x2Squares, occupiedSquares, inBounds, GRID_W, GRID_H, squareLabel, nearbySquaresW, orthAdjacentWrapped } from './grid'
@@ -2216,8 +2217,74 @@ export function emitEventWhere(
   const active = state.activePlayer
   listeners.sort((a, b) => (a.controller === active ? 1 : 0) - (b.controller === active ? 1 : 0))
   const run = listeners.filter((l) => !(enteringProtected && state.sites[l.id]) && (!keep || keep(l.controller)))
+  if (askTriggerOrder(state, hook, run, args)) return
   runTriggers(state, hook, run, args)
 }
+
+let dryRunning = 0
+
+/** Would this trigger actually do something now? Run it on a copy of the game and see whether the copy
+ *  changed (the log aside) or a question was asked — exact for every card, with no per-card predicate. */
+function triggerActs(state: GameState, hook: string, l: TriggerListener, args: any[], before: string): boolean {
+  const fn = (getScript(l.name) as any)?.[hook]
+  if (!fn) return false
+  const copy = cloneState(state)
+  // a unit passed to the event is the copy's own unit
+  const copyArgs = args.map((a) => (a && typeof a === 'object' && typeof a.id === 'string' && 'carrying' in a && copy.units[a.id]) || a)
+  dryRunning++
+  try {
+    fn(makeCtx(copy, l.id, l.controller, []), ...copyArgs)
+  } catch {
+    return true // let the real run deal with it
+  } finally {
+    dryRunning--
+  }
+  return copy.prompts.length > state.prompts.length || fingerprint(copy) !== before
+}
+
+const fingerprint = (state: GameState): string => JSON.stringify({ ...state, log: undefined })
+
+/** Codex, Simultaneous Triggers: "the active player adds all of their events first, in the order of their
+ *  choice." When two or more of the active player's triggers would really act on this event, ask them for
+ *  the order before anything resolves (the non-active player's still go first). true when it asked. */
+function askTriggerOrder(state: GameState, hook: string, listeners: TriggerListener[], args: any[]): boolean {
+  if (dryRunning) return false
+  const active = state.activePlayer
+  const own = listeners.filter((l) => l.controller === active)
+  if (own.length < 2) return false
+  const before = fingerprint(state)
+  const acting = own.filter((l) => triggerActs(state, hook, l, args, before))
+  if (acting.length < 2) return false
+  const names = acting.map((l) => l.name)
+  pushPrompt(state, {
+    player: active,
+    kind: 'orderCards',
+    title: 'Order your simultaneous effects',
+    data: {
+      cards: names,
+      labels: acting.map((l, i) => (names.filter((n) => n === names[i]).length > 1 ? `#${i + 1}` : '')),
+      place: 'resolve',
+    },
+    cont: 'trigger:order',
+    ctx: {
+      hook,
+      others: listeners.filter((l) => l.controller !== active),
+      acting,
+      idle: own.filter((l) => !acting.includes(l)),
+      args,
+    },
+  })
+  return true
+}
+
+registerCont('trigger:order', (state, c: { hook: string; others: TriggerListener[]; acting: TriggerListener[]; idle: TriggerListener[]; args: any[] }, choice) => {
+  const order: number[] = []
+  if (Array.isArray(choice)) for (const v of choice) if (Number.isInteger(v) && v >= 0 && v < c.acting.length && !order.includes(v)) order.push(v)
+  for (let i = 0; i < c.acting.length; i++) if (!order.includes(i)) order.push(i)
+  // the non-active player's resolve first, then the active player's in their order (idle ones after)
+  const args = c.args.map((a) => (a && typeof a === 'object' && typeof a.id === 'string' && 'carrying' in a && state.units[a.id]) || a)
+  runTriggers(state, c.hook, [...c.others, ...order.map((i) => c.acting[i]), ...c.idle], args)
+})
 
 type TriggerListener = { id: string; name: string; controller: PlayerId }
 
