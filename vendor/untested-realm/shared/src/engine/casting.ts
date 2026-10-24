@@ -979,6 +979,9 @@ function summonCastMinion(
   state.flow.actingUnitId = unitId
   state.flow.entering = [...(((state.flow.entering as string[] | undefined)) ?? []), unitId]
   emitUnitEnters(state, unit)
+  // the entry triggers have resolved: settle what they did (a Mariner's Curse submerged a minion that can't
+  // live underwater → it drowns) before the Genesis, which then finds its minion gone and is ignored
+  checkStateBased(state)
   const promptsBefore = state.prompts.length
   // Genesis + cast-rider are one simultaneous damage event (a Genesis that blasts an area — Wraetannis
   // Titan, Vile Imp — resolves reduction/prevention across every victim before any death settles).
@@ -987,7 +990,9 @@ function summonCastMinion(
     // or already disabled by an OUTSIDE source (atop a burrowed Root Spider, an area-disable) — so it
     // fires no Genesis. Shared predicate with the effect-summon path (a Slumbering Giantess summoned
     // already-disabled must never add her own "fall asleep" whichever way she enters).
-    if (script?.genesis && firesGenesisOnEntry(state, unit)) {
+    // Codex, Storyline: a Genesis whose minion has already left the realm (an entry trigger killed or
+    // removed it) is ignored — the effect-summon path checks the same (`survived`)
+    if (script?.genesis && state.units[unitId] && firesGenesisOnEntry(state, unit)) {
       // a "this minion itself" pick (SELF_TARGET) now names the real unit
       const own = targets.map((t) => ('unit' in t && t.unit === SELF_TARGET ? { unit: unitId } : t))
       script.genesis(makeCtx(state, unitId, player, own, at, extra))
@@ -1433,14 +1438,14 @@ export function castSpell(
   state.flow = state.flow ?? {}
   state.flow.airCastSum = state.flow.airCastSum ?? { 0: 0, 1: 0 }
   state.flow.airCastSum[player] += def.thresholds.air
-  // "When you cast a spell" triggers resolve BEFORE the spell itself resolves. For now this deferral
-  // is scoped to the Enchantress's "you may animate an aura": she raises a flag when she opens her
-  // prompt, and if she did we park the spell's resolution (of any type) behind it — see the branches
-  // below + resolvePendingCast. Other cast-trigger prompts keep the old synchronous behavior.
+  // "When you cast a spell" triggers resolve BEFORE the spell itself resolves (Codex, Storyline: Ring of
+  // Morrigan's ability goes on top of the Plumed Pegasus spell). A trigger that asks something (the
+  // Enchantress's animate, Ring of Morrigan, Fenvale Muse, Sturmgeist…) parks the spell's resolution, of
+  // any type, until it is settled — see the branches below + resolvePendingCast.
   state.flow.enchantAnimatePending = false
   const promptsBeforeCast = state.prompts.length
   emitEvent(state, 'onSpellCast', player, castName, casterId, targets)
-  const enchantDeferred = state.prompts.length > promptsBeforeCast && !!state.flow.enchantAnimatePending
+  const castTriggerAsked = state.prompts.length > promptsBeforeCast
   state.flow.enchantAnimatePending = false
 
   // fresh capture for the cast reveal shown to BOTH players (golden caster + spell name,
@@ -1486,25 +1491,25 @@ export function castSpell(
         return null
       }
     }
-    if (enchantDeferred) { state.flow.pendingCast = { type: 'magic', cardId, castName, player, casterId, at, targets, extra, fromCemetery }; return null }
+    if (castTriggerAsked) { state.flow.pendingCast = { type: 'magic', cardId, castName, player, casterId, at, targets, extra, fromCemetery }; return null }
     resolveMagicCast(state, cardId, castName, player, casterId, targets, at, extra, fromCemetery)
     return null
   }
 
   if (def.type === 'Minion') {
-    if (enchantDeferred) { state.flow.pendingCast = { type: 'minion', cardId, castName, player, casterId, at, targets, extra, fromCemetery }; return null }
+    if (castTriggerAsked) { state.flow.pendingCast = { type: 'minion', cardId, castName, player, casterId, at, targets, extra, fromCemetery }; return null }
     summonCastMinion(state, cardId, castName, player, at, targets, extra)
     return null
   }
 
   if (def.type === 'Artifact') {
-    if (enchantDeferred) { state.flow.pendingCast = { type: 'artifact', cardId, castName, player, casterId, at, targets, extra, fromCemetery }; return null }
+    if (castTriggerAsked) { state.flow.pendingCast = { type: 'artifact', cardId, castName, player, casterId, at, targets, extra, fromCemetery }; return null }
     resolveArtifactCast(state, cardId, castName, player, at, targets, extra)
     return null
   }
 
   if (def.type === 'Aura') {
-    if (enchantDeferred) { state.flow.pendingCast = { type: 'aura', cardId, castName, player, casterId, at, targets, extra, fromCemetery }; return null }
+    if (castTriggerAsked) { state.flow.pendingCast = { type: 'aura', cardId, castName, player, casterId, at, targets, extra, fromCemetery }; return null }
     resolveAuraCast(state, cardId, castName, player, at, targets, extra)
     return null
   }

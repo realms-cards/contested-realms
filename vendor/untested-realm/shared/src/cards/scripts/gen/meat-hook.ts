@@ -33,6 +33,14 @@ registerScript('Meat Hook', {
       const id = Array.isArray(choice) ? choice[0] : choice
       if (typeof id === 'string') hookPull(ctx, contCtx.bearerId, id)
     },
+    arrived: (ctx, contCtx) => {
+      const bearer = ctx.state.units[contCtx.bearerId]
+      const hit = ctx.state.units[contCtx.victim]
+      // "may fight it WHEN IT ARRIVES" — a drag blocked short (Perilous Bridge / Cage / Bailey) lands the
+      // prey nowhere near the bearer, so no fight AND no fight prompt.
+      const arrived = !!bearer && !!hit && hit.x === bearer.x && hit.y === bearer.y && hit.region === bearer.region
+      if (arrived) ctx.ask({ kind: 'yesNo', title: `Fight ${hit.name}?` }, 'gaff', { bearerId: bearer.id, victim: hit.id })
+    },
     gaff: (ctx, contCtx, choice) => {
       if (!choice) return
       const a = ctx.state.units[contCtx.bearerId]
@@ -50,9 +58,7 @@ function hookPull(ctx: EffectAPI, bearerId: string, hitId: string) {
   const bearer = ctx.state.units[bearerId]
   const hit = ctx.state.units[hitId]
   if (!bearer || !hit) return
-  ctx.teleport(hitId, bearer.x, bearer.y, bearer.region, { push: true }) // a hook/pull, not a Teleport (Perilous Bridge / Cage of Sidrak)
-  // "may fight it WHEN IT ARRIVES" — a drag blocked short (Perilous Bridge / Cage / Bailey) lands the
-  // prey nowhere near the bearer, so no fight AND no fight prompt.
-  const arrived = !!ctx.state.units[hitId] && hit.x === bearer.x && hit.y === bearer.y && hit.region === bearer.region
-  if (arrived) ctx.ask({ kind: 'yesNo', title: `Fight ${hit.name}?` }, 'gaff', { bearerId, victim: hitId })
+  // a hook/pull, not a Teleport (Perilous Bridge / Cage of Sidrak); `arrived` once the drag is over,
+  // which a trigger on the way may hold up (a Troll Bridge's toll)
+  ctx.teleport(hitId, bearer.x, bearer.y, bearer.region, { push: true, then: { key: 'arrived', ctx: { bearerId, victim: hitId } } })
 }

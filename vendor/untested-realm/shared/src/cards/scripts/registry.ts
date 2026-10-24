@@ -51,6 +51,13 @@ export interface TargetSpec {
   label?: string
 }
 
+export interface TeleportOpts {
+  push?: boolean
+  intoVoid?: boolean
+  shape?: { dx: number; dy: number }[]
+  then?: { key: string; ctx?: Record<string, unknown> }
+}
+
 export interface EffectAPI {
   state: GameState
   /** instance id of the source (unit / artifact / site / aura), '' for magics */
@@ -93,7 +100,10 @@ export interface EffectAPI {
   // `shape`: for a rigid multi-square body (an Enchantress wall), the chosen footprint offsets from the
   // destination anchor — lets a player ROTATE it as they teleport it (a 2x2 needs no shape; its anchor
   // corner is just the chosen (x,y)). Offsets must include {dx:0,dy:0}; the engine validates legality.
-  teleport(unitId: string, x: number, y: number, region?: Region, opts?: { push?: boolean; intoVoid?: boolean; shape?: { dx: number; dy: number }[] }): void
+  // `then`: one of the calling script's own `conts`, run once the move is over (`ctx` is its contCtx) —
+  // for what a card does "when it arrives". It runs at once, or, if a multi-step drag stopped at a step
+  // whose trigger asked something, when the resumed drag is done (Storyline).
+  teleport(unitId: string, x: number, y: number, region?: Region, opts?: TeleportOpts): void
   tap(unitId: string): void
   untap(unitId: string): void
   /** `by` overrides who is credited with the destruction (Vindictive Nation, ward checks);

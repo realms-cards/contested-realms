@@ -4,7 +4,7 @@ import { getScript } from '../cards/scripts/registry'
 import { findCard } from '../cards/db'
 import { pickUpUnits, dropUnits, syncCarried, detachFromCarrier } from './carrying'
 import type { GameState, PlayerId, Region, Step, UnitState, AttackTarget } from './types'
-import { pushLog, pushPrompt, registerCont, dealDamageToUnit, dealDamage, checkStateBased, opponent, makeCtx, emitUnitMoved, gainLife, tapUnit, emitEvent, drawCards, askDrawCard, recordAreaReveal, markRevealShoots, beginAreaReveal, sealAbilityReveal, beginBattleCapture, finishBattleCapture, avatarTrappedAt, isMagicProtected } from './effects'
+import { pushLog, pushPrompt, registerCont, resumeWhenSettled, dealDamageToUnit, dealDamage, checkStateBased, opponent, makeCtx, emitUnitMoved, gainLife, tapUnit, emitEvent, drawCards, askDrawCard, recordAreaReveal, markRevealShoots, beginAreaReveal, sealAbilityReveal, beginBattleCapture, finishBattleCapture, avatarTrappedAt, isMagicProtected } from './effects'
 import { effAttack, effKeywords, isDisabled, canTap, projectileCanHit, attackBlockedAt, interceptBlockedAt, siteSilenced as siteSilencedC, artScript, regionPresentAt, carriedInside, isBlanked, isCarriableArtifact } from './statics'
 import { findPath, isFreeStep, isLegalStep, maxSteps, reachableLocations, reachableWithPaths, resolveMovement, type Walk } from './movement'
 import { unitsAt, occupies, occupiedSquares, sharedLocation, inBounds, edgesConnected, GRID_W, GRID_H, squareLabel } from './grid'
@@ -611,6 +611,18 @@ registerCont('combat:defenders', (state, ctx: FightCtx, choice: DefendPick[]) =>
       chosen = []
     }
   }
+  walkInDefenders(state, ctx, loc, chosen, 0)
+})
+
+type DefendPickNorm = { unitId: string; path?: Step[] }
+
+/** Pass 1 and 2 of declaring defenders, from `chosen[from]` on. A defender walking to the fight stops at a
+ *  step whose trigger asked something (Codex, Storyline: "each step is resolved one at a time") — and so
+ *  does the declaration: the rest of that walk, the other defenders and the fight wait until it is
+ *  settled (combat:defendersWalk resumes here). */
+function walkInDefenders(state: GameState, ctx: FightCtx, loc: Step, chosen: DefendPickNorm[], from: number): void {
+  const attacker = state.units[ctx.attackerId]
+  if (!attacker) return
   const atLoc = (u: UnitState | undefined): boolean => !!u && u.x === loc.x && u.y === loc.y && u.region === loc.region
   const commit = (u: UnitState) => {
     tapUnit(state, u)
@@ -627,7 +639,8 @@ registerCont('combat:defenders', (state, ctx: FightCtx, choice: DefendPick[]) =>
   // Pass 1 — non-carried defenders (carriers included) tap and WALK to the fight; per-step
   // effects (Wall of Fire, Brambles, enter-square triggers) apply along the way. A carrier
   // that defends drags its cargo along (syncCarried), setting up its riders for Pass 2.
-  for (const pick of chosen) {
+  for (let i = from; i < chosen.length; i++) {
+    const pick = chosen[i]
     const id = pick.unitId
     const u = state.units[id]
     if (!u || u.carriedBy || u.controller === attacker.controller || !canTap(state, u) || isDisabled(state, u)) continue
@@ -636,26 +649,14 @@ registerCont('combat:defenders', (state, ctx: FightCtx, choice: DefendPick[]) =>
       const path = validDeclaredDefendPath(state, u, pick.path, loc) ?? findPath(state, u, loc)
       if (!path) continue // can't reach the fight
       tapUnit(state, u)
-      resolveMovement(state, u, path)
-      const survivor = state.units[id]
-      if (!survivor) { pushLog(state, null, `${u.name} never reaches the fight.`); continue }
-      if (!atLoc(survivor)) continue
-      // the arrived defender is now a combatant → exempt from AT-REST disablers (Basilisk/Gorgon) for the
-      // fight. But a NON-at-rest disabler on the fight square (Cold Iron Rod on a Faerie, a Root Spider
-      // burrowed below) disables it regardless, and a disabled unit can't defend — so it doesn't count
-      // (and gives the attacked unit no reason to withdraw).
-      state.flow = state.flow ?? {}
-      state.flow.battleUnits = [...new Set([...(state.flow.battleUnits ?? []), survivor.id])]
-      if (isDisabled(state, survivor)) {
-        state.flow.battleUnits = (state.flow.battleUnits ?? []).filter((bid: string) => bid !== survivor.id)
-        pushLog(state, survivor.controller, `${survivor.name} reaches the fight but is disabled and cannot defend.`)
-        continue
+      const asked = state.prompts.length
+      const walk: Walk = { pauseWhen: () => state.prompts.length > asked }
+      resolveMovement(state, u, path, walk)
+      if (walk.remaining || state.prompts.length > asked) {
+        resumeWhenSettled(state, 'combat:defendersWalk', { ctx, loc, chosen, index: i, name: u.name, path: walk.remaining ?? [], at: { x: u.x, y: u.y, region: u.region } })
+        return
       }
-      breakStealth(state, survivor) // defending breaks Stealth (movement usually already did)
-      syncCarried(state, survivor)
-      ctx.defenderIds.push(id)
-      pushLog(state, u.controller, `${u.name} defends!`)
-      emitEvent(state, 'onAllyDefends', state.units[id])
+      arriveDefender(state, ctx, loc, id, u.name)
     } else {
       commit(u)
     }
@@ -671,6 +672,45 @@ registerCont('combat:defenders', (state, ctx: FightCtx, choice: DefendPick[]) =>
     commit(u)
   }
   afterDefenders(state, ctx)
+}
+
+/** a defender that walked in: it defends if it got there, alive and able to */
+function arriveDefender(state: GameState, ctx: FightCtx, loc: Step, id: string, name: string): void {
+  const atLoc = (u: UnitState | undefined): boolean => !!u && u.x === loc.x && u.y === loc.y && u.region === loc.region
+  const survivor = state.units[id]
+  if (!survivor) { pushLog(state, null, `${name} never reaches the fight.`); return }
+  if (!atLoc(survivor)) return
+  // the arrived defender is now a combatant → exempt from AT-REST disablers (Basilisk/Gorgon) for the
+  // fight. But a NON-at-rest disabler on the fight square (Cold Iron Rod on a Faerie, a Root Spider
+  // burrowed below) disables it regardless, and a disabled unit can't defend — so it doesn't count
+  // (and gives the attacked unit no reason to withdraw).
+  state.flow = state.flow ?? {}
+  state.flow.battleUnits = [...new Set([...(state.flow.battleUnits ?? []), survivor.id])]
+  if (isDisabled(state, survivor)) {
+    state.flow.battleUnits = (state.flow.battleUnits ?? []).filter((bid: string) => bid !== survivor.id)
+    pushLog(state, survivor.controller, `${survivor.name} reaches the fight but is disabled and cannot defend.`)
+    return
+  }
+  breakStealth(state, survivor) // defending breaks Stealth (movement usually already did)
+  syncCarried(state, survivor)
+  ctx.defenderIds.push(id)
+  pushLog(state, survivor.controller, `${survivor.name} defends!`)
+  emitEvent(state, 'onAllyDefends', state.units[id])
+}
+
+// a defender's walk stopped for a trigger: finish it, then the other defenders, then the fight
+registerCont('combat:defendersWalk', (state, c: { ctx: FightCtx; loc: Step; chosen: DefendPickNorm[]; index: number; name: string; path: Step[]; at: Step }) => {
+  const u = state.units[c.chosen[c.index].unitId]
+  if (u && c.path.length && u.x === c.at.x && u.y === c.at.y && u.region === c.at.region) {
+    const walk: Walk = { pauseWhen: () => state.prompts.length > 0 }
+    resolveMovement(state, u, c.path, walk)
+    if (walk.remaining || state.prompts.length > 0) {
+      resumeWhenSettled(state, 'combat:defendersWalk', { ...c, path: walk.remaining ?? [], at: { x: u.x, y: u.y, region: u.region } })
+      return
+    }
+  }
+  arriveDefender(state, c.ctx, c.loc, c.chosen[c.index].unitId, c.name)
+  walkInDefenders(state, c.ctx, c.loc, c.chosen, c.index + 1)
 })
 
 function afterDefenders(state: GameState, ctx: FightCtx): void {

@@ -2,7 +2,7 @@
 // prompt/continuation machinery that lets effects pause for player decisions.
 
 import { getCard, getKeywords, findCard } from '../cards/db'
-import { getScript, type DamageSource, type EffectAPI, type TargetRef, type TargetSpec } from '../cards/scripts/registry'
+import { getScript, type DamageSource, type EffectAPI, type TargetRef, type TargetSpec, type TeleportOpts } from '../cards/scripts/registry'
 import type { GameState, PlayerId, Region, UnitState, SiteState, AuraState, Prompt, DeckName } from './types'
 import { isLocation } from './action-shape'
 import { avatarOf, siteAt, unitsAt, edgesConnected, aura2x2Squares, occupiedSquares, inBounds, GRID_W, GRID_H, squareLabel, nearbySquaresW, orthAdjacentWrapped } from './grid'
@@ -468,7 +468,13 @@ export function resumeWhenSettled(state: GameState, cont: string, ctx: any): voi
  *  prompt (e.g. the draw prompt), which stops the drain until that too resolves. */
 export function runTurnSteps(state: GameState): void {
   let guard = 0
-  while (state.prompts.length === 0 && state.flow?.turnSteps?.length && guard++ < 64) {
+  while (state.prompts.length === 0 && (state.flow?.pendingTriggers?.length || state.flow?.turnSteps?.length) && guard++ < 64) {
+    // an event's remaining triggers come first: the event is still resolving (runTriggers)
+    if (state.flow.pendingTriggers?.length) {
+      runPendingTriggers(state)
+      checkStateBased(state)
+      continue
+    }
     const step = state.flow.turnSteps.shift()
     const fn = continuations.get(step.cont)
     if (fn) fn(state, step.ctx, null)
@@ -2147,9 +2153,17 @@ export function completeDeferredDeaths(state: GameState): void {
 }
 
 /** notify every scripted card in play about a game event */
-export function emitEvent(
+type EventHook = 'onAnyDeath' | 'onUnitEnters' | 'onSpellCast' | 'onUnitEntersSquare' | 'onCardDrawn' | 'onUnitTapped' | 'onAllyStrikesAvatar' | 'onSitePlayed' | 'onUnitAttacked' | 'onUnitKilled' | 'onSiteDamaged' | 'onUnitDamaged' | 'onLifeLost' | 'onDeathsDoor' | 'onAllyDefends' | 'onDrowned'
+
+export function emitEvent(state: GameState, hook: EventHook, ...args: any[]): void {
+  emitEventWhere(state, undefined, hook, ...args)
+}
+
+/** emitEvent, keeping only the listeners whose controller `keep` accepts */
+export function emitEventWhere(
   state: GameState,
-  hook: 'onAnyDeath' | 'onUnitEnters' | 'onSpellCast' | 'onUnitEntersSquare' | 'onCardDrawn' | 'onUnitTapped' | 'onAllyStrikesAvatar' | 'onSitePlayed' | 'onUnitAttacked' | 'onUnitKilled' | 'onSiteDamaged' | 'onUnitDamaged' | 'onLifeLost' | 'onDeathsDoor' | 'onAllyDefends' | 'onDrowned',
+  keep: ((controller: PlayerId) => boolean) | undefined,
+  hook: EventHook,
   ...args: any[]
 ): void {
   const listeners: { id: string; name: string; controller: PlayerId }[] = []
@@ -2197,16 +2211,44 @@ export function emitEvent(
     hook === 'onUnitEntersSquare' && args[0] && typeof args[0] === 'object' && 'carrying' in args[0]
       ? protectedFromSites(state, args[0] as UnitState)
       : false
-  for (const l of listeners) {
+  // Codex, Simultaneous Triggers: the active player adds theirs first, then the non-active player adds
+  // theirs on top — so the NON-ACTIVE player's triggers resolve first. (Within one player, board order.)
+  const active = state.activePlayer
+  listeners.sort((a, b) => (a.controller === active ? 1 : 0) - (b.controller === active ? 1 : 0))
+  const run = listeners.filter((l) => !(enteringProtected && state.sites[l.id]) && (!keep || keep(l.controller)))
+  runTriggers(state, hook, run, args)
+}
+
+type TriggerListener = { id: string; name: string; controller: PlayerId }
+
+/** Run event triggers in order, ONE AT A TIME: a trigger that asks something resolves completely before
+ *  the next one runs, so the rest wait in flow.pendingTriggers (drained by runTurnSteps, ahead of any
+ *  parked step — they belong to the event still resolving). */
+function runTriggers(state: GameState, hook: string, listeners: TriggerListener[], args: any[]): void {
+  for (let i = 0; i < listeners.length; i++) {
+    const l = listeners[i]
     const fn = (getScript(l.name) as any)?.[hook]
-    if (fn) {
-      if (enteringProtected && state.sites[l.id]) continue
-      // the listener may have left play due to an earlier listener's effect
-      const inZone = state.players.some((p) => p.cemetery.includes(l.id) || p.hand.includes(l.id))
-      if (!state.units[l.id] && !state.sites[l.id] && !state.artifacts[l.id] && !state.auras[l.id] && !inZone) continue
-      fn(makeCtx(state, l.id, l.controller, []), ...args)
+    if (!fn) continue
+    // the listener may have left play due to an earlier listener's effect
+    const inZone = state.players.some((p) => p.cemetery.includes(l.id) || p.hand.includes(l.id))
+    if (!state.units[l.id] && !state.sites[l.id] && !state.artifacts[l.id] && !state.auras[l.id] && !inZone) continue
+    const asked = state.prompts.length
+    fn(makeCtx(state, l.id, l.controller, []), ...args)
+    if (state.prompts.length > asked && i < listeners.length - 1) {
+      state.flow = state.flow ?? {}
+      state.flow.pendingTriggers = [{ hook, listeners: listeners.slice(i + 1), args }, ...((state.flow.pendingTriggers as unknown[] | undefined) ?? [])]
+      return
     }
   }
+}
+
+/** the next parked group of event triggers (see runTriggers). A unit passed to the event is re-read
+ *  from the board, in case it changed while the earlier trigger resolved. */
+function runPendingTriggers(state: GameState): void {
+  const group = (state.flow?.pendingTriggers as { hook: string; listeners: TriggerListener[]; args: any[] }[] | undefined)?.shift()
+  if (!group) return
+  const args = group.args.map((a) => (a && typeof a === 'object' && typeof a.id === 'string' && 'carrying' in a && state.units[a.id]) || a)
+  runTriggers(state, group.hook, group.listeners, args)
 }
 
 /** a unit entered the realm by any means */
@@ -2250,13 +2292,19 @@ export function emitUnitEnters(state: GameState, unit: UnitState): void {
   if (state.units[unit.id]) {
     const isEntering = ((state.flow?.entering as string[] | undefined) ?? []).includes(unit.id)
     if (isEntering) {
+      // Codex, Simultaneous Triggers: entering, the minion's Genesis and every "enters here" trigger go
+      // on the storyline together. The NON-ACTIVE player's resolve first — now (a Mariner's Curse can
+      // drown the minion before its Genesis). Only the active player's own are held for after it.
+      const active = state.activePlayer
+      emitEventWhere(state, (c) => c !== active, 'onUnitEntersSquare', unit, { x: -1, y: -1, region: 'offboard' as Region })
+      if (!state.units[unit.id]) return
       // Remember WHERE it entered. If its Genesis then moves it off this square (Hotwheel rolling
       // forward), each move already fires the square-entry triggers along the way — including the
       // final square — so the deferred summon-entry must NOT re-fire at that final square, or the
       // last site is entered twice (a flipped-Druid site deals its 1 damage one time too many).
       state.flow.pendingSquareEntry = [
         ...(((state.flow.pendingSquareEntry as Array<{ id: string; x: number; y: number; region: Region }> | undefined)) ?? []),
-        { id: unit.id, x: unit.x, y: unit.y, region: unit.region },
+        { id: unit.id, x: unit.x, y: unit.y, region: unit.region, active },
       ]
     } else {
       emitEvent(state, 'onUnitEntersSquare', unit, { x: -1, y: -1, region: 'offboard' as Region })
@@ -2475,7 +2523,7 @@ export function settleEntering(state: GameState, unitId: string): void {
   // the unit's Genesis — including any prompt it raised — is fully resolved now, so fire its DEFERRED
   // location-entry trigger (see emitUnitEnters): a site that kills or relocates on entry (Bottomless
   // Pit, Dark Alley) only acts once the Genesis has completely resolved and chosen its targets.
-  const pend = state.flow?.pendingSquareEntry as Array<{ id: string; x: number; y: number; region: Region }> | undefined
+  const pend = state.flow?.pendingSquareEntry as Array<{ id: string; x: number; y: number; region: Region; active?: PlayerId }> | undefined
   const rec = pend?.find((p) => p.id === unitId)
   if (rec) {
     state.flow.pendingSquareEntry = pend!.filter((p) => p.id !== unitId)
@@ -2484,7 +2532,9 @@ export function settleEntering(state: GameState, unitId: string): void {
     // its Genesis moved it (Hotwheel's roll), emitUnitMoved already fired the entry triggers for every
     // square it travelled through, so re-firing here would double the final square.
     if (u && u.x === rec.x && u.y === rec.y && u.region === rec.region) {
-      emitEvent(state, 'onUnitEntersSquare', u, { x: -1, y: -1, region: 'offboard' as Region })
+      // the active player's (emitUnitEnters already fired the other player's when it entered)
+      const keep = rec.active === undefined ? undefined : (c: PlayerId) => c === rec.active
+      emitEventWhere(state, keep, 'onUnitEntersSquare', u, { x: -1, y: -1, region: 'offboard' as Region })
     }
   }
   // Deathspeaker's echo: a copy that must be banished once its Genesis resolves (Archangel Michael's
@@ -3168,7 +3218,11 @@ export function checkStateBased(state: GameState): void {
   let guard = 0
   while (changed && guard++ < 20) {
     changed = false
-    for (const unit of Object.values(state.units)) {
+    // units dying together: the NON-ACTIVE player's go first, so their deathrites resolve first
+    // (Codex, Simultaneous Triggers — the same order as emitEvent's)
+    const active = state.activePlayer
+    const byTurn = Object.values(state.units).sort((a, b) => (a.controller === active ? 1 : 0) - (b.controller === active ? 1 : 0))
+    for (const unit of byTurn) {
       // A square with a site has no void: anything left in the void of a sited square
       // is placed atop it (rulebook). Do this before region-legality so voidwalkers
       // don't linger in a phantom void — and so non-voidwalkers gifted/summoned to them
@@ -3440,6 +3494,93 @@ function siteCasterUnit(state: GameState, sourceId: string, controller: PlayerId
   }
 }
 
+/** A card script's continuation to run once a move is over (TeleportOpts.then), with the context to
+ *  rebuild its EffectAPI from — plain data, so a paused drag can carry it in state.flow. */
+interface ThenRef {
+  card: string
+  key: string
+  ctx: Record<string, unknown>
+  sourceId: string
+  controller: PlayerId
+  targets: TargetRef[]
+  at?: { x: number; y: number; region?: Region }
+  extra?: any
+  meta?: { kind: DamageSource['kind']; name?: string; elements?: string[] }
+}
+
+function runThen(state: GameState, then: ThenRef | undefined): void {
+  if (!then) return
+  const fn = getScript(then.card)?.conts?.[then.key]
+  if (fn) fn(makeCtx(state, then.sourceId, then.controller, then.targets, then.at, then.extra, then.meta, then.card), then.ctx, null)
+}
+
+/** a paused drag of `unitId` runs `then` when it is done */
+function parkThen(state: GameState, unitId: string, then: ThenRef | undefined): void {
+  if (!then) return
+  const step = ((state.flow?.turnSteps ?? []) as { cont: string; ctx: { unitId?: string; then?: ThenRef } }[])
+    .find((t) => t.cont === 'teleport:walk' && t.ctx.unitId === unitId)
+  if (step) step.ctx.then = then
+  else runThen(state, then)
+}
+
+/** A forced push / pull in a straight line (ctx.teleport with `push`), one step at a time: each step fires
+ *  the squares' enter triggers, and a step whose trigger asked something stops the drag there until that
+ *  is settled (Codex, Storyline: "each step is resolved one at a time"). 'paused' when it stopped.
+ *  Forced movement ignores the unit's own movement limits (Immobile, walls, Burrowing/Submerge/Voidwalk);
+ *  a void gap can't be crossed, and forced / push-only entry bans still stop it (Gnome Hollows, Bailey,
+ *  Perilous Bridge). */
+function pushWalk(state: GameState, unitId: string, sx: number, sy: number, steps: number, push: boolean): 'paused' | void {
+  const u = state.units[unitId]
+  if (!u) return
+  const canEnter = (a: { x: number; y: number; region: Region }, b: { x: number; y: number; region: Region }) =>
+    !!siteAt(state, b.x, b.y) && siteEntryAllowed(state, u, a, b, true, push)
+  state.flow = state.flow ?? {}
+  // while it is being dragged the unit is NOT "at rest", so an at-rest disabler (Hillock Basilisk /
+  // Stone-Gaze Gorgons) can't freeze it in a square it is merely passing through. It settles — and
+  // becomes disable-able again — only once it stops.
+  if (!((state.flow.entering as string[] | undefined) ?? []).includes(u.id)) {
+    state.flow.entering = [...((state.flow.entering as string[] | undefined) ?? []), u.id]
+  }
+  let paused = false
+  try {
+    for (let i = 1; i <= steps; i++) {
+      const stepFrom = { x: u.x, y: u.y, region: u.region }
+      const next = { x: u.x + sx, y: u.y + sy, region: u.region }
+      if (!canEnter(stepFrom, next)) break // blocked — it comes to rest on the last square it entered
+      u.x = next.x; u.y = next.y
+      // final=true on the square it actually STOPS on (the destination, or where a ban halts it) so
+      // "stops here" triggers (Vaults of Zul, Flame of the First Ones) fire once, at rest — while
+      // pass-through squares emit final=false and only fire "enters/leaves" triggers.
+      const after = { x: u.x + sx, y: u.y + sy, region: u.region }
+      const isFinal = i === steps || !canEnter({ x: u.x, y: u.y, region: u.region }, after)
+      const asked = state.prompts.length
+      emitUnitMoved(state, u, stepFrom, 'forced', isFinal)
+      if (!state.units[u.id]) return // a trigger (Briar Patch thorns…) killed the mover mid-drag
+      syncCarried(state, u)
+      if (u.carriedBy) {
+        const carrier = state.units[u.carriedBy]
+        if (!carrier || carrier.x !== u.x || carrier.y !== u.y || carrier.region !== u.region) detachFromCarrier(state, u)
+      }
+      checkStateBased(state)
+      if (!state.units[u.id]) return
+      if (isFinal) break
+      if (state.prompts.length > asked) {
+        paused = true
+        resumeWhenSettled(state, 'teleport:walk', { unitId: u.id, sx, sy, steps: steps - i, push })
+        return 'paused'
+      }
+    }
+  } finally {
+    if (!paused) settleEntering(state, u.id) // it has come to rest — an at-rest disabler now bites it here
+  }
+  checkStateBased(state)
+}
+
+registerCont('teleport:walk', (state, c: { unitId: string; sx: number; sy: number; steps: number; push: boolean; then?: ThenRef }) => {
+  if (pushWalk(state, c.unitId, c.sx, c.sy, c.steps, c.push) === 'paused') parkThen(state, c.unitId, c.then)
+  else runThen(state, c.then)
+})
+
 export function makeCtx(
   state: GameState,
   sourceId: string,
@@ -3484,6 +3625,138 @@ export function makeCtx(
     sourceUnitId: meta?.kind !== 'magic' ? actorUnit?.id : undefined,
     elements: meta?.elements,
   }
+  // ctx.teleport's move itself (teleport, below, adds its `then`): 'paused' when a multi-step drag stopped
+  // at a step whose trigger asked something — pushWalk resumes it once that is settled.
+  const teleportBody = (unitId: string, x: number, y: number, region: Region | undefined, opts: TeleportOpts | undefined): 'paused' | void => {
+    const u = state.units[unitId]
+    if (!u) return
+    const push = !!opts?.push
+    // honour a client-chosen oversized PLACEMENT (anchor + rotation) for a GENUINE (non-push) teleport
+    // of a multi-square unit — stashed in flow.teleportPlace by castSpell from extra.teleportPlace, so
+    // ANY teleport spell/ability (not just Blink) respects it. Consumed once; a forced push never claims
+    // it, so a shove elsewhere in the same cast can't steal the choice.
+    let shape = opts?.shape
+    if (!push && (u.size === '2x2' || (u.extraSquares?.length ?? 0) > 0) && state.flow?.teleportPlace) {
+      const pl = state.flow.teleportPlace as { x: number; y: number; shape?: { dx: number; dy: number }[]; from?: { x: number; y: number } }
+      delete state.flow.teleportPlace
+      // only a placement the engine itself offers at this destination (raw actions could otherwise move
+      // the body anywhere, or reshape it) — rotated about the anchor PART the player picked (`from`, which
+      // must be one of the body's squares); anything else falls back to the default placement
+      const from = pl?.from && Number.isInteger(pl.from.x) && Number.isInteger(pl.from.y) ? { x: pl.from.x, y: pl.from.y } : undefined
+      const legal = oversizedTeleportPlacements(state, u, { x, y }, from)
+        .find((o) => o.x === pl?.x && o.y === pl?.y && JSON.stringify(o.shape ?? null) === JSON.stringify(pl.shape ?? null))
+      if (legal) { x = legal.x; y = legal.y; shape = legal.shape }
+    }
+    // Cage of Sidrak (golden rule): a locked minion can only leave via TELEPORTATION-based forced
+    // movement. A push/pull/drag (River Rapids, Riptide, Scatter…) can't take it out; a genuine
+    // Teleport (Blink, Swap) frees it — so we drop the cage link before it moves.
+    const caged = (state.flow?.cagedUnits ?? []).find((c: { unitId: string }) => c.unitId === unitId)
+    if (caged) {
+      if (push) {
+        pushLog(state, u.controller, `${u.name} is locked in the Cage of Sidrak — force alone can't free it.`)
+        return
+      }
+      state.flow!.cagedUnits = (state.flow!.cagedUnits as { unitId: string }[]).filter((c) => c.unitId !== unitId)
+      if (u.counters) delete u.counters.caged
+    }
+    // forced-move protection: enemy effects can't relocate protected units
+    if (u.controller !== controller && moveProtected(state, u)) {
+      pushLog(state, u.controller, `${u.name} holds its ground — it can't be moved by force.`)
+      return
+    }
+    // Sphere of Animosity: a trapped avatar "can't ... be moved by force" out of the trap. Any
+    // forced relocation (pull, push, blink, swap, drag) to a square outside the trap is refused;
+    // a move to another trap-occupied square is allowed. (Cage of Sidrak's teleport exception was
+    // handled above; the Sphere grants no such exception.)
+    if (avatarTrapBlocksMove(state, u, x, y)) {
+      pushLog(state, u.controller, `${u.name} is held fast by the Sphere of Animosity — force can't drag it out.`)
+      return
+    }
+    // "Avatars can never enter void locations" (Keyword: Void). No forced movement — Mudslide,
+    // Windblast, a pull/push/drag or a teleport/swap — may drop an Avatar onto a siteless (void)
+    // square. Other units may be shoved into the void (Mudslide spans it); only Avatars can't.
+    // (An Avatar can still END UP in the void passively when a site moves out from under it —
+    // that path doesn't go through here and doesn't count as "entering".)
+    if (u.isAvatar && !siteAt(state, x, y)) {
+      pushLog(state, u.controller, `${u.name} can't be forced into the void.`)
+      return
+    }
+    // A PUSH/pull's forced "one step" must land on a real adjacent LOCATION — you can't shove ANY
+    // unit into the void (Windblast/Scatter FAQ: a siteless square is the void, not a location). A
+    // genuine Teleport/relocation (push: false — Blink, Swap, or a card that places into the void)
+    // MAY reach a siteless square; the unit is then banished below if it lacks Voidwalk.
+    // EXCEPTION — `intoVoid`: cards whose text deliberately drags/pushes INTO the void (Lacuna Entity
+    // "drag to here [in the void]", Nightmare "push it to an adjacent location OR void") keep full
+    // push semantics (Cage-lock, push-bans, moveProtected) but ARE allowed to reach a siteless square.
+    if (push && !opts?.intoVoid && !siteAt(state, x, y)) {
+      pushLog(state, u.controller, `${u.name} can't be pushed into the void.`)
+      return
+    }
+    // site entry restrictions (Gnome Hollows' power cap, Great Wall…) apply to forced relocation
+    // too: a unit that "can't enter" a site can't be teleported / Blinked / Teleported into it.
+    // A PUSH additionally trips push-only border bans (Perilous Bridge); a Teleport does not.
+    const from = { x: u.x, y: u.y, region: u.region }
+    const destRegion = region ?? u.region
+    const dx = x - from.x, dy = y - from.y
+    // A push/pull/drag is FORCED MOVEMENT but it still TAKES STEPS — only a genuine Teleport "moves a
+    // unit directly to a specified location without taking any steps in between" (rulebook). So a
+    // multi-square drag along a straight line (Grapple Shot, Meat Hook, harpoons, a current…) must pass
+    // THROUGH every square between origin and destination, entering each "even if just for a moment"
+    // (rulebook), so every square's enter/leave trigger fires — Briar Patch thorns, flipped-Druid
+    // thorns, Dark Alley stealth, a Giant Shark's waters, Root Spider… — instead of teleport-jumping
+    // past them. We only walk when the move is a straight orthogonal line staying in one region (the
+    // real push/pull geometry); a genuine teleport, a region-crossing drag, or a 1-step shove relocates
+    // directly below. Oversized / multi-square bodies also fall through to the direct relocation.
+    const walk =
+      push && destRegion === u.region && (dx === 0) !== (dy === 0) &&
+      Math.abs(dx) + Math.abs(dy) > 1 && u.size !== '2x2' && !(u.extraSquares?.length)
+    if (walk) return pushWalk(state, u.id, Math.sign(dx), Math.sign(dy), Math.abs(dx) + Math.abs(dy), push)
+    const dest = { x, y, region: destRegion }
+    if (!siteEntryAllowed(state, u, from, dest, true, push)) {
+      pushLog(state, u.controller, `${u.name} can't enter there.`)
+      return
+    }
+    // Oversized (2x2) / rigid-body (wall, Rack-stretched) units must land their WHOLE footprint on a
+    // legal set of locations — all parts in-bounds (Magellan-wrap aware) and sited (rulebook: a
+    // teleported oversized unit goes "to a location or set of locations that conforms to its size
+    // restrictions and is otherwise legal to occupy"). A relocation that would strand a part off-board
+    // or over a void is refused. `opts.shape` carries a player-chosen ROTATION of a wall's footprint;
+    // a 2x2 needs none — its anchor corner is just the chosen (x,y).
+    const multiBody = u.size === '2x2' || (u.extraSquares?.length ?? 0) > 0
+    const footprint = multiBody ? multiSquareDestSquares(state, u, { x, y }, shape) : null
+    if (multiBody && (destRegion !== 'surface' || !footprint)) {
+      pushLog(state, u.controller, `${u.name} can't fit there.`)
+      return
+    }
+    u.x = x
+    u.y = y
+    if (region) u.region = region
+    // apply a chosen rotation to a rigid body — re-lay its extra parts around the new anchor
+    if (shape && footprint && (u.extraSquares?.length ?? 0) > 0) {
+      u.extraSquares = footprint
+        .filter((s) => !(s.x === x && s.y === y))
+        .map((s) => ({ x: s.x, y: s.y, region: 'surface' as Region }))
+    }
+    // A square with no site IS the void (rulebook: "A square without a site is part of the void
+    // region"). A non-avatar RELOCATED onto one enters the void region; checkStateBased then
+    // banishes it unless it has Voidwalk. Only on an actual move (a same-square no-op pull, e.g.
+    // Pudge hooking a co-located enemy, must not void a unit that never left). Avatars are guarded.
+    const moved = from.x !== u.x || from.y !== u.y
+    if (moved && !u.isAvatar && !siteAt(state, u.x, u.y)) u.region = 'void'
+    emitUnitMoved(state, u, from)
+    // its cargo travels along; if IT was the cargo, the ride is over
+    syncCarried(state, u)
+    if (u.carriedBy) {
+      const carrier = state.units[u.carriedBy]
+      if (!carrier || carrier.x !== u.x || carrier.y !== u.y || carrier.region !== u.region) {
+        detachFromCarrier(state, u)
+      }
+    }
+    // a genuine teleport (not a push/pull shove) zaps away + glows the destination on the client
+    if (moved && !push) recordTeleport(state, u.id, u.name, from, { x: u.x, y: u.y })
+    checkStateBased(state)
+  }
+
   return {
     state,
     sourceId,
@@ -3614,175 +3887,13 @@ export function makeCtx(
     },
     summonToken: (name, owner, x, y, region) => summonToken(state, name, owner, x, y, region),
     teleport: (unitId, x, y, region, opts) => {
-      const u = state.units[unitId]
-      if (!u) return
-      const push = !!opts?.push
-      // honour a client-chosen oversized PLACEMENT (anchor + rotation) for a GENUINE (non-push) teleport
-      // of a multi-square unit — stashed in flow.teleportPlace by castSpell from extra.teleportPlace, so
-      // ANY teleport spell/ability (not just Blink) respects it. Consumed once; a forced push never claims
-      // it, so a shove elsewhere in the same cast can't steal the choice.
-      let shape = opts?.shape
-      if (!push && (u.size === '2x2' || (u.extraSquares?.length ?? 0) > 0) && state.flow?.teleportPlace) {
-        const pl = state.flow.teleportPlace as { x: number; y: number; shape?: { dx: number; dy: number }[]; from?: { x: number; y: number } }
-        delete state.flow.teleportPlace
-        // only a placement the engine itself offers at this destination (raw actions could otherwise move
-        // the body anywhere, or reshape it) — rotated about the anchor PART the player picked (`from`, which
-        // must be one of the body's squares); anything else falls back to the default placement
-        const from = pl?.from && Number.isInteger(pl.from.x) && Number.isInteger(pl.from.y) ? { x: pl.from.x, y: pl.from.y } : undefined
-        const legal = oversizedTeleportPlacements(state, u, { x, y }, from)
-          .find((o) => o.x === pl?.x && o.y === pl?.y && JSON.stringify(o.shape ?? null) === JSON.stringify(pl.shape ?? null))
-        if (legal) { x = legal.x; y = legal.y; shape = legal.shape }
-      }
-      // Cage of Sidrak (golden rule): a locked minion can only leave via TELEPORTATION-based forced
-      // movement. A push/pull/drag (River Rapids, Riptide, Scatter…) can't take it out; a genuine
-      // Teleport (Blink, Swap) frees it — so we drop the cage link before it moves.
-      const caged = (state.flow?.cagedUnits ?? []).find((c: { unitId: string }) => c.unitId === unitId)
-      if (caged) {
-        if (push) {
-          pushLog(state, u.controller, `${u.name} is locked in the Cage of Sidrak — force alone can't free it.`)
-          return
-        }
-        state.flow!.cagedUnits = (state.flow!.cagedUnits as { unitId: string }[]).filter((c) => c.unitId !== unitId)
-        if (u.counters) delete u.counters.caged
-      }
-      // forced-move protection: enemy effects can't relocate protected units
-      if (u.controller !== controller && moveProtected(state, u)) {
-        pushLog(state, u.controller, `${u.name} holds its ground — it can't be moved by force.`)
-        return
-      }
-      // Sphere of Animosity: a trapped avatar "can't ... be moved by force" out of the trap. Any
-      // forced relocation (pull, push, blink, swap, drag) to a square outside the trap is refused;
-      // a move to another trap-occupied square is allowed. (Cage of Sidrak's teleport exception was
-      // handled above; the Sphere grants no such exception.)
-      if (avatarTrapBlocksMove(state, u, x, y)) {
-        pushLog(state, u.controller, `${u.name} is held fast by the Sphere of Animosity — force can't drag it out.`)
-        return
-      }
-      // "Avatars can never enter void locations" (Keyword: Void). No forced movement — Mudslide,
-      // Windblast, a pull/push/drag or a teleport/swap — may drop an Avatar onto a siteless (void)
-      // square. Other units may be shoved into the void (Mudslide spans it); only Avatars can't.
-      // (An Avatar can still END UP in the void passively when a site moves out from under it —
-      // that path doesn't go through here and doesn't count as "entering".)
-      if (u.isAvatar && !siteAt(state, x, y)) {
-        pushLog(state, u.controller, `${u.name} can't be forced into the void.`)
-        return
-      }
-      // A PUSH/pull's forced "one step" must land on a real adjacent LOCATION — you can't shove ANY
-      // unit into the void (Windblast/Scatter FAQ: a siteless square is the void, not a location). A
-      // genuine Teleport/relocation (push: false — Blink, Swap, or a card that places into the void)
-      // MAY reach a siteless square; the unit is then banished below if it lacks Voidwalk.
-      // EXCEPTION — `intoVoid`: cards whose text deliberately drags/pushes INTO the void (Lacuna Entity
-      // "drag to here [in the void]", Nightmare "push it to an adjacent location OR void") keep full
-      // push semantics (Cage-lock, push-bans, moveProtected) but ARE allowed to reach a siteless square.
-      if (push && !opts?.intoVoid && !siteAt(state, x, y)) {
-        pushLog(state, u.controller, `${u.name} can't be pushed into the void.`)
-        return
-      }
-      // site entry restrictions (Gnome Hollows' power cap, Great Wall…) apply to forced relocation
-      // too: a unit that "can't enter" a site can't be teleported / Blinked / Teleported into it.
-      // A PUSH additionally trips push-only border bans (Perilous Bridge); a Teleport does not.
-      const from = { x: u.x, y: u.y, region: u.region }
-      const destRegion = region ?? u.region
-      const dx = x - from.x, dy = y - from.y
-      // A push/pull/drag is FORCED MOVEMENT but it still TAKES STEPS — only a genuine Teleport "moves a
-      // unit directly to a specified location without taking any steps in between" (rulebook). So a
-      // multi-square drag along a straight line (Grapple Shot, Meat Hook, harpoons, a current…) must pass
-      // THROUGH every square between origin and destination, entering each "even if just for a moment"
-      // (rulebook), so every square's enter/leave trigger fires — Briar Patch thorns, flipped-Druid
-      // thorns, Dark Alley stealth, a Giant Shark's waters, Root Spider… — instead of teleport-jumping
-      // past them. We only walk when the move is a straight orthogonal line staying in one region (the
-      // real push/pull geometry); a genuine teleport, a region-crossing drag, or a 1-step shove relocates
-      // directly below. Oversized / multi-square bodies also fall through to the direct relocation.
-      const walk =
-        push && destRegion === u.region && (dx === 0) !== (dy === 0) &&
-        Math.abs(dx) + Math.abs(dy) > 1 && u.size !== '2x2' && !(u.extraSquares?.length)
-      if (walk) {
-        const sx = Math.sign(dx), sy = Math.sign(dy)
-        const steps = Math.abs(dx) + Math.abs(dy)
-        // can the unit be forced from `a` into the adjacent `b`? A void gap (a siteless square) can't be
-        // crossed by a push (rulebook: a unit "can't be pushed into the void"), and forced/ push-only
-        // entry bans still stop it (Gnome Hollows via entryFilterBlocksForcedEntry, Bailey / Perilous
-        // Bridge via entryFilterBlocksPush). Movement LIMITATIONS of the unit itself (Immobile, walls,
-        // Burrowing/Submerge/Voidwalk) are NOT consulted — forced movement ignores them.
-        const canEnter = (a: { x: number; y: number; region: Region }, b: { x: number; y: number; region: Region }) =>
-          !!siteAt(state, b.x, b.y) && siteEntryAllowed(state, u, a, b, true, push)
-        state.flow = state.flow ?? {}
-        // while it is being dragged the unit is NOT "at rest", so an at-rest disabler (Hillock Basilisk /
-        // Stone-Gaze Gorgons) can't freeze it in a square it is merely passing through. It settles — and
-        // becomes disable-able again — only once it stops (finally, below).
-        state.flow.entering = [...((state.flow.entering as string[] | undefined) ?? []), u.id]
-        try {
-          for (let i = 1; i <= steps; i++) {
-            const stepFrom = { x: u.x, y: u.y, region: u.region }
-            const next = { x: u.x + sx, y: u.y + sy, region: u.region }
-            if (!canEnter(stepFrom, next)) break // blocked — it comes to rest on the last square it entered
-            u.x = next.x; u.y = next.y
-            // final=true on the square it actually STOPS on (the destination, or where a ban halts it) so
-            // "stops here" triggers (Vaults of Zul, Flame of the First Ones) fire once, at rest — while
-            // pass-through squares emit final=false and only fire "enters/leaves" triggers.
-            const after = { x: u.x + sx, y: u.y + sy, region: u.region }
-            const isFinal = i === steps || !canEnter({ x: u.x, y: u.y, region: u.region }, after)
-            emitUnitMoved(state, u, stepFrom, 'forced', isFinal)
-            if (!state.units[u.id]) return // a trigger (Briar Patch thorns…) killed the mover mid-drag
-            syncCarried(state, u)
-            if (u.carriedBy) {
-              const carrier = state.units[u.carriedBy]
-              if (!carrier || carrier.x !== u.x || carrier.y !== u.y || carrier.region !== u.region) detachFromCarrier(state, u)
-            }
-            checkStateBased(state)
-            if (!state.units[u.id]) return
-            if (isFinal) break
-          }
-        } finally {
-          settleEntering(state, u.id) // it has come to rest — an at-rest disabler now bites it here
-        }
-        checkStateBased(state)
-        return
-      }
-      const dest = { x, y, region: destRegion }
-      if (!siteEntryAllowed(state, u, from, dest, true, push)) {
-        pushLog(state, u.controller, `${u.name} can't enter there.`)
-        return
-      }
-      // Oversized (2x2) / rigid-body (wall, Rack-stretched) units must land their WHOLE footprint on a
-      // legal set of locations — all parts in-bounds (Magellan-wrap aware) and sited (rulebook: a
-      // teleported oversized unit goes "to a location or set of locations that conforms to its size
-      // restrictions and is otherwise legal to occupy"). A relocation that would strand a part off-board
-      // or over a void is refused. `opts.shape` carries a player-chosen ROTATION of a wall's footprint;
-      // a 2x2 needs none — its anchor corner is just the chosen (x,y).
-      const multiBody = u.size === '2x2' || (u.extraSquares?.length ?? 0) > 0
-      const footprint = multiBody ? multiSquareDestSquares(state, u, { x, y }, shape) : null
-      if (multiBody && (destRegion !== 'surface' || !footprint)) {
-        pushLog(state, u.controller, `${u.name} can't fit there.`)
-        return
-      }
-      u.x = x
-      u.y = y
-      if (region) u.region = region
-      // apply a chosen rotation to a rigid body — re-lay its extra parts around the new anchor
-      if (shape && footprint && (u.extraSquares?.length ?? 0) > 0) {
-        u.extraSquares = footprint
-          .filter((s) => !(s.x === x && s.y === y))
-          .map((s) => ({ x: s.x, y: s.y, region: 'surface' as Region }))
-      }
-      // A square with no site IS the void (rulebook: "A square without a site is part of the void
-      // region"). A non-avatar RELOCATED onto one enters the void region; checkStateBased then
-      // banishes it unless it has Voidwalk. Only on an actual move (a same-square no-op pull, e.g.
-      // Pudge hooking a co-located enemy, must not void a unit that never left). Avatars are guarded.
-      const moved = from.x !== u.x || from.y !== u.y
-      if (moved && !u.isAvatar && !siteAt(state, u.x, u.y)) u.region = 'void'
-      emitUnitMoved(state, u, from)
-      // its cargo travels along; if IT was the cargo, the ride is over
-      syncCarried(state, u)
-      if (u.carriedBy) {
-        const carrier = state.units[u.carriedBy]
-        if (!carrier || carrier.x !== u.x || carrier.y !== u.y || carrier.region !== u.region) {
-          detachFromCarrier(state, u)
-        }
-      }
-      // a genuine teleport (not a push/pull shove) zaps away + glows the destination on the client
-      if (moved && !push) recordTeleport(state, u.id, u.name, from, { x: u.x, y: u.y })
-      checkStateBased(state)
+      // `then` (TeleportOpts): the caller's own continuation, run once the move is over — at once, or by
+      // the resumed drag if a step's trigger made it stop (pushWalk)
+      const then: ThenRef | undefined = opts?.then
+        ? { card: meta?.name ?? routeCardName, key: opts.then.key, ctx: opts.then.ctx ?? {}, sourceId, controller, targets, at, extra, meta }
+        : undefined
+      if (teleportBody(unitId, x, y, region, opts) === 'paused') parkThen(state, unitId, then)
+      else runThen(state, then)
     },
     tap: (unitId) => {
       const u = state.units[unitId]

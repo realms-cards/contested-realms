@@ -8,11 +8,9 @@ function grappleHit(ctx: EffectAPI, allyId: string, hitId: string) {
   const ally = ctx.state.units[allyId]
   const hit = ctx.state.units[hitId]
   if (!ally || !hit) return
-  ctx.teleport(ally.id, hit.x, hit.y, hit.region, { push: true }) // a grapple/pull, not a Teleport (Perilous Bridge / Cage of Sidrak)
-  // "may strike the hit unit WHEN IT ARRIVES" — if the grapple was blocked short (Perilous Bridge / Cage
-  // of Sidrak / Bailey), the ally never reaches the target, so there is no strike AND no strike prompt.
-  const arrived = !!ctx.state.units[ally.id] && ally.x === hit.x && ally.y === hit.y && ally.region === hit.region
-  if (arrived) ctx.ask({ kind: 'yesNo', title: `Strike ${hit.name} on arrival?` }, 'land', { allyId: ally.id, victim: hit.id })
+  // a grapple/pull, not a Teleport (Perilous Bridge / Cage of Sidrak); `arrived` once the drag is over,
+  // which a trigger on the way may hold up (a Troll Bridge's toll)
+  ctx.teleport(ally.id, hit.x, hit.y, hit.region, { push: true, then: { key: 'arrived', ctx: { allyId: ally.id, victim: hit.id } } })
 }
 
 // 'An ally shoots a projectile. If it hits a unit, the ally is dragged to that
@@ -50,6 +48,14 @@ registerScript('Grapple Shot', {
     grapplePick: (ctx, contCtx, choice) => {
       const id = Array.isArray(choice) ? choice[0] : choice
       if (typeof id === 'string') grappleHit(ctx, contCtx.allyId, id)
+    },
+    arrived: (ctx, contCtx) => {
+      const ally = ctx.state.units[contCtx.allyId]
+      const hit = ctx.state.units[contCtx.victim]
+      // "may strike the hit unit WHEN IT ARRIVES" — if the grapple was blocked short (Perilous Bridge / Cage
+      // of Sidrak / Bailey), the ally never reaches the target, so there is no strike AND no strike prompt.
+      const arrived = !!ally && !!hit && ally.x === hit.x && ally.y === hit.y && ally.region === hit.region
+      if (arrived) ctx.ask({ kind: 'yesNo', title: `Strike ${hit.name} on arrival?` }, 'land', { allyId: ally.id, victim: hit.id })
     },
     land: (ctx, contCtx, choice) => {
       const ally = ctx.state.units[contCtx.allyId]
