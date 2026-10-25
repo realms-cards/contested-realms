@@ -5,12 +5,14 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cardImage } from "@/components/game/CpuPlayReveal";
 import { cardRefFor, loadCardIndex } from "@/lib/engine-mode/cardIndex";
+import { describeCardStatus, type BoardStatus, type StatusChip } from "@/lib/engine-mode/cardStatus";
 import { opponentName, useEngineSession } from "@/lib/engine-mode/session";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store/types";
 import { TOKEN_BY_NAME, tokenSlug } from "@/lib/game/tokens";
 import { getCardImageUrl } from "@/lib/utils/cdnUrl";
+import { getCard } from "@sorcery/shared";
 import { useActionFeed } from "./ActionFeed2D";
 import { useChosenSource } from "./PickGuide2D";
 import { entrySummary, latestEntry } from "./actionFeed";
@@ -150,6 +152,61 @@ function useSize<T extends HTMLElement>() {
   return { ref: setEl, size };
 }
 
+const BOARD_STATUSES: BoardStatus[] = ["disabled", "silenced", "ward", "stealth"];
+
+/**
+ * What is going on with the previewed card, if it is a unit on the board: the statuses the board can
+ * only show as small badges, as chips, and the effects behind them in words (describeCardStatus).
+ * A board card's instanceId is its unit's CARD id; the board item and its status tokens use the unit id.
+ */
+function useCardStatus(card: CardRef | null): { chips: StatusChip[]; notes: string[] } | null {
+  const game = useEngineSession((s) => s.game);
+  useEngineSession((s) => s.rev);
+  const permanents = useGameStore((s) => s.permanents);
+  return useMemo(() => {
+    const id = card?.instanceId;
+    if (!game || !id) return null;
+    const unit = Object.values(game.units).find((u) => u.cardId === id || u.id === id);
+    if (!unit) return null;
+    const items = Object.values(permanents).flat();
+    const statuses = BOARD_STATUSES.filter((s) => items.some((i) => i.instanceId === `${unit.id}:${s}`));
+    const item = items.find((i) => i.instanceId === unit.id);
+    const printed = getCard(unit.name);
+    const status = describeCardStatus({
+      unit,
+      statuses,
+      stats: item?.stats ?? null,
+      printed: printed ? { attack: printed.attack, defence: printed.defence } : null,
+      carrying: unit.carrying.map((a) => game.artifacts[a]?.name).filter((n): n is string => !!n),
+      carriedBy: unit.carriedBy ? (game.units[unit.carriedBy]?.name ?? null) : null,
+    });
+    return status.chips.length || status.notes.length ? status : null;
+  }, [card?.instanceId, game, permanents]);
+}
+
+const CHIP_TONE: Record<StatusChip["tone"], string> = {
+  bad: "border-rc-danger/50 text-rc-danger-ink",
+  good: "border-rc-success/50 text-rc-success-ink",
+  info: "border-rc-line/30 text-rc-info-ink",
+};
+
+function StatusChips({ chips, small }: { chips: StatusChip[]; small?: boolean }) {
+  return (
+    <ul className={`m-0 flex list-none flex-wrap justify-center p-0 ${small ? "gap-1" : "gap-1.5"}`}>
+      {chips.map((c) => (
+        <li
+          key={c.key}
+          title={c.label}
+          className={`flex items-center gap-1 rounded-full border bg-[rgba(7,10,20,0.85)] font-rc-sans leading-none ${CHIP_TONE[c.tone]} ${small ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-[12px]"}`}
+        >
+          <Icon icon={c.icon} aria-hidden className={small ? "h-3 w-3" : "h-3.5 w-3.5"} />
+          {c.label}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /**
  * The inspector's top: whichever card is being looked at (hovered or tapped on the board, in
  * the hand or in the feed), shown as large as the section allows and borderless — unless the
@@ -205,9 +262,11 @@ export default function PreviewPanel2D({ quiet = true, compact = false }: { quie
   const theirsFirst = quiet && !!lastRef && order.played > order.looked && !chosen;
   const live = theirsFirst ? null : looking;
   const card = live ?? (quiet ? (lastRef ?? avatar) : null);
+  // only a card you are looking at: the opponent's latest play is a card from their hand
+  const status = useCardStatus(live ?? null);
   if (!card) return null;
   const caption = live ? null : last && lastRef === card ? { them, text: entrySummary(last), now: theirTurn } : "hint";
-  return <PreviewFigure card={card} live={!!live || (caption !== "hint" && !!caption?.now)} caption={caption} compact={compact} />;
+  return <PreviewFigure card={card} live={!!live || (caption !== "hint" && !!caption?.now)} caption={caption} compact={compact} status={status} />;
 }
 
 function PreviewFigure({
@@ -215,11 +274,13 @@ function PreviewFigure({
   live,
   caption,
   compact,
+  status,
 }: {
   card: CardRef;
   live: boolean;
   caption: { them: string; text: string; now: boolean } | "hint" | null;
   compact: boolean;
+  status: { chips: StatusChip[]; notes: string[] } | null;
 }) {
   // the card gets what the caption leaves: the caption is never cut to make room for the art
   const { ref, size } = useSize<HTMLDivElement>();
@@ -230,7 +291,8 @@ function PreviewFigure({
     const theirs = caption && caption !== "hint" ? caption : null;
     // the card and its caption as one centred group: the caption sits right under the art
     // (a landscape site in a tall box left a wide gap between them when only the art centred)
-    const art = previewBox(landscape, Math.max(0, compactSize.w - 4), Math.max(0, compactSize.h - 4 - (caption ? COMPACT_CAPTION_H : 0)));
+    const chipsH = status?.chips.length ? COMPACT_CAPTION_H + 2 : 0;
+    const art = previewBox(landscape, Math.max(0, compactSize.w - 4), Math.max(0, compactSize.h - 4 - (caption ? COMPACT_CAPTION_H : 0) - chipsH));
     return (
       <figure
         ref={compactRef}
@@ -243,6 +305,12 @@ function PreviewFigure({
             <CardFace key={`${card.name}:${card.slug ?? ""}`} card={card} w={art.w} h={art.h} landscape={landscape} dim={!live} />
           )}
         </div>
+        {status && status.chips.length > 0 && (
+          // the effects in words ride along as the chips' tooltip: the half-width column has no room for them
+          <div className="w-full flex-none overflow-hidden pt-0.5" title={status.notes.join(" ")} style={{ height: chipsH }}>
+            <StatusChips chips={status.chips} small />
+          </div>
+        )}
         {caption && (
           <figcaption
             className="flex w-full max-w-full flex-none items-center justify-center gap-1 truncate pt-0.5 text-[11px] leading-tight text-rc-fg-muted"
@@ -275,6 +343,18 @@ function PreviewFigure({
           <CardFace key={`${card.name}:${card.slug ?? ""}`} card={card} w={box.w} h={box.h} landscape={landscape} dim={!live} />
         )}
       </div>
+      {status && (
+        <section aria-label={`${card.name}: status`} className="mt-2 flex w-full max-w-full flex-none flex-col gap-1.5 px-1">
+          {status.chips.length > 0 && <StatusChips chips={status.chips} />}
+          {status.notes.length > 0 && (
+            <ul className="m-0 list-none space-y-0.5 p-0 text-[12px] leading-snug text-rc-fg">
+              {status.notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
       {caption && (
         <figcaption className="mt-2 flex w-full max-w-full flex-none items-start gap-1.5 px-1 text-[12px] leading-snug text-rc-fg-muted">
           {caption !== "hint" ? (
