@@ -268,7 +268,11 @@ function DirectionPick({
 function promptCtxCard(game: EngineState, prompt: Prompt): string | null {
   const ctx = (prompt as { ctx?: { cardId?: unknown } }).ctx;
   const cardId = typeof ctx?.cardId === "string" ? ctx.cardId : null;
-  return cardId ? (game.cards[cardId]?.name ?? null) : null;
+  if (cardId && game.cards[cardId]?.name) return game.cards[cardId].name;
+  // a card the prompt reveals by name (Pathfinder's topmost site, placed where you choose) — online the
+  // view never holds the hidden card itself, so the name has to travel with the prompt
+  const reveal = (prompt.data as { reveal?: unknown } | undefined)?.reveal;
+  return typeof reveal === "string" ? reveal : null;
 }
 
 /** Our 1–20 tile number for a board cell key. */

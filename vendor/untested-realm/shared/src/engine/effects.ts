@@ -990,6 +990,9 @@ export function registerSpellDraw(state: GameState, player: PlayerId): boolean {
 
 export function drawCards(state: GameState, player: PlayerId, deck: DeckName, n = 1): void {
   const p = state.players[player]
+  // drawing nothing is not a draw — Pathfinder's "draw no sites during setup" asks for 0, and the log
+  // below would otherwise report "draws a card from their atlas"
+  if (n <= 0) return
   // Magician (and any noAtlasDraw avatar) has no atlas: site draws are skipped
   // entirely — never a loss for an "empty" atlas, never a card gained.
   if (deck === 'atlas' && noAtlasDraw(state, player)) return
