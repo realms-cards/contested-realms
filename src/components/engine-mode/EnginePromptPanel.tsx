@@ -783,6 +783,9 @@ function PromptCardChip({ name }: { name: string }) {
   );
 }
 
+/** two clicks on the same card within this many ms count as a double-click */
+const DOUBLE_CLICK_MS = 400;
+
 function MultiPick({
   request,
   title,
@@ -815,6 +818,11 @@ function MultiPick({
 }) {
   const [chosen, setChosen] = useState<string[]>([]);
   const [twins, setTwins] = useState<string[] | null>(null);
+  // a second click on the same card right after the first (a double-click) means "this one, go":
+  // it stays chosen and the pick is confirmed, if that completes it (Quarrelsome Kobolds' one target)
+  const lastClick = useRef<{ token: string; at: number } | null>(null);
+  const chosenRef = useRef(chosen);
+  chosenRef.current = chosen;
   const toggleId = useCallback(
     (id: string) =>
       setChosen((cur) => (cur.includes(id) ? cur.filter((c) => c !== id) : cur.length < max ? [...cur, id] : cur)),
@@ -822,15 +830,27 @@ function MultiPick({
   );
   const toggle = useMemo(
     () => (token: string) => {
+      const now = Date.now();
+      const again = lastClick.current?.token === token && now - lastClick.current.at < DOUBLE_CLICK_MS;
+      lastClick.current = again ? null : { token, at: now };
       const matches = idsAt(ids, tokenOf, token);
       if (matches.length > 1) {
         setTwins(matches);
         return;
       }
       setTwins(null);
-      if (matches[0]) toggleId(matches[0]);
+      const id = matches[0];
+      if (!id) return;
+      if (again) {
+        const picked = chosenRef.current.includes(id) ? chosenRef.current : [...chosenRef.current, id];
+        if (picked.length >= min && picked.length <= max) {
+          onConfirm(picked);
+          return;
+        }
+      }
+      toggleId(id);
     },
-    [ids, tokenOf, toggleId],
+    [ids, tokenOf, toggleId, min, max, onConfirm],
   );
   useBoardPick(`${request}:${chosen.join(",")}`, ids.map(tokenOf), chosen.map(tokenOf), toggle);
   const ready = chosen.length >= min && chosen.length <= max;
