@@ -659,8 +659,16 @@ function mainPhase(state: GameState, me: PlayerId, banned?: Set<string>): Action
     .map((id) => ({ id, def: getCard(state.cards[id].name) }))
     .filter(({ def }) => def.type !== 'Site' && def.type !== 'Avatar')
 
+  // A Pathfinder plays its sites only through its own tap ability: the standard "play a site" /
+  // "draw a site" are refused, so it develops by blazing a trail instead.
+  const blaze: Action = { t: 'activate', sourceId: avatar.id, ability: 'blaze', targets: [] }
+  const blazer = getScript(avatar.name)?.noStandardSiteAction === true
+  const canBlaze = () => blazer && canActivate(state, me, avatar.id, 'blaze') === null && actionMakesProgress(state, me, blaze)
+
   // 1. develop with the avatar: play a site, or draw one when ramping / short.
-  if (!avatar.tapped) {
+  if (blazer) {
+    if (ok(blaze) && canBlaze()) return blaze
+  } else if (!avatar.tapped) {
     const siteCards = p.hand.filter((id) => getCard(state.cards[id].name).type === 'Site')
     if (siteCards.length > 0) {
       const squares = legalSiteSquares(state, me).filter((s) => !underEnemySiteEater(state, me, s.x, s.y))
@@ -717,7 +725,9 @@ function mainPhase(state: GameState, me: PlayerId, banned?: Set<string>): Action
   // 6. NEVER end the turn with an untapped avatar (owner rule): an unspent avatar
   //    tap is a wasted resource — dump it into "tap: draw a site" before passing.
   //    (Steps 0-5 already had their chance to use the tap for something better.)
-  if (!avatar.tapped && canTap(state, avatar) && !isDisabled(state, avatar) && p.atlas.length > 0) {
+  if (blazer) {
+    if (ok(blaze) && canBlaze()) return blaze
+  } else if (!avatar.tapped && canTap(state, avatar) && !isDisabled(state, avatar) && p.atlas.length > 0) {
     const draw: Action = { t: 'avatarSite', mode: 'draw' }
     if (ok(draw)) return draw
   }
