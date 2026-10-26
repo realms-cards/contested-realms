@@ -200,6 +200,8 @@ const FEED_NOTES_KEPT = 60;
 
 export type BotLevel = "quick" | "thinking";
 const BOT_BUDGET_MS: Record<BotLevel, number> = { quick: 1500, thinking: 20000 };
+/** how long past its budget the planner may take before it is presumed stuck */
+const BOT_REPLY_GRACE_MS = 15000;
 
 interface EngineSession {
   game: EngineState | null;
@@ -315,6 +317,10 @@ let legalWorker: Worker | null = null;
 let legalRequestId = 0;
 let botRequestId = 0;
 let botTimer: ReturnType<typeof setTimeout> | null = null;
+/** the planner's deadline: no reply by then and it is restarted (see requestBotAction) */
+let botWatchdog: ReturnType<typeof setTimeout> | null = null;
+/** planners restarted in a row without a reply */
+let botRestarts = 0;
 /** anti-loop ward: bot actions proven score-neutral this turn (upstream App does the same) */
 let bannedThisTurn = new Set<string>();
 let bannedTurn = -1;
@@ -547,6 +553,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
   function stopLocalWork() {
     if (botTimer) clearTimeout(botTimer);
     botTimer = null;
+    clearBotWatchdog();
     worker?.terminate();
     worker = null;
     legalWorker?.terminate();
@@ -730,6 +737,8 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     };
     worker.onmessage = (e: MessageEvent<BotReply>) => {
       if (e.data.id !== botRequestId) return; // superseded (undo / restart)
+      clearBotWatchdog();
+      botRestarts = 0;
       set({ botThinking: false });
       // an error reply carries no action: say so rather than silently passing every turn
       if (e.data.error) set({ lastError: `The computer could not plan: ${e.data.error}` });
@@ -740,6 +749,28 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     };
     set({ botThinking: true });
     worker.postMessage(request);
+    // A planner that never answers (a hung search, or a worker still running an older engine after a
+    // hot reload) left the computer "thinking" until the page was reloaded. Past its budget plus a
+    // grace period it is restarted once; a second silence passes the turn, saying so.
+    clearBotWatchdog();
+    botWatchdog = setTimeout(() => {
+      botWatchdog = null;
+      if (id !== botRequestId) return;
+      botRequestId++; // a late reply from the stuck planner is ignored
+      worker?.terminate();
+      worker = null;
+      set({ botThinking: false });
+      if (++botRestarts <= 1) return scheduleBot();
+      botRestarts = 0;
+      if (get().game) applyBotAction({ t: "endTurn" });
+      // after the action: committing it clears lastError
+      set({ lastError: "The computer's planner stopped responding; it passes the turn." });
+    }, BOT_BUDGET_MS[botLevel] + BOT_REPLY_GRACE_MS);
+  }
+
+  function clearBotWatchdog() {
+    if (botWatchdog) clearTimeout(botWatchdog);
+    botWatchdog = null;
   }
 
   /**
@@ -1193,6 +1224,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       }
       worker?.terminate();
       worker = null;
+      clearBotWatchdog();
       legalRequestId++;
       legalWorker?.terminate();
       legalWorker = null;
