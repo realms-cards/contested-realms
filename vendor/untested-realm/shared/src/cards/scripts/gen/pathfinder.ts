@@ -26,12 +26,11 @@ registerScript('Pathfinder', {
         const site = siteAt(ctx.state, s.x, s.y)
         return !site || site.isRubble
       })
-      if (!spots.length) return ctx.log('No adjacent void or rubble to blaze a trail into.')
+      if (!spots.length) return ctx.log('No adjacent void or rubble.')
       // FAQ (Pathfinder): "you reveal the site, then play it in an adjacent Rubble or void" — so the
-      // player chooses the square knowing which site it is
+      // player chooses the square seeing which site it is (`reveal`: the client shows the card)
       const top = ctx.state.cards[p.atlas[0]].name
-      pushLog(ctx.state, ctx.controller, `Pathfinder reveals the topmost site of their atlas: ${top}.`)
-      ctx.ask({ kind: 'chooseSquare', title: `Blaze a trail — play ${top} where?`, data: { squares: spots, reveal: top } }, 'blaze')
+      ctx.ask({ kind: 'chooseSquare', title: 'Play the site where?', data: { squares: spots, reveal: top } }, 'blaze')
     },
   }],
   conts: {
@@ -49,7 +48,7 @@ registerScript('Pathfinder', {
       // route through enterSite so the played site's Genesis (and its mana/ward/onSitePlayed)
       // fire, exactly as a normal site play would — previously the site was inserted raw and
       // its Genesis never triggered (Den of Evil, Pond, etc. did nothing when Pathfinder laid them).
-      pushLog(ctx.state, ctx.controller, `Pathfinder blazes a trail to ${ctx.state.cards[cardId].name}.`)
+      pushLog(ctx.state, ctx.controller, `Pathfinder plays ${ctx.state.cards[cardId].name}.`)
       enterSite(ctx.state, ctx.controller, cardId, sq.x, sq.y)
       // FAQ: the site is ALWAYS played, but the Pathfinder only moves onto it if it legally can.
       // If something stops the move — it's trapped where it stands (Sphere of Animosity), or the
@@ -59,7 +58,7 @@ registerScript('Pathfinder', {
       const from = { x: self.x, y: self.y, region: 'surface' as const }
       const to = { x: sq.x, y: sq.y, region: 'surface' as const }
       if (isLegalStep(ctx.state, self, from, to)) ctx.teleport(self.id, sq.x, sq.y, 'surface')
-      else pushLog(ctx.state, ctx.controller, `Pathfinder can't advance onto the new site and holds its ground.`)
+      else pushLog(ctx.state, ctx.controller, `Pathfinder can't move onto it.`)
     },
   },
 })
