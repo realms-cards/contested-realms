@@ -249,7 +249,7 @@ export function enterSite(
     const placed = state.sites[siteId]
     for (const r of Object.values(state.auras)) {
       const floods = getScript(r.name)?.auraFloodsSite
-      if (floods && !placed.flooded && r.squares.some((q) => q.x === x && q.y === y) && floods(state, placed)) applyFlood(state, placed, r.controller)
+      if (floods && !placed.flooded && r.squares.some((q) => q.x === x && q.y === y) && floods(state, placed)) applyFlood(state, placed, r.controller, { aura: r.id })
     }
   }
 

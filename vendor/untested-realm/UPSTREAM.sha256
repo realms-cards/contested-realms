@@ -70,7 +70,7 @@ c9c2ff895a1021d871e68fdffd377f1c42f3596ab49b4a32d17b7368ad3faf32  shared/src/car
 f79aa0addfdcc1730fdd1d017594467a70272bb9289d28a57d1415980288fd45  shared/src/cards/scripts/gen/assimilator-snail.ts
 10abc3d53bc0a3666e01555278506bf163687377c32c6716b3bf45e2c205ae51  shared/src/cards/scripts/gen/assorted-animals.ts
 92f4f9a4d0b06eb7b8e2d66197fe0cdce657ac61d62d8bedfe880a28601be0d6  shared/src/cards/scripts/gen/astral-alcazar.ts
-627e697146953dfaf348a069080469bd6014187844c12520e875d344926dfb05  shared/src/cards/scripts/gen/atlantean-fate.ts
+0b18ba9e81fd6444974764f9eb7a4be4ca301b95881b4d238a0579ac7ffcd7d1  shared/src/cards/scripts/gen/atlantean-fate.ts
 507856c31e5ab2a672fc7f0415353c79129fe73337f58a81bcf1a600e11345ea  shared/src/cards/scripts/gen/atlas-wanderers.ts
 f973d26a69e5bef32ae74b66f1eb6fac4de187de80fc703122945d00239ed463  shared/src/cards/scripts/gen/attack-by-night.ts
 bbe98e9e64bf836f7033ee6df8aa42c9c8b10abfc4e30db7586871cbf1c5a2e2  shared/src/cards/scripts/gen/autumn-bloom.ts
@@ -349,7 +349,7 @@ b8b86377c7612b9f048e38d54f6138b6f3559adf3055ce73992f5870bd78c778  shared/src/car
 d897de32819006f697488a36f52c1c72eeb6f0095ad34e394051ec425c59df33  shared/src/cards/scripts/gen/flaming-sword.ts
 dbbda9123282db81715fb2e1893e791800aabc14cc3fb6f67a9f20d294b452ca  shared/src/cards/scripts/gen/flanking-maneuver.ts
 9487232d8d66a74ccc0ae3e4179e711141cc2050212767f8eee0b398d26449f0  shared/src/cards/scripts/gen/flayer.ts
-828f3f7a024905ab264a56ef269d9729670601609a8093ed01d1644b92827d37  shared/src/cards/scripts/gen/flood.ts
+8298d86c5ca7828188c2d6cef95f5d9b420a158a5e634b6625b0f41774b8ad4f  shared/src/cards/scripts/gen/flood.ts
 ecba4213ed2f484e8f0dd441bc82787e5ad3417a25090186257ac3f85aad8fc0  shared/src/cards/scripts/gen/floodplain.ts
 db7070036af6ed985fcb40fb882f27019d14a81b74da46f9cf77e957a59576a6  shared/src/cards/scripts/gen/font-of-life.ts
 2f0da234cf2733aa6565989b478932565ba78cef22fc3048d5e63ac8d0e69406  shared/src/cards/scripts/gen/forge.ts
@@ -1056,7 +1056,7 @@ fd40c4846be704fe567c94de1a181f9ed5cc5a9c97609e3dd37ce7c0f1e01bda  shared/src/car
 7a24be632f2642476adad3fb20006810c29bade7de222d73d25170abf9a01492  shared/src/cards/scripts/multi-card-utils/burrow-occupants.ts
 8a269852a896ceb00c9ab3a8c878a8a7a54e342a27fb277944a4cb7d0378b3d0  shared/src/cards/scripts/multi-card-utils/collection-site.ts
 b90af3de90cc8baed2dc1a996ea629ce039a2c5dcbc139bcd4ac95dfca06a53c  shared/src/cards/scripts/multi-card-utils/connected.ts
-4d06f793dab8d491c5245dadc44ca7c30ea75216a5560ff71e52fe83198f8d07  shared/src/cards/scripts/multi-card-utils/dispel-script.ts
+e30bbcf3b74892b7c1d9b78bba110a50b43e5825f8f29958e95441d6050a2969  shared/src/cards/scripts/multi-card-utils/dispel-script.ts
 579f45eae34533c4bfa2aabdd8f09f34f16d2e71f5158b1ea2488af5b1d9e5bb  shared/src/cards/scripts/multi-card-utils/draw-locked.ts
 7f04c8cfa50a216631a66e8d7d5b071c5b116c1fc38cc474dedd619952945285  shared/src/cards/scripts/multi-card-utils/forced-subsurface.ts
 e3cc15cbfe8f0574f1f71e89b1428e67ba20e2c003bbd001a55c4deb65dd139a  shared/src/cards/scripts/multi-card-utils/from-collection.ts
@@ -1100,13 +1100,13 @@ fd072dbd6ab48c5d31fff5b8c500b01f361ea2efeb845bca34528b2144c9c14c  shared/src/car
 20853e6ed6113f2305077d3da645ac763af86af75edfc230d3f49445868d4786  shared/src/engine/action-shape.ts
 217ed4a3450bb15b169cbc08054594b6ec8d044b40f62275ae967c99da25cb24  shared/src/engine/auditboard.ts
 33b460d23677692b88f16c0adbfb769b4cd45b234587eaaa989392164ac90f3d  shared/src/engine/carrying.ts
-1cafe5e85f910f6dc202d71b5bee1579de5de332ade7fd4bcde771a6de2def6c  shared/src/engine/casting.ts
+f4a33e18b7a0c9843dd15c4f293b0a838ee27f8471b7b14536d33648c7bce73d  shared/src/engine/casting.ts
 d4f16ac3bcf6b7cf09d4a5283450425520e4249bbe122c9c092e0b6a82cf469b  shared/src/engine/castplan.ts
 666ce9ee82019b029561213a5c079e13a84a1bc00d4b980472b72205d1c524db  shared/src/engine/clock.ts
 56890816708cc2cdf4f261eb18ab93749fb5a0c02bef53506bfa848122f3e511  shared/src/engine/clone.ts
 649d4d69883037deb6f32cc4e51dd0007e05559431df0d45d1e41b8d5e5b0d3d  shared/src/engine/combat.ts
 33d65e2334a9520da8645f01e5a3d772a022a68e96f6608f2de3702fc5a58a39  shared/src/engine/decks.ts
-72d3eef94936c4f9ceda7afa7ac36115219333ad263c7e6f5309380f77382dae  shared/src/engine/effects.ts
+9f86458dfffb6610738034cb678f6ce957f90a81774d022e5d0f3fc8d0be4c05  shared/src/engine/effects.ts
 b3db144ee5b984ce7ac0acf99332a0bebe89afebf26f619341186891f58b0093  shared/src/engine/game.ts
 5d3b98693dc04181eec63f8133d4dda0692d22040794f51bdcc6ae1f7a72d96a  shared/src/engine/grid.ts
 2d048fc15c4c7c46e5b3f2e4596a4f344ead5e70e30c7af05d3cde0ad25e3702  shared/src/engine/judge.ts

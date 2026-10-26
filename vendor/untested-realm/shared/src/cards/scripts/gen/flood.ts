@@ -13,7 +13,7 @@ registerScript('Flood', {
       const site = siteAt(ctx.state, sq.x, sq.y)
       // rubble floods too — flooded rubble becomes a body of water (applyFlood still honours Bedrock's
       // "can't be modified"). Only a siteless void square has nothing to flood.
-      if (site) applyFlood(ctx.state, site, ctx.controller)
+      if (site) applyFlood(ctx.state, site, ctx.controller, { aura: aura.id })
     }
     checkStateBased(ctx.state)
   },

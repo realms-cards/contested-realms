@@ -2897,20 +2897,23 @@ export function siteCantBeModified(state: GameState, site: { name?: string; x: n
  *  skips a Naiads that is itself leaving; `excludeEndOfTurn` skips the end-of-turn floods that are the
  *  ones currently expiring. (Naturally-water sites read as water via their threshold regardless of this
  *  flag, so draining one is harmless.) */
-export function siteStillFlooded(state: GameState, siteId: string, opts?: { excludeUnit?: string; excludeEndOfTurn?: boolean }): boolean {
+export function siteStillFlooded(state: GameState, siteId: string, opts?: { excludeUnit?: string; excludeEndOfTurn?: boolean; excludeAura?: string }): boolean {
   if (state.flow?.realmFlooded) return true
   const num = Number(siteId.slice(1))
   if (!Number.isNaN(num) && Object.values(state.units).some((u) => u.counters?.naiadSite === num && u.id !== opts?.excludeUnit)) return true
   const ws = state.flow?.waveshaperFlood as Record<string, string> | undefined
   if (ws && Object.values(ws).includes(siteId)) return true
   if (!opts?.excludeEndOfTurn && ((state.flow?.unfloodAtEnd ?? []) as string[]).includes(siteId)) return true
+  // a flooding aura still over it (Flood, Atlantean Fate)
+  const site = state.sites[siteId]
+  if (site && auraFloodingSite(state, site, { except: opts?.excludeAura })) return true
   return false
 }
 
 // Flood a site, honoring "can't be modified" (Bedrock): the wave washes over but
 // can't stick — non-submerge surface minions still get knocked over (tapped) per
 // FAQ, then the water dissipates. Returns whether the site actually stayed flooded.
-export function applyFlood(state: GameState, site: SiteState, by: PlayerId): boolean {
+export function applyFlood(state: GameState, site: SiteState, by: PlayerId, opts?: { aura?: string }): boolean {
   if (site.isRubble && siteCantBeModified(state, site)) return false
   if (!site.isRubble && siteCantBeModified(state, site)) {
     for (const u of unitsAt(state, site.x, site.y, 'surface')) {
@@ -2919,8 +2922,61 @@ export function applyFlood(state: GameState, site: SiteState, by: PlayerId): boo
     pushLog(state, by, `${site.name} can't be flooded.`)
     return false
   }
+  const wasFlooded = !!site.flooded
   site.flooded = true
+  // An aura's flood lasts only while the aura covers the site (reconcileAuraFloods dries it after). A site
+  // flooded by anything else is flooded in its own right: no aura record, so no aura leaving dries it.
+  const recs = (state.flow?.auraFloods ?? []) as AuraFlood[]
+  if (opts?.aura) {
+    if (!wasFlooded) {
+      state.flow = state.flow ?? {}
+      state.flow.auraFloods = [...recs, { siteId: site.id, auraId: opts.aura }]
+    }
+  } else if (recs.some((r) => r.siteId === site.id)) {
+    state.flow.auraFloods = recs.filter((r) => r.siteId !== site.id)
+  }
   return true
+}
+
+type AuraFlood = { siteId: string; auraId: string }
+
+/** the flooding aura (Flood, Atlantean Fate) that covers this site and floods it — `only` that one, or
+ *  any but `except` */
+function auraFloodingSite(state: GameState, site: SiteState, opts?: { only?: string; except?: string }): string | undefined {
+  return Object.values(state.auras).find((r) => {
+    if (opts?.only !== undefined && r.id !== opts.only) return false
+    if (r.id === opts?.except) return false
+    const floods = getScript(r.name)?.auraFloodsSite
+    return !!floods && r.squares.some((q) => q.x === site.x && q.y === site.y) && floods(state, site)
+  })?.id
+}
+
+/** The flood `auraId` gave its sites ends (it is leaving, or no longer covers them). Another flooding
+ *  aura over the site takes the flood over; otherwise the site dries — unless something else floods it. */
+export function endAuraFloods(state: GameState, auraId: string, onlySite?: string): void {
+  const recs = state.flow?.auraFloods as AuraFlood[] | undefined
+  if (!recs?.length) return
+  const next: AuraFlood[] = []
+  for (const r of recs) {
+    if (r.auraId !== auraId || (onlySite !== undefined && r.siteId !== onlySite)) { next.push(r); continue }
+    const site = state.sites[r.siteId]
+    if (!site) continue
+    const other = auraFloodingSite(state, site, { except: auraId })
+    if (other) { next.push({ siteId: r.siteId, auraId: other }); continue }
+    if (!siteStillFlooded(state, r.siteId, { excludeAura: auraId })) site.flooded = false
+  }
+  state.flow.auraFloods = next
+}
+
+/** An aura's flood lasts while the aura covers the site. However it stopped — dispelled, destroyed,
+ *  returned to hand, moved — its sites dry here (endAuraFloods), unless something else floods them. */
+function reconcileAuraFloods(state: GameState): void {
+  const recs = state.flow?.auraFloods as AuraFlood[] | undefined
+  if (!recs?.length) return
+  for (const r of [...recs]) {
+    const site = state.sites[r.siteId]
+    if (!site || !auraFloodingSite(state, site, { only: r.auraId })) endAuraFloods(state, r.auraId, r.siteId)
+  }
 }
 
 export function destroySite(state: GameState, siteId: string, sourcePlayer?: PlayerId, sacrifice = false): void {
@@ -3015,6 +3071,7 @@ export function banishSite(state: GameState, siteId: string): void {
 // ---- state-based checks ----
 
 export function checkStateBased(state: GameState): void {
+  reconcileAuraFloods(state)
   if (state.phase === 'over') return
   sbDepth++
   try {

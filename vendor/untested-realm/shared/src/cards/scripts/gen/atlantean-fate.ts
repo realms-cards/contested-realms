@@ -18,7 +18,7 @@ registerScript('Atlantean Fate', {
     for (const sq of aura.squares) {
       const site = siteAt(ctx.state, sq.x, sq.y)
       if (site && siteRarity(ctx.state, site) !== 'Ordinary') {
-        applyFlood(ctx.state, site, ctx.controller)
+        applyFlood(ctx.state, site, ctx.controller, { aura: aura.id })
         // modifying an enemy's site is interference — but FAQ (Oct 2026): exactly ONE "modify" per site,
         // so a nearby Vindictive Nation exacts only 1 life per affected site (not once per sub-effect).
         notifySiteInterference(ctx.state, 'modify', { id: site.id, x: site.x, y: site.y, controller: site.controller }, ctx.controller)

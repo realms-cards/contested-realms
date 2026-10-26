@@ -1,7 +1,6 @@
-import { type EffectAPI, getScript } from '../registry'
-import { siteAt } from '../../../engine/grid'
+import { type EffectAPI } from '../registry'
 import { realStepDistanceW } from '../../../engine/movement'
-import { pushLog, checkStateBased, toCemetery } from '../../../engine/effects'
+import { pushLog, checkStateBased, toCemetery, endAuraFloods } from '../../../engine/effects'
 import { squaresWithinSteps } from './step-range-targets'
 import type { GameState } from '../../../engine/types'
 
@@ -11,17 +10,8 @@ import type { GameState } from '../../../engine/types'
 // so the removal paths call this to revert sites this aura flooded -- unless another
 // flooding aura still covers them.
 export function unfloodOnAuraLeave(state: GameState, leaving: { id: string; name: string; squares: { x: number; y: number }[] }) {
-  const floods = getScript(leaving.name)?.auraFloodsSite
-  if (!floods) return
-  for (const sq of leaving.squares) {
-    const site = siteAt(state, sq.x, sq.y)
-    if (!site || !site.flooded || !floods(state, site)) continue // not one this aura flooded
-    // keep flooded if some OTHER flooding aura still covers this square
-    const stillFlooded = Object.values(state.auras).some(
-      (a) => a.id !== leaving.id && a.squares.some((s) => s.x === site.x && s.y === site.y) && !!getScript(a.name)?.auraFloodsSite?.(state, site),
-    )
-    if (!stillFlooded) site.flooded = undefined
-  }
+  // the sites this aura flooded dry with it, unless another flooding aura or anything else floods them
+  endAuraFloods(state, leaving.id)
 }
 
 // 'Destroy all auras and artifacts at target location up to two steps away.'
