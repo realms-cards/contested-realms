@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { selfStepsCloser } from '../../../engine/movement'
+import { selfStepsCloser, takeOwnStep } from '../../../engine/movement'
 import { checkStateBased } from '../../../engine/effects'
 
 // 'Submerge / Once on your turn, Coy Nixie may force target nearby enemy to take
@@ -25,7 +25,7 @@ registerScript('Coy Nixie', {
       const options = selfStepsCloser(ctx.state, u, self)
       if (options.length === 0) { checkStateBased(ctx.state); return } // nowhere closer to go
       if (options.length === 1) {
-        ctx.teleport(u.id, options[0].x, options[0].y, u.region)
+        takeOwnStep(ctx.state, u, options[0], ctx.controller)
         checkStateBased(ctx.state)
         return
       }
@@ -41,8 +41,10 @@ registerScript('Coy Nixie', {
   conts: {
     step: (ctx, c: any, choice: any) => {
       const u = ctx.state.units[c.victim as string]
-      if (!u || !choice || typeof choice.x !== 'number') return
-      ctx.teleport(u.id, choice.x, choice.y, u.region)
+      const self = ctx.state.units[ctx.sourceId]
+      if (!u || !self || !choice || typeof choice.x !== 'number') return
+      const step = selfStepsCloser(ctx.state, u, self).find((s) => s.x === choice.x && s.y === choice.y)
+      if (step) takeOwnStep(ctx.state, u, step, ctx.controller)
       checkStateBased(ctx.state)
     },
   },

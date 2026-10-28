@@ -1805,6 +1805,12 @@ export function loseLife(state: GameState, player: PlayerId, n: number, emit = t
  *  (its own `immovable`, or a nearby Old Salt Anchorman ally) */
 export function moveProtected(state: GameState, unit: UnitState): boolean {
   if (getScript(unit.name)?.immovable && !unit.silenced) return true
+  return protectedFromEnemyMoves(state, unit)
+}
+
+/** An ally shields it from being moved by enemy spells and abilities (Old Salt Anchorman) — a lured step
+ *  included, unlike "can't be moved by force" (immovable), which only stops forced movement. */
+export function protectedFromEnemyMoves(state: GameState, unit: UnitState): boolean {
   for (const o of Object.values(state.units)) {
     if (o.silenced || o.controller !== unit.controller) continue
     const f = getScript(o.name)?.protectsAlliesFromMoves
@@ -2657,7 +2663,7 @@ registerCont('core:teleportPlace', (state, ctx: { unitId: string; region?: Regio
 
 /** a unit changed square/region. `via` distinguishes a BASIC move action ('move' — the unit's own
  *  Move / Move-and-Attack) from any other relocation ('forced' — teleport, pull, blown by a site…). */
-export function emitUnitMoved(state: GameState, unit: UnitState, from: { x: number; y: number; region: Region }, via: 'move' | 'forced' = 'forced', final = true): void {
+export function emitUnitMoved(state: GameState, unit: UnitState, from: { x: number; y: number; region: Region }, via: 'move' | 'step' | 'forced' = 'forced', final = true): void {
   if (unit.x === from.x && unit.y === from.y && unit.region === from.region) return
   // an Enchantress "aura minion" drags its aura's AREA along as it moves, so the
   // enchantment's effect follows the creature (its footprint is the aura's area).

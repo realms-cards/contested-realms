@@ -1,7 +1,7 @@
 import { getCard, type ParsedKeywords } from '../cards/db'
 import type { GameState, PlayerId, Region, Step, UnitState, SiteState, ArtifactState, AuraState } from './types'
 import { GRID_H, GRID_W, inBounds, isOrthAdjacent, isDiagAdjacent, siteAt, isWaterSite, sameSquare, nearbySquaresW, orthAdjacentWrapped, occupiedSquares, edgesConnected } from './grid'
-import { emitUnitMoved, makeCtx, recordMoveAnim } from './effects'
+import { emitUnitMoved, makeCtx, protectedFromEnemyMoves, pushLog, recordMoveAnim } from './effects'
 import { detachFromCarrier } from './carrying'
 import { getScript } from '../cards/scripts/registry'
 import { effKeywords, isDisabled, isUnmodifiable, immobilizeImmune, terrainAt, siteSilenced, artifactSilenced, protectedFromSites } from './statics'
@@ -665,6 +665,8 @@ export function crossesEdge(
 export interface Walk {
   pauseWhen?: () => boolean
   remaining?: Step[]
+  /** a step an effect has the unit take (a lure, "take a step"): its own step, but not basic movement */
+  step?: boolean
 }
 
 export function resolveMovement(state: GameState, unit: UnitState, path: Step[], walk?: Walk): number {
@@ -720,7 +722,7 @@ export function resolveMovement(state: GameState, unit: UnitState, path: Step[],
     }
     // final=true only on the LAST square of the walk — so "when it stops here" triggers (Vaults of
     // Zul, Flame of the First Ones) fire once at the destination, not at every square passed through.
-    emitUnitMoved(state, unit, from, 'move', step === path[path.length - 1]) // the unit's own basic movement (Skirmishers of Mu fires only here)
+    emitUnitMoved(state, unit, from, walk?.step ? 'step' : 'move', step === path[path.length - 1]) // the unit's own basic movement (Skirmishers of Mu fires only here)
     if (!state.units[unit.id]) return taken // a trigger killed the mover mid-path
     current = step
     visited.push({ x: unit.x, y: unit.y, region: unit.region })
@@ -944,16 +946,41 @@ export function selfStepsToward(
     air ? Math.max(axis(x, ref.x, GRID_W), axis(y, ref.y, GRID_H)) : axis(x, ref.x, GRID_W) + axis(y, ref.y, GRID_H)
   const cur = dist(mover.x, mover.y)
   const from: Step = { x: mover.x, y: mover.y, region: mover.region }
-  return (air ? nearbySquaresW(state, mover.x, mover.y) : orthAdjacentWrapped(state, mover.x, mover.y))
-    .filter((s) => !(s.x === mover.x && s.y === mover.y))
-    .filter((s) => (dir === 'closer' ? dist(s.x, s.y) < cur : dist(s.x, s.y) > cur))
-    .filter((s) => isLegalStep(state, mover, from, { x: s.x, y: s.y, region: mover.region }))
-    .map((s) => ({ x: s.x, y: s.y, region: mover.region }))
+  // The step may change region the way the unit's own abilities allow (Codex, Step: "may use abilities
+  // like Airborne, Voidwalk, Burrow, and Submerge, crossing region boundaries") — a Voidwalker into an
+  // adjacent void, a burrowed minion along the underground. One step per square: its current region
+  // when that's legal, so a square-only answer (chooseSquare) is never ambiguous.
+  const regions: Region[] = [mover.region, ...(['surface', 'underground', 'underwater', 'void'] as Region[]).filter((r) => r !== mover.region)]
+  const out: Step[] = []
+  for (const s of air ? nearbySquaresW(state, mover.x, mover.y) : orthAdjacentWrapped(state, mover.x, mover.y)) {
+    if (s.x === mover.x && s.y === mover.y) continue
+    if (dir === 'closer' ? dist(s.x, s.y) >= cur : dist(s.x, s.y) <= cur) continue
+    const region = regions.find((r) => isLegalStep(state, mover, from, { x: s.x, y: s.y, region: r }))
+    if (region) out.push({ x: s.x, y: s.y, region })
+  }
+  return out
 }
 export const selfStepsCloser = (state: GameState, mover: UnitState, ref: { x: number; y: number }) =>
   selfStepsToward(state, mover, ref, 'closer')
 export const selfStepsAway = (state: GameState, mover: UnitState, ref: { x: number; y: number }) =>
   selfStepsToward(state, mover, ref, 'away')
+
+/**
+ * The unit takes ONE step of its own to `to` — step definition 2: a lure, "take a step", "step closer"
+ * (Lure, Led Astray, Coy Nixie…). Codex (Forced Movement): this is NOT forced movement, "because the
+ * unit is taking their own step (and an Immobile unit wouldn't move at all)". So "can't be moved by
+ * force" doesn't stop it, while everything that stops a step does (isLegalStep: Immobile, Maze
+ * Minotaur, walls), a wall it crosses still hurts, and "enters here" triggers fire as for any step.
+ * `by` is the player whose effect makes it step: Old Salt Anchorman's nearby allies "can't be moved by
+ * enemy spells and abilities". Returns whether the unit moved.
+ */
+export function takeOwnStep(state: GameState, unit: UnitState, to: Step, by: PlayerId): boolean {
+  if (by !== unit.controller && protectedFromEnemyMoves(state, unit)) {
+    pushLog(state, unit.controller, `${unit.name} holds its ground.`)
+    return false
+  }
+  return resolveMovement(state, unit, [to], { step: true }) > 0
+}
 
 /**
  * The squares one FORCED step from `mover` relative to `ref` — Sorcery

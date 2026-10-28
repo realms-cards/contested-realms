@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { nearbySquaresW, unitsAt } from '../../../engine/grid'
-import { selfStepsCloser } from '../../../engine/movement'
+import { selfStepsCloser, takeOwnStep } from '../../../engine/movement'
 import { checkStateBased } from '../../../engine/effects'
 
 // (Grey Wolves scripted in m7, where the pack also counts the Talagelum.)
@@ -26,14 +26,16 @@ registerScript('Guile Sirens', {
       if (!self || !u) return
       const options = selfStepsCloser(ctx.state, u, self)
       if (options.length === 0) return
-      if (options.length === 1) { ctx.teleport(u.id, options[0].x, options[0].y, u.region); checkStateBased(ctx.state); return }
+      if (options.length === 1) { takeOwnStep(ctx.state, u, options[0], ctx.controller); checkStateBased(ctx.state); return }
       // several legal closer steps â†’ the EFFECT's controller chooses (Coy Nixie rule)
       ctx.ask({ kind: 'chooseSquare', title: `Guile Sirens -- step ${u.name} closer (choose a direction)`, data: { squares: options.map((s) => ({ x: s.x, y: s.y })) }, player: ctx.controller }, 'sirenStep', { victim: u.id })
     },
     sirenStep: (ctx, c: any, choice: any) => {
       const u = ctx.state.units[c.victim as string]
-      if (!u || !choice || typeof choice.x !== 'number') return
-      ctx.teleport(u.id, choice.x, choice.y, u.region)
+      const self = ctx.state.units[ctx.sourceId]
+      if (!u || !self || !choice || typeof choice.x !== 'number') return
+      const step = selfStepsCloser(ctx.state, u, self).find((s) => s.x === choice.x && s.y === choice.y)
+      if (step) takeOwnStep(ctx.state, u, step, ctx.controller)
       checkStateBased(ctx.state)
     },
   },

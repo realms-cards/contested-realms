@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { selfStepsAway } from '../../../engine/movement'
+import { selfStepsAway, takeOwnStep } from '../../../engine/movement'
 
 // 'Genesis → Tap target adjacent enemy minion and make it take a step away.'
 // When several steps-away are legal, the EFFECT's controller (you, the Screamer's caster) picks the
@@ -18,13 +18,16 @@ registerScript('Screamer', {
     foe.tapped = true
     const steps = selfStepsAway(ctx.state, foe, self) // "take a step away" (def. 2)
     if (!steps.length) return
-    if (steps.length === 1) return ctx.teleport(foe.id, steps[0].x, steps[0].y, foe.region)
-    ctx.ask({ kind: 'chooseSquare', title: `${foe.name} recoils from the Screamer — which way?`, data: { squares: steps }, player: ctx.controller }, 'flee', { unitId: foe.id })
+    if (steps.length === 1) { takeOwnStep(ctx.state, foe, steps[0], ctx.controller); return }
+    ctx.ask({ kind: 'chooseSquare', title: `${foe.name} recoils from the Screamer — which way?`, data: { squares: steps.map((s) => ({ x: s.x, y: s.y })) }, player: ctx.controller }, 'flee', { unitId: foe.id })
   },
   conts: {
     flee: (ctx, c, sq) => {
       const u = ctx.state.units[c.unitId as string]
-      if (u && sq) ctx.teleport(u.id, sq.x, sq.y, u.region)
+      const self = ctx.state.units[ctx.sourceId]
+      if (!u || !self || !sq) return
+      const step = selfStepsAway(ctx.state, u, self).find((s) => s.x === sq.x && s.y === sq.y)
+      if (step) takeOwnStep(ctx.state, u, step, ctx.controller)
     },
   },
 })

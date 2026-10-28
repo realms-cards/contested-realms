@@ -681,7 +681,7 @@ export interface CardScript {
    * A unit entered a new square (movement step, teleport, defend move).
    * `self` is the listening card in play (site or unit script).
    */
-  onUnitEntersSquare?: (ctx: EffectAPI, moved: UnitState, from: { x: number; y: number; region: Region }, via?: 'move' | 'forced', final?: boolean) => void
+  onUnitEntersSquare?: (ctx: EffectAPI, moved: UnitState, from: { x: number; y: number; region: Region }, via?: 'move' | 'step' | 'forced', final?: boolean) => void
   /**
    * Replaces the Spellcaster requirement: who may cast this spell
    * (e.g. "May be cast by an allied Beast or Dragon"). Return an error
