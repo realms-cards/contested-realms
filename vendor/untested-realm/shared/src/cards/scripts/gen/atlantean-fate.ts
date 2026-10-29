@@ -27,7 +27,7 @@ registerScript('Atlantean Fate', {
       // FAQ: the Genesis submerges atop EVERY site in the area, Ordinary ones included — but only a
       // water site can be submerged into: an Ordinary land site stays dry, so what's atop it stays put
       if (!site || terrainAt(ctx.state, sq.x, sq.y) !== 'water') continue
-      submergeOccupantsAt(ctx.state, sq.x, sq.y) // minions with their cargo, and every artifact here
+      submergeOccupantsAt(ctx.state, sq.x, sq.y, ctx.controller) // minions with their cargo, and every artifact here
     }
     pushLog(ctx.state, null, 'The fate of Atlantis comes for these lands.')
   },

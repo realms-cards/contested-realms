@@ -14,7 +14,7 @@ registerScript('Unland Angler', {
       const u = ctx.state.units[c.unitId as string]
       const self = ctx.state.units[ctx.sourceId]
       const step = u && self && sq ? selfStepsCloser(ctx.state, u, self).find((s) => s.x === sq.x && s.y === sq.y) : undefined
-      if (u && step) takeOwnStep(ctx.state, u, step, ctx.controller)
+      if (u && step) takeOwnStep(ctx.state, u, step)
       anglerNext(ctx, [...(c.done as string[]), c.unitId as string])
     },
   },
@@ -31,7 +31,7 @@ function anglerNext(ctx: EffectAPI, done: string[]): void {
   const steps = selfStepsCloser(ctx.state, prey, self) // "take a step toward" (def. 2)
   if (!steps.length) return anglerNext(ctx, [...done, prey.id])
   if (steps.length === 1) {
-    if (takeOwnStep(ctx.state, prey, steps[0], ctx.controller)) pushLog(ctx.state, ctx.controller, `${prey.name} is lured toward the Angler's light…`)
+    if (takeOwnStep(ctx.state, prey, steps[0])) pushLog(ctx.state, ctx.controller, `${prey.name} is lured toward the Angler's light…`)
     return anglerNext(ctx, [...done, prey.id])
   }
   ctx.ask(

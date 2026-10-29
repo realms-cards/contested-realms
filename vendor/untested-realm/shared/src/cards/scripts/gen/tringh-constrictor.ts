@@ -1,7 +1,8 @@
-import { registerScript } from '../registry'
+import { registerScript, type EffectAPI } from '../registry'
 import { pushLog, killUnit, checkStateBased } from '../../../engine/effects'
-import { orthAdjacentWrapped, unitsAt } from '../../../engine/grid'
-import { isLegalStep } from '../../../engine/movement'
+import { unitsAt } from '../../../engine/grid'
+import { takeOwnStep } from '../../../engine/movement'
+import { mayStepSquares, mayStepOption, readMayStep } from '../multi-card-utils/own-step'
 
 // 'Tap → Tringh Constrictor may take a step, then it constricts target minion
 //  here and carries it disabled. The next time it would untap, it instead kills
@@ -15,9 +16,8 @@ registerScript('Tringh Constrictor', {
     effect: (ctx) => {
       const self = ctx.state.units[ctx.sourceId]
       if (!self) return
-      const from = { x: self.x, y: self.y, region: self.region }
-      const squares = orthAdjacentWrapped(ctx.state, self.x, self.y).filter((s) => isLegalStep(ctx.state, self, from, { ...s, region: self.region }))
-      ctx.ask({ kind: 'chooseSquare', title: 'The Constrictor slithers where? (its square to stay)', data: { squares: [...squares, { x: self.x, y: self.y }] } }, 'slither')
+      // its own step (Codex, Step def. 2): any legal step its abilities allow
+      ctx.ask({ kind: 'chooseSquare', title: 'The Constrictor slithers where? (its square to stay)', data: { squares: mayStepSquares(ctx.state, self) } }, 'slither')
     },
   }],
   startOfTurn: (ctx) => {
@@ -38,12 +38,17 @@ registerScript('Tringh Constrictor', {
     slither: (ctx, _c, sq) => {
       const self = ctx.state.units[ctx.sourceId]
       if (!self) return
-      if (sq && (sq.x !== self.x || sq.y !== self.y) && orthAdjacentWrapped(ctx.state, self.x, self.y).some((s) => s.x === sq.x && s.y === sq.y)) {
-        ctx.teleport(self.id, sq.x, sq.y, self.region)
-      }
-      const prey = unitsAt(ctx.state, self.x, self.y, self.region).filter((u) => u.id !== self.id && !u.isAvatar).map((u) => u.id)
-      if (!prey.length) return
-      ctx.ask({ kind: 'chooseTargets', title: 'Constrict which minion here?', data: { candidates: prey, count: 1, upTo: true, kind: 'unit' } }, 'squeeze')
+      const step = readMayStep(ctx, self, sq, 'slitherVertical')
+      if (step === 'asked') return
+      if (step !== 'stay') takeOwnStep(ctx.state, self, step)
+      constrict(ctx)
+    },
+    slitherVertical: (ctx, _c, choice) => {
+      const self = ctx.state.units[ctx.sourceId]
+      if (!self) return
+      const step = mayStepOption(ctx.state, self, choice)
+      if (step !== 'stay') takeOwnStep(ctx.state, self, step)
+      constrict(ctx)
     },
     squeeze: (ctx, _c, choice) => {
       const id = Array.isArray(choice) ? choice[0] : choice
@@ -57,3 +62,12 @@ registerScript('Tringh Constrictor', {
     },
   },
 })
+
+/** "then it constricts target minion here" */
+function constrict(ctx: EffectAPI): void {
+  const self = ctx.state.units[ctx.sourceId]
+  if (!self) return
+  const prey = unitsAt(ctx.state, self.x, self.y, self.region).filter((u) => u.id !== self.id && !u.isAvatar).map((u) => u.id)
+  if (!prey.length) return
+  ctx.ask({ kind: 'chooseTargets', title: 'Constrict which minion here?', data: { candidates: prey, count: 1, upTo: true, kind: 'unit' } }, 'squeeze')
+}

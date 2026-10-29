@@ -1,4 +1,4 @@
-import type { GameState, UnitState } from '../../../engine/types'
+import type { GameState, PlayerId, UnitState } from '../../../engine/types'
 import { unitsAt } from '../../../engine/grid'
 import { footprintAllTerrain } from '../../../engine/statics'
 import { syncCarried, buryArtifactsAt } from '../../../engine/carrying'
@@ -30,9 +30,10 @@ export function burrowOccupantsAt(state: GameState, x: number, y: number, skip?:
  * of the Sea, Atlantean Fate). Each surface minion goes through trySubmerge (footprint, "clings on"
  * protection, drowning) and takes its cargo down with it; EVERY artifact at the square is submerged —
  * loose ones AND ones carried by a unit that stayed up (an Avatar), detached and submerged on their own.
+ * `by` is the player whose effect it is: a minion it can't move by force stays up (trySubmerge).
  * The caller checks the square is water and settles state (checkStateBased) afterwards.
  */
-export function submergeOccupantsAt(state: GameState, x: number, y: number): void {
-  for (const u of unitsAt(state, x, y, 'surface')) trySubmerge(state, u)
+export function submergeOccupantsAt(state: GameState, x: number, y: number, by: PlayerId): void {
+  for (const u of unitsAt(state, x, y, 'surface')) trySubmerge(state, u, by)
   buryArtifactsAt(state, x, y, 'underwater')
 }

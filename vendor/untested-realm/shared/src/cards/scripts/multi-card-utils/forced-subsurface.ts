@@ -1,13 +1,15 @@
 import { type CardScript } from '../registry'
 import { occupiedSquares } from '../../../engine/grid'
 import { terrainAt, footprintAllTerrain } from '../../../engine/statics'
-import { pushLog, checkStateBased } from '../../../engine/effects'
+import { pushLog, checkStateBased, moveProtected } from '../../../engine/effects'
 import { syncCarried } from '../../../engine/carrying'
 
 // Bury (land → underground) / Drown (water → underwater): force a minion or artifact into the matching
 // subsurface, if able. A carried artifact drags its BEARER under with it — except an Avatar can never
 // enter the subsurface, so then only the artifact goes under (detached). An oversized unit submerges only
 // if its WHOLE footprint is the right terrain (rulebook: a forced burrow/submerge fails on a straddler).
+// Being forced below is forced movement: a unit the caster can't move by force stays put (moveProtected),
+// and a bearer that stays lets go of the targeted artifact, which goes under alone.
 export function forcedSubsurface(terrain: 'land' | 'water'): CardScript {
   const water = terrain === 'water'
   const region = water ? 'underwater' : 'underground'
@@ -26,7 +28,7 @@ export function forcedSubsurface(terrain: 'land' | 'water'): CardScript {
         const bearer = a.carriedBy ? ctx.state.units[a.carriedBy] : null
         const bx = bearer ? bearer.x : a.x, by = bearer ? bearer.y : a.y
         if (terrainAt(ctx.state, bx, by) !== terrain) return ctx.log(noneMsg)
-        if (bearer && !bearer.isAvatar) {
+        if (bearer && !bearer.isAvatar && !moveProtected(ctx.state, bearer, ctx.controller)) {
           if (!footprintAllTerrain(ctx.state, bearer, terrain)) return ctx.log(straddleMsg(bearer.name))
           bearer.region = region
           syncCarried(ctx.state, bearer) // the carried artifact rides down with it
@@ -43,6 +45,7 @@ export function forcedSubsurface(terrain: 'land' | 'water'): CardScript {
       if (!u) return
       if (!footprintAllTerrain(ctx.state, u, terrain))
         return ctx.log(occupiedSquares(u).length > 1 ? straddleMsg(u.name) : noneMsg)
+      if (moveProtected(ctx.state, u, ctx.controller)) return ctx.log(`${u.name} holds its ground.`)
       u.region = region
       syncCarried(ctx.state, u) // carried artifacts/units are dragged down along with the bearer
       pushLog(ctx.state, ctx.controller, sunkMsg(u.name))

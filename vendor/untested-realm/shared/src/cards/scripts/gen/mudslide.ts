@@ -21,7 +21,7 @@ registerScript('Mudslide', {
         // Mudslide spans the void — an ordinary unit may be slid into a siteless square — but
         // "Avatars can never enter void locations", so an Avatar only slides onto another site.
         if (u.isAvatar && !siteAt(ctx.state, u.x + dx, u.y)) continue
-        if (u.controller !== ctx.controller && moveProtected(ctx.state, u)) continue // "can't be moved by force"
+        if (moveProtected(ctx.state, u, ctx.controller)) continue // "can't be moved by force"
         const from = { x: u.x, y: u.y, region: u.region }
         u.x += dx
         // slid into the void (no site) → the void region; checkStateBased banishes it unless Voidwalk

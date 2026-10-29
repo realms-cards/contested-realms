@@ -14,7 +14,7 @@ registerScript("Mariner's Curse", {
     if (!aura.squares.some((s) => s.x === moved.x && s.y === moved.y)) return
     const site = siteAt(ctx.state, moved.x, moved.y)
     if (!site || !isWaterSite(ctx.state, site, getCard)) return
-    if (!trySubmerge(ctx.state, moved)) return
+    if (!trySubmerge(ctx.state, moved, ctx.controller)) return
     pushLog(ctx.state, ctx.controller, `${moved.name} is pulled beneath the waves.`)
     const card = ctx.state.cards[aura.cardId]
     if (ctx.state.auras[aura.id]) {

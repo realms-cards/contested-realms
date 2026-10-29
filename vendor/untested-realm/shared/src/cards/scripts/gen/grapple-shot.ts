@@ -38,9 +38,10 @@ registerScript('Grapple Shot', {
       })
       if (!impact) return ctx.log('The grapple finds nothing.')
       if (impact.candidates.length === 1) return grappleHit(ctx, ally.id, impact.candidates[0])
-      // the shooter chooses which co-located unit the grapple latches onto
+      // the shooter chooses which co-located unit the grapple latches onto -- a projectile hit, not a
+      // target, so a Ward doesn't break over it (Codex, Ward)
       ctx.ask(
-        { kind: 'chooseTargets', title: 'Which unit does the grapple hit?', data: { candidates: impact.candidates, count: 1, kind: 'unit' } },
+        { kind: 'chooseTargets', title: 'Which unit does the grapple hit?', data: { candidates: impact.candidates, count: 1, kind: 'unit', notTargeted: true } },
         'grapplePick',
         { allyId: ally.id },
       )

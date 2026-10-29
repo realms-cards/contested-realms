@@ -7,6 +7,8 @@
 import { getScript } from '../cards/scripts/registry'
 import type { GameState, PlayerId, Region, UnitState } from './types'
 import { pushLog } from './effects'
+import { siteEntryAllowed } from './movement' // runtime-only use; import cycle is safe
+import { hasRegionKeyword } from './statics'
 
 /** true if `carrierId` transitively carries `unitId` */
 export function carriesTransitively(state: GameState, carrierId: string, unitId: string): boolean {
@@ -43,14 +45,25 @@ export function syncCarried(state: GameState, carrier: UnitState, visited: Set<s
   }
   // A carrier dragged INTO THE VOID (Lacuna Entity, Nightmare, Into the Abyss) doesn't take its
   // ON-TOP cargo with it — those units are left behind on the surface (dropped in place, at the
-  // carrier's old square, since they haven't been moved yet). Only cargo carried INSIDE the carrier
-  // (a Brobdingnag Bullfrog's belly — carriedAreDisabled) rides down into the void with it.
+  // carrier's old square, since they haven't been moved yet). Cargo carried INSIDE the carrier
+  // (a Brobdingnag Bullfrog's belly — carriedAreDisabled) rides down into the void with it, and so does
+  // the cargo of a carrier with Voidwalk, which confers it (Codex, Carrying Units: a Phantom Steed carries
+  // a Bosk Troll into the void, and the Troll survives there while it is carried).
   const carrierSwallows = !!getScript(carrier.name)?.carriedAreDisabled && !carrier.silenced
-  for (const unitId of carrier.carryingUnits) {
+  const voidRide = carrier.region === 'void' && (carrierSwallows || hasRegionKeyword(state, carrier, 'voidwalk'))
+  for (const unitId of [...carrier.carryingUnits]) {
     const u = state.units[unitId]
     if (!u) continue
-    if (carrier.region === 'void' && !carrierSwallows) {
+    if (carrier.region === 'void' && !voidRide) {
       detachFromCarrier(state, u) // stays behind on the surface — it doesn't follow into the void
+      continue
+    }
+    // Being carried is forced movement: cargo that can't enter the carrier's new site (a Bosk Troll on a
+    // War Horse riding into Gnome Hollows) doesn't move, and is dropped where it was (Codex, Carrying Units).
+    const to = { x: carrier.x, y: carrier.y, region: carrier.region }
+    if ((u.x !== to.x || u.y !== to.y) && !siteEntryAllowed(state, u, { x: u.x, y: u.y, region: u.region }, to, true)) {
+      detachFromCarrier(state, u)
+      pushLog(state, u.controller, `${u.name} can't enter there — it stays behind.`)
       continue
     }
     // an avatar can NEVER leave the surface: a mount that burrows/submerges while carrying it drops it
@@ -128,6 +141,8 @@ export function pickUpUnits(state: GameState, player: PlayerId, carrier: UnitSta
     if (u.carriedBy) return `${u.name} is already being carried.`
     if (u.x !== carrier.x || u.y !== carrier.y || u.region !== carrier.region) return `${u.name} is not at this location.`
     if (carriesTransitively(state, u.id, carrier.id)) return 'That would create a carrying loop.'
+    // being carried is forced movement, which "can't be moved by force" refuses (Iron Man Talus)
+    if (getScript(u.name)?.immovable && !u.silenced) return `${u.name} can't be moved by force.`
     if (!invited(u) && spec?.filter && !spec.filter(state, carrier, u)) return `${carrier.name} cannot carry ${u.name}.`
   }
   for (const id of unitIds) {

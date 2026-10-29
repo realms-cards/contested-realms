@@ -12,7 +12,8 @@ registerScript('Wind Sylph', {
     if (!self) return
     const here = unitsAt(ctx.state, self.x, self.y, self.region).filter((u) => u.id !== self.id).map((u) => u.id)
     if (!here.length) return
-    ctx.ask({ kind: 'chooseTargets', title: 'Wind Sylph: gust who away? (skip for none)', data: { candidates: here, count: 1, upTo: true, kind: 'unit' } }, 'gust')
+    // "a unit here", not a target: a Ward doesn't break over the push (Codex, Ward)
+    ctx.ask({ kind: 'chooseTargets', title: 'Wind Sylph: gust who away? (skip for none)', data: { candidates: here, count: 1, upTo: true, kind: 'unit', notTargeted: true } }, 'gust')
   },
   conts: {
     gust: (ctx, _c, choice) => {

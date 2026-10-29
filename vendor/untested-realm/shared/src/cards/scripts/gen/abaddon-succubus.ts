@@ -27,8 +27,8 @@ registerScript('Abaddon Succubus', {
       const options = selfStepsCloser(ctx.state, u, self) // "take a step closer" (def. 2)
       if (options.length === 0) return
       if (options.length === 1) {
-        // "When it arrives": nothing happens to one that didn't (Old Salt Anchorman held it back)
-        if (takeOwnStep(ctx.state, u, options[0], ctx.controller) && ctx.state.units[u.id]) {
+        // "When it arrives": nothing happens to one that didn't (a trigger on the way stopped or killed it)
+        if (takeOwnStep(ctx.state, u, options[0]) && ctx.state.units[u.id]) {
           ctx.dealDamage({ unit: u.id }, 2)
           ctx.gainLife(ctx.controller, 2)
         }
@@ -45,7 +45,7 @@ registerScript('Abaddon Succubus', {
       const self = ctx.state.units[ctx.sourceId]
       if (!u || !self || !choice || typeof choice.x !== 'number') return
       const step = selfStepsCloser(ctx.state, u, self).find((s) => s.x === choice.x && s.y === choice.y)
-      if (step && takeOwnStep(ctx.state, u, step, ctx.controller) && ctx.state.units[u.id]) {
+      if (step && takeOwnStep(ctx.state, u, step) && ctx.state.units[u.id]) {
         ctx.dealDamage({ unit: u.id }, 2)
         ctx.gainLife(c.gainer, 2)
       }

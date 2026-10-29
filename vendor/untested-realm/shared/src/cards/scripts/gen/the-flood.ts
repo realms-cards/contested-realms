@@ -60,7 +60,7 @@ function floodNext(ctx: any, types: string[], spared: string[]): void {
     // everything else on the surface goes under
     for (const u of Object.values(ctx.state.units) as any[]) {
       if (u.isAvatar || u.region !== 'surface' || spared.includes(u.id)) continue
-      trySubmerge(ctx.state, u)
+      trySubmerge(ctx.state, u, ctx.controller)
     }
     return
   }

@@ -1,11 +1,24 @@
 import { registerScript } from '../registry'
 import { nearbySquaresW, occupiedLocations } from '../../../engine/grid'
 import { oversizedTeleportPlacements } from '../../../engine/movement'
+import { regionPresentAt } from '../../../engine/statics'
+import type { GameState, Region, UnitState } from '../../../engine/types'
 
 // 'An ally teleports to a location it's nearby. Draw a card.'
 // An OVERSIZED ally is nearby everything nearby any of its parts. The player picks the ANCHOR part first,
 // then a location nearby that part, then the rotation — the anchor part lands on the location and the
 // body turns around it (client sends extra.teleportPlace = { x, y, shape, from }).
+// "A location it's nearby" keeps to the ally's region (Codex, Nearby; Teleport: "does not cross borders"),
+// and a void square has no surface (Codex, Void): a surface ally can't Blink into the void, nor a
+// Voidwalker in the void onto a site.
+
+/** the locations nearby a part of `u`, each in that part's region */
+function blinkSpots(state: GameState, u: UnitState): { x: number; y: number; region: Region }[] {
+  return occupiedLocations(u).flatMap((p) => nearbySquaresW(state, p.x, p.y)
+    .filter((s) => regionPresentAt(state, p.region, s.x, s.y))
+    .map((s) => ({ x: s.x, y: s.y, region: p.region })))
+}
+
 registerScript('Blink', {
   targets: [
     { what: 'unit', count: 1, targeted: false, owner: 'ally', label: 'an ally' },
@@ -13,6 +26,13 @@ registerScript('Blink', {
     // (whereOf), so the UI only offers legal squares instead of accepting one and fizzling on resolution.
     { what: 'square', count: 1, targeted: false, where: 'nearby', whereOf: 0, label: 'a nearby location' },
   ],
+  // engine-authoritative destinations: only real locations nearby the chosen ally (any unit for the ally pick)
+  targetOptions: (state, _caster, picked, specIndex) => {
+    if (specIndex === 0) return Object.values(state.units).map((u) => ({ unit: u.id }))
+    const t = picked[0]
+    const u = t && 'unit' in t ? state.units[t.unit] : undefined
+    return u ? blinkSpots(state, u).map((square) => ({ square })) : []
+  },
   // the ally + destination are chosen targets; the client reads this to offer the anchor-part and
   // placement pickers when the ally occupies multiple squares (2x2 corner / wall / Megamoeba rotation).
   teleportPlacement: (_state, targets) =>
@@ -24,7 +44,9 @@ registerScript('Blink', {
       const dest = ts.square
       const region = dest.region ?? u?.region
       // the parts of the ally this location is nearby (same region) — validated at cast time too
-      const parts = u ? occupiedLocations(u).filter((p) => p.region === region && nearbySquaresW(ctx.state, p.x, p.y).some((s) => s.x === dest.x && s.y === dest.y)) : []
+      const parts = u && region && regionPresentAt(ctx.state, region, dest.x, dest.y)
+        ? occupiedLocations(u).filter((p) => p.region === region && nearbySquaresW(ctx.state, p.x, p.y).some((s) => s.x === dest.x && s.y === dest.y))
+        : []
       if (u && parts.length) {
         const multi = u.size === '2x2' || (u.extraSquares?.length ?? 0) > 0
         if (multi) {

@@ -60,7 +60,7 @@ function stepTogether(state: GameState, from: From, ids: string[], to: { x: numb
   if (!adjacentSquaresW(state, from.x, from.y).some((s) => s.x === to.x && s.y === to.y)) return
   for (const u of enemiesAt(state, from, me).filter((e) => ids.includes(e.id))) {
     const step = { x: to.x, y: to.y, region: from.region }
-    if (isLegalStep(state, u, from, step)) takeOwnStep(state, u, step, me)
+    if (isLegalStep(state, u, from, step)) takeOwnStep(state, u, step)
   }
   checkStateBased(state)
 }

@@ -25,7 +25,7 @@ registerScript('Coy Nixie', {
       const options = selfStepsCloser(ctx.state, u, self)
       if (options.length === 0) { checkStateBased(ctx.state); return } // nowhere closer to go
       if (options.length === 1) {
-        takeOwnStep(ctx.state, u, options[0], ctx.controller)
+        takeOwnStep(ctx.state, u, options[0])
         checkStateBased(ctx.state)
         return
       }
@@ -44,7 +44,7 @@ registerScript('Coy Nixie', {
       const self = ctx.state.units[ctx.sourceId]
       if (!u || !self || !choice || typeof choice.x !== 'number') return
       const step = selfStepsCloser(ctx.state, u, self).find((s) => s.x === choice.x && s.y === choice.y)
-      if (step) takeOwnStep(ctx.state, u, step, ctx.controller)
+      if (step) takeOwnStep(ctx.state, u, step)
       checkStateBased(ctx.state)
     },
   },

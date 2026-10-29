@@ -29,7 +29,8 @@ registerScript('Sold-out Cemetery', {
       .filter((u) => u.id !== moved.id && !u.isAvatar && !isDyingUnit(ctx.state, u) && effSubtypes(ctx.state, u).includes('Undead'))
       .map((u) => u.id)
     if (!others.length) return
-    ctx.ask({ kind: 'chooseTargets', title: 'No vacancy — which Undead is pushed out?', data: { candidates: others, count: 1, upTo: false, kind: 'unit' } }, 'evict')
+    // "another Undead here", not a target: a Ward doesn't break over the push (Codex, Ward)
+    ctx.ask({ kind: 'chooseTargets', title: 'No vacancy — which Undead is pushed out?', data: { candidates: others, count: 1, upTo: false, kind: 'unit', notTargeted: true } }, 'evict')
   },
   conts: {
     evict: (ctx, _c, choice) => {
@@ -44,8 +45,9 @@ registerScript('Sold-out Cemetery', {
       if (ctx.state.prompts.some((p) => p.cont === 'script:Sold-out Cemetery:shamble' && (p.ctx as any)?.unitId === u.id)) return
       const steps = orthAdjacentWrapped(ctx.state, u.x, u.y).filter((s) => siteAt(ctx.state, s.x, s.y))
       if (!steps.length) return
-      if (steps.length === 1) return ctx.teleport(u.id, steps[0].x, steps[0].y, u.region, { push: true }) // "push away one step"
-      ctx.ask({ kind: 'chooseSquare', title: `${u.name} shambles out — which way?`, data: { squares: steps }, player: u.controller }, 'shamble', { unitId: u.id })
+      if (steps.length === 1) { ctx.teleport(u.id, steps[0].x, steps[0].y, u.region, { push: true }); return } // "push away one step"
+      // the site's ability: its controller pushes, so its controller picks the way too
+      ctx.ask({ kind: 'chooseSquare', title: `${u.name} shambles out — which way?`, data: { squares: steps } }, 'shamble', { unitId: u.id })
     },
     shamble: (ctx, c, sq) => {
       const u = ctx.state.units[c.unitId as string]

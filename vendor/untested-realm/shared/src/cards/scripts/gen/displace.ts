@@ -1,12 +1,14 @@
 import { registerScript, type EffectAPI } from '../registry'
-import type { GameState } from '../../../engine/types'
+import type { GameState, Region } from '../../../engine/types'
 import { nearbySquaresW, adjacentSquaresW, orthAdjacentWrapped, siteAt, aura2x2Squares, edgesConnected, GRID_W, GRID_H } from '../../../engine/grid'
 import { pushLog } from '../../../engine/effects'
+import { regionPresentAt } from '../../../engine/statics'
 
 // 'Teleport target minion, artifact, or aura one diagonal step.'
 // Every printed target type is supported. The DESTINATION picker matches how each thing is placed:
-//  • minion / artifact → a diagonal SITE (a carried artifact is dropped there, off its bearer)
-//  • single-site aura (Wildfire…) → a diagonal SITE (it sits on one site)
+//  • minion / artifact → a diagonal location in its own region (a carried artifact is dropped there, off
+//    its bearer). FAQ: "steps are only measured within the same region" — not from a site to the void.
+//  • single-site aura (Wildfire…) → any diagonal square. FAQ: an aura ignores the surface/void boundary.
 //  • 2×2 aura → a diagonal INTERSECTION anchor (Magellan-aware), shifting its whole 2×2
 //  • wall (edge) aura → a nearby SITE BORDER
 type Anchor = { x: number; y: number }
@@ -17,41 +19,46 @@ registerScript('Displace', {
   onCast: (ctx) => {
     const t = ctx.targets[0]
     if ('aura' in t) { offerAuraDestination(ctx, t.aura); return }
-    // minion / artifact anchor (a carried artifact rides its carrier's square)
-    let ax: number, ay: number
-    if ('unit' in t) { const u = ctx.state.units[t.unit]; if (!u) return; ax = u.x; ay = u.y }
-    else if ('artifact' in t) { const a = ctx.state.artifacts[t.artifact]; if (!a) return; ax = a.x; ay = a.y }
-    else return
-    const siteCands = diagonalSites(ctx.state, ax, ay)
-    if (!siteCands.length) return
+    // minion / artifact anchor and region (a carried artifact rides its carrier's location)
+    let at: { x: number; y: number; region: Region }
+    if ('unit' in t) { const u = ctx.state.units[t.unit]; if (!u) return; at = { x: u.x, y: u.y, region: u.region } }
+    else if ('artifact' in t) {
+      const a = ctx.state.artifacts[t.artifact]; if (!a) return
+      const carrier = a.carriedBy ? ctx.state.units[a.carriedBy] : null
+      at = { x: a.x, y: a.y, region: carrier?.region ?? a.region }
+    } else return
+    const squares = diagonalSquares(ctx.state, at.x, at.y).filter((s) => regionPresentAt(ctx.state, at.region, s.x, s.y))
+    if (!squares.length) return
     ctx.ask(
-      { kind: 'chooseTargets', title: 'Displace to which diagonal square?', data: { candidates: siteCands, count: 1, kind: 'site' } },
+      { kind: 'chooseSquare', title: 'Displace to which diagonal square?', data: { squares } },
       'slip',
-      'unit' in t ? { unitId: t.unit } : { artifactId: t.artifact },
+      'unit' in t ? { unitId: t.unit, region: at.region } : { artifactId: t.artifact, region: at.region },
     )
   },
   conts: {
-    // minion / artifact / single-site aura → a diagonal SITE
+    // minion / artifact → a diagonal location in its region; single-site aura → a diagonal square
     slip: (ctx, contCtx, choice) => {
-      const siteId = Array.isArray(choice) ? choice[0] : choice
-      const site = ctx.state.sites[siteId]
-      if (!site) return
+      const to = choice as Anchor
+      if (!to || typeof to.x !== 'number' || typeof to.y !== 'number') return
+      const where = siteAt(ctx.state, to.x, to.y)?.name ?? 'the void'
+      const region = contCtx.region as Region | undefined
+      if (region && !regionPresentAt(ctx.state, region, to.x, to.y)) return
       if (contCtx.unitId) {
         const u = ctx.state.units[contCtx.unitId]
-        if (u) ctx.teleport(u.id, site.x, site.y, u.region)
+        if (u && region && u.region === region) ctx.teleport(u.id, to.x, to.y, region)
       } else if (contCtx.artifactId) {
         const a = ctx.state.artifacts[contCtx.artifactId]
-        if (!a) return
+        if (!a || !region) return
         const carrier = a.carriedBy ? ctx.state.units[a.carriedBy] : null
-        a.x = site.x; a.y = site.y; a.region = 'surface'
+        a.x = to.x; a.y = to.y; a.region = region
         if (carrier && (carrier.x !== a.x || carrier.y !== a.y)) {
           carrier.carrying = carrier.carrying.filter((id) => id !== a.id)
           a.carriedBy = null
-          pushLog(ctx.state, ctx.controller, `${a.name} is displaced from ${carrier.name} and drops onto ${site.name}.`)
+          pushLog(ctx.state, ctx.controller, `${a.name} is displaced from ${carrier.name} and drops onto ${where}.`)
         }
       } else if (contCtx.auraId) {
         const r = ctx.state.auras[contCtx.auraId]
-        if (r) { r.squares = [{ x: site.x, y: site.y }]; pushLog(ctx.state, ctx.controller, `${r.name} shifts one step onto ${site.name}.`) }
+        if (r) { r.squares = [{ x: to.x, y: to.y }]; pushLog(ctx.state, ctx.controller, `${r.name} shifts one step onto ${where}.`) }
       }
     },
     // 2×2 aura → a diagonal INTERSECTION anchor: shift the whole footprint
@@ -77,16 +84,12 @@ registerScript('Displace', {
   },
 })
 
-// the four diagonal squares of (x,y) that hold a (non-rubble) site — Magellan-Globe aware. The
-// diagonals are `nearby (self+8) MINUS adjacent (self+4 orthogonal)`, which stays correct under wrap
-// (a naive `abs(dx)===1 && abs(dy)===1` filter would reject the wrapped-edge diagonals).
-function diagonalSites(state: GameState, x: number, y: number): string[] {
+// the four diagonal squares of (x,y) — Magellan-Globe aware. The diagonals are `nearby (self+8) MINUS
+// adjacent (self+4 orthogonal)`, which stays correct under wrap (a naive `abs(dx)===1 && abs(dy)===1`
+// filter would reject the wrapped-edge diagonals).
+function diagonalSquares(state: GameState, x: number, y: number): Anchor[] {
   const orth = adjacentSquaresW(state, x, y)
-  return nearbySquaresW(state, x, y)
-    .filter((s) => !orth.some((o) => o.x === s.x && o.y === s.y))
-    .map((s) => siteAt(state, s.x, s.y))
-    .filter((s): s is NonNullable<typeof s> => !!s && !s.isRubble)
-    .map((s) => s.id)
+  return nearbySquaresW(state, x, y).filter((s) => !orth.some((o) => o.x === s.x && o.y === s.y))
 }
 
 function offerAuraDestination(ctx: EffectAPI, auraId: string): void {
@@ -114,12 +117,12 @@ function offerAuraDestination(ctx: EffectAPI, auraId: string): void {
     return
   }
   if ((r.squares?.length ?? 0) <= 1) {
-    // SINGLE-SITE aura (Wildfire): a diagonal SITE, like a minion/artifact
+    // SINGLE-SITE aura (Wildfire): any diagonal square, a void included (FAQ)
     const sq = r.squares?.[0]
     if (!sq) return
-    const siteCands = diagonalSites(ctx.state, sq.x, sq.y)
-    if (!siteCands.length) return
-    ctx.ask({ kind: 'chooseTargets', title: 'Displace to which diagonal square?', data: { candidates: siteCands, count: 1, kind: 'site' } }, 'slip', { auraId })
+    const squares = diagonalSquares(ctx.state, sq.x, sq.y)
+    if (!squares.length) return
+    ctx.ask({ kind: 'chooseSquare', title: 'Displace to which diagonal square?', data: { squares } }, 'slip', { auraId })
     return
   }
   // 2×2 aura: a diagonal INTERSECTION anchor (Magellan-aware). Its anchor is its top-left square.

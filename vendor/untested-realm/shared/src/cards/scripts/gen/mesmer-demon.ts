@@ -14,7 +14,7 @@ registerScript('Mesmer Demon', {
     u.tapped = true
     const options = selfStepsCloser(ctx.state, u, self) // "step closer" (def. 2)
     if (options.length === 0) return
-    if (options.length === 1) { takeOwnStep(ctx.state, u, options[0], ctx.controller); checkStateBased(ctx.state); return }
+    if (options.length === 1) { takeOwnStep(ctx.state, u, options[0]); checkStateBased(ctx.state); return }
     // several legal closer steps → the EFFECT's controller chooses (Coy Nixie rule)
     ctx.ask({ kind: 'chooseSquare', title: `Mesmer Demon — step ${u.name} closer (choose a direction)`, data: { squares: options.map((s) => ({ x: s.x, y: s.y })) }, player: ctx.controller }, 'mesmerStep', { victim: u.id })
   },
@@ -24,7 +24,7 @@ registerScript('Mesmer Demon', {
       const self = ctx.state.units[ctx.sourceId]
       if (!u || !self || !choice || typeof choice.x !== 'number') return
       const step = selfStepsCloser(ctx.state, u, self).find((s) => s.x === choice.x && s.y === choice.y)
-      if (step) takeOwnStep(ctx.state, u, step, ctx.controller)
+      if (step) takeOwnStep(ctx.state, u, step)
       checkStateBased(ctx.state)
     },
   },

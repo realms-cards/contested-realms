@@ -1,6 +1,7 @@
 import { registerScript } from '../registry'
 import { pushLog, checkStateBased } from '../../../engine/effects'
 import { GRID_H, GRID_W, siteAt, unitsAt, edgesConnected } from '../../../engine/grid'
+import { isCarriableArtifact } from '../../../engine/statics'
 
 // 'Choose clockwise or counterclockwise. Each unit and artifact atop sites in a
 //  two-by-two area is pushed one step in that direction.'
@@ -38,8 +39,9 @@ registerScript('Whirlwind', {
         const to = ring[(i + 1) % 4]
         if (!siteAt(ctx.state, cur.x, cur.y) || !siteAt(ctx.state, to.x, to.y)) continue
         for (const u of unitsAt(ctx.state, cur.x, cur.y, 'surface')) unitMoves.push({ id: u.id, to })
+        // a carried artifact rides its bearer; a Monument never moves (Automatons are units, pushed above)
         for (const a of Object.values(ctx.state.artifacts)) {
-          if (!a.carriedBy && a.x === cur.x && a.y === cur.y && a.region === 'surface') artMoves.push({ thing: a, to })
+          if (!a.carriedBy && a.x === cur.x && a.y === cur.y && a.region === 'surface' && isCarriableArtifact(a.name)) artMoves.push({ thing: a, to })
         }
       }
       // "pushed one step" — a forced push (respects Cage of Sidrak / moveProtected / can't-push-into-void)

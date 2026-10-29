@@ -26,7 +26,7 @@ registerScript('Lure', {
     if (!nearbySquaresW(ctx.state, bait.x, bait.y).some((s) => s.x === fish.x && s.y === fish.y)) return ctx.log('Not nearby.')
     const options = selfStepsCloser(ctx.state, fish, bait)
     if (options.length === 0) return ctx.log(`${fish.name} can't step any closer.`)
-    if (options.length === 1) { takeOwnStep(ctx.state, fish, options[0], ctx.controller); checkStateBased(ctx.state); return }
+    if (options.length === 1) { takeOwnStep(ctx.state, fish, options[0]); checkStateBased(ctx.state); return }
     // AGENCY RULE (see Coy Nixie): several legal closer steps → the EFFECT's controller chooses which
     // (unless the card says otherwise); the lure must be followed, so one is picked.
     ctx.ask({ kind: 'chooseSquare', title: `Lure — step ${fish.name} closer (choose a direction)`, data: { squares: options.map((s) => ({ x: s.x, y: s.y })) }, player: ctx.controller }, 'lureStep', { victim: fish.id, bait: bait.id })
@@ -38,7 +38,7 @@ registerScript('Lure', {
       if (!u || !bait || !choice || typeof choice.x !== 'number') return
       // re-derived now: the board may have changed while the question waited
       const step = selfStepsCloser(ctx.state, u, bait).find((s) => s.x === choice.x && s.y === choice.y)
-      if (step) takeOwnStep(ctx.state, u, step, ctx.controller)
+      if (step) takeOwnStep(ctx.state, u, step)
       checkStateBased(ctx.state)
     },
   },

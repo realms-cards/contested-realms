@@ -15,6 +15,10 @@ registerScript('Gargantula', {
     if (!prey) return
     // The drag doesn't target (no "target" in its text), so neither Ward nor Stealth stops it.
     ctx.teleport(prey.id, self.x, self.y, self.region, { push: true }) // forced drag: Cage/push-ban/no-void aware
+    // FAQ: "Gargantula must be at the same location as the minion to wrap it in her web, so if the minion
+    // cannot be dragged there it will not be disabled" (one already sharing her location is cocooned)
+    const caught = ctx.state.units[prey.id]
+    if (!caught || caught.x !== self.x || caught.y !== self.y || caught.region !== self.region) return
     prey.disabled = true
     prey.counters = { ...prey.counters, cocooned: 1 }
     pushLog(ctx.state, ctx.controller, `${prey.name} is wrapped in silk!`)

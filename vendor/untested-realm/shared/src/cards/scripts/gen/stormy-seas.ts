@@ -18,7 +18,7 @@ registerScript('Stormy Seas', {
     const site = ctx.state.sites[t.site]
     if (!site) return
     // minions (via trySubmerge, cargo included) and every artifact here, carried or not
-    submergeOccupantsAt(ctx.state, site.x, site.y)
+    submergeOccupantsAt(ctx.state, site.x, site.y, ctx.controller)
     pushLog(ctx.state, ctx.controller, 'The seas swallow everything!')
     checkStateBased(ctx.state)
   },

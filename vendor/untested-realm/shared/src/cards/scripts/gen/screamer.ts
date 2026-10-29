@@ -18,7 +18,7 @@ registerScript('Screamer', {
     foe.tapped = true
     const steps = selfStepsAway(ctx.state, foe, self) // "take a step away" (def. 2)
     if (!steps.length) return
-    if (steps.length === 1) { takeOwnStep(ctx.state, foe, steps[0], ctx.controller); return }
+    if (steps.length === 1) { takeOwnStep(ctx.state, foe, steps[0]); return }
     ctx.ask({ kind: 'chooseSquare', title: `${foe.name} recoils from the Screamer — which way?`, data: { squares: steps.map((s) => ({ x: s.x, y: s.y })) }, player: ctx.controller }, 'flee', { unitId: foe.id })
   },
   conts: {
@@ -27,7 +27,7 @@ registerScript('Screamer', {
       const self = ctx.state.units[ctx.sourceId]
       if (!u || !self || !sq) return
       const step = selfStepsAway(ctx.state, u, self).find((s) => s.x === sq.x && s.y === sq.y)
-      if (step) takeOwnStep(ctx.state, u, step, ctx.controller)
+      if (step) takeOwnStep(ctx.state, u, step)
     },
   },
 })

@@ -20,7 +20,8 @@ registerScript('Megalurker', {
         }),
     )]
     if (!killers.length) return
-    ctx.ask({ kind: 'chooseTargets', title: 'The Megalurker drags which killer under? (skip for none)', data: { candidates: killers, count: 1, upTo: true, kind: 'unit' } }, 'drag')
+    // "the killer", not a target: a Ward doesn't break over the drag (Codex, Ward)
+    ctx.ask({ kind: 'chooseTargets', title: 'The Megalurker drags which killer under? (skip for none)', data: { candidates: killers, count: 1, upTo: true, kind: 'unit', notTargeted: true } }, 'drag')
   },
   conts: {
     drag: (ctx, _c, choice) => {

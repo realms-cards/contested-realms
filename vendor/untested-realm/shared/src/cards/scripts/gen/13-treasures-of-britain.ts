@@ -1,9 +1,11 @@
 import { registerScript, type EffectAPI } from '../registry'
 import { pushLog, luckyChoiceIndex } from '../../../engine/effects'
-import { GRID_H, GRID_W, squareLabel } from '../../../engine/grid'
+import { GRID_H, GRID_W, siteAt, squareLabel } from '../../../engine/grid'
 
 // "When picked up, bearer's controller draws a card. Teleport the Treasures to
 //  the top of a random site or void."
+// The top of a site is its surface; a void square has no surface (Codex, Void, Surface) — there the
+// Treasures lie in the void.
 registerScript('13 Treasures of Britain', {
   onPickedUp: (ctx, bearer) => {
     const art = ctx.state.artifacts[ctx.sourceId]
@@ -28,6 +30,6 @@ function treasuresSlip(ctx: EffectAPI, artId: string, spot: { x: number; y: numb
   art.carriedBy = null
   art.x = spot.x
   art.y = spot.y
-  art.region = 'surface'
+  art.region = siteAt(ctx.state, spot.x, spot.y) ? 'surface' : 'void'
   pushLog(ctx.state, ctx.controller, `The 13 Treasures vanish — and reappear at ${squareLabel(spot.x, spot.y)}!`)
 }

@@ -37,7 +37,8 @@ registerScript('Pudge Butcher', {
       })
       if (!impact) { pushLog(ctx.state, ctx.controller, 'The hook clatters against nothing.'); return }
       if (impact.candidates.length === 1) { pudgeDrag(ctx, impact.candidates[0]); return }
-      ctx.ask({ kind: 'chooseTargets', title: 'Hook which unit?', data: { candidates: impact.candidates, count: 1, upTo: false, kind: 'unit' } }, 'hookPick')
+      // a projectile hit, not a target: a Ward doesn't break over it (Codex, Ward)
+      ctx.ask({ kind: 'chooseTargets', title: 'Hook which unit?', data: { candidates: impact.candidates, count: 1, upTo: false, kind: 'unit', notTargeted: true } }, 'hookPick')
     },
     hookPick: (ctx, _c, choice) => {
       const id = Array.isArray(choice) ? choice[0] : choice
@@ -48,8 +49,9 @@ registerScript('Pudge Butcher', {
       const hit = ctx.state.units[c.preyId as string]
       // "may fight it WHEN IT ARRIVES" — if the drag was blocked short (Perilous Bridge / Cage of Sidrak /
       // Bailey), the prey never reaches Pudge, so there is no fight AND no fight prompt.
+      // "fight IT": whatever unit the hook hit, an ally included (a projectile hits the first unit, enemy or ally)
       const arrived = !!self && !!hit && hit.x === self.x && hit.y === self.y && hit.region === self.region
-      if (arrived && hit.controller !== ctx.controller) {
+      if (arrived) {
         ctx.ask({ kind: 'yesNo', title: `Fight ${hit.name}?` }, 'chop', { preyId: hit.id })
       }
     },

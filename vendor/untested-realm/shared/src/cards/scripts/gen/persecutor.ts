@@ -1,7 +1,8 @@
 import { registerScript } from '../registry'
 import { pushLog } from '../../../engine/effects'
 import { isEvilUnit } from '../../../engine/statics'
-import { selfStepsCloser, stepDistance } from '../../../engine/movement'
+import { takeOwnStep } from '../../../engine/movement'
+import { stepsTowardClosest } from '../multi-card-utils/own-step'
 import type { GameState, UnitState } from '../../../engine/types'
 
 const isEvilU = (state: GameState, u: UnitState) => isEvilUnit(state, u)
@@ -11,6 +12,11 @@ const isEvilU = (state: GameState, u: UnitState) => isEvilUnit(state, u)
 // The brand does NOT change subtypes (it must NOT make the enemy a Monster, and must NOT break its Ward).
 // It is a per-turn "treated as Evil" flag (flow.branded) that isEvilUnit() recognises for targeting/
 // affecting Evil, while isEvilUnitIntrinsic() (ward-strip, "real Evil") ignores it.
+// Codex (Closest): "imagine the Persecutor had unlimited movement … the 'closest' Evil is the unit that
+// requires the fewest Persecutor steps to reach. (Your choice if tied.)" — measured in his own steps,
+// and the step is his own (takeOwnStep), not a teleport.
+const evilSteps = (state: GameState, self: UnitState) =>
+  stepsTowardClosest(state, self, Object.values(state.units).filter((u) => !u.isAvatar && isEvilU(state, u)))
 registerScript('Persecutor', {
   abilities: [{
     key: 'zeal',
@@ -30,24 +36,19 @@ registerScript('Persecutor', {
       const self = ctx.state.units[ctx.sourceId]
       if (!self || typeof choice !== 'string') return
       if (choice.startsWith('steps')) {
-        const evils = Object.values(ctx.state.units).filter((u) => !u.isAvatar && isEvilU(ctx.state, u))
-        if (!evils.length) return ctx.log('No Evil stalks the realm.')
-        const minD = Math.min(...evils.map((e) => stepDistance(self, e)))
-        // every square that steps closer to ANY of the equally-closest Evils is legal —
-        // the player chooses the direction (dedupe squares by coordinate)
-        const byCoord = new Map<string, { x: number; y: number }>()
-        for (const e of evils.filter((e) => stepDistance(self, e) === minD)) {
-          for (const s of selfStepsCloser(ctx.state, self, e)) byCoord.set(`${s.x},${s.y}`, { x: s.x, y: s.y })
-        }
-        const steps = [...byCoord.values()]
+        if (!Object.values(ctx.state.units).some((u) => !u.isAvatar && isEvilU(ctx.state, u))) return ctx.log('No Evil stalks the realm.')
+        // every first step of a shortest route to ANY of the equally-closest Evils —
+        // the player chooses the direction
+        const steps = evilSteps(ctx.state, self)
         if (!steps.length) return ctx.log('No step brings the Persecutor closer.')
         if (steps.length === 1) {
-          ctx.teleport(self.id, steps[0].x, steps[0].y, self.region)
-          self.usedThisTurn.zeal = 1 // committed → spend the once-per-turn use
-          pushLog(ctx.state, ctx.controller, 'The Persecutor stalks toward the nearest Evil.')
+          if (takeOwnStep(ctx.state, self, steps[0])) {
+            self.usedThisTurn.zeal = 1 // committed → spend the once-per-turn use
+            pushLog(ctx.state, ctx.controller, 'The Persecutor stalks toward the nearest Evil.')
+          }
           return
         }
-        ctx.ask({ kind: 'chooseSquare', title: 'The Persecutor stalks — which way?', data: { squares: steps } }, 'persecutorStep')
+        ctx.ask({ kind: 'chooseSquare', title: 'The Persecutor stalks — which way?', data: { squares: steps.map((s) => ({ x: s.x, y: s.y })) } }, 'persecutorStep')
       } else {
         const enemies = Object.values(ctx.state.units).filter((u) => u.controller !== ctx.controller && !u.stealth).map((u) => u.id)
         if (!enemies.length) return
@@ -66,8 +67,8 @@ registerScript('Persecutor', {
     },
     persecutorStep: (ctx, _c, sq) => {
       const self = ctx.state.units[ctx.sourceId]
-      if (self && sq) {
-        ctx.teleport(self.id, sq.x, sq.y, self.region)
+      const step = self && sq ? evilSteps(ctx.state, self).find((s) => s.x === sq.x && s.y === sq.y) : undefined
+      if (self && step && takeOwnStep(ctx.state, self, step)) {
         self.usedThisTurn.zeal = 1 // committed → spend the once-per-turn use
         pushLog(ctx.state, ctx.controller, 'The Persecutor stalks toward the nearest Evil.')
       }

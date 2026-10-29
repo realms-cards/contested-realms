@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { waterSiteTargets } from '../multi-card-utils/site-terrain-targets'
-import { isWaterSite, adjacentSquaresW, unitsAt } from '../../../engine/grid'
+import { isWaterSite, orthAdjacentWrapped, unitsAt } from '../../../engine/grid'
 
 // 'Target water site pulls in an aboveground unit it's adjacent to. Draw a card.'
 registerScript('Riptide', {
@@ -15,9 +15,11 @@ registerScript('Riptide', {
     if (!t || !('site' in t)) return
     const site = ctx.state.sites[t.site]
     if (!site) return ctx.drawCard(ctx.controller)
-    const pullable = adjacentSquaresW(ctx.state, site.x, site.y).flatMap((s) => unitsAt(ctx.state, s.x, s.y, 'surface')).map((u) => u.id)
+    // "pulls IN" a unit from a neighbouring square: one already on the site isn't pulled in. Only the site
+    // is targeted — the unit isn't, so a Ward doesn't break over the pull (Codex, Ward)
+    const pullable = orthAdjacentWrapped(ctx.state, site.x, site.y).flatMap((s) => unitsAt(ctx.state, s.x, s.y, 'surface')).map((u) => u.id)
     if (!pullable.length) return ctx.drawCard(ctx.controller)
-    ctx.ask({ kind: 'chooseTargets', title: 'The riptide drags in which unit?', data: { candidates: pullable, count: 1, upTo: false, kind: 'unit' } }, 'pull', { siteId: site.id })
+    ctx.ask({ kind: 'chooseTargets', title: 'The riptide drags in which unit?', data: { candidates: pullable, count: 1, upTo: false, kind: 'unit', notTargeted: true } }, 'pull', { siteId: site.id })
   },
   conts: {
     pull: (ctx, c, choice) => {

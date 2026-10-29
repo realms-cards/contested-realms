@@ -25,7 +25,7 @@ registerScript('Wrath of the Sea', {
     for (const u of Object.values(ctx.state.units)) {
       if (u.isAvatar || u.region !== 'surface') continue
       const site = siteAt(ctx.state, u.x, u.y)
-      if (site && isWaterSite(ctx.state, site, getCard)) trySubmerge(ctx.state, u) // cargo rides down too
+      if (site && isWaterSite(ctx.state, site, getCard)) trySubmerge(ctx.state, u, ctx.controller) // cargo rides down too
     }
     // submerge every surface artifact on water — loose ones AND ones carried by a bearer that stayed up
     // (an Avatar), which are detached and submerged on their own (mirrors Stormy Seas / Cave-In)

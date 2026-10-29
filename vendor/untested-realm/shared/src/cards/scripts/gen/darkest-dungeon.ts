@@ -1,5 +1,7 @@
 import { registerScript } from '../registry'
-import { pushLog, avatarTrapBlocksMove } from '../../../engine/effects'
+import { pushLog, avatarTrapBlocksMove, moveProtected } from '../../../engine/effects'
+import { siteEntryAllowed } from '../../../engine/movement'
+import type { UnitState } from '../../../engine/types'
 
 // 'Genesis → The next time an ally strikes an Avatar this turn, drag both here if able.'
 registerScript('Darkest Dungeon', {
@@ -18,6 +20,14 @@ registerScript('Darkest Dungeon', {
     // the effect can't happen — don't activate (leave it armed for a later legal strike). Checked
     // up-front so the effect never half-fires (dragging the striker but stranding the avatar).
     if (avatarTrapBlocksMove(ctx.state, avatar, self.x, self.y)) return
+    // FAQ: "If there is no legal path that will get both of the involved units to the Dungeon, there will
+    // be no movement" — so neither is dragged when the other can't be (can't be moved by force, an enemy
+    // Anchorman, Cage of Sidrak, a site it can't be dragged into)
+    const caged = (u: UnitState) => (ctx.state.flow?.cagedUnits ?? []).some((c: { unitId: string }) => c.unitId === u.id)
+    const draggable = (u: UnitState) => (u.x === self.x && u.y === self.y && u.region === 'surface') || (
+      !caged(u) && !moveProtected(ctx.state, u, ctx.controller) &&
+      siteEntryAllowed(ctx.state, u, { x: u.x, y: u.y, region: u.region }, { x: self.x, y: self.y, region: 'surface' }, true, true))
+    if (!draggable(striker) || !draggable(avatar)) return
     ctx.state.flow.darkestDungeon = null
     ctx.teleport(striker.id, self.x, self.y, 'surface', { push: true }) // forced drag: Cage/push-ban aware
     ctx.teleport(avatar.id, self.x, self.y, 'surface', { push: true })

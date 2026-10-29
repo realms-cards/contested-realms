@@ -1,32 +1,27 @@
 import { registerScript, type EffectAPI } from '../registry'
-import { nearbySquaresW, siteAt, unitsAt } from '../../../engine/grid'
-import { isLegalStep } from '../../../engine/movement'
-import { strikeAllSimultaneous, emitUnitMoved } from '../../../engine/effects'
+import { unitsAt } from '../../../engine/grid'
+import { takeOwnStep } from '../../../engine/movement'
+import { strikeAllSimultaneous } from '../../../engine/effects'
+import { ownSteps, ownStepTo } from '../multi-card-utils/own-step'
 
 // 'Airborne, Ward / Genesis → Michael takes a step, then strikes all enemies at his location.'
+// "Takes a step" is mandatory, and his own step (Codex, Step def. 2): any legal step — Airborne, so
+// surface diagonals too; walls / entry-bans / Immobile still block him. The step isn't "target"-worded,
+// so it is a square pick, not a site target (which would break a warded site's Ward).
 registerScript('Archangel Michael', {
   genesis: (ctx) => {
     const self = ctx.state.units[ctx.sourceId]
     if (!self) return
-    // "takes a step" — only legal steps (Michael is Airborne, so surface diagonals are fine; walls /
-    // entry-bans / Immobile still block him).
-    const options = nearbySquaresW(ctx.state, self.x, self.y)
-      .filter((s) => !(s.x === self.x && s.y === self.y) && siteAt(ctx.state, s.x, s.y) &&
-        isLegalStep(ctx.state, self, { x: self.x, y: self.y, region: self.region }, { x: s.x, y: s.y, region: 'surface' }))
-      .map((s) => siteAt(ctx.state, s.x, s.y)!.id)
-    if (!options.length) return michaelSmite(ctx)
-    ctx.ask({ kind: 'chooseTargets', title: 'Michael steps to which site (or skip)?', data: { candidates: options, count: 1, upTo: true, kind: 'site' } }, 'step')
+    const steps = ownSteps(ctx.state, self)
+    if (!steps.length) return michaelSmite(ctx)
+    if (steps.length === 1) { takeOwnStep(ctx.state, self, steps[0]); return michaelSmite(ctx) }
+    ctx.ask({ kind: 'chooseSquare', title: 'Michael takes a step — to where?', data: { squares: steps.map((s) => ({ x: s.x, y: s.y })) } }, 'step')
   },
   conts: {
-    step: (ctx, _c, choice) => {
-      const id = Array.isArray(choice) ? choice[0] : choice
+    step: (ctx, _c, sq) => {
       const self = ctx.state.units[ctx.sourceId]
-      const site = id ? ctx.state.sites[id] : null
-      if (self && site) {
-        const from = { x: self.x, y: self.y, region: self.region }
-        const to = { x: site.x, y: site.y, region: 'surface' as const }
-        if (isLegalStep(ctx.state, self, from, to)) { self.x = site.x; self.y = site.y; self.region = 'surface'; emitUnitMoved(ctx.state, self, from) }
-      }
+      const step = self ? ownStepTo(ctx.state, self, sq) : undefined
+      if (self && step) takeOwnStep(ctx.state, self, step)
       michaelSmite(ctx)
     },
   },

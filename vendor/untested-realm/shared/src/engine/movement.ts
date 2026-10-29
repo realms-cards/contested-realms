@@ -1,7 +1,7 @@
 import { getCard, type ParsedKeywords } from '../cards/db'
 import type { GameState, PlayerId, Region, Step, UnitState, SiteState, ArtifactState, AuraState } from './types'
 import { GRID_H, GRID_W, inBounds, isOrthAdjacent, isDiagAdjacent, siteAt, isWaterSite, sameSquare, nearbySquaresW, orthAdjacentWrapped, occupiedSquares, edgesConnected } from './grid'
-import { emitUnitMoved, makeCtx, protectedFromEnemyMoves, pushLog, recordMoveAnim } from './effects'
+import { emitUnitMoved, makeCtx, pushLog, recordMoveAnim } from './effects'
 import { detachFromCarrier } from './carrying'
 import { getScript } from '../cards/scripts/registry'
 import { effKeywords, isDisabled, isUnmodifiable, immobilizeImmune, terrainAt, siteSilenced, artifactSilenced, protectedFromSites } from './statics'
@@ -971,14 +971,10 @@ export const selfStepsAway = (state: GameState, mover: UnitState, ref: { x: numb
  * unit is taking their own step (and an Immobile unit wouldn't move at all)". So "can't be moved by
  * force" doesn't stop it, while everything that stops a step does (isLegalStep: Immobile, Maze
  * Minotaur, walls), a wall it crosses still hurts, and "enters here" triggers fire as for any step.
- * `by` is the player whose effect makes it step: Old Salt Anchorman's nearby allies "can't be moved by
- * enemy spells and abilities". Returns whether the unit moved.
+ * Old Salt Anchorman doesn't stop it either — his FAQ: "Sailors historically have trouble resisting
+ * the siren's call." Returns whether the unit moved.
  */
-export function takeOwnStep(state: GameState, unit: UnitState, to: Step, by: PlayerId): boolean {
-  if (by !== unit.controller && protectedFromEnemyMoves(state, unit)) {
-    pushLog(state, unit.controller, `${unit.name} holds its ground.`)
-    return false
-  }
+export function takeOwnStep(state: GameState, unit: UnitState, to: Step): boolean {
   return resolveMovement(state, unit, [to], { step: true }) > 0
 }
 

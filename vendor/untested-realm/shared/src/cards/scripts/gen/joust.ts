@@ -1,11 +1,13 @@
 import { registerScript } from '../registry'
-import { pushLog, emitUnitMoved } from '../../../engine/effects'
-import { isLegalStep } from '../../../engine/movement'
+import { pushLog } from '../../../engine/effects'
+import { isLegalStep, takeOwnStep } from '../../../engine/movement'
 import { fightUnits } from '../../../engine/combat'
 import { adjacentFightTargets, resolveAdjacentCombatants } from '../multi-card-utils/adjacent-fight'
 
 // "An ally targets an enemy they're adjacent to, then they both take a step to
 // swap places. If they pass each other, they fight."
+// Each takes its OWN step (Codex, Step def. 2: takeOwnStep — walls, "enters here" triggers, carrier),
+// so Old Salt Anchorman doesn't keep the enemy from it (his FAQ: own steps aren't stopped).
 registerScript('Joust!', {
   targets: adjacentFightTargets('your jouster'),
   onCast: (ctx) => {
@@ -19,11 +21,9 @@ registerScript('Joust!', {
     if (!isLegalStep(ctx.state, a, aFrom, bFrom) || !isLegalStep(ctx.state, b, bFrom, aFrom)) {
       return ctx.log('One of them cannot take the step — no joust occurs.')
     }
-    a.x = bFrom.x; a.y = bFrom.y
-    b.x = aFrom.x; b.y = aFrom.y
-    emitUnitMoved(ctx.state, a, aFrom) // both units "take a step" — fire on-enter triggers for the new squares
-    emitUnitMoved(ctx.state, b, bFrom)
-    if (!ctx.state.units[a.id] || !ctx.state.units[b.id]) return // an on-enter trigger removed a jouster
+    const aMoved = takeOwnStep(ctx.state, a, bFrom)
+    const bMoved = ctx.state.units[b.id] ? takeOwnStep(ctx.state, b, aFrom) : false
+    if (!aMoved || !bMoved || !ctx.state.units[a.id] || !ctx.state.units[b.id]) return // a step failed or a trigger removed a jouster
     pushLog(ctx.state, ctx.controller, `${a.name} and ${b.name} joust past each other!`)
     // they pass each other and fight — a real simultaneous strike exchange (Interrogator, Lethal, …)
     fightUnits(ctx.state, a, b)
