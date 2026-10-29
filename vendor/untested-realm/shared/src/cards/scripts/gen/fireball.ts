@@ -10,9 +10,9 @@ registerScript('Fireball', {
     const c = ctx.caster!
     if (!dir || (dir !== 'n' && dir !== 's' && dir !== 'e' && dir !== 'w')) return ctx.log('Fizzled: no direction chosen.')
     // firstProjectileImpact stops at the first square holding a hittable unit and
-    // also void-stops; 'notStealth' preserves the stealth filter.
+    // also void-stops; hittable = projectileCanHit (Stealth, Crawling Congregation…).
     const impact = firstProjectileImpact(ctx.state, {
-      player: ctx.controller, ox: c.x, oy: c.y, region: c.region, dir: String(dir), filter: 'notStealth', excludeId: c.id,
+      player: ctx.controller, ox: c.x, oy: c.y, region: c.region, dir: String(dir), excludeId: c.id,
     })
     if (!impact) return ctx.log('The fireball flies off the realm.')
     if (impact.candidates.length === 1) return fireballHit(ctx, impact.candidates[0])

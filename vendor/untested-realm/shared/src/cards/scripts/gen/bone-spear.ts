@@ -21,7 +21,7 @@ registerScript('Bone Spear', {
       ctx.kill(contCtx.sacId)
       fireVolleyProjectiles(ctx.state, {
         player: ctx.controller, ox: contCtx.from.x, oy: contCtx.from.y, region: contCtx.region,
-        dir: String(dir), volleys: 1, damage: 3, filter: 'notStealth', srcName: 'Bone Spear',
+        dir: String(dir), volleys: 1, damage: 3, srcName: 'Bone Spear',
       })
     },
   },

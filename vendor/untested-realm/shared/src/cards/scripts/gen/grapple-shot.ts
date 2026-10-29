@@ -34,7 +34,7 @@ registerScript('Grapple Shot', {
       if (!ally || !dir) return
       // firstProjectileImpact void-stops and returns the co-located hittable units
       const impact = firstProjectileImpact(ctx.state, {
-        player: ctx.controller, ox: ally.x, oy: ally.y, region: ally.region, dir: String(dir), filter: 'notStealth', excludeId: ally.id,
+        player: ctx.controller, ox: ally.x, oy: ally.y, region: ally.region, dir: String(dir), excludeId: ally.id,
       })
       if (!impact) return ctx.log('The grapple finds nothing.')
       if (impact.candidates.length === 1) return grappleHit(ctx, ally.id, impact.candidates[0])

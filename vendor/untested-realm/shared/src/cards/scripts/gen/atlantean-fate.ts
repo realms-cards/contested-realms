@@ -1,7 +1,8 @@
 import { registerScript } from '../registry'
-import { pushLog, trySubmerge, applyFlood, notifySiteInterference } from '../../../engine/effects'
-import { siteAt, unitsAt } from '../../../engine/grid'
-import { siteRarity } from '../../../engine/statics'
+import { pushLog, applyFlood, notifySiteInterference } from '../../../engine/effects'
+import { siteAt } from '../../../engine/grid'
+import { submergeOccupantsAt } from '../multi-card-utils/burrow-occupants'
+import { siteRarity, terrainAt } from '../../../engine/statics'
 
 // 'Affected non-Ordinary sites are flooded. They are water sites, only provide
 //  Water threshold, and lose all other abilities. / Genesis → Submerge all
@@ -23,10 +24,10 @@ registerScript('Atlantean Fate', {
         // so a nearby Vindictive Nation exacts only 1 life per affected site (not once per sub-effect).
         notifySiteInterference(ctx.state, 'modify', { id: site.id, x: site.x, y: site.y, controller: site.controller }, ctx.controller)
       }
-      for (const u of unitsAt(ctx.state, sq.x, sq.y, 'surface')) trySubmerge(ctx.state, u)
-      for (const a of Object.values(ctx.state.artifacts)) {
-        if (!a.carriedBy && a.x === sq.x && a.y === sq.y && a.region === 'surface') a.region = 'underwater'
-      }
+      // FAQ: the Genesis submerges atop EVERY site in the area, Ordinary ones included — but only a
+      // water site can be submerged into: an Ordinary land site stays dry, so what's atop it stays put
+      if (!site || terrainAt(ctx.state, sq.x, sq.y) !== 'water') continue
+      submergeOccupantsAt(ctx.state, sq.x, sq.y) // minions with their cargo, and every artifact here
     }
     pushLog(ctx.state, null, 'The fate of Atlantis comes for these lands.')
   },

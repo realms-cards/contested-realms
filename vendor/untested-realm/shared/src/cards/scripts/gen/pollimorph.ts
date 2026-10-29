@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { pushLog, removeUnitFromRealm } from '../../../engine/effects'
+import { transformIntoToken } from '../../../engine/effects'
 
 // 'Transform target nearby minion into a Frog token.'
 registerScript('Pollimorph', {
@@ -8,12 +8,7 @@ registerScript('Pollimorph', {
     const t = ctx.targets[0]
     if (!('unit' in t)) return
     const u = ctx.state.units[t.unit]
-    if (!u) return
-    const { x, y, region, controller } = u
-    // transformed cards are removed from the game, not sent to the cemetery
-    if (removeUnitFromRealm(ctx.state, u.id)) delete ctx.state.units[u.id] // cargo stays behind (FAQ); an avatar refuses removal
-    pushLog(ctx.state, ctx.controller, `${u.name} turns into a Frog!`)
-    const frog = ctx.summonToken('Frog', controller, x, y, region)
-    if (frog) frog.enteredTurn = u.enteredTurn // no new summoning sickness
+    // a transform, not an entry: the Frog takes its place without "entering" (transformIntoToken)
+    if (u) transformIntoToken(ctx.state, u, 'Frog')
   },
 })

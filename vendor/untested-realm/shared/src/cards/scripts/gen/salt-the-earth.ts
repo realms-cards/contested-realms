@@ -3,20 +3,18 @@ import { pushLog } from '../../../engine/effects'
 import { siteAt } from '../../../engine/grid'
 
 // 'Conjure Salt the Earth to a single site, destroying it. / Sites can't be played here.'
+// A single-site aura (like Hamlet's Ablaze!): it covers the ONE site it's conjured to. The destroyed site
+// becomes rubble as usual (rulebook) — the salt stays on the rubble, so no site can be played there again.
 registerScript('Salt the Earth', {
+  singleSiteAura: true,
   auraPlacement: (state, _player, at) => (siteAt(state, at.x, at.y) ? null : 'Salt the Earth must be conjured atop a site.'),
   auraBlocksSitePlay: true,
   genesis: (ctx) => {
-    const aura = ctx.state.auras[ctx.sourceId]
     const at = ctx.at
-    if (!aura || !at) return
-    aura.squares = [{ x: at.x, y: at.y }]
+    if (!ctx.state.auras[ctx.sourceId] || !at) return
     const site = siteAt(ctx.state, at.x, at.y)
-    if (site) {
+    if (site && !site.isRubble) {
       ctx.destroySite(site.id)
-      // salt the very rubble: nothing grows here again
-      const rubble = siteAt(ctx.state, at.x, at.y)
-      if (rubble) delete ctx.state.sites[rubble.id]
       pushLog(ctx.state, ctx.controller, 'The land is sown with salt — nothing will ever grow here.')
     }
   },

@@ -1,11 +1,5 @@
 import { registerScript } from '../registry'
-import { GRID_H } from '../../../engine/grid'
+import { backRowOnly } from '../multi-card-utils/back-row-only'
 
-// back-row-only sites
-registerScript('Joyous Garde', {
-  siteProvides: (state, site) => {
-    if (site.controller === null) return false
-    const backRow = site.controller === 0 ? 0 : GRID_H - 1
-    return site.y === backRow
-  },
-})
+// 'Only provides mana and threshold while in your back row.'
+registerScript('Joyous Garde', backRowOnly)

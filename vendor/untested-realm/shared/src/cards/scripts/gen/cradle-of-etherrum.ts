@@ -33,7 +33,7 @@ registerScript('Cradle of Etherrum', {
       if (def.type !== 'Minion' || !def.subtypes.includes('Dragon')) return ctx.log(`${name} is no Dragon.`)
       p.spellbook.shift()
       lend(ctx, top, 'spellbookTop', ctx.controller)
-      ctx.state.flow.castAtOnly = [...(ctx.state.flow.castAtOnly ?? []), { cardId: top, x: art.x, y: art.y }]
+      ctx.state.flow.castAtOnly = [...(ctx.state.flow.castAtOnly ?? []), { cardId: top, x: art.x, y: art.y, followId: art.id }]
       ctx.state.flow.spellDiscounts = [
         ...(ctx.state.flow.spellDiscounts ?? []),
         { player: ctx.controller, turn: ctx.state.turn, amount: 1, subtype: 'Dragon', at: { x: art.x, y: art.y } },

@@ -1846,6 +1846,7 @@ export function trySubmerge(state: GameState, unit: UnitState): boolean {
     }
   }
   unit.region = 'underwater'
+  syncCarried(state, unit) // its carried artifacts (and riders) go under with it
   if (!canExistIn(state, unit, 'underwater', unit.x, unit.y)) {
     pushLog(state, null, `${unit.name} drowns!`)
     const snapshot = { ...unit }
@@ -3593,6 +3594,30 @@ export function summonToken(state: GameState, name: string, owner: PlayerId, x: 
   if (state.units[unitId]) applySummonTax(state, unit)
   checkStateBased(state)
   return state.units[unitId] ?? null
+}
+
+/** TRANSFORM a minion into a token (Pollimorph's Frog, Degradation's Foot Soldier). A transform is not an
+ *  entry: the token takes the minion's place, controller and summoning status, and NOTHING "enters" —
+ *  no Genesis, no "whenever … enters" trigger (the Druid's thorns), no summon ban (No Man's Land), no
+ *  summon tax (Mock Court), no "summoned nearby" banish (Order of the White Wing). The old card is
+ *  removed from the game and its cargo stays behind (FAQ). An Avatar or a "can't be modified" minion
+ *  can't be transformed. */
+export function transformIntoToken(state: GameState, unit: UnitState, name: string): UnitState | null {
+  if (unit.isAvatar) return null
+  if (isUnmodifiable(state, unit)) { pushLog(state, unit.controller, `${unit.name} can't be modified.`); return null }
+  const { x, y, region, controller, enteredTurn } = unit
+  if (removeUnitFromRealm(state, unit.id)) delete state.units[unit.id]
+  const cardId = newId(state, 'c')
+  state.cards[cardId] = { id: cardId, name, owner: controller, isToken: true }
+  const token: UnitState = {
+    id: newId(state, 'u'), cardId, name, owner: controller, controller, isAvatar: false, x, y, region,
+    tapped: false, damage: 0, enteredTurn, modifiers: [], carrying: [], carryingUnits: [], usedThisTurn: {},
+    counters: { transformed: 1 },
+  }
+  state.units[token.id] = token
+  pushLog(state, controller, `${unit.name} transforms into a ${name}.`)
+  checkStateBased(state)
+  return state.units[token.id] ?? null
 }
 
 // ---- the EffectAPI context handed to card scripts ----

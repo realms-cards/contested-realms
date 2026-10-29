@@ -1,9 +1,9 @@
-import { getCard, cardSupport, getKeywords } from '../cards/db'
+import { getCard, cardSupport, getKeywords, spiritCastName } from '../cards/db'
 import { getScript, type CardScript, type TargetRef, type TargetSpec } from '../cards/scripts/registry'
 import type { GameState, PlayerId, Region, Thresholds, UnitState } from './types'
 import { occupiedLocations, adjacentSquares, adjacentSquaresW, avatarOf, chebyshev, chebyshevW, orthAdjacentWrapped, nearbySquares, nearbySquaresW, siteAt, sitesOf, inBounds, unitsAt, occupies, occupiedSquares, GRID_W, GRID_H, edgesConnected, aura2x2Squares } from './grid'
 import { newId, pushLog, makeCtx, checkStateBased, opponent, emitUnitEnters, directionReach, emitEvent, isMagicProtected, loseLife, checkWard, pushPrompt, registerCont, runCont, toCemetery, bumpManaSpent, beginAreaReveal, recordAffectedSites, snapshotRealm, recordTouchedSites, sealSpellReveal, setActionCredit, restoreActionCredit, firesGenesisOnEntry, recordManaGain, deferTurnStep, settleEntering, runDamageEvent, notifySilencerEntered, applyFlood } from './effects'
-import { affinity, effKeywords, isDisabled, disabledByEffect, canExistIn, siteSilenced, siteDisabledByArtifact, artifactSilenced, artScript, zoneAccessToll, isArtifactUnit, isEvilUnit, isEvilUnitIntrinsic, isEvilCardName, isEvilCardNameFor, cardSubtypesFor, collectionBanned, payZoneToll, takeFromCollection, carriedInside, isBlanked, isCarriableArtifact, terrainAt, artifactController } from './statics'
+import { affinity, effKeywords, isDisabled, disabledByEffect, canExistIn, siteSilenced, siteDisabledByArtifact, artifactSilenced, artScript, zoneAccessToll, isArtifactUnit, isEvilUnit, isEvilUnitIntrinsic, isEvilCardName, isEvilCardNameFor, cardSubtypesFor, collectionBanned, payZoneToll, takeFromCollection, carriedInside, isBlanked, isCarriableArtifact, terrainAt, artifactController, grantedAbilities } from './statics'
 import { siteEntryAllowed } from './movement'
 import { applyGrant } from './keywords'
 import { TRAP_DISGUISE, trapElementOf } from './traps'
@@ -348,6 +348,17 @@ function normalCasterCheck(caster: UnitState, kw: ReturnType<typeof effKeywords>
     if ((def.thresholds[el] ?? 0) > 0) return `${caster.name} cannot cast ${kw.spellcasterExclude} spells.`
   }
   return null
+}
+
+/** The location a card is bound to be summoned at (flow.castAtOnly). A lock with `followId` is "here"
+ *  of a permanent (an Omphalos, the Cradle, Vivien): it follows that permanent wherever it goes
+ *  (a Cloud City flying off, a bearer carrying it), with `region` bound when the lock binds one. */
+export function castAtLock(state: GameState, cardId: string): { x: number; y: number; region?: Region } | undefined {
+  const lock = (state.flow?.castAtOnly ?? []).find((e: any) => e.cardId === cardId)
+  if (!lock) return undefined
+  const src = lock.followId ? (state.artifacts[lock.followId] ?? state.units[lock.followId]) : undefined
+  if (!src) return lock
+  return { x: src.x, y: src.y, region: lock.region !== undefined ? src.region : undefined }
 }
 
 /** Resolve a caster id to a UnitState — a real unit, OR a spellcaster ARTIFACT (the Omphaloi)
@@ -890,6 +901,18 @@ function siteCastRegions(state: GameState, siteId: string): Region[] {
 /** Authoritative check of the positional `extra` fields a client may send with a cast or an activated
  *  ability. The UI only offers legal values, but the engine resolves them AFTER target validation, so a
  *  raw action could otherwise re-region (castRegion) or relocate (castOrigin) an already-validated spell. */
+/** Can `cardId` be cast as an Animist Spirit? A magic in hand, by a player who has the Animist's
+ *  ability (the Animist avatar, or anything granted it, e.g. an Imposter masked as one). */
+export function spiritCastProblem(state: GameState, player: PlayerId, cardId: string): string | null {
+  const card = state.cards[cardId]
+  if (!card || !state.players[player].hand.includes(cardId)) return 'Only magics in your hand can take Spirit form.'
+  if (getCard(card.name).type !== 'Magic') return 'Only magics can take Spirit form.'
+  const animates = Object.values(state.units).some((u) =>
+    u.controller === player && !u.silenced && !isDisabled(state, u) &&
+    [...(getScript(u.name)?.abilities ?? []), ...grantedAbilities(state, u)].some((a) => a.key === 'animate'))
+  return animates ? null : 'Only an Animist can cast magics as Spirits.'
+}
+
 export function castExtrasProblem(state: GameState, casterId: string, extra: any): string | null {
   if (extra?.castRegion !== undefined && !siteCastRegions(state, casterId).includes(extra.castRegion))
     return 'Only a site caster picks the region it casts from.'
@@ -955,6 +978,11 @@ function summonCastMinion(
     ward: kw.ward || undefined,
     size: script?.oversized ? '2x2' : undefined,
     counters: { castFromHand: 1 }, // real casts, vs script-summons (Order of the White Wing)
+  }
+  // an Animist Spirit: the magic card in the realm, with power equal to its printed cost
+  if (extra?.asSpirit) {
+    unit.counters!.animistSpirit = 1
+    unit.modifiers.push({ kind: 'power', amount: def.attack ?? 0, duration: 'permanent', turn: state.turn, sourcePlayer: player })
   }
   state.units[unitId] = unit
   // rulebook: "Evil minions can't be warded" — strip a printed Ward that seeded onto an entering Evil
@@ -1182,8 +1210,14 @@ export function castSpell(
   if (!check.ok) return check.reason!
   const p = state.players[player]
   const card = state.cards[cardId]
+  // Animist: a magic in hand cast as a Spirit is a MINION spell, cast under its virtual Spirit card
+  const asSpirit = !!extra?.asSpirit
+  if (asSpirit) {
+    const err = spiritCastProblem(state, player, cardId)
+    if (err) return err
+  }
   // hand-card morphs resolve as the substitute spell (Avatar of Fire's Fireballs)
-  const morphed = p.hand.includes(cardId) ? spellMorphName(state, player, card.name) : null
+  const morphed = asSpirit ? spiritCastName(card.name) : p.hand.includes(cardId) ? spellMorphName(state, player, card.name) : null
   const castName = morphed ?? card.name
   const def = getCard(castName)
   // caster-locked cards resolve with their bonded caster (avatar stands in for
@@ -1277,7 +1311,7 @@ export function castSpell(
     } else {
       if (!at) return 'Choose where to summon.'
       // per-instance placement locks (Cradle of Etherrum, Doomsday Cult)
-      const lock = (state.flow?.castAtOnly ?? []).find((e: any) => e.cardId === cardId)
+      const lock = castAtLock(state, cardId)
       // a lock may also bind the REGION (an Omphalos summons "here" = its own layer, which can be
       // buried/submerged); when it does, the minion must materialize at that exact location + region.
       if (lock && (lock.x !== at.x || lock.y !== at.y || (lock.region !== undefined && at.region !== undefined && lock.region !== at.region)))
@@ -1399,8 +1433,8 @@ export function castSpell(
       pushLog(state, player, `${caster.name} loses Stealth.`)
     }
   }
-  pushLog(state, player, `${p.name} casts ${card.name}${morphed ? ` as ${castName}` : ''}${caster.isAvatar ? '' : ` with ${caster.name}`}.`)
-  state.lastPlay = { name: morphed ? castName : card.name, player, n: (state.lastPlay?.n ?? 0) + 1 }
+  pushLog(state, player, `${p.name} casts ${card.name}${asSpirit ? ' as a Spirit' : morphed ? ` as ${castName}` : ''}${caster.isAvatar ? '' : ` with ${caster.name}`}.`)
+  state.lastPlay = { name: morphed && !asSpirit ? castName : card.name, player, n: (state.lastPlay?.n ?? 0) + 1 }
   // codex: an OPPONENT's targeting breaks wards instead — the spell's effect
   // skips the warded target (costs stay paid)
   {
@@ -1451,7 +1485,7 @@ export function castSpell(
   // fresh capture for the cast reveal shown to BOTH players (golden caster + spell name,
   // plus either a numbered damage grid — Lava Flow / Ice Lance / Earthquake — OR red-glowing
   // affected sites for a single-target spell). Element tints the numbers.
-  beginAreaReveal(state, def.elements?.[0]?.toLowerCase(), castName, caster.id, def.type === 'Magic')
+  beginAreaReveal(state, def.elements?.[0]?.toLowerCase(), asSpirit ? card.name : castName, caster.id, def.type === 'Magic')
   if (def.type === 'Magic') {
     // capture the sites the spell touches NOW (before it moves/kills anything): a targeted
     // unit's/artifact's square, or a targeted site. Area spells target squares/directions,

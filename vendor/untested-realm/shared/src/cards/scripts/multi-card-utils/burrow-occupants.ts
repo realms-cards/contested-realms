@@ -2,6 +2,7 @@ import type { GameState, UnitState } from '../../../engine/types'
 import { unitsAt } from '../../../engine/grid'
 import { footprintAllTerrain } from '../../../engine/statics'
 import { syncCarried, buryArtifactsAt } from '../../../engine/carrying'
+import { trySubmerge } from '../../../engine/effects'
 
 /**
  * Burrow everything occupying a square underground — the shared Cave-In / Sir Balin mechanic.
@@ -22,4 +23,16 @@ export function burrowOccupantsAt(state: GameState, x: number, y: number, skip?:
     if (footprintAllTerrain(state, u, 'land')) { u.region = 'underground'; syncCarried(state, u) }
   }
   buryArtifactsAt(state, x, y)
+}
+
+/**
+ * Submerge everything occupying a square — the water twin of burrowOccupantsAt (Stormy Seas, Wrath
+ * of the Sea, Atlantean Fate). Each surface minion goes through trySubmerge (footprint, "clings on"
+ * protection, drowning) and takes its cargo down with it; EVERY artifact at the square is submerged —
+ * loose ones AND ones carried by a unit that stayed up (an Avatar), detached and submerged on their own.
+ * The caller checks the square is water and settles state (checkStateBased) afterwards.
+ */
+export function submergeOccupantsAt(state: GameState, x: number, y: number): void {
+  for (const u of unitsAt(state, x, y, 'surface')) trySubmerge(state, u)
+  buryArtifactsAt(state, x, y, 'underwater')
 }

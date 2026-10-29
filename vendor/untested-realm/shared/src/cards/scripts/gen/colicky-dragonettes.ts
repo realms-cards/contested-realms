@@ -13,7 +13,7 @@ registerScript('Colicky Dragonettes', {
       breakStealth(ctx.state, self) // firing the projectile reveals them — they lose Stealth
       fireVolleyProjectiles(ctx.state, {
         player: ctx.controller, ox: self.x, oy: self.y, region: self.region,
-        dir: String(dir), volleys: 1, damage: 1, filter: 'notStealth', excludeId: self.id, srcName: 'Colicky Dragonettes',
+        dir: String(dir), volleys: 1, damage: 1, excludeId: self.id, srcName: 'Colicky Dragonettes',
       })
     },
   },

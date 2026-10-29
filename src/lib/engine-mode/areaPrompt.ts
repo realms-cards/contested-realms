@@ -48,10 +48,11 @@ export function areaFootprints(
  *
  * The engine decides an aura's footprint twice. `singleSiteAura` / `edgeAura` are declared up
  * front and we can read them — but a Genesis may simply overwrite `aura.squares` afterwards,
- * and these two set it to the single square they were conjured on. Upstream cannot express
+ * and Sow the Earth sets it to the single square it was conjured on. Upstream cannot express
  * that with the flag it has: `singleSiteAura` makes the engine offer only squares that HOLD a
- * site, which is right for Salt the Earth ("conjured atop a site") and exactly wrong for Sow
- * the Earth ("needs a void square"). Upstream's own placement UI shows 2x2 markers for both.
+ * site, which is right for Salt the Earth ("conjured atop a site", flagged since 0.5.6) and
+ * exactly wrong for Sow the Earth ("needs a void square"). Upstream's own placement UI shows
+ * 2x2 markers for it.
  *
  * So the list is kept here, and `auraShapes.test.ts` re-derives it from the vendored scripts on
  * every run: if a re-vendor brings in another aura that rewrites its squares, that test fails
@@ -60,7 +61,7 @@ export function areaFootprints(
  * Thunderstorm is deliberately NOT here — it only translates its squares as it drifts, so the
  * 2x2 it is placed as is honest.
  */
-export const SINGLE_SQUARE_AURAS: ReadonlySet<string> = new Set(["Salt the Earth", "Sow the Earth"]);
+export const SINGLE_SQUARE_AURAS: ReadonlySet<string> = new Set(["Sow the Earth"]);
 
 export function auraFootprints(
   game: EngineState,

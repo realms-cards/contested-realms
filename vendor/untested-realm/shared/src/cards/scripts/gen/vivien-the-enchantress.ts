@@ -202,7 +202,7 @@ registerScript('Vivien the Enchantress', {
       ctx.state.flow.lockedCards = [...(ctx.state.flow.lockedCards ?? []), { cardId: top, casterId: self.id, casterName: self.name, grantsCasting: false }]
       pushLog(ctx.state, ctx.controller, 'Vivien draws a spell — only she may cast it.')
       if (getCard(ctx.state.cards[top].name).type === 'Minion') {
-        ctx.state.flow.castAtOnly = [...(ctx.state.flow.castAtOnly ?? []).filter((c: any) => c.cardId !== top), { cardId: top, x: self.x, y: self.y }]
+        ctx.state.flow.castAtOnly = [...(ctx.state.flow.castAtOnly ?? []).filter((c: any) => c.cardId !== top), { cardId: top, x: self.x, y: self.y, followId: self.id }]
       }
     }
     for (const name of vivienUnitSourceNames(ctx.state)) {

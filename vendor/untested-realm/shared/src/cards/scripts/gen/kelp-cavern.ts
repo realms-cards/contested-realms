@@ -21,6 +21,8 @@ registerScript('Kelp Cavern', {
           const [id] = p.spellbook.splice(i, 1)
           noteAddedToEnd(ctx.state, ctx.controller, ctx.controller, 'spellbook', 'top', [id], () => p.spellbook.unshift(id))
           noteSeenAtEnd(ctx.state, ctx.controller, ctx.controller, 'spellbook', 'bottom', seen.filter((s) => s !== id))
+          // unnamed: the spell is hidden from the opponent
+          ctx.log(`${p.name} puts a spell from the bottom of their spellbook on top.`)
           return
         }
       }

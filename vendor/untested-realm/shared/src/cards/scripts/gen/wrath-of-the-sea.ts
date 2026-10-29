@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { checkStateBased, trySubmerge, applyFlood } from '../../../engine/effects'
-import { syncCarried, buryArtifactsAt } from '../../../engine/carrying'
+import { buryArtifactsAt } from '../../../engine/carrying'
 import { isWaterSite, orthAdjacentWrapped, siteAt } from '../../../engine/grid'
 
 // 'Flood all sites adjacent to a body of water this turn. Then submerge all
@@ -25,7 +25,7 @@ registerScript('Wrath of the Sea', {
     for (const u of Object.values(ctx.state.units)) {
       if (u.isAvatar || u.region !== 'surface') continue
       const site = siteAt(ctx.state, u.x, u.y)
-      if (site && isWaterSite(ctx.state, site, getCard) && trySubmerge(ctx.state, u) && ctx.state.units[u.id]) syncCarried(ctx.state, u)
+      if (site && isWaterSite(ctx.state, site, getCard)) trySubmerge(ctx.state, u) // cargo rides down too
     }
     // submerge every surface artifact on water — loose ones AND ones carried by a bearer that stayed up
     // (an Avatar), which are detached and submerged on their own (mirrors Stormy Seas / Cave-In)

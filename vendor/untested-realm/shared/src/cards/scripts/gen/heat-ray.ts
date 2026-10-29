@@ -11,7 +11,7 @@ registerScript('Heat Ray', {
     if (!dir) return ctx.log('No direction chosen.')
     firePiercingProjectile(ctx.state, {
       player: ctx.controller, ox: caster.x, oy: caster.y, region: caster.region,
-      dir: String(dir), damage: 2, filter: 'notStealth', excludeId: caster.id, srcName: 'Heat Ray',
+      dir: String(dir), damage: 2, excludeId: caster.id, srcName: 'Heat Ray',
     })
   },
 })

@@ -849,6 +849,11 @@ function fightSides(state: GameState, ctx: FightCtx): { attackers: UnitState[]; 
       if (shares && regionOk) defenders.push(t)
     }
   }
+  // a unit already DEAD whose death is on hold while its Deathrite asks something (flow.pendingDeaths)
+  // still sits in state.units, but it's out of the fight: killed by a strike-first blow, it must not
+  // strike back in the normal pass (Lance / Strike First vs Estranged Loner).
+  const dying = new Set(((state.flow?.pendingDeaths ?? []) as { unitId: string }[]).map((p) => p.unitId))
+  if (dying.size) return { attackers: attackers.filter((u) => !dying.has(u.id)), defenders: defenders.filter((u) => !dying.has(u.id)) }
   return { attackers, defenders }
 }
 
@@ -969,8 +974,10 @@ function runFightPass(state: GameState, ctx: FightCtx): void {
     const flags: any[] = state.flow?.strikeFlags ?? []
     // ALL of the striker's pending flags apply to this strike and stack
     // multiplicatively (Critical Strike FAQ: doubling twice = ×4)
-    const myFlags = flags.filter((f: any) => f.player === striker.controller)
-    if (myFlags.length && state.flow) state.flow.strikeFlags = flags.filter((f: any) => f.player !== striker.controller)
+    // a flag on one chosen minion (Gift of the Raven) waits for that minion's strike
+    const mine = (f: any) => f.player === striker.controller && (!f.unitId || f.unitId === striker.id)
+    const myFlags = flags.filter(mine)
+    if (myFlags.length && state.flow) state.flow.strikeFlags = flags.filter((f: any) => !mine(f))
     const doubles = myFlags.filter((f: any) => f.type === 'double').length
     // lifelink STACKS: each Gift of the Raven flag AND a passive strikeLifelink is its own source
     const lifelinkSources = myFlags.filter((f: any) => f.type === 'lifelink').length + ((getScript(striker.name)?.strikeLifelink && !striker.silenced) ? 1 : 0)
@@ -1827,6 +1834,8 @@ export function pickUp(state: GameState, player: PlayerId, unitId: string, artif
 export function drop(state: GameState, player: PlayerId, unitId: string, artifactIds: string[], unitIds: string[] = []): string | null {
   const unit = state.units[unitId]
   if (!unit || unit.controller !== player) return 'Not your unit.'
+  // Drop is a basic ability, and a disabled unit has none (Iron Shackles' bearer can't shed them)
+  if (isDisabled(state, unit)) return `${unit.name} is disabled.`
   if (getScript(unit.name)?.unitCantDrop && !unit.silenced && artifactIds.length > 0) return `${unit.name} refuses to let go.`
   if ((unit.usedThisTurn['drop'] ?? 0) >= 1) return 'Drop was already used this turn.'
   // Drop basic ability: only a unit that HASN'T interacted with the realm this turn may

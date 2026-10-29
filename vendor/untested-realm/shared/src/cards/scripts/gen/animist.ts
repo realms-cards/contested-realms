@@ -1,31 +1,33 @@
 import { registerScript, type EffectAPI } from '../registry'
-import { getCard } from '../../db'
-import { pushLog, effectSummonUnit } from '../../../engine/effects'
-import { siteAt } from '../../../engine/grid'
-import { validateSummonAt } from '../../../engine/casting'
+import { getCard, spiritCastName } from '../../db'
+import { validateSummonAt, effectiveCost, castSpell, canCast } from '../../../engine/casting'
 import type { GameState, PlayerId } from '../../../engine/types'
 
-/** Every site a Spirit may legally be summoned to: your own sites PLUS anywhere a
- *  Spirit-summon permission opens up (Evil Presence's affected sites, Summoning
- *  Sphere, etc.). Reuse the engine's summon-legality with the printed 'Spirit'
- *  token as the proxy card so all those rules apply automatically. */
-function animistSpiritSquares(state: GameState, player: PlayerId): { x: number; y: number }[] {
+/** Every site the magic may take Spirit form at, and afford there: the summon rules of its Spirit card
+ *  (your own sites, Evil Presence's area, Summoning Sphere…) and the cost of casting it there (cost
+ *  modifiers can depend on the location). castSpell re-validates all of it. */
+function spiritSquares(state: GameState, player: PlayerId, casterId: string, cardId: string): { x: number; y: number }[] {
+  const caster = state.units[casterId]
+  const name = spiritCastName(state.cards[cardId].name)
   const out: { x: number; y: number }[] = []
   for (const s of Object.values(state.sites)) {
     if (s.isRubble) continue
-    if (validateSummonAt(state, player, 'Spirit', { x: s.x, y: s.y, region: 'surface' }) === null) out.push({ x: s.x, y: s.y })
+    const at = { x: s.x, y: s.y, region: 'surface' as const }
+    if (validateSummonAt(state, player, name, at) !== null) continue
+    if (caster && effectiveCost(state, player, name, caster, at, cardId) > state.players[player].mana) continue
+    out.push({ x: s.x, y: s.y })
   }
   return out
 }
 
 function animistOfferPlace(ctx: EffectAPI, cardId: string): void {
-  const p = ctx.state.players[ctx.controller]
   const name = ctx.state.cards[cardId].name
-  const cost = getCard(name).cost ?? 0
-  if (p.mana < cost) return ctx.log(`Not enough mana (${p.mana}/${cost}).`)
-  const squares = animistSpiritSquares(ctx.state, ctx.controller)
-  if (!squares.length) return ctx.log('Nowhere to summon a Spirit.')
-  ctx.ask({ kind: 'chooseSquare', title: `Summon the ${name} Spirit where?`, data: { squares } }, 'place', { cardId, cost })
+  // a real cast: the magic's threshold, a caster able to cast it, … (castSpell's own checks)
+  const check = canCast(ctx.state, ctx.controller, cardId, ctx.sourceId)
+  if (!check.ok) return ctx.log(check.reason ?? `${name} can't be cast.`)
+  const squares = spiritSquares(ctx.state, ctx.controller, ctx.sourceId, cardId)
+  if (!squares.length) return ctx.log(`Nowhere you can afford to cast ${name} as a Spirit.`)
+  ctx.ask({ kind: 'chooseSquare', title: `Summon the ${name} Spirit where?`, data: { squares } }, 'place', { cardId })
 }
 
 registerScript('Animist', {
@@ -66,26 +68,11 @@ registerScript('Animist', {
       if (cardId) animistOfferPlace(ctx, cardId)
     },
     place: (ctx, c, sq) => {
-      const p = ctx.state.players[ctx.controller]
-      const cardId = c.cardId as string
-      const cost = c.cost as number
-      const site = sq ? siteAt(ctx.state, sq.x, sq.y) : null
-      if (!site || !p.hand.includes(cardId) || p.mana < cost) return
-      // re-validate the chosen square is a legal Spirit summon (own site / Evil Presence area / …)
-      if (validateSummonAt(ctx.state, ctx.controller, 'Spirit', { x: site.x, y: site.y, region: 'surface' }) !== null) return
-      ctx.spendMana(ctx.controller, cost)
-      p.hand.splice(p.hand.indexOf(cardId), 1)
-      const name = ctx.state.cards[cardId].name
-      const unitId = `u${ctx.state.nextId++}`
-      // route through effectSummonUnit so enter-triggers fire — e.g. an Evil
-      // Presence covering this site gives the Spirit Charge and returns to hand
-      effectSummonUnit(ctx.state, {
-        id: unitId, cardId, name, owner: ctx.state.cards[cardId].owner, controller: ctx.controller,
-        isAvatar: false, x: site.x, y: site.y, region: 'surface', tapped: false, damage: 0,
-        enteredTurn: ctx.state.turn, modifiers: [{ kind: 'power', amount: cost, duration: 'permanent', turn: ctx.state.turn, sourcePlayer: ctx.controller }],
-        carrying: [], carryingUnits: [], usedThisTurn: {}, counters: { animistSpirit: 1 },
-      })
-      pushLog(ctx.state, ctx.controller, `${name} takes Spirit form (${cost} power).`)
+      if (!sq) return
+      // a true cast: costs and their modifiers, "when you cast" triggers, summon rules — the magic is a
+      // Minion spell while it's cast, and enters as a Spirit with power equal to its printed cost
+      const err = castSpell(ctx.state, ctx.controller, c.cardId as string, ctx.sourceId, { x: sq.x, y: sq.y, region: 'surface' }, [], { asSpirit: true })
+      if (err) ctx.log(err)
     },
   },
 })

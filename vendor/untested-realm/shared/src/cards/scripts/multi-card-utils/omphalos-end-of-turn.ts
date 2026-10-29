@@ -14,8 +14,9 @@ export function omphalosEndOfTurn(ctx: EffectAPI, name: string): void {
     if (getCard(ctx.state.cards[e.cardId].name).type !== 'Minion') continue
     ctx.state.flow.castAtOnly = [
       ...(ctx.state.flow.castAtOnly ?? []).filter((c: any) => c.cardId !== e.cardId),
-      // "summoned here" = the Omphalos's own location AND region (it can be buried/submerged)
-      { cardId: e.cardId, x: art.x, y: art.y, region: art.region },
+      // "summoned here" = the Omphalos's own location AND region (it can be buried/submerged),
+      // wherever it is when the minion is cast (followId: a Cloud City may carry it off)
+      { cardId: e.cardId, x: art.x, y: art.y, region: art.region, followId: art.id },
     ]
   }
 }

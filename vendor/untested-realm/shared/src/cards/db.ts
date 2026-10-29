@@ -91,10 +91,26 @@ const exactCardCache = new Map<string, CardDef>()
 export function getCard(name: string): CardDef {
   const hit = exactCardCache.get(name)
   if (hit) return hit
-  const c = byName.get(name.toLowerCase())
+  const c = byName.get(name.toLowerCase()) ?? spiritCardDef(name)
   if (!c) throw new Error(`Unknown card: ${name}`)
   exactCardCache.set(name, c)
   return c
+}
+
+// ---- Animist Spirits ----
+// "You may cast magics in your hand as Spirits with power equal to their cost": while it is CAST, a
+// magic taking Spirit form is a Minion spell (cost hooks, "when you cast a minion" triggers and summon
+// rules all see a minion). The cast runs under this virtual name; the unit itself keeps the card's name.
+const SPIRIT_SUFFIX = ' (Spirit)'
+export function spiritCastName(magicName: string): string {
+  return magicName + SPIRIT_SUFFIX
+}
+function spiritCardDef(name: string): CardDef | undefined {
+  if (!name.endsWith(SPIRIT_SUFFIX)) return undefined
+  const base = byName.get(name.slice(0, -SPIRIT_SUFFIX.length).toLowerCase())
+  if (!base || base.type !== 'Magic') return undefined
+  const power = base.cost ?? 0
+  return { ...base, name, type: 'Minion', subtypes: ['Spirit'], attack: power, defence: power, text: '' }
 }
 
 export function findCard(name: string): CardDef | undefined {

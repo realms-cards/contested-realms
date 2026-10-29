@@ -14,7 +14,7 @@ registerScript('Ice Lance', {
     // when several share a square.
     firePerSquareProjectile(ctx.state, {
       player: ctx.controller, ox: caster.x, oy: caster.y, region: caster.region,
-      dir: String(dir), damages: [3, 2, 1], filter: 'notStealth', excludeId: caster.id, srcName: 'Ice Lance', includeOrigin: true,
+      dir: String(dir), damages: [3, 2, 1], excludeId: caster.id, srcName: 'Ice Lance', includeOrigin: true,
     })
   },
 })

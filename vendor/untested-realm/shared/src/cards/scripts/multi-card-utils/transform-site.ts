@@ -1,5 +1,5 @@
 import { type EffectAPI } from '../registry'
-import { pushLog, emitUnitEnters, newId } from '../../../engine/effects'
+import { pushLog, checkStateBased, newId } from '../../../engine/effects'
 import type { UnitState } from '../../../engine/types'
 
 // 'A site rises from the land itself as a minion.' (Horns of Behemoth / Island Leviathan)
@@ -26,5 +26,6 @@ export function transformSite(ctx: EffectAPI, floodRubble: boolean): void {
     x: site.x, y: site.y, tapped: false, isRubble: true, flooded: floodRubble || undefined,
   }
   pushLog(ctx.state, site.controller, `🌋 ${site.name} rises from the land itself!`)
-  emitUnitEnters(ctx.state, unit)
+  // a transform is not an entry: no "whenever … enters" trigger fires for it
+  checkStateBased(ctx.state)
 }

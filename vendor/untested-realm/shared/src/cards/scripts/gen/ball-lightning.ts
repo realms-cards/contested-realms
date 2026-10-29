@@ -30,7 +30,7 @@ registerScript('Ball Lightning', {
 // may be struck twice in one Ball Lightning chain — so already-hit units are passed through.
 function bounce(ctx: EffectAPI, from: { x: number; y: number }, dir: string, dmg: number, hit: string[], firstShot: boolean) {
   const caster = ctx.caster!
-  const impact = firstProjectileImpact(ctx.state, { player: ctx.controller, ox: from.x, oy: from.y, region: 'surface', dir, filter: 'notStealth', excludeId: firstShot ? caster.id : undefined, excludeIds: hit })
+  const impact = firstProjectileImpact(ctx.state, { player: ctx.controller, ox: from.x, oy: from.y, region: 'surface', dir, excludeId: firstShot ? caster.id : undefined, excludeIds: hit })
   if (!impact) return pushLog(ctx.state, ctx.controller, 'The lightning dissipates.')
   if (impact.candidates.length === 1) return ballLightningHit(ctx, impact.candidates[0], dmg, hit)
   ctx.ask(

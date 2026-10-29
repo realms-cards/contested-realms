@@ -38,7 +38,7 @@ registerScript('Flamecaller', {
       if (total === 0) return ctx.log('No dead fire minions to burn.')
       fireVolleyProjectiles(ctx.state, {
         player: ctx.controller, ox: self.x, oy: self.y, region: self.region,
-        dir: String(dir), volleys: 1, damage: total, filter: 'notStealth', excludeId: self.id, srcName: 'Flamecaller',
+        dir: String(dir), volleys: 1, damage: total, excludeId: self.id, srcName: 'Flamecaller',
       })
     },
   },

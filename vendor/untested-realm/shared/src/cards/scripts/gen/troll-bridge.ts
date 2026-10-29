@@ -1,21 +1,24 @@
 import { registerScript, type EffectAPI } from '../registry'
 import type { GameState, PlayerId } from '../../../engine/types'
 import { pushLog, toCemetery, isCasterLocked } from '../../../engine/effects'
-import { unitsAt } from '../../../engine/grid'
 
 // 'The first time a lone enemy enters here each turn, strike it unless they discard a card.'
 registerScript('Troll Bridge', {
   onUnitEntersSquare: (ctx, moved, from) => {
     const self = ctx.state.sites[ctx.sourceId]
     // "a lone ENEMY enters" — includes the enemy AVATAR (text says enemy, not minion); fires on forced
-    // moves too (emitUnitMoved → onUnitEntersSquare). "lone" counts only UNITS at the site (unitsAt),
-    // so co-located artifacts/auras never stop it from triggering.
+    // moves too (emitUnitMoved → onUnitEntersSquare). "lone" counts only UNITS (artifacts/auras never
+    // stop it from triggering).
     // A site's "here" spans surface AND subsurface, so an enemy swimming/burrowing in from outside the
     // site also enters here. `from` outside the site rules out an in-place region change.
     if (!self || moved.controller === self.controller) return
     if (moved.x !== self.x || moved.y !== self.y) return
     if (from.x === self.x && from.y === self.y) return
-    if (unitsAt(ctx.state, self.x, self.y).filter((u) => u.controller === moved.controller).length > 1) return
+    // FAQ: a "lone enemy" is one "not entering simultaneously with another enemy unit. Stationary units at
+    // the Troll Bridge [are] ignored" — so count the ENEMIES travelling with it (its carrier and everything
+    // that carrier carries: a War Horse carrying its Avatar = 2 → no toll; your Bodach Bogeyman carrying
+    // one enemy = 1 → toll), never whoever was already standing here.
+    if (enemiesEnteringWith(ctx.state, moved.id, self.controller) > 1) return
     ctx.state.flow = ctx.state.flow ?? {}
     const key = `troll:${ctx.sourceId}`
     if (ctx.state.flow[key] === ctx.state.turn) return
@@ -60,6 +63,25 @@ registerScript('Troll Bridge', {
 })
 
 const TOLL_TITLE = 'Pay the toll: discard a card? (skip to be struck)'
+
+/** enemy units (of the bridge's controller) moving together with `unitId`: the whole carrying group —
+ *  up to its outermost carrier, then everything carried below — since they all enter at once */
+function enemiesEnteringWith(state: GameState, unitId: string, bridgeController: PlayerId | null): number {
+  let root = state.units[unitId]
+  while (root?.carriedBy && state.units[root.carriedBy]) root = state.units[root.carriedBy]
+  if (!root) return 0
+  let n = 0
+  const stack = [root]
+  const seen = new Set<string>()
+  while (stack.length) {
+    const u = stack.pop()!
+    if (seen.has(u.id)) continue
+    seen.add(u.id)
+    if (u.controller !== bridgeController) n++
+    for (const id of u.carryingUnits ?? []) if (state.units[id]) stack.push(state.units[id])
+  }
+  return n
+}
 
 // caster-locked cards (Morgana's / an Omphalos's own spells) aren't a free part of the hand
 function tollableHand(state: GameState, player: PlayerId): string[] {

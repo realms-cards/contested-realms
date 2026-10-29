@@ -9,7 +9,10 @@ registerScript('Gift of the Raven', {
   targets: [{ what: 'minion', count: 1, targeted: false, owner: 'ally', label: 'an allied minion' }],
   onCast: (ctx) => {
     ctx.state.flow = ctx.state.flow ?? {}
-    ctx.state.flow.strikeFlags = [...(ctx.state.flow.strikeFlags ?? []), { player: ctx.controller, type: 'lifelink' }]
+    // the chosen minion's next strike, not just any ally's
+    const chosen = ctx.targets[0]
+    const unitId = chosen && 'unit' in chosen ? chosen.unit : undefined
+    ctx.state.flow.strikeFlags = [...(ctx.state.flow.strikeFlags ?? []), { player: ctx.controller, type: 'lifelink', ...(unitId ? { unitId } : {}) }]
     ctx.draw(ctx.controller, 'spellbook')
   },
 })
