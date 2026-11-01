@@ -1,4 +1,4 @@
-import { applyAction, createGame, getCard, isDisabled, viewFor } from "@sorcery/shared";
+import { applyAction, createGame, getCard, getScript, isDisabled, makeCtx, viewFor } from "@sorcery/shared";
 import type { PlayerId } from "@sorcery/shared";
 import { botAction, botNeedsToAct } from "@untested-realm/bot/bot";
 import { describe, expect, it, vi } from "vitest";
@@ -335,6 +335,24 @@ describe("token cards", () => {
     const again = projectView(viewFor(game, 0)).zones.p1.graveyard.filter((c) => c.name === "Skeleton");
     expect(again.map((c) => c.cardId)).toEqual(withTokens.map((c) => c.cardId));
     expect(first.graveyard.filter((c) => c.name === "Skeleton")).toHaveLength(0);
+  });
+
+  it("puts a Ward token on a warded site, and takes it off when the ward moves on", () => {
+    const deck = toEngineDeck(enginePrecons[0]);
+    const game = createGame([deck, deck], ["You", "Computer"], 11, 0 as PlayerId);
+    game.cards.cShrine = { id: "cShrine", name: "Pilgrim's Shrine", owner: 0 } as (typeof game.cards)[string];
+    game.sites.sShrine = {
+      id: "sShrine", cardId: "cShrine", name: "Pilgrim's Shrine", x: 2, y: 2, owner: 0, controller: 0, isRubble: false, tapped: false,
+    } as (typeof game.sites)[string];
+    getScript("Pilgrim's Shrine")!.genesis!(makeCtx(game, "sShrine", 0, []));
+    expect(game.sites.sShrine.ward).toBe(true);
+
+    const cell = engineCellKey(2, 2, 0);
+    const wardOn = (g: typeof game) => (projectView(viewFor(g, 0)).permanents[cell] ?? []).some((p) => p.instanceId === "sShrine:ward");
+    expect(wardOn(game)).toBe(true);
+
+    game.sites.sShrine.ward = false; // a minion leaving took it (wardUnit)
+    expect(wardOn(game)).toBe(false);
   });
 });
 

@@ -690,15 +690,18 @@ export function projectView(
   const players = view.players as ViewPlayer[];
 
   const sites: Record<string, SiteTile> = {};
-  // sites become rubble when destroyed; flooded sites carry a Flooded token (both added below)
+  // sites become rubble when destroyed; flooded sites carry a Flooded token and warded sites
+  // (Pilgrim's Shrine, Bless) a Ward token (all added below)
   const rubble: typeof view.sites[string][] = [];
   const flooded: typeof view.sites[string][] = [];
+  const warded: typeof view.sites[string][] = [];
   for (const site of Object.values(view.sites)) {
     if (site.isRubble) {
       rubble.push(site);
       continue;
     }
     if (site.flooded) flooded.push(site);
+    if (site.ward) warded.push(site);
     const owner = site.controller ?? site.owner;
     sites[engineCellKey(site.x, site.y, viewer)] = {
       owner: seatOwner(owner, viewer),
@@ -821,6 +824,11 @@ export function projectView(
     for (const site of flooded) {
       const controller = site.controller ?? site.owner;
       const card = tokenCard("Flooded", `${site.id}:flooded`, seatKey(controller, viewer));
+      if (card) pushTo(permanents, engineCellKey(site.x, site.y, viewer), { card, owner: seatOwner(controller, viewer), instanceId: card.instanceId, tapped: false, offset: null });
+    }
+    for (const site of warded) {
+      const controller = site.controller ?? site.owner;
+      const card = tokenCard("Ward", `${site.id}:ward`, seatKey(controller, viewer));
       if (card) pushTo(permanents, engineCellKey(site.x, site.y, viewer), { card, owner: seatOwner(controller, viewer), instanceId: card.instanceId, tapped: false, offset: null });
     }
   }

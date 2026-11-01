@@ -43,7 +43,7 @@ f0c88206400af2db616aad748abbbc616e1c1961b148b31b86b8026d43d50b70  shared/src/car
 36430629689b403db5748bd1702f0c17c179be07452c7a0ac1c6fc14e4070098  shared/src/cards/scripts/gen/amulet-of-niniane.ts
 62898f2cccf6774a7614ac492c928c0b91b39eb63f29cfac1e41bef4b1778301  shared/src/cards/scripts/gen/ancient-dragon.ts
 d5c549433c704d52adcabf676e13a2ed07345fe54aa22eb514948d7dbf1e7783  shared/src/cards/scripts/gen/angel-ascendant.ts
-f4603b7fcc7ba0800753f4cbd2cbcb3b0db7528ff17e240fb2d7c269c181015f  shared/src/cards/scripts/gen/angels-egg.ts
+435d27df8b023d971d579e304ffba934a63d80a1f28ce81061c0645744b18ab8  shared/src/cards/scripts/gen/angels-egg.ts
 0c18e74d26ec4e39ddd28b61ff350e56d706869acd28d4b6b372476d95cd7eb3  shared/src/cards/scripts/gen/angry-mob.ts
 0b98f5fffeba3bf2b03b4d86f0ff9891dc49025db48e2ecb656290aba3ad9d6a  shared/src/cards/scripts/gen/animist.ts
 8b72c79df57b3a63ee963e04dffda1363b83b76033ba5a13b9dfdf51040bd414  shared/src/cards/scripts/gen/annual-fair.ts
@@ -252,7 +252,7 @@ b148a4e0e8c498372daf4c1962efb04c8461cdfec1531b77026dd0bd1c00fe64  shared/src/car
 21a4b3eb663b37ba0d02965e0a55a65d3b2b744998c5c299fe967e824717b4b9  shared/src/cards/scripts/gen/desecrator-kite.ts
 b58c7442733c762f0c684274542e40f0949d023b90219ee0a444e1aae3a2750e  shared/src/cards/scripts/gen/desert-bloom.ts
 16ee651aba50005639e01e0f7e85f202b80a41d5d78349b6d32c6a6981073d39  shared/src/cards/scripts/gen/detonate.ts
-a00582864725fda998f6cd141fd96beaea8580758a4e161b06641a4eda2aec32  shared/src/cards/scripts/gen/devils-egg.ts
+f38ea3eb4ae154286f64b5a1da99b8b10829b0887bb5442fe8c6a18b3389ce2c  shared/src/cards/scripts/gen/devils-egg.ts
 eed3a5fb82a55d2019ad09b0c5487536957a3ce683320b68f2e9e658083cad53  shared/src/cards/scripts/gen/dhol-chants.ts
 7614dc235b2e413818a163e1fef3f75c812ad8023883598e21762a666509b153  shared/src/cards/scripts/gen/diluvian-kraken.ts
 044f737ca5bbadb231fc1f66412f457a5eb56651f4bfeee26b16ed606722f111  shared/src/cards/scripts/gen/disenchant.ts

@@ -3,6 +3,7 @@ import { siteAt } from '../../../engine/grid'
 
 // "At the end of each turn, the controller of Devil's Egg's site loses 1 life."
 registerScript("Devil's Egg", {
+  actsUncontrolled: true, // names the SITE's controller, not its own: works on the ground, uncontrolled
   endOfEveryTurn: (ctx) => {
     const art = ctx.state.artifacts[ctx.sourceId]
     if (!art) return
