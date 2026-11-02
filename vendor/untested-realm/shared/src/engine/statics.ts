@@ -838,7 +838,9 @@ function computeDisabledByEffect(state: GameState, unit: UnitState): boolean {
   const acting = state.flow?.actingUnitId as string | undefined
   const entering = state.flow?.entering as string[] | undefined
   const battleUnits = state.flow?.battleUnits as string[] | undefined
-  const notAtRest = unit.id === acting || !!entering?.includes(unit.id) || !!battleUnits?.includes(unit.id)
+  // a Move & Attack paused mid-path while a step's trigger resolves (Storyline) is still moving, too
+  const pausedMover = (state.flow?.pendingMoveAttack as { unitId?: string } | undefined)?.unitId
+  const notAtRest = unit.id === acting || unit.id === pausedMover || !!entering?.includes(unit.id) || !!battleUnits?.includes(unit.id)
   const disablesNow = (name: string, srcId: string): boolean => {
     const sc = getScript(name)
     if (!sc?.disablesOther?.(state, srcId, unit)) return false

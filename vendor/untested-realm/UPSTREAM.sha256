@@ -64,7 +64,7 @@ ca7eb99189cf5e5f40c96c366ed031e6cea06268b720b6a67e5ceb3103c64c51  shared/src/car
 bd93f81803cc54013e3fc2fc1ee44c5a70a230bdba6fb60a330da1fdaac0637e  shared/src/cards/scripts/gen/arid-desert.ts
 4eac575fd742c85016703312bfca1d701cb73f1308058f3979beaf8a6ed80017  shared/src/cards/scripts/gen/arjaro-exorcist.ts
 c9c2ff895a1021d871e68fdffd377f1c42f3596ab49b4a32d17b7368ad3faf32  shared/src/cards/scripts/gen/armageddon.ts
-57b8e9ed76beb824e25e9eabf56f830f44fb644076257cc9a7672d466c4e5af6  shared/src/cards/scripts/gen/army-of-the-dead.ts
+6e8ef094cdfe10fee19e083dd2bd5966c2572b897cb32136a6b5db693c1849e2  shared/src/cards/scripts/gen/army-of-the-dead.ts
 5b98602a500f80768db8e32104181d988155911a21901421506e61f4a7ec882b  shared/src/cards/scripts/gen/askelon-phoenix.ts
 702107da9220b070e88f8e742ceb384506a629d3d19249bcfa7a472d95032d2f  shared/src/cards/scripts/gen/asmodeus.ts
 f79aa0addfdcc1730fdd1d017594467a70272bb9289d28a57d1415980288fd45  shared/src/cards/scripts/gen/assimilator-snail.ts
@@ -103,7 +103,7 @@ edf991d0b33b4cf2981600ab2d6deefe7da9c363e7f96f177495ec2690a1b2cc  shared/src/car
 ff16ede0dd392a850a54b8e8e535221c1a8dc899e67d6e779c91d1e697455e04  shared/src/cards/scripts/gen/belfry.ts
 d80e3d02c7ac65c5ccf8885f678dbbff20be18ba929f2a342de0ef02a045dd08  shared/src/cards/scripts/gen/betrayal.ts
 150654c01186013823e77ee6259118caae75de7acb5578a193bcac59f4f2c1c5  shared/src/cards/scripts/gen/bind-evil.ts
-8c842bc3d7dccf11d7745567f82708d81463efae84b5b7b1d81334ccd05b3edd  shared/src/cards/scripts/gen/bitten.ts
+48ffe105b69164de99d54408a072483b2b1854e8ce3b6d4cc6aebfad17cb235e  shared/src/cards/scripts/gen/bitten.ts
 fe351c67c14a148e48906ff1105e456ad4d5440fbb80ef50ca5d7dfae9e95da1  shared/src/cards/scripts/gen/bitter-departed.ts
 eb58bc084ebbe09e7e15a912a44b5fce9f123025ca329df864dd1b6b5beebdb0  shared/src/cards/scripts/gen/black-cat.ts
 693afa7ceb70209509ab3481293556edb1a33c0a4d1fa5b12a2d05a6c6163d5b  shared/src/cards/scripts/gen/black-knight.ts
@@ -245,7 +245,7 @@ f2242e284f081d7d01a0f5b021c1a7b3e38f94d2d7dc83036fa46bb0581c631f  shared/src/car
 b148a4e0e8c498372daf4c1962efb04c8461cdfec1531b77026dd0bd1c00fe64  shared/src/cards/scripts/gen/degradation.ts
 8a787009eb594d2df5ab222a009e27e3074d8e9b9b331f09871e93a5a60d555f  shared/src/cards/scripts/gen/deliverance.ts
 5a9f51e87d81b1881cb6f713b2f33fd153c0e3dfdc915b7e0ba4e8399e545ebd  shared/src/cards/scripts/gen/demon-hunter.ts
-9c208336952676eb7a634f163d44fa2bd865f08401c0558fc8001edec22e414e  shared/src/cards/scripts/gen/demonic-contract.ts
+7a64623efcbca913cab3aa8eb624ecec557c2bff7e71bba2792868f5415c18df  shared/src/cards/scripts/gen/demonic-contract.ts
 89599d50aeccd761f8c188b5038e4acf3295e1c84d1b9588986e206f56abfbc9  shared/src/cards/scripts/gen/den-of-evil.ts
 1f4e811c71ff4b4afd3e9a7aa0a33846c33f100dabebeaedbc86eb5f09597dbe  shared/src/cards/scripts/gen/desecrate.ts
 311983e17cf109d23d651026fb1e5aaabab4d2e23d6bd584478e342b37c42eed  shared/src/cards/scripts/gen/desecrated-ground.ts
@@ -272,7 +272,7 @@ c7d8f9316267dd4900412c937528de635b49dab3ec07d8417217397860f7d6b3  shared/src/car
 4697f3abdfc9195681f4a98200b4bdefa82859b5afb0b95cc751d336bed1e11a  shared/src/cards/scripts/gen/dormant-monstrosity.ts
 e44cdb96a0e7003a1e25db4667972822123342397ed8d3f537d82d55a1c66476  shared/src/cards/scripts/gen/dozmary-pool.ts
 4406758216cb4a97dc54efb8addef0644ef4f1cee9df37ade0cf8007bcda9dee  shared/src/cards/scripts/gen/draco-corvus.ts
-532344415d088a9afdf2d6600af672c216242eec7959d5cf2e7789e943d4d8ad  shared/src/cards/scripts/gen/draconian-bonekite.ts
+016b90792283778a92a3affdfaf3bb773f265987c26f595aaf4d821f9b5012a7  shared/src/cards/scripts/gen/draconian-bonekite.ts
 b6479fe860f3d9cb80c0ebd28a6ba41c50d790cd0b4ceaa54c6d68b742c213ac  shared/src/cards/scripts/gen/dragonlord.ts
 21a6552198b91e434be3651ad1f0a106956dca27cf7960a6aa6bb4a19b58f1ca  shared/src/cards/scripts/gen/dragonlords-lair.ts
 31e2ac8f3f0f80713b81ea1cb901d9eacc3c8db7b9617dfcf29d23dccc4f046d  shared/src/cards/scripts/gen/dread-thicket.ts
@@ -375,7 +375,7 @@ cdd1b0ccc2dc135b35178a97caff3d0c1610f58e6a6b51db3920d0cd184031fe  shared/src/car
 f87837d93dd41c9d5bf0a16b9d11d03ee4d0fa22248f30230cf2b872d2427831  shared/src/cards/scripts/gen/ghost-ship.ts
 d7a51ee846c092866c525a18d3b1641ee1cea7962699880a3a8149fcb6857be4  shared/src/cards/scripts/gen/ghost-town.ts
 981f92383ac2a306d4d034577cb61f0cbbcda12847243a4b68f3a97d5f443cb7  shared/src/cards/scripts/gen/ghostfire.ts
-bbf1259ff9979f06ff767ba6c6c5a156095a5d0c2ec60d3b225633c80702bbdf  shared/src/cards/scripts/gen/ghoul.ts
+8c6f23783a15ab6f74c5c97e949c6d0c575071032e6b24a6df6f5e8ff3ec3a81  shared/src/cards/scripts/gen/ghoul.ts
 e75fe4f09074e5ee4b11401970ba489b25ac7553465a0593daf1276a2c6f44be  shared/src/cards/scripts/gen/giant-killer.ts
 737682d86d1f4839345591d6456b79e14e10210524456541d8092a39446712ca  shared/src/cards/scripts/gen/giant-shark.ts
 f75bf8053a6251ee829a1f06b09100aff46de1248e6b33bd7263510a5c747d22  shared/src/cards/scripts/gen/gift-of-the-frog.ts
@@ -491,7 +491,7 @@ a919b3437e1eb60e11035d0144a94e239e93c6ebd622465ccf3298c6638715a3  shared/src/car
 ece0deec2d6c006dd569edf66902cd6f92ee4b28240c4010484fdcd2009b1749  shared/src/cards/scripts/gen/joust.ts
 63d527f3d709e35599f45d4747cbd3fa5cfafdde815cc968c0a4cad1cf10bf65  shared/src/cards/scripts/gen/joyous-garde.ts
 249901fcae70443b8124275eec3786423c8ce872c38b5f81789bd1c7af3412e1  shared/src/cards/scripts/gen/just-a-rock.ts
-b5b9dfcf843c1ac9c6d49882aae433e71ff239996d96798b035a1135092db88c  shared/src/cards/scripts/gen/kairos-the-archivist.ts
+445ad581467105822ac41bfcd0d574b2ec55384898d53bfce0f97b692410cbb5  shared/src/cards/scripts/gen/kairos-the-archivist.ts
 4697d01a8b6c8c572785cc4114aa2414fefd959642e23567fa4ba4a74a8fa102  shared/src/cards/scripts/gen/karkemish-chimera.ts
 1b532bafc26e0beeab30ea3bfd3e5c76b3f6621aae168fda0ddbcd04da937137  shared/src/cards/scripts/gen/keening-banshee.ts
 af9807db23ce729491b2d53309316559deb53ef72262793962d95dbabd0e6e38  shared/src/cards/scripts/gen/kelp-cavern.ts
@@ -619,7 +619,7 @@ cce74527f7c3c1ade09cf8a74f94851c041a9403fc9c6ded87cde23371ab5339  shared/src/car
 96b821054762fbf0aabac104c6ad8bef022777624da92244558e75d72741e437  shared/src/cards/scripts/gen/murder-of-crows.ts
 a0b9b2c7f0c40f74cb620af3c10ef2b8818ae53a9b2ca8e3dc593ed3f1e15c4f  shared/src/cards/scripts/gen/myrrhs-trophy-room.ts
 5d3f69407be36b4e856f803140718a18f435b541fabd430ca14c67d8a1106fa3  shared/src/cards/scripts/gen/nadir-seed.ts
-7547fec6db61151c24ba11e9e1d7c4612ffd72820ea252767e8355cf76c87e9c  shared/src/cards/scripts/gen/necromancer.ts
+3c1ee2bd10c5003ddb37f8d7d5103044437edee98e88f44b1404b8f20bb45493  shared/src/cards/scripts/gen/necromancer.ts
 d2f61ed2c81cb3a3079a48eb6d28e7a25937b70c11b34aaee702f9c5851de12a  shared/src/cards/scripts/gen/necronomiconcert.ts
 2973aee5e2cd7a696e1f5cddd4690233ef35a37227c3e505ed326874bfdf82cd  shared/src/cards/scripts/gen/necropotence.ts
 874d4d1e02fc3db7bb7195df5c33c9db9fb6b5752eae4808dbc23ef791d5ee83  shared/src/cards/scripts/gen/nelly-longarms.ts
@@ -627,9 +627,9 @@ d2f61ed2c81cb3a3079a48eb6d28e7a25937b70c11b34aaee702f9c5851de12a  shared/src/car
 6f7372b697269d6ac87158eabd6677a28578639f9c94deca602470b17810d311  shared/src/cards/scripts/gen/nightwatchmen.ts
 d5ab9747696dfad3712941eadb40c283b8734ff8af7b07f501662a28027ce556  shared/src/cards/scripts/gen/nimbus-jinn.ts
 87cf4fcbb15cea086b571cd18dfc64517e7f0529b55d936cb87118ae4082487b  shared/src/cards/scripts/gen/no-mans-land.ts
-6fb662386c3d914ed989c66e1733d6469170ed4f24d128b73e5d333d0a26ca98  shared/src/cards/scripts/gen/noisome-twosome.ts
+367a029edf8e80ae4b5b33605ea5513234e77813770cb12aa00914212ac43382  shared/src/cards/scripts/gen/noisome-twosome.ts
 da48095d16aff339a4f96544413c544eebac8bacd7409d60a712b0fd5ca7cbe0  shared/src/cards/scripts/gen/nosferatu.ts
-25d5d8e1f7cdd05f4448454b983bbd7a44a76e120fd50fd6f4fd8c8dfd55e19f  shared/src/cards/scripts/gen/novice-necromancer.ts
+7942c7091fb1a523da1b7303301101f706e0ba319f80a15b5f256e5ae6613b65  shared/src/cards/scripts/gen/novice-necromancer.ts
 42a44a0b6fc6710113ceead9cb9683e298dac72a37689c7f1d0020fd20a6d85a  shared/src/cards/scripts/gen/observatory.ts
 bdb52d463ead5cbca91e129eba7a42b9c843a9fa64b2f4feb5bce90f32fdd0bb  shared/src/cards/scripts/gen/occult-ritual.ts
 e911399f871ea2d8d657bf941c396e1487fbcdc153aec75deb565f7e3065253c  shared/src/cards/scripts/gen/old-mortimers-den.ts
@@ -825,7 +825,7 @@ e4d26beca3140f062877b67e2d79a1421a95984fa91ce91d55b300cdcde0c876  shared/src/car
 e67d1ef828a2a1bab4cc6b0d9d669c88cfb5372e411b38147ec2d9a6c19ddd1b  shared/src/cards/scripts/gen/sir-lamorak.ts
 3f5f61a09698608e5cb4978c2ddf9e832f244b699bddf3f852a21fff1f32ae86  shared/src/cards/scripts/gen/sir-lancelot.ts
 c097e83d122597b2a0136c41904b111e3f19d22810e2e0fb82ad5a3c5be6f7bf  shared/src/cards/scripts/gen/sir-mordred.ts
-e67b4c489c8bbddc45c657886cf111a35dd7ca4cdf84a923d899c11e1fe74aea  shared/src/cards/scripts/gen/sir-morien.ts
+6b8166a7cb4b50fc09a9413a2a827ad84c2aecd5d135bfcc9e92aa4996ac43ad  shared/src/cards/scripts/gen/sir-morien.ts
 673b8843be4fa0145e91a7f9c12fb218d8c85a8f346b0bf020581af86452d003  shared/src/cards/scripts/gen/sir-pelleas.ts
 f9e3d0e69b83f1b00d49c6d3e18b2e3eca7befcc393c132d1b15ff08b825dd8c  shared/src/cards/scripts/gen/sir-pellinore.ts
 d92ddbac0505b1c400d49c2c259515e443a89d70c6780348fe84e764573c543a  shared/src/cards/scripts/gen/sir-perceval.ts
@@ -881,7 +881,7 @@ eff62e1a926efb28ee9a583b4455211a62c0ee66ff003652d579285f24ee4981  shared/src/car
 ee42e338cd2f384ddb0bd27bd71f1001c5671e966457cfb69d3a8efea6d3dec6  shared/src/cards/scripts/gen/stone-rain.ts
 801c3eecad37c3a313be590779042bc1509986006a8066c05ce9b771032f3ead  shared/src/cards/scripts/gen/stormy-seas.ts
 d64a4a05fde78bab847d8ffe58e5ef264a1c2c07c341edb685270cccceb03aa8  shared/src/cards/scripts/gen/sturmgeist.ts
-911edb6e2575d7b94511225dd8a0477c743a624d1798be810861b63a7bea66cf  shared/src/cards/scripts/gen/stygian-archers.ts
+56f058ff4b9b8f12ad860a0bcdff0cda8040908d3431c747f9128c8a1115a858  shared/src/cards/scripts/gen/stygian-archers.ts
 b806a15fd6f4177cbb535e23eae12a8059dfe50389f9a15d1974909ab9e02387  shared/src/cards/scripts/gen/sugarplum-pixies.ts
 90050435cd0b89209f7124d4d2fccf22e4fb4f419ae7855f48fc1f8ab9f79756  shared/src/cards/scripts/gen/summer-river.ts
 2f476b18fed511955e886045d5b20d97e7c2284fda68a58f56bf720a5cbda044  shared/src/cards/scripts/gen/summoning-sphere.ts
@@ -958,7 +958,7 @@ cce4a3b3cbeb2487aad0ce01ad4f836100247ae0331eb4a94949df7f785a3fd3  shared/src/car
 99f3c2337535efce98e33846cc6537f1ca5c279abd718b80e55b12e6aeda0629  shared/src/cards/scripts/gen/tufted-turtles.ts
 49d39941794d0673a5244957bf7e911e6a6721c78d801218bfe110eadc3e3ebf  shared/src/cards/scripts/gen/tvinnax-berserker.ts
 93b7f8f42ea0ed9bc946b7dbaf52655c589077870f8d95cd1c20e8bb948ceb32  shared/src/cards/scripts/gen/twilight-bloom.ts
-26693aa7b9a673e5b8eef925d4d1c82fa19063413c6831627f5ecfae4edb0f46  shared/src/cards/scripts/gen/twist-of-fate.ts
+d4e1433b5193c127817cfcd9f2f4717c6fbc72fbd63cad08f754d58704cda727  shared/src/cards/scripts/gen/twist-of-fate.ts
 3ebb83bf37b812e527103977b5416a2c5e9536aa56ed67e0dd9b6cbcc06e7c2b  shared/src/cards/scripts/gen/ultimate-horror.ts
 c1fda5f8e7557968cbf72d124a761d144c1a38d86d8beba06f75e0efa28a9dc0  shared/src/cards/scripts/gen/undead-ambush.ts
 c24c464515895602b501c7be8e1769676cdf0f71754160b2766535018c9b97fe  shared/src/cards/scripts/gen/undertaker-engine.ts
@@ -1007,7 +1007,7 @@ d2778f7662c2398ff22d945f4c7ba1707e8686401e62953d35ab4222481d4e2b  shared/src/car
 9ab412778b66b1149b11813d41de36aa2b4dce17665f99788e84a1b5cb0b52b5  shared/src/cards/scripts/gen/waypoint-portal.ts
 4ccc377e9415453d34d6e0c1cd20af36351225f176fe0d858d795dccf0efce67  shared/src/cards/scripts/gen/weathered-trunks.ts
 18dcf090ead845cd33ef55fba54e3baa1541a13586ae9a6026ded34b72e4be8d  shared/src/cards/scripts/gen/wedding-hall.ts
-13b17223a2ea280e644aa30b8317c0120fb3715c129722cf8b90347ac77cdcf4  shared/src/cards/scripts/gen/whirling-blades.ts
+fe6b1f45d6752621698c83bf0019e7c2067c05022494cdd853ee5a7806db17f5  shared/src/cards/scripts/gen/whirling-blades.ts
 930164a7d7c5f2a018d61debd79ef4f5072613cb607d8a60b8081022d267c913  shared/src/cards/scripts/gen/whirlwind.ts
 ca5b6a516047f7d4469895940b29a8e68232e923c7a32dd32accfda828943019  shared/src/cards/scripts/gen/white-hart.ts
 dffb1d3d30ea2a59890c55d17d8b087a7117b2a50a9ccc9a6f24fc9d52f2c170  shared/src/cards/scripts/gen/white-knight.ts
@@ -1069,7 +1069,7 @@ b3e98962119a26d7522ec52f3793e984853ed3936feeaa92e6f4f77345261ef9  shared/src/car
 3d57e7780e2e12759c0f2bda921b74304e6296455bef560933c04887da45e3fd  shared/src/cards/scripts/multi-card-utils/omphalos-end-of-turn.ts
 5b002ee434eef3e5405523725630177ce9d26a29da9351e22806ad678776e3f7  shared/src/cards/scripts/multi-card-utils/orth.ts
 a0c2ee84d3272c6937ab7788eb1b8d531aaffac34f8dd1d6cb0e8e5dee96ad16  shared/src/cards/scripts/multi-card-utils/own-step.ts
-d708f2d6020ef17bc24ce51b635a87b884b25cddc948f6ed634795c89a2b4b1d  shared/src/cards/scripts/multi-card-utils/plague.ts
+b0131881d7808c3b5ab0f22651bfd5ab3d45f39aaf3898aab2cf531e20bc40fa  shared/src/cards/scripts/multi-card-utils/plague.ts
 948398c569840c5ca0a64b7e00d50c3d916080e5e93a955374d3b76e7452c8b3  shared/src/cards/scripts/multi-card-utils/plunder-card.ts
 f3fe6f444f55b9a0c8a22fcf3fc1662c9fc79db0ab1f85f6c10cdd32785975e2  shared/src/cards/scripts/multi-card-utils/ranged-location-spell.ts
 70e0fe06d0615fd3c03a0733db555e1fad04a5c556c159a612c1a9b19c16e904  shared/src/cards/scripts/multi-card-utils/remove-aura.ts
@@ -1107,8 +1107,8 @@ d4f16ac3bcf6b7cf09d4a5283450425520e4249bbe122c9c092e0b6a82cf469b  shared/src/eng
 56890816708cc2cdf4f261eb18ab93749fb5a0c02bef53506bfa848122f3e511  shared/src/engine/clone.ts
 3d230eac3039ff713b9817e7e1ac256b2e9ce37346534f8cf8922c262ebe3034  shared/src/engine/combat.ts
 33d65e2334a9520da8645f01e5a3d772a022a68e96f6608f2de3702fc5a58a39  shared/src/engine/decks.ts
-a6ba5969789c54588b7aeab121dbd5c5bf935e3dac9466b711011b09b8018c6e  shared/src/engine/effects.ts
-b3db144ee5b984ce7ac0acf99332a0bebe89afebf26f619341186891f58b0093  shared/src/engine/game.ts
+82abfa6564185779bd2bd3289536f53b85ae131879a5daced38f2666ce3c4d15  shared/src/engine/effects.ts
+d0aeaa8b50e4b78a2a229ed7205e846336d396701180cdd3b3b62486666a2a6a  shared/src/engine/game.ts
 5d3b98693dc04181eec63f8133d4dda0692d22040794f51bdcc6ae1f7a72d96a  shared/src/engine/grid.ts
 2d048fc15c4c7c46e5b3f2e4596a4f344ead5e70e30c7af05d3cde0ad25e3702  shared/src/engine/judge.ts
 ad5f2881c0e8e489157c12754d77b4d6b23c30b8bd1782ecd02d17db61088c84  shared/src/engine/keywords.ts
@@ -1116,7 +1116,7 @@ acf7a8b2295902ef7dff52e122d45e71161a75fcf01cdf821b66efd9b84bcaae  shared/src/eng
 9dea9b6f1bc03f406c56172d74299eaa9f273cc57ecf9036c6927d7a72fc900d  shared/src/engine/movement.ts
 7aae8babd2a097079520ff12492e16c7e60021923b3c70bbe87be35e0722a8b8  shared/src/engine/rng.ts
 07d563cb5e38e7ce1b11d1a7f66fa11213af0c37475f837deac76111ddd8c3f0  shared/src/engine/setup.ts
-a3a2a94e85b41ba7889cbcb23f3b98c44d55d8f97964989a9e0f59d5a30a2420  shared/src/engine/statics.ts
+e4d8751b73a4d6f3fc157c7a567a276597d089133b9657fad3d7c17a98a867e3  shared/src/engine/statics.ts
 382bcb18eae104ae96efd7d0fb37835768783578da3bff7216596b19d766fbe8  shared/src/engine/traps.ts
 bc0188495ad3256b84493fb59f09aa9b7a7c59a6841f3c30c1f4b70f2bf395e8  shared/src/engine/turn.ts
 f60da0d21365a78a73f3c4a9d33430708b02a77af5fc56d04094d5ef7c448773  shared/src/engine/types.ts

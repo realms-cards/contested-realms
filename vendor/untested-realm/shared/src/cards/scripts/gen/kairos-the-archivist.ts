@@ -93,7 +93,7 @@ registerScript('Kairos the Archivist', {
       if (existing) {
         existing.x = r.x; existing.y = r.y; existing.region = r.region
         existing.damage = r.damage; existing.controller = r.controller; existing.tapped = r.tapped
-        if (existing.isAvatar) { existing.life = r.life; existing.deathsDoor = r.deathsDoor }
+        // FAQ: players' life totals don't revert (so neither does Death's Door)
         continue
       }
       if (r.isAvatar) continue // a gone avatar means the game already ended

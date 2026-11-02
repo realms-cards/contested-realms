@@ -7,8 +7,8 @@ registerScript('Sir Morien', {
   genesis: (ctx) => {
     const self = ctx.state.units[ctx.sourceId]
     if (!self) return
-    ctx.summonToken('Foot Soldier', ctx.controller, self.x, self.y)
-    ctx.summonToken('Foot Soldier', ctx.controller, self.x, self.y)
+    ctx.summonToken('Foot Soldier', ctx.controller, self.x, self.y, self.region)
+    ctx.summonToken('Foot Soldier', ctx.controller, self.x, self.y, self.region)
     pushLog(ctx.state, ctx.controller, "Sir Morien's men form up around him.")
   },
 })

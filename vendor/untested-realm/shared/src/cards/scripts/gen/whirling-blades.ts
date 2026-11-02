@@ -1,5 +1,5 @@
 import { registerScript, type EffectAPI } from '../registry'
-import { strikeAllSimultaneous } from '../../../engine/effects'
+import { strikeAllSimultaneous, settleEntering } from '../../../engine/effects'
 import { unitsAt } from '../../../engine/grid'
 import { legalStepsFrom } from '../../../engine/movement'
 import type { Region } from '../../../engine/types'
@@ -13,12 +13,18 @@ registerScript('Whirling Blades', {
   onCast: (ctx) => {
     const t = ctx.targets[0]
     if (!t || !('unit' in t)) return
+    // the ally isn't "at rest" until the whole whirl — both steps and the strikes — has resolved, so an
+    // at-rest disabler (Hillock Basilisk / Stone-gaze Gorgons) on a square it passes or stops on can't
+    // freeze it mid-way; it settles (and can be disabled there) once the strikes are dealt
+    const flow = (ctx.state.flow = ctx.state.flow ?? {})
+    const entering = (flow.entering as string[] | undefined) ?? []
+    if (!entering.includes(t.unit)) flow.entering = [...entering, t.unit]
     whirlStep(ctx, t.unit, [], 0)
   },
   conts: {
     whirl: (ctx, c, sq) => {
       const ally = ctx.state.units[c.unitId as string]
-      if (!ally) return
+      if (!ally) return settleEntering(ctx.state, c.unitId as string)
       const path = c.path as Visited[]
       if (!path.length) path.push({ x: ally.x, y: ally.y, region: ally.region }) // record the start square
       // These are real STEPS (not a forced same-region teleport): a Voidwalk ally in the void may step to
@@ -43,13 +49,14 @@ registerScript('Whirling Blades', {
       // the strikes resolve one at a time and the ORDER can matter (a kill may cut off a
       // trigger), so the controller chooses it — shared with every other multi-strike effect.
       strikeAllSimultaneous(ctx.state, ally.id, [...seen], ctx.controller)
+      settleEntering(ctx.state, ally.id)
     },
   },
 })
 
 function whirlStep(ctx: EffectAPI, unitId: string, path: Visited[], n: number): void {
   const ally = ctx.state.units[unitId]
-  if (!ally) return
+  if (!ally) return settleEntering(ctx.state, unitId)
   const from = { x: ally.x, y: ally.y, region: ally.region }
   // every legal single step (Voidwalk/Airborne/Burrowing/Submerge region changes included), plus "stay here"
   const steps = legalStepsFrom(ctx.state, ally, from)

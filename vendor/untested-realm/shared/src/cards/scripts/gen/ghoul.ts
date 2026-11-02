@@ -10,7 +10,7 @@ import { siteAt } from '../../../engine/grid'
     const self = ctx.state.units[ctx.sourceId]
     if (self?.counters?.lingering && siteAt(ctx.state, self.x, self.y)) {
       const before = new Set(Object.keys(ctx.state.units))
-      ctx.summonToken('Skeleton', ctx.controller, self.x, self.y)
+      ctx.summonToken('Skeleton', ctx.controller, self.x, self.y, self.region)
       // tag the raised Skeleton so the "Linger that!" achievement can trace the lineage
       for (const id of Object.keys(ctx.state.units)) {
         const su = ctx.state.units[id]

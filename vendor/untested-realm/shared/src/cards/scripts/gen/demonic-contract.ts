@@ -1,7 +1,7 @@
 import { registerScript, type EffectAPI } from '../registry'
 import { getCard } from '../../db'
 import { hasSubtype, searchLimit } from '../../../engine/statics'
-import { killUnit, revealCards } from '../../../engine/effects'
+import { killUnit, revealCards, loseLife } from '../../../engine/effects'
 import { shuffleDeck } from '../../../engine/knowledge'
 
 // after the contract is sealed, offer the eligible spellbook cards to grant
@@ -26,14 +26,17 @@ registerScript('Demonic Contract', {
     const sacrificable = Object.values(ctx.state.units).filter(
       (u) => u.controller === ctx.controller && !u.isAvatar && (u.name === 'Frog' || hasSubtype(ctx.state, u, 'Mortal')),
     )
-    const options = ['pay 4 life', ...(sacrificable.length ? ['sacrifice a soul'] : [])]
+    // FAQ: you can't pay more life than you have (so never at Death's Door)
+    const avatar = Object.values(ctx.state.units).find((u) => u.isAvatar && u.controller === ctx.controller)
+    const canPay = !!avatar && !avatar.deathsDoor && (avatar.life ?? 0) >= 4
+    const options = [...(canPay ? ['pay 4 life'] : []), ...(sacrificable.length ? ['sacrifice a soul'] : [])]
+    if (!options.length) return ctx.log('You have nothing to seal the contract with.')
     ctx.ask({ kind: 'chooseOption', title: 'Seal the contract how?', data: { options } }, 'seal', { maxRank })
   },
   conts: {
     seal: (ctx, contCtx, choice) => {
-      const avatar = Object.values(ctx.state.units).find((u) => u.isAvatar && u.controller === ctx.controller)!
       if (choice === 'pay 4 life') {
-        avatar.life = Math.max(0, (avatar.life ?? 0) - 4)
+        loseLife(ctx.state, ctx.controller, 4)
         return demonGrant(ctx, contCtx.maxRank)
       }
       const souls = Object.values(ctx.state.units).filter(

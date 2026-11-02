@@ -22,7 +22,7 @@ registerScript('Draconian Bonekite', {
       for (const id of ids) if (ctx.state.units[id]) ctx.dealDamage({ unit: id }, 3)
       ctx.settleDeaths()
       const deaths = ids.filter((id) => !ctx.state.units[id]).length
-      for (let i = 0; i < deaths; i++) ctx.summonToken('Skeleton', ctx.controller, t.square.x, t.square.y)
+      for (let i = 0; i < deaths; i++) ctx.summonToken('Skeleton', ctx.controller, t.square.x, t.square.y, region)
     },
   }],
 })

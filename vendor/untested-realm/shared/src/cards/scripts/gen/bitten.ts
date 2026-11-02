@@ -16,6 +16,6 @@ registerScript('Bitten', {
   },
   deathrite: (ctx) => {
     const self = ctx.state.units[ctx.sourceId]
-    if (self) ctx.summonToken('Skeleton', (1 - ctx.controller) as PlayerId, self.x, self.y)
+    if (self) ctx.summonToken('Skeleton', (1 - ctx.controller) as PlayerId, self.x, self.y, self.region)
   },
 })

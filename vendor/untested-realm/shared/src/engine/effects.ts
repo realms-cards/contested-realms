@@ -2545,6 +2545,16 @@ export function hushedByStatic(state: GameState, u: UnitState, src = silencerSou
   return false
 }
 
+/** Tabula Rasa: "Bearer is silenced, can't be modified OTHERWISE" — the artifact that makes its bearer
+ *  unmodifiable still silences it, so its own silence isn't stopped by the immunity it grants. */
+function silencedByOwnShield(state: GameState, u: UnitState): boolean {
+  return u.carrying.some((id) => {
+    const art = state.artifacts[id]
+    const s = art ? artScript(state, art) : undefined
+    return !!(s?.bearerUnmodifiable && s.silencesUnit?.(state, art!.id, u))
+  })
+}
+
 /** Does a minion ENTERING the realm fire its Genesis? It doesn't when it has no abilities to fire:
  *  it is silenced, hushed by a static silence (Silent Hills), or already disabled by an OUTSIDE
  *  source (an area-disable, atop a burrowed Root Spider). This is the SINGLE predicate both entry
@@ -3150,7 +3160,7 @@ export function checkStateBased(state: GameState): void {
     if (u.isAvatar) continue
     // a unit that "can't be silenced" (Monks of Kobalsa, Bedrock, an Onslaught'd ally…) — a silencing
     // static (Root Spider, Bower of Bliss, Sisters of Silence) simply doesn't touch it.
-    const hush = hushedByStatic(state, u, silencers) && !silenceImmune(state, u)
+    const hush = (hushedByStatic(state, u, silencers) && !silenceImmune(state, u)) || silencedByOwnShield(state, u)
     if (hush && !u.silenced) {
       u.silenced = true
       u.counters = { ...u.counters, hushed: 1 }

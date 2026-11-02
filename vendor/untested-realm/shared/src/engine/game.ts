@@ -3,7 +3,7 @@ import { getScript, type AbilityDef, type EffectAPI } from '../cards/scripts/reg
 import type { Action, ActionResult, GameState, PlayerId, UnitState } from './types'
 import { doMulligan, keepHand } from './setup'
 import { endTurn, reconcileControlledMana } from './turn'
-import { activePrompt, resolvePrompt, pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkStateBased, killUnit, tapUnit, checkWard, luckyCandidates, bumpManaSpent, beginAreaReveal, sealAbilityReveal, revealAbility, setActionCredit, restoreActionCredit, reconcileSummonTax, completeDeferredDeaths, finishBattleCapture, runDamageEvent } from './effects'
+import { activePrompt, resolvePrompt, pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkStateBased, killUnit, tapUnit, checkWard, luckyCandidates, bumpManaSpent, beginAreaReveal, sealAbilityReveal, revealAbility, setActionCredit, restoreActionCredit, reconcileSummonTax, completeDeferredDeaths, finishBattleCapture, runDamageEvent, loseLife } from './effects'
 import { castSpell, playSite, affinity, validateTarget, legalTargetOptions, sameTargetRef, resolvePendingCast, resolveQueuedCopyCasts, castExtrasProblem, isRegion, settleResolvedMagics } from './casting'
 import { moveAttack, shootProjectile, pickUp, drop, enforceForcedAttacks, resolvePendingMoveAttack } from './combat'
 import { applyJudge } from './judge'
@@ -504,10 +504,8 @@ function activateAbility(
     // sites do NOT tap; a tap-cost site ability is gated once-per-turn (recorded below)
   }
   if (ability.cost.mana) { p.mana -= ability.cost.mana; bumpManaSpent(state, player, ability.cost.mana) }
-  if (ability.cost.life) {
-    const avatar = avatarOf(state, player)
-    avatar.life = Math.max(0, (avatar.life ?? 0) - ability.cost.life)
-  }
+  // paying life is losing it: paying down to 0 puts the Avatar at Death's Door (as Blood Mana does)
+  if (ability.cost.life) loseLife(state, player, ability.cost.life)
   // `deferUse` abilities don't spend their once-per-turn at activation — the script marks it only when the
   // effect actually COMMITS (e.g. Deathspeaker on the summon), so backing out of intermediate prompts is free.
   if (unit && ability.oncePerTurn && !ability.deferUse) unit.usedThisTurn[ability.key] = 1
