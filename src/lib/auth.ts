@@ -279,6 +279,9 @@ const providers = [
   DiscordProvider({
     clientId: discordClientId,
     clientSecret: discordClientSecret,
+    // Discord now returns `iss` on the OAuth redirect (RFC 9207); openid-client
+    // rejects the callback unless the issuer is configured to match.
+    issuer: "https://discord.com",
     authorization: {
       params: { scope: "identify email guilds" },
     },
