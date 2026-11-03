@@ -448,8 +448,15 @@ export function legalActionsWithCasters(state: GameState, me: PlayerId): Action[
     const abilities = [...(getScript(src.name)?.abilities ?? []), ...(unit ? grantedAbilities(state, unit) : [])];
     for (const ability of abilities) {
       const specs = (ability.targets ?? []) as TargetSpecLike[];
-      if (!specs.length) continue; // targetless ones are already in the base list
       if (canActivate(state, me, src.id, ability.key) !== null) continue;
+      // Targetless ones are usually in the base list already (`offer` drops the duplicate), but
+      // upstream's bot list leaves out the Avatar's tap abilities below 4 sites ("develop
+      // instead") — a strategy for the bot, not a rule. A human keeps Sorcerer's draw, and a
+      // masked Imposter the abilities of its mask, from the first turn.
+      if (!specs.length) {
+        offer({ t: "activate", sourceId: src.id, ability: ability.key }, true);
+        continue;
+      }
       const anchor = abilityAnchor(state, src.id, me);
       for (const targets of targetCombos(state, me, specs, anchor)) {
         if (!targets.length) continue;

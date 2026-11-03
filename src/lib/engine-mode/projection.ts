@@ -433,11 +433,24 @@ function cardOf(view: PlayerView, instanceId: string, owner: PlayerKey): CardRef
   return { ...cardRefFor(inst.name), instanceId, owner };
 }
 
+/** The Avatar an Imposter is masked as (the engine keeps it per player in `flow.imposterMask`), or null. */
+export function imposterMaskOf(
+  view: { flow?: unknown },
+  unit: { isAvatar: boolean; name: string; controller: PlayerId },
+): string | null {
+  if (!unit.isAvatar || unit.name !== "Imposter") return null;
+  const masks = (view.flow as { imposterMask?: Partial<Record<PlayerId, string>> } | undefined)?.imposterMask;
+  return masks?.[unit.controller] ?? null;
+}
+
 /**
  * A unit shows what it IS now, not the card it was printed as: Assimilator Snail and other
  * "becomes a copy" effects rename the unit and leave its card instance untouched.
  */
 function unitCardOf(view: PlayerView, unit: PlayerView["units"][string], owner: PlayerKey): CardRef {
+  // a masked Imposter wears the masked Avatar's face until damaged or masked anew (the preview says it's the Imposter)
+  const mask = imposterMaskOf(view, unit);
+  if (mask) return { ...cardRefFor(mask), instanceId: unit.cardId, owner };
   const card = cardOf(view, unit.cardId, owner);
   if (!unit.name || unit.name === view.cards[unit.cardId]?.name) return card;
   return { ...cardRefFor(unit.name), instanceId: unit.cardId, owner };

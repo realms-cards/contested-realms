@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { cardImage } from "@/components/game/CpuPlayReveal";
 import { cardRefFor, loadCardIndex } from "@/lib/engine-mode/cardIndex";
 import { describeCardStatus, type BoardStatus, type StatusChip } from "@/lib/engine-mode/cardStatus";
+import { imposterMaskOf } from "@/lib/engine-mode/projection";
 import { opponentName, useEngineSession } from "@/lib/engine-mode/session";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
@@ -179,6 +180,7 @@ function useCardStatus(card: CardRef | null): { chips: StatusChip[]; notes: stri
       printed: printed ? { attack: printed.attack, defence: printed.defence } : null,
       carrying: unit.carrying.map((a) => game.artifacts[a]?.name).filter((n): n is string => !!n),
       carriedBy: unit.carriedBy ? (game.units[unit.carriedBy]?.name ?? null) : null,
+      mask: imposterMaskOf(game, unit),
     });
     return status.chips.length || status.notes.length ? status : null;
   }, [card?.instanceId, game, permanents]);

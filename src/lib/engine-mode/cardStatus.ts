@@ -31,6 +31,8 @@ export interface CardStatusInput {
   /** names of the artifacts it carries, and of the unit carrying it */
   carrying: string[];
   carriedBy: string | null;
+  /** the Avatar a masked Imposter wears (the board shows that face), if it is one */
+  mask?: string | null;
 }
 
 const STATUS_CHIPS: Record<BoardStatus, Omit<StatusChip, "key">> = {
@@ -58,6 +60,11 @@ export function describeCardStatus(input: CardStatusInput): { chips: StatusChip[
   const { unit, statuses, stats, printed } = input;
   const chips: StatusChip[] = [];
   const notes: string[] = [];
+
+  if (input.mask) {
+    chips.push({ key: "mask", icon: "game-icons:domino-mask", label: "Imposter, masked", tone: "info" });
+    notes.push(`The Imposter, masked as ${input.mask}: it has ${input.mask}'s abilities until it takes damage or puts on a new mask.`);
+  }
 
   for (const status of ["disabled", "silenced", "ward", "stealth"] as BoardStatus[]) {
     if (!statuses.includes(status)) continue;

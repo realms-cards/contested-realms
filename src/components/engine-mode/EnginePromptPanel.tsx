@@ -569,15 +569,14 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
       if (data.reveal)
         return (
           <PromptDialog title={prompt.title} hint="Revealed to you.">
-            <CpuCardPick title={data.reveal} items={[{ id: "reveal", card: cardRefFor(data.reveal) }]} onPick={() => undefined}>
-              <div className="mt-3 flex justify-center gap-2">
-                {(data.options ?? []).map((option) => (
-                  <RcButton key={option} variant="outline" size="sm" onClick={() => send(option)}>
-                    {localizeEngineText(option, viewer)}
-                  </RcButton>
-                ))}
-              </div>
-            </CpuCardPick>
+            <CpuCardPick title={data.reveal} items={[{ id: "reveal", card: cardRefFor(data.reveal) }]} onPick={() => undefined} />
+            <div className="mt-3 flex justify-center gap-2">
+              {(data.options ?? []).map((option) => (
+                <RcButton key={option} variant="outline" size="sm" onClick={() => send(option)}>
+                  {localizeEngineText(option, viewer)}
+                </RcButton>
+              ))}
+            </div>
           </PromptDialog>
         );
       {
@@ -986,19 +985,19 @@ function ChooseCards({
         selected={null}
         selectedIds={chosen.map(String)}
         onPick={toggle}
-      >
-        <div className="mt-3 flex justify-center gap-2">
-          {auto}
-          {data.upTo && (
-            <RcButton variant="outline" size="sm" onClick={() => onSend([])}>
-              {data.skipLabel ?? "Skip"}
-            </RcButton>
-          )}
-          <RcButton size="sm" disabled={!ready} onClick={() => onSend(chosen)}>
-            Confirm
+      />
+      {/* outside the row, which scrolls on its own: a long list (the Imposter's masks) never hides Confirm */}
+      <div className="mt-3 flex justify-center gap-2">
+        {auto}
+        {data.upTo && (
+          <RcButton variant="outline" size="sm" onClick={() => onSend([])}>
+            {data.skipLabel ?? "Skip"}
           </RcButton>
-        </div>
-      </CpuCardPick>
+        )}
+        <RcButton size="sm" disabled={!ready} onClick={() => onSend(chosen)}>
+          Confirm
+        </RcButton>
+      </div>
     </PromptDialog>
   );
 }
@@ -1021,13 +1020,13 @@ function OrderCards({ prompt, data, onSend }: { prompt: Prompt; data: PromptData
   const items = order.map((cardIndex, pos) => ({ id: String(pos), card: cardRefFor(cards[cardIndex]), badge: `${pos + 1}` }));
   return (
     <PromptDialog title={prompt.title} hint="Click two cards to swap them. The first is resolved or placed first." wide>
-      <CpuCardPick title="Order" items={items} selected={held === null ? null : String(held)} onPick={onPick}>
-        <div className="mt-3 flex justify-center">
-          <RcButton size="sm" onClick={() => onSend(order)}>
-            Confirm order
-          </RcButton>
-        </div>
-      </CpuCardPick>
+      <CpuCardPick title="Order" items={items} selected={held === null ? null : String(held)} onPick={onPick} />
+      {/* outside the row, which scrolls on its own: Confirm order is never below its fold */}
+      <div className="mt-3 flex justify-center">
+        <RcButton size="sm" onClick={() => onSend(order)}>
+          Confirm order
+        </RcButton>
+      </div>
     </PromptDialog>
   );
 }

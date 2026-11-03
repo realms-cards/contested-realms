@@ -53,4 +53,10 @@ describe("describeCardStatus", () => {
       "Carrying Ring of Morrigan.",
     ]);
   });
+
+  it("names a masked Imposter, whose card on the board shows the mask's face", () => {
+    const { chips, notes } = describeCardStatus({ ...base, mask: "Sorcerer" });
+    expect(chips.map((c) => c.label)).toEqual(["Imposter, masked"]);
+    expect(notes).toEqual(["The Imposter, masked as Sorcerer: it has Sorcerer's abilities until it takes damage or puts on a new mask."]);
+  });
 });
