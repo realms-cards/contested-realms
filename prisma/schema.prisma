@@ -609,6 +609,19 @@ model OnlineMatchAction {
   @@index([timestamp])
 }
 
+/// Lobby (global) chat log. Redis holds the newest 500 for fast history; this
+/// table is the durable copy it is refilled from when the Redis list is gone.
+/// senderId is a socket player id (users and guest_ ids alike), so no relation.
+model GlobalChatMessage {
+  id         String   @id @default(cuid())
+  senderId   String?
+  senderName String?
+  content    String
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 model MatchResult {
   id            String     @id @default(cuid())
   matchId       String     @unique

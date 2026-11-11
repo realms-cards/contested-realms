@@ -191,11 +191,8 @@ export const chatKeys = {
   /** Global chat history list: chat:global */
   global: "chat:global" as const,
 
-  /** Max messages to keep in global chat history */
+  /** Max messages to keep in global chat history (no expiry; Postgres keeps them all) */
   maxMessages: 500 as const,
-
-  /** TTL for global chat history (7 days) */
-  ttlSec: 604800 as const,
 };
 
 /**

@@ -2931,6 +2931,7 @@ io.on("connection", async (socket: SocketClient) => {
     io,
     socket,
     storeRedis,
+    prisma,
     isAuthed: () => authed,
     getPlayerBySocket,
     getPlayerInfo,
@@ -3131,7 +3132,7 @@ io.on("connection", async (socket: SocketClient) => {
 
     // Send full global chat history to newly connected client (up to 100 messages)
     try {
-      const chatHistory = await getGlobalChatHistory(storeRedis, 100);
+      const chatHistory = await getGlobalChatHistory(storeRedis, prisma, 100);
       if (chatHistory.messages.length > 0) {
         socket.emit("chatHistory", chatHistory);
       }

@@ -1,5 +1,6 @@
 "use strict";
 
+import type { PrismaClient } from "@prisma/client";
 import type { Redis } from "ioredis";
 import type { Server as SocketIOServer, Socket } from "socket.io";
 import { chatKeys } from "../core/redis-keys";
@@ -33,6 +34,7 @@ interface ChatHandlersDeps {
   io: SocketIOServer;
   socket: Socket;
   storeRedis: Redis | null;
+  prisma: PrismaClient | null;
   isAuthed: () => boolean;
   getPlayerBySocket: (socket: Socket | null | undefined) => PlayerState | null;
   getPlayerInfo: (
@@ -45,45 +47,127 @@ interface ChatHandlersDeps {
   debugLog: (message: string) => void;
 }
 
+/** How many messages a cold Redis list is refilled with from the database. */
+const HYDRATE_LIMIT = chatKeys.maxMessages;
+
+/** Append to the Redis list only while it is empty (one atomic step, so two
+ *  sockets connecting at once can't both refill it). */
+const HYDRATE_IF_EMPTY_LUA =
+  "if redis.call('LLEN', KEYS[1]) == 0 then return redis.call('RPUSH', KEYS[1], unpack(ARGV)) end return 0";
+
 /**
- * Persist a global chat message to Redis
+ * Persist a global chat message: Redis keeps the newest 500 for history (no
+ * expiry), Postgres keeps every message durably.
  */
 async function persistGlobalMessage(
   redis: Redis | null,
+  prisma: PrismaClient | null,
   message: ChatMessage
 ): Promise<void> {
+  const ts = message.ts ?? Date.now();
+  if (prisma) {
+    try {
+      await prisma.globalChatMessage.create({
+        data: {
+          senderId: message.from?.id ?? null,
+          senderName: message.from?.displayName ?? null,
+          content: message.content,
+          createdAt: new Date(ts),
+        },
+      });
+    } catch (err) {
+      console.error("[chat] Failed to store global message:", err);
+    }
+  }
   if (!redis) return;
   try {
     const key = chatKeys.global;
-    const json = JSON.stringify({ ...message, ts: Date.now() });
-    // Push to the right (newest at end), then trim to max size
-    await redis.rpush(key, json);
+    // Refill first if the list was lost, so this message lands after its history
+    // instead of being the only one (the DB row above is already part of the refill).
+    if (prisma && (await redis.llen(key)) === 0) {
+      await hydrateFromDatabase(redis, prisma);
+      return;
+    }
+    await redis.rpush(key, JSON.stringify({ ...message, ts }));
     await redis.ltrim(key, -chatKeys.maxMessages, -1);
-    // Refresh TTL
-    await redis.expire(key, chatKeys.ttlSec);
+    // Lists written before the history stopped expiring still carry a TTL
+    await redis.persist(key);
   } catch (err) {
     // Log but don't fail the message send
     console.error("[chat] Failed to persist global message:", err);
   }
 }
 
+/** Newest messages from the database, oldest first. */
+async function loadFromDatabase(
+  prisma: PrismaClient,
+  limit: number
+): Promise<ChatMessage[]> {
+  const rows = await prisma.globalChatMessage.findMany({
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+  return rows.reverse().map((row) => ({
+    from: row.senderId
+      ? { id: row.senderId, displayName: row.senderName ?? "Player" }
+      : null,
+    content: row.content,
+    scope: "global" as const,
+    ts: row.createdAt.getTime(),
+  }));
+}
+
+/** Refill an empty Redis history list from the database. */
+async function hydrateFromDatabase(
+  redis: Redis,
+  prisma: PrismaClient
+): Promise<void> {
+  const messages = await loadFromDatabase(prisma, HYDRATE_LIMIT);
+  if (messages.length === 0) return;
+  await redis.eval(
+    HYDRATE_IF_EMPTY_LUA,
+    1,
+    chatKeys.global,
+    ...messages.map((m) => JSON.stringify(m))
+  );
+}
+
 /**
- * Get global chat history from Redis with pagination
- * @param redis - Redis client
+ * Get global chat history with pagination. Reads the Redis list, refilling it
+ * from the database when it is empty; without Redis, reads the database.
  * @param limit - Max messages to return (default: all)
  * @param before - Return messages older than this index (for pagination)
  * @returns Messages in chronological order (oldest first)
  */
 export async function getGlobalChatHistory(
   redis: Redis | null,
+  prisma: PrismaClient | null,
   limit?: number,
   before?: number
 ): Promise<{ messages: ChatMessage[]; hasMore: boolean; oldestIndex: number }> {
-  if (!redis) return { messages: [], hasMore: false, oldestIndex: 0 };
+  const empty = { messages: [], hasMore: false, oldestIndex: 0 };
   try {
+    if (!redis) {
+      if (!prisma) return empty;
+      // Same window as the Redis list: the newest 500, paged from the end
+      const all = await loadFromDatabase(prisma, chatKeys.maxMessages);
+      const end = all.length - (before ?? 0);
+      const start = limit !== undefined ? Math.max(0, end - limit) : 0;
+      const messages = all.slice(start, Math.max(start, end));
+      return {
+        messages,
+        hasMore: start > 0,
+        oldestIndex: (before ?? 0) + messages.length,
+      };
+    }
+
     const key = chatKeys.global;
-    const totalLen = await redis.llen(key);
-    if (totalLen === 0) return { messages: [], hasMore: false, oldestIndex: 0 };
+    let totalLen = await redis.llen(key);
+    if (totalLen === 0 && prisma) {
+      await hydrateFromDatabase(redis, prisma);
+      totalLen = await redis.llen(key);
+    }
+    if (totalLen === 0) return empty;
 
     // Calculate range: newest messages are at the end (right) of the list
     // before = index from the end (0 = newest, totalLen-1 = oldest)
@@ -111,7 +195,7 @@ export async function getGlobalChatHistory(
     return { messages, hasMore, oldestIndex };
   } catch (err) {
     console.error("[chat] Failed to get global chat history:", err);
-    return { messages: [], hasMore: false, oldestIndex: 0 };
+    return empty;
   }
 }
 
@@ -122,6 +206,7 @@ export function registerChatHandlers({
   io,
   socket,
   storeRedis,
+  prisma,
   isAuthed,
   getPlayerBySocket,
   getPlayerInfo,
@@ -193,7 +278,7 @@ export function registerChatHandlers({
       };
       io.emit("chat", message);
       // Persist to Redis for history (ts already included)
-      persistGlobalMessage(storeRedis, message).catch(() => {});
+      persistGlobalMessage(storeRedis, prisma, message).catch(() => {});
       incrementMetric("chatSentTotal");
       debugLog(`[chat] global message sent from ${player.id}`);
       return;
@@ -236,7 +321,7 @@ export function registerChatHandlers({
           typeof payload?.before === "number" ? payload.before : undefined;
         const limit =
           typeof payload?.limit === "number" ? Math.min(payload.limit, 50) : 10;
-        const result = await getGlobalChatHistory(storeRedis, limit, before);
+        const result = await getGlobalChatHistory(storeRedis, prisma, limit, before);
         socket.emit("chatHistory", result);
       } catch (err) {
         console.error("[chat] Failed to handle chatHistory:request:", err);
