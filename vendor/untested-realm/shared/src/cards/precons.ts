@@ -2,10 +2,13 @@
 // SorceryTCG account on sorcerytcg.com (each entry's `source`). Generated 2026-10-18 through the same
 // sorceryToDeck importer the deck-link import uses. Precon mode: each player picks one of these, unedited —
 // they are 53-card decks (avatar + 36 spells + 16 sites), so they bypass the constructed size minimums.
+// Plus the two Frost Mage vs Lavamancer decks as WIP lists (see `wip`) until the set's release (Nov 13).
 import type { DeckList } from '../engine/decks'
 
-export type PreconSet = 'Alpha' | 'Beta' | 'Gothic'
-export interface PreconDeck extends DeckList { id: string; set: PreconSet; source: string }
+export type PreconSet = 'Alpha' | 'Beta' | 'Gothic' | 'Frost Mage vs Lavamancer'
+/** `wip`: a work-in-progress list (set not yet released): the official names without counts — Ordinary ×3,
+ *  Exceptional ×2, Elite/Unique ×1, collection ×1 — and only the cards whose text is already known. */
+export interface PreconDeck extends DeckList { id: string; set: PreconSet; source: string; wip?: boolean }
 
 export const PRECONS: PreconDeck[] = [
   {
@@ -593,6 +596,107 @@ export const PRECONS: PreconDeck[] = [
     },
     "art": {
       "Savior": "006-savior-pd-s"
+    }
+  },
+  {
+    "id": "precon:fvl-frost",
+    "name": "Frost Mage (previews)",
+    "set": "Frost Mage vs Lavamancer",
+    "source": "https://sorcerytcg.com/news/every-card-in-frost-mage-vs-lavamancer",
+    "wip": true,
+    "avatar": "Frost Mage",
+    "spellbook": {
+      "Toolbox": 2,
+      "Shatter": 2,
+      "Frostbolt": 2,
+      "Polar Shift": 1,
+      "Snowball": 2,
+      "Call of the Sea": 1,
+      "The White Death": 1,
+      "Aria Wraith": 1,
+      "Coy Nixie": 2,
+      "Fey Changeling": 2,
+      "Lone Wolf": 2,
+      "Polar Bears 2": 3,
+      "Failed Mutation": 2,
+      "Frost Elemental": 2,
+      "Frozen Horror": 2
+    },
+    "atlas": {
+      "Avalanche": 1,
+      "Deep Snow": 3,
+      "Icicle Dome": 1,
+      "Mountain Pass": 2,
+      "River Rapids": 1,
+      "Springstem Meadow": 3,
+      "Thin Ice": 2,
+      "Tundra": 1,
+      "Winter River": 3,
+      "Wuthering Heights": 1
+    },
+    "collection": {
+      "Blizzard": 1,
+      "Disenchant": 1,
+      "Displace": 1,
+      "Lightning Bolt": 1,
+      "Drown": 1,
+      "Ice Shards": 1,
+      "Plumed Pegasus": 1,
+      "Tufted Turtles": 1,
+      "Arc Lightning": 1,
+      "Highland Clansmen": 1
+    }
+  },
+  {
+    "id": "precon:fvl-lava",
+    "name": "Lavamancer (previews)",
+    "set": "Frost Mage vs Lavamancer",
+    "source": "https://sorcerytcg.com/news/every-card-in-frost-mage-vs-lavamancer",
+    "wip": true,
+    "avatar": "Lavamancer",
+    "spellbook": {
+      "Rite of Eruption": 1,
+      "Toolbox": 2,
+      "Iron Man Talus": 2,
+      "Ash of Effort": 1,
+      "Blaze": 2,
+      "Landmass": 3,
+      "Fireball 2": 2,
+      "Ground Slam": 2,
+      "Earthquake": 1,
+      "Lava Flow": 2,
+      "Flame Wave": 1,
+      "Emberleaf Dryad": 1,
+      "Namira Cheetah": 3,
+      "Sinterfee": 2,
+      "Snapjaw Raptor": 2,
+      "Flat Realm Society": 1,
+      "Slumbering Giantess": 2,
+      "Flayer": 3,
+      "Lava Elemental": 2,
+      "Pass-plug Serpent": 1,
+      "Southpaw Dyrodor": 2,
+      "Stiff-pitch Witch": 1
+    },
+    "atlas": {
+      "Bouldermaw": 1,
+      "Combusting Busts": 3,
+      "Molten Maar": 2,
+      "Scoria": 1,
+      "Sinkhole": 1,
+      "Smoldering Hollow": 1,
+      "Sulfur Vents": 3,
+      "Supervolcano": 1,
+      "Trapper's Rest": 2,
+      "Volcanic Eruption": 2
+    },
+    "collection": {
+      "Dispel": 1,
+      "Gift of the Serpent": 1,
+      "Boil": 1,
+      "Bury": 1,
+      "Heat Ray": 1,
+      "Rolling Boulder": 1
     }
   }
 ]

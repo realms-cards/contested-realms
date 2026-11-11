@@ -7,6 +7,7 @@ registerScript('Briar Patch', {
     if (!self || moved.controller === self.controller) return
     const entered = moved.x === self.x && moved.y === self.y
     const left = from.x === self.x && from.y === self.y
-    if (entered || left) ctx.dealDamage({ unit: moved.id }, 1)
+    // moving between the site's own levels (surface <-> beneath) neither enters nor leaves it (codex Enter)
+    if ((entered || left) && !(entered && left)) ctx.dealDamage({ unit: moved.id }, 1)
   },
 })

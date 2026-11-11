@@ -1,6 +1,7 @@
 import { registerScript, getScript } from '../registry'
 import { pushLog, effectSummonUnit } from '../../../engine/effects'
 import { effAttack, isEvilUnit } from '../../../engine/statics'
+import { getCard } from '../../db'
 
 // 'Banish an Evil ally → Cast Rasputin from your cemetery to there. He adds
 //  their power and abilities to his own until he dies again.'
@@ -8,7 +9,9 @@ registerScript('Grigori Rasputin', {
   cemeteryAbilities: (state, cardId, owner) => [{
     key: `rasputin:${cardId}`,
     label: 'Banish an Evil ally → Rasputin returns in their place',
-    cost: {},
+    // "Cast Rasputin": a real cast, so his mana cost is paid and his threshold is needed (Codex Casting)
+    cost: { mana: getCard(state.cards[cardId]?.name ?? 'Grigori Rasputin').cost ?? 0 },
+    threshold: getCard(state.cards[cardId]?.name ?? 'Grigori Rasputin').thresholds,
     effect: (ctx) => {
       const evils = Object.values(ctx.state.units)
         .filter((u) => u.controller === ctx.controller && !u.isAvatar && isEvilUnit(ctx.state, u))

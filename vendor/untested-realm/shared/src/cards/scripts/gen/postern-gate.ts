@@ -1,12 +1,5 @@
 import { registerScript } from '../registry'
-import { pushLog, opponent } from '../../../engine/effects'
 
-// 'Enters the realm under an opponent's control.'
-registerScript('Postern Gate', {
-  genesis: (ctx) => {
-    const self = ctx.state.sites[ctx.sourceId]
-    if (!self) return
-    self.controller = opponent(ctx.controller)
-    pushLog(ctx.state, ctx.controller, 'The Postern Gate opens for the enemy.')
-  },
-})
+// 'Enters the realm under an opponent's control.' — applied as it enters (enterSite), not as a Genesis,
+// so a silencer next to it (Smokestacks of Gnaak) can't keep it on your side
+registerScript('Postern Gate', { entersUnderOpponent: true })

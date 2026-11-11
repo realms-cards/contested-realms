@@ -50,6 +50,12 @@ import {
   cloneState,
   underEnemySiteEater,
   artifactController,
+  legalTargetsFor,
+  targetPickProblem,
+  targetRefId,
+  type TargetPick,
+  type TargetRef,
+  type AbilityDef,
 } from '@sorcery/shared'
 
 export function botNeedsToAct(state: GameState, me: PlayerId): boolean {
@@ -348,6 +354,8 @@ function safePromptAnswer(state: GameState, prompt: any): Action {
 
 function answerPrompt(state: GameState, me: PlayerId, prompt: any): Action {
   const answer = (choice: any): Action => ({ t: 'prompt', promptId: prompt.id, choice })
+  const trapAnswer = trapPromptAnswer(state, me, prompt)
+  if (trapAnswer) return trapAnswer
 
   switch (prompt.kind) {
     case 'drawDeck': {
@@ -801,7 +809,7 @@ function lethalAction(state: GameState, me: PlayerId, avatar: UnitState, enemyAv
     // a targeted damage spell whose spec can pick the enemy avatar
     if (looksLikeDamageSpell(cand.def) && script?.targets?.length) {
       const caster = state.units[cand.casterId] ?? avatar
-      const targets = resolveTargetsPreferAvatar(state, me, script.targets, caster, enemyAvatar)
+      const targets = resolveTargetsPreferAvatar(state, me, { script, specs: script.targets, caster, player: me, magic: true, source: cand.def.name }, enemyAvatar)
       if (targets) return { t: 'castSpell', cardId: cand.id, casterId: cand.casterId, targets }
     }
   }
@@ -822,46 +830,34 @@ function looksLikeDamageSpell(def: ReturnType<typeof getCard>): boolean {
 function resolveTargetsPreferAvatar(
   state: GameState,
   me: PlayerId,
-  specs: any[],
-  caster: UnitState,
+  pick: TargetPick,
   enemyAvatar: UnitState,
 ): string[] | null {
   const targets: string[] = []
+  const picked: TargetRef[] = []
   let hitAvatar = false
-  for (const spec of specs) {
+  for (let si = 0; si < pick.specs.length; si++) {
+    const spec = pick.specs[si]
     for (let i = 0; i < spec.count; i++) {
       if ((spec.owner === 'enemy' || spec.owner === 'any' || spec.owner === undefined) &&
-          (spec.what === 'unit' || spec.what === 'avatar' || spec.what === 'minion')) {
-        if (spec.what !== 'minion' && targetOk(state, me, spec, caster, enemyAvatar)) {
-          targets.push(enemyAvatar.id)
+          (spec.what === 'unit' || spec.what === 'avatar')) {
+        // the engine's own pick test (range, region, Stealth, filters, magic protection)
+        const ref: TargetRef = { unit: enemyAvatar.id }
+        if (targetPickProblem(state, pick, picked, ref, si) === null) {
+          targets.push(enemyAvatar.id); picked.push(ref)
           hitAvatar = true
           continue
         }
       }
-      const pick = pickTargetFor(state, me, spec, caster)
-      if (!pick) {
+      const ref = pickTargetFor(state, me, pick, picked, si)
+      if (!ref) {
         if (spec.upTo) continue
         return null
       }
-      targets.push(pick)
+      targets.push(targetRefId(ref)); picked.push(ref)
     }
   }
   return hitAvatar ? targets : null
-}
-
-/** does the enemy avatar satisfy a hostile target spec from this caster? */
-function targetOk(state: GameState, me: PlayerId, spec: any, caster: UnitState, enemyAvatar: UnitState): boolean {
-  if (spec.owner === 'ally') return false
-  if (spec.targeted && (enemyAvatar.region !== caster.region || enemyAvatar.stealth)) return false
-  if (spec.where === 'nearby' && chebyshev(enemyAvatar, caster) > 1) return false
-  if (spec.where === 'adjacent' && chebyshev(enemyAvatar, caster) > 1) return false
-  if (spec.where === 'here' && (enemyAvatar.x !== caster.x || enemyAvatar.y !== caster.y)) return false
-  try {
-    if (spec.filter && !spec.filter(state, enemyAvatar, caster)) return false
-  } catch {
-    return false
-  }
-  return true
 }
 
 // ---------- casting (caster selection, hand + cemetery) ----------
@@ -958,17 +954,20 @@ function tryCastWith(state: GameState, me: PlayerId, cand: CastCand, casterId: s
       if (specs.length === 0) {
         candidate = script?.onCast ? { t: 'castSpell', cardId: cand.id, casterId } : null
       } else {
+        const pick: TargetPick = { script, specs, caster, player: me, magic: true, source: cand.def.name }
         const targets: string[] = []
+        const picked: TargetRef[] = []
         let ok = true
-        for (const spec of specs) {
+        for (let si = 0; si < specs.length; si++) {
+          const spec = specs[si]
           for (let i = 0; i < spec.count; i++) {
-            const pick = pickTargetFor(state, me, spec, caster)
-            if (!pick) {
+            const ref = pickTargetFor(state, me, pick, picked, si)
+            if (!ref) {
               if (spec.upTo) continue
               ok = false
               break
             }
-            targets.push(pick)
+            targets.push(targetRefId(ref)); picked.push(ref)
           }
           if (!ok) break
         }
@@ -1171,18 +1170,22 @@ function summonKillsEnemyMinion(state: GameState, me: PlayerId, action: Action):
 function genesisTargetsAt(
   state: GameState, me: PlayerId, name: string, caster: UnitState, spot: SummonSpot, includeOptional = false,
 ): string[] | null {
-  const gt = getScript(name)?.genesisTargets ?? []
+  const script = getScript(name)
+  const gt = script?.genesisTargets ?? []
   const atSpot = atLoc(caster, spot)
+  const pick: TargetPick = { script, specs: gt, caster: atSpot, player: me, source: name }
   const targets: string[] = []
-  for (const spec of gt) {
+  const picked: TargetRef[] = []
+  for (let si = 0; si < gt.length; si++) {
+    const spec = gt[si]
     for (let i = 0; i < spec.count; i++) {
-      const pick = pickTargetFor(state, me, spec, atSpot)
-      if (!pick) {
+      const ref = pickTargetFor(state, me, pick, picked, si)
+      if (!ref) {
         if (spec.upTo) break // optional: nothing legal to pick → leave it empty
         return null
       }
       if (spec.upTo && !includeOptional) break // skip optional targets unless asked
-      targets.push(pick)
+      targets.push(targetRefId(ref)); picked.push(ref)
     }
   }
   return targets
@@ -1411,74 +1414,52 @@ function isHostileAura(def: ReturnType<typeof getCard>): boolean {
     !/(your (units|minions)|allied|you control)/i.test(def.text)
 }
 
-function pickTargetFor(state: GameState, me: PlayerId, spec: any, caster: UnitState): string | null {
+/** The Fast bot's choice for one pick: its candidates are the engine's shared legal list (legalTargetsFor —
+ *  the same one the client, effect casts and the search bot offer, judged by castSpell's own test), then
+ *  scored by a quick heuristic. */
+function pickTargetFor(state: GameState, me: PlayerId, pick: TargetPick, picked: TargetRef[], si: number): TargetRef | null {
+  const spec = pick.specs[si]
+  if (!spec) return null
+  const legal = legalTargetsFor(state, pick, picked, { specIndex: si, squareRegions: [pick.caster.region] })
   if (spec.what === 'square') {
-    let best: { x: number; y: number } | null = null
+    let best: TargetRef | null = null
     let bestScore = 0
-    for (let x = 0; x < 5; x++) {
-      for (let y = 0; y < 4; y++) {
-        if (spec.targeted && chebyshev({ x, y }, caster) > 2) continue
-        const at = unitsAt(state, x, y, caster.region)
-        const enemies = at.filter((u) => u.controller !== me).length
-        const allies = at.filter((u) => u.controller === me).length
-        const hasEnemyAvatar = at.some((u) => u.isAvatar && u.controller !== me)
-        const score = enemies - allies + (hasEnemyAvatar ? 5 : 0)
-        if (score > bestScore) {
-          bestScore = score
-          best = { x, y }
-        }
+    for (const r of legal) {
+      if (!('square' in r)) continue
+      const { x, y } = r.square
+      const at = unitsAt(state, x, y, r.square.region ?? pick.caster.region)
+      const enemies = at.filter((u) => u.controller !== me).length
+      const allies = at.filter((u) => u.controller === me).length
+      const hasEnemyAvatar = at.some((u) => u.isAvatar && u.controller !== me)
+      const score = enemies - allies + (hasEnemyAvatar ? 5 : 0)
+      if (score > bestScore) {
+        bestScore = score
+        best = r
       }
     }
-    return best ? `sq:${best.x},${best.y},${caster.region}` : null
+    return best
   }
   if (spec.what === 'site') {
-    // mirror validateTargetCore's site rules: owner, where, and the spec filter.
-    const pool = Object.values(state.sites).filter((s) => {
-      if (s.isRubble) return false
-      if (spec.owner === 'ally' && s.controller !== me) return false
-      if (spec.owner === 'enemy' && (s.controller === me || s.controller === null)) return false
-      if (spec.where === 'nearby' && chebyshev(s, caster) > 1) return false
-      if (spec.where === 'adjacent' && chebyshev(s, caster) > 1) return false
-      if (spec.where === 'here' && (s.x !== caster.x || s.y !== caster.y)) return false
-      try {
-        if (spec.filter && !spec.filter(state, s, caster)) return false
-      } catch {
-        return false
-      }
-      return true
-    })
+    const pool = legal.flatMap((r) => ('site' in r && state.sites[r.site] && !state.sites[r.site].isRubble ? [state.sites[r.site]] : []))
     if (!pool.length) return null
     // prefer an enemy site (resource denial); else the first legal (e.g. own site).
     const enemySite = pool.find((s) => s.controller !== null && s.controller !== me)
-    return (enemySite ?? pool[0]).id
+    return { site: (enemySite ?? pool[0]).id }
   }
-  const candidates = (Object.values(state.units) as UnitState[]).filter((u) => {
-    if ((spec.what === 'minion' || spec.what === 'minionOrArtifact') && u.isAvatar) return false
-    if (spec.what === 'avatar' && !u.isAvatar) return false
-    if (spec.owner === 'ally' && u.controller !== me) return false
-    if (spec.owner === 'enemy' && u.controller === me) return false
-    if (spec.targeted && (u.region !== caster.region || (u.stealth && u.controller !== me))) return false
-    if (spec.where === 'nearby' && chebyshev(u, caster) > 1) return false
-    if (spec.where === 'adjacent' && chebyshev(u, caster) > 1) return false
-    if (spec.where === 'here' && (u.x !== caster.x || u.y !== caster.y)) return false
-    try {
-      if (spec.filter && !spec.filter(state, u, caster)) return false
-    } catch {
-      return false
-    }
-    return true
-  })
+  const candidates = legal.flatMap((r) => ('unit' in r && state.units[r.unit] ? [state.units[r.unit]] : []))
   if (!candidates.length) return null
   if (spec.owner === 'ally') {
-    return candidates.sort((a, b) => effAttack(state, b) - effAttack(state, a))[0].id
+    return { unit: candidates.sort((a, b) => effAttack(state, b) - effAttack(state, a))[0].id }
   }
   const enemies = candidates.filter((u) => u.controller !== me)
   if (enemies.length) {
-    return enemies
-      .map((u) => ({ u, s: scoreDamageTarget(state, me, u, 3) }))
-      .sort((a, b) => b.s - a.s)[0].u.id
+    return {
+      unit: enemies
+        .map((u) => ({ u, s: scoreDamageTarget(state, me, u, 3) }))
+        .sort((a, b) => b.s - a.s)[0].u.id,
+    }
   }
-  return candidates[0].id
+  return { unit: candidates[0].id }
 }
 
 // ---------- activated abilities ----------
@@ -1506,7 +1487,7 @@ function tryActivateAbilities(state: GameState, me: PlayerId): Action | null {
 
   for (const src of sources) {
     const script = getScript(src.name)
-    const abilities = script?.abilities ?? []
+    const abilities = [...(script?.abilities ?? []), ...trapSpring(state, me, src.id)]
     for (const ability of abilities) {
       if (ability.key === 'ranged') continue // handled in unitTurn / lethal
       // skip abilities with a life or self-sacrifice cost, or mana beyond spare.
@@ -1514,6 +1495,12 @@ function tryActivateAbilities(state: GameState, me: PlayerId): Action | null {
       const manaCost = ability.cost?.mana ?? 0
       if (manaCost > 0 && manaCost > p.mana) continue
       if (canActivate(state, me, src.id, ability.key) !== null) continue
+      // a trap springs once: only when playing it out (every choice it offers) clearly pays off
+      if (ability.key === 'trap:spring') {
+        const spring: Action = { t: 'activate', sourceId: src.id, ability: 'trap:spring', targets: [] }
+        if (trapSpringGain(state, me, spring) >= TRAP_SPRING_MIN_GAIN) return spring
+        continue
+      }
 
       const action = buildAbilityAction(state, me, src.id, ability, src.anchor, enemyAvatar)
       // only use it if it actually changes the game state — an accepted-but-no-op
@@ -1552,15 +1539,19 @@ function buildAbilityAction(
 
   // has targets: treat enemy-target specs as removal/damage, ally as buff.
   const wantsEnemy = specs.some((s: any) => s.owner === 'enemy' || s.owner === 'any' || s.owner === undefined)
+  const srcName = state.units[sourceId]?.name ?? state.sites[sourceId]?.name ?? state.artifacts[sourceId]?.name ?? ''
+  const pick: TargetPick = { script: getScript(srcName), specs, caster: anchor, player: me, source: srcName }
   const targets: string[] = []
-  for (const spec of specs) {
+  const picked: TargetRef[] = []
+  for (let si = 0; si < specs.length; si++) {
+    const spec = specs[si]
     for (let i = 0; i < spec.count; i++) {
-      const pick = pickTargetFor(state, me, spec, anchor)
-      if (!pick) {
+      const ref = pickTargetFor(state, me, pick, picked, si)
+      if (!ref) {
         if (spec.upTo) continue
         return null // can't satisfy → skip this ability
       }
-      targets.push(pick)
+      targets.push(targetRefId(ref)); picked.push(ref)
     }
   }
   if (!targets.length) {
@@ -1607,7 +1598,7 @@ function damageAbilityAtAvatar(state: GameState, me: PlayerId, enemyAvatar: Unit
       if (!/(damage|deal|strike|bolt|burn|shot|fire)/.test(label)) continue
       if (canActivate(state, me, src.id, ability.key) !== null) continue
       const specs = ability.targets ?? []
-      const targets = resolveTargetsPreferAvatar(state, me, specs, src.anchor, enemyAvatar)
+      const targets = resolveTargetsPreferAvatar(state, me, { script, specs, caster: src.anchor, player: me, source: src.name }, enemyAvatar)
       if (targets) {
         const at = ability.needsSquare ? { x: src.anchor.x, y: src.anchor.y } : undefined
         return { t: 'activate', sourceId: src.id, ability: ability.key, targets, ...(at ? { at } : {}) }
@@ -1615,6 +1606,83 @@ function damageAbilityAtAvatar(state: GameState, me: PlayerId, enemyAvatar: Unit
     }
   }
   return null
+}
+
+/** my face-down trap's spring, as an ability the heuristics can weigh (its label names the effect).
+ *  Only a trap I OWN: a foe's trap I've come to control is still a secret to me. */
+function trapSpring(state: GameState, me: PlayerId, siteId: string): AbilityDef[] {
+  const site = state.sites[siteId]
+  const real = site?.owner === me ? site.trap?.realName : undefined
+  const ta = real ? getScript(real)?.siteTrapAbility : undefined
+  return ta ? [{ key: 'trap:spring', label: ta.label, cost: ta.cost, threshold: ta.threshold, targets: ta.targets, effect: ta.effect }] : []
+}
+
+/** a spring must win at least this much board value (boardAdvantage + disables) to be worth the trap */
+const TRAP_SPRING_MIN_GAIN = 2
+
+/** board value for trap decisions: boardAdvantage plus 2 per enemy minion disabled or tapped (minus mine) */
+function trapBoardValue(state: GameState, me: PlayerId): number {
+  let v = boardAdvantage(state, me)
+  for (const u of Object.values(state.units)) {
+    if (u.isAvatar || !(u.tapped || isDisabled(state, u))) continue
+    v += u.controller === me ? -2 : 2
+  }
+  return v
+}
+
+/** every answer worth trying for one of MY prompts (squares, candidates, options, card picks) */
+function promptChoices(prompt: any): any[] {
+  const d = prompt.data ?? {}
+  const out: any[] = []
+  for (const sq of (Array.isArray(d.squares) ? d.squares : [])) out.push(sq)
+  for (const c of (Array.isArray(d.candidates) ? d.candidates : [])) out.push([c])
+  for (const o of (Array.isArray(d.options) ? d.options : [])) out.push(o)
+  if (Array.isArray(d.cards)) d.cards.forEach((_: unknown, i: number) => out.push([i]))
+  if (d.upTo || d.optional) out.push([])
+  return out
+}
+
+/** play out `state`'s pending prompts, trying each of MY choices (foe prompts get the safe answer),
+ *  and return the best reachable trapBoardValue — or, with `pick`, the first choice that reaches it */
+function bestPromptLine(state: GameState, me: PlayerId, depth = 0): { value: number; choice?: any } {
+  const prompt = state.prompts[0]
+  if (!prompt || depth > 4) return { value: trapBoardValue(state, me) }
+  const step = (s: GameState, a: Action): GameState | null => {
+    try {
+      const c = cloneState(s)
+      return applyAction(c, prompt.player, a).ok ? c : null
+    } catch { return null }
+  }
+  const choices = prompt.player === me ? promptChoices(prompt) : []
+  let best: { value: number; choice?: any } | null = null
+  for (const choice of choices) {
+    const next = step(state, { t: 'prompt', promptId: prompt.id, choice })
+    if (!next) continue
+    const v = bestPromptLine(next, me, depth + 1).value
+    if (!best || v > best.value) best = { value: v, choice }
+  }
+  if (best) return best
+  const next = step(state, safePromptAnswer(state, prompt))
+  return next ? { value: bestPromptLine(next, me, depth + 1).value } : { value: trapBoardValue(state, me) }
+}
+
+/** how much board value springing this trap wins, its choices played well */
+function trapSpringGain(state: GameState, me: PlayerId, spring: Action): number {
+  let clone: GameState
+  try {
+    clone = cloneState(state)
+    if (!applyAction(clone, me, spring).ok) return -Infinity
+  } catch { return -Infinity }
+  return bestPromptLine(clone, me).value - trapBoardValue(state, me)
+}
+
+/** a prompt from a trap I sprung (now face up, mine): answer it by playing the choices out, so a
+ *  Combusting Busts lands on the enemy, not on my own site */
+function trapPromptAnswer(state: GameState, me: PlayerId, prompt: any): Action | null {
+  const src = state.sites[prompt.ctx?.sourceId]
+  if (!src || src.owner !== me || src.trap || !getScript(src.name)?.siteTrapAbility) return null
+  const { choice } = bestPromptLine(state, me)
+  return choice === undefined ? null : { t: 'prompt', promptId: prompt.id, choice }
 }
 
 /** a pseudo-unit at a site's square so target ranges anchor on the source. */

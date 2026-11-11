@@ -2,6 +2,7 @@ import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { nearbySquaresW, siteAt } from '../../../engine/grid'
 import { teleportWithPlacement } from '../../../engine/effects'
+import { siteEntryAllowed } from '../../../engine/movement'
 
 // 'Once on your turn, if you occupy an Air site, you may fly a unit atop it to a nearby site.'
 registerScript('Avatar of Air', {
@@ -26,7 +27,9 @@ registerScript('Avatar of Air', {
       if (!site || getCard(site.name).thresholds.air <= 0) return ctx.log('You must occupy an Air site.')
       const u = ctx.state.units[t.unit]
       if (!u || u.x !== self.x || u.y !== self.y) return
-      const options = nearbySquaresW(ctx.state, self.x, self.y).filter((s) => siteAt(ctx.state, s.x, s.y) && !(s.x === self.x && s.y === self.y))
+      // being flown is forced movement: a location it can't enter that way (a Crucifix vs Evil) isn't offered
+      const options = nearbySquaresW(ctx.state, self.x, self.y).filter((s) => siteAt(ctx.state, s.x, s.y) && !(s.x === self.x && s.y === self.y) &&
+        siteEntryAllowed(ctx.state, u, { x: u.x, y: u.y, region: u.region }, { x: s.x, y: s.y, region: 'surface' }, true))
       if (!options.length) return
       ctx.ask(
         { kind: 'chooseTargets', title: 'Fly to which nearby site?', data: { candidates: options.map((s) => siteAt(ctx.state, s.x, s.y)!.id), count: 1, kind: 'site' } },

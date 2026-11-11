@@ -1,5 +1,5 @@
 import { type CardScript } from '../registry'
-import { pushLog } from '../../../engine/effects'
+import { pushLog, wardSite, notifySiteInterference } from '../../../engine/effects'
 import { siteAt } from '../../../engine/grid'
 import { isEvilU } from './is-evil-u'
 
@@ -21,7 +21,7 @@ export function groundRitualScript(ground: string, needsEvil: boolean, strikesFi
       if (strikesFirstText) {
         ctx.strike(ally, { site: site.id })
       } else {
-        ;(site as any).ward = true // site ward — no Evil clause, kept direct
+        wardSite(ctx.state, site, ctx.controller)
         pushLog(ctx.state, ctx.controller, `${site.name} is warded.`)
       }
       if (!ctx.state.sites[site.id]) return
@@ -36,6 +36,7 @@ export function groundRitualScript(ground: string, needsEvil: boolean, strikesFi
         site.name = ground
         site.cardId = cardId
         pushLog(ctx.state, ctx.controller, `The land is remade: ${ground}.`)
+        notifySiteInterference(ctx.state, 'modify', site, ctx.controller) // a transform modifies the site
       },
     },
   }

@@ -1,4 +1,5 @@
 import { registerScript } from '../registry'
+import { tapUnit } from '../../../engine/effects'
 import { selfStepsAway, takeOwnStep } from '../../../engine/movement'
 
 // 'Genesis → Tap target adjacent enemy minion and make it take a step away.'
@@ -15,7 +16,7 @@ registerScript('Screamer', {
     if (!self || !t || !('unit' in t)) return
     const foe = ctx.state.units[t.unit]
     if (!foe) return
-    foe.tapped = true
+    tapUnit(ctx.state, foe)
     const steps = selfStepsAway(ctx.state, foe, self) // "take a step away" (def. 2)
     if (!steps.length) return
     if (steps.length === 1) { takeOwnStep(ctx.state, foe, steps[0]); return }

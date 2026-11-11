@@ -61,7 +61,7 @@ registerScript('Pudge Butcher', {
       // "may FIGHT it when it arrives" — a fight, not an attack (no defend window, no attack legality).
       // It must have ARRIVED at Pudge's square (a blocked drag → no fight).
       if (yes && self && prey && prey.x === self.x && prey.y === self.y && prey.region === self.region) {
-        fightUnits(ctx.state, self, prey)
+        fightUnits(ctx.state, self, prey, [self, prey]) // Pudge acted, the prey was dragged
       }
     },
   },

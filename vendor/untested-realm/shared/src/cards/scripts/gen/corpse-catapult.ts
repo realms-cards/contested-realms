@@ -2,30 +2,14 @@ import { registerScript, type EffectAPI } from '../registry'
 import { getCard } from '../../db'
 import { unitsAt } from '../../../engine/grid'
 import { realStepDistanceW } from '../../../engine/movement'
-import { pushLog } from '../../../engine/effects'
-import { canTapForCost, payZoneToll } from '../../../engine/statics'
+import { pushLog, tapUnit } from '../../../engine/effects'
+import { canTapForCost } from '../../../engine/statics'
+import { deadMinions, askDeadMinion, pickedDeadMinion, banishDeadMinion, canBanishDeadMinion } from '../multi-card-utils/dead-minions'
 import { squaresWithinSteps } from '../multi-card-utils/step-range-targets'
-import type { GameState, PlayerId } from '../../../engine/types'
-
-// corpses (dead minions) available to fling — from EITHER cemetery, player's choice.
-function corpseCatapultCorpses(state: GameState): string[] {
-  const out: string[] = []
-  for (const pl of [0, 1] as PlayerId[]) {
-    for (const id of state.players[pl].cemetery) {
-      if (getCard(state.cards[id].name).type === 'Minion') out.push(id)
-    }
-  }
-  return out
-}
 
 /** push the "which corpse?" prompt (corpses drawn from both cemeteries) */
 function askCorpseCatapult(ctx: EffectAPI, helperId: string): void {
-  const corpses = corpseCatapultCorpses(ctx.state)
-  ctx.ask(
-    { kind: 'chooseCards', title: 'Fling which dead minion? (either cemetery)', data: { cards: corpses.map((id) => ctx.state.cards[id].name), pick: 1, upTo: false } },
-    'ccCorpse',
-    { helperId, corpses },
-  )
+  askDeadMinion(ctx, 'Fling which dead minion? (either cemetery)', 'ccCorpse', { helperId }, flingCorpse)
 }
 
 registerScript('Corpse Catapult', {
@@ -44,7 +28,7 @@ registerScript('Corpse Catapult', {
       const bearer = art?.carriedBy ? state.units[art.carriedBy] : null
       if (!bearer || !canTapForCost(state, bearer)) return false
       const helper = unitsAt(state, art!.x, art!.y, art!.region).some((u) => u.id !== bearer.id && u.controller === bearer.controller && canTapForCost(state, u))
-      return helper && corpseCatapultCorpses(state).length > 0
+      return helper && canBanishDeadMinion(state, bearer.controller)
     },
     targets: [{ what: 'square', count: 1, targeted: true, label: 'target location (≤3 steps)' }],
     effect: (ctx) => {
@@ -56,7 +40,7 @@ registerScript('Corpse Catapult', {
       if (!bearer || !canTapForCost(ctx.state, bearer)) return ctx.log('The bearer cannot be tapped to pay for this.')
       const helpers = unitsAt(ctx.state, art.x, art.y, art.region).filter((u) => u.id !== bearer.id && u.controller === ctx.controller && canTapForCost(ctx.state, u))
       if (!helpers.length) return ctx.log('Another untapped ally is needed here.')
-      if (!corpseCatapultCorpses(ctx.state).length) return ctx.log('No corpse to fling.')
+      if (!deadMinions(ctx.state).length) return ctx.log('No corpse to fling.')
       // 1) choose which ally helps (auto only when there is exactly one)
       if (helpers.length > 1) {
         ctx.ask(
@@ -76,33 +60,24 @@ registerScript('Corpse Catapult', {
       if (!helper || helper.controller !== ctx.controller || !canTapForCost(ctx.state, helper)) return
       askCorpseCatapult(ctx, helperId)
     },
-    // 2) banish the chosen corpse (from whichever cemetery holds it) and fling it
-    ccCorpse: (ctx, c, choice) => {
-      const idx = Array.isArray(choice) ? choice[0] : choice
-      if (typeof idx !== 'number') return
-      const dead = (c.corpses as string[])[idx]
-      const t = ctx.targets[0]
-      const art = ctx.state.artifacts[ctx.sourceId]
-      const bearer = art?.carriedBy ? ctx.state.units[art.carriedBy] : null
-      const helper = ctx.state.units[c.helperId as string]
-      if (!dead || !t || !('square' in t) || !art || !bearer || !canTapForCost(ctx.state, bearer) || !helper || !canTapForCost(ctx.state, helper)) return
-      if (!ctx.state.players.some((pl) => pl.cemetery.includes(dead))) return
-      if (!payZoneToll(ctx.state, ctx.controller)) return ctx.log('The Bureau of Occult Control demands (2) for cemetery access.')
-      // remove the corpse from its cemetery → its owner's banished pile
-      let banished = false
-      for (const pl of [0, 1] as PlayerId[]) {
-        const cem = ctx.state.players[pl].cemetery
-        const i = cem.indexOf(dead)
-        if (i >= 0) { cem.splice(i, 1); ctx.state.players[pl].banished.push(dead); banished = true; break }
-      }
-      if (!banished) return
-      bearer.tapped = true
-      helper.tapped = true
-      const power = getCard(ctx.state.cards[dead].name).attack ?? 0
-      for (const u of unitsAt(ctx.state, t.square.x, t.square.y, t.square.region ?? 'surface')) {
-        ctx.dealDamage({ unit: u.id }, power)
-      }
-      pushLog(ctx.state, ctx.controller, `A ${ctx.state.cards[dead].name} sails overhead! (${power} damage)`)
-    },
+    ccCorpse: (ctx, c, choice) => flingCorpse(ctx, c, choice),
   },
 })
+
+// 2) banish the chosen corpse (from whichever cemetery holds it) and fling it
+function flingCorpse(ctx: EffectAPI, c: Record<string, unknown>, choice: unknown): void {
+  const dead = pickedDeadMinion(ctx.state, c, choice)
+  const t = ctx.targets[0]
+  const art = ctx.state.artifacts[ctx.sourceId]
+  const bearer = art?.carriedBy ? ctx.state.units[art.carriedBy] : null
+  const helper = ctx.state.units[c.helperId as string]
+  if (!dead || !t || !('square' in t) || !art || !bearer || !canTapForCost(ctx.state, bearer) || !helper || !canTapForCost(ctx.state, helper)) return
+  if (!banishDeadMinion(ctx, dead)) return
+  tapUnit(ctx.state, bearer)
+  tapUnit(ctx.state, helper)
+  const power = getCard(ctx.state.cards[dead].name).attack ?? 0
+  for (const u of unitsAt(ctx.state, t.square.x, t.square.y, t.square.region ?? 'surface')) {
+    ctx.dealDamage({ unit: u.id }, power)
+  }
+  pushLog(ctx.state, ctx.controller, `A ${ctx.state.cards[dead].name} sails overhead! (${power} damage)`)
+}

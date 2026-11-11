@@ -1,11 +1,12 @@
-import { registerScript } from '../registry'
+import { registerScript, isStrikeDamage } from '../registry'
 import { pushLog } from '../../../engine/effects'
 
 // 'If bearer would take strike damage, prevent it and return this helmet to hand.'
 registerScript('Goswhit Helmet', {
   damagePreventer: true,
+  bearerOnlyPreventer: true,
   damageModifier: (state, selfId, victim, amount, source) => {
-    if (source.kind !== 'strike') return amount
+    if (!isStrikeDamage(source)) return amount
     const art = state.artifacts[selfId]
     if (!art || art.carriedBy !== victim.id) return amount
     // prevent and bounce the helmet

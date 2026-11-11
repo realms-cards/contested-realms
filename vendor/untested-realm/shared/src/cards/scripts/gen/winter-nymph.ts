@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { pushLog } from '../../../engine/effects'
+import { pushLog, tapUnit } from '../../../engine/effects'
 import { nearbySquaresW } from '../../../engine/grid'
 
 // 'Whenever a minion is summoned nearby, tap it.'
@@ -8,7 +8,7 @@ registerScript('Winter Nymph', {
     const self = ctx.state.units[ctx.sourceId]
     if (!self || entered.isAvatar || entered.id === self.id || entered.enteredTurn !== ctx.state.turn) return
     if (nearbySquaresW(ctx.state, self.x, self.y).some((s) => s.x === entered.x && s.y === entered.y)) {
-      entered.tapped = true
+      tapUnit(ctx.state, entered)
       pushLog(ctx.state, ctx.controller, `${entered.name} arrives frostbitten and numb.`)
     }
   },

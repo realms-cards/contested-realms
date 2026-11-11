@@ -11,7 +11,9 @@ registerScript('The Faerie Queene', {
     if (!self || self.silenced || victim.controller !== self.controller || victim.isAvatar) return amount
     if (!effSubtypes(state, victim).includes('Faerie')) return amount
     if (!nearbySquaresW(state, self.x, self.y).some((s) => s.x === victim.x && s.y === victim.y)) return amount
-    const striker = source?.attackerId ? state.units[source.attackerId] : null
+    // a striker, or a unit dealing damage with its ability (Hellstar): "from units" covers both
+    const dealer = source?.attackerId ?? source?.sourceUnitId
+    const striker = dealer ? state.units[dealer] : null
     return striker && effAttack(state, striker) >= 4 ? 0 : amount
   },
 })

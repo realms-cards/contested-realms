@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { selfStepsCloser, takeOwnStep } from '../../../engine/movement'
-import { checkStateBased } from '../../../engine/effects'
+import { checkStateBased, tapUnit } from '../../../engine/effects'
 
 // 'Genesis → Tap target adjacent enemy minion and make it step closer.'
 registerScript('Mesmer Demon', {
@@ -11,7 +11,7 @@ registerScript('Mesmer Demon', {
     if (!self || !t || !('unit' in t)) return
     const u = ctx.state.units[t.unit]
     if (!u) return
-    u.tapped = true
+    tapUnit(ctx.state, u)
     const options = selfStepsCloser(ctx.state, u, self) // "step closer" (def. 2)
     if (options.length === 0) return
     if (options.length === 1) { takeOwnStep(ctx.state, u, options[0]); checkStateBased(ctx.state); return }

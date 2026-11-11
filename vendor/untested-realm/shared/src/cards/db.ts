@@ -132,6 +132,8 @@ export interface ParsedKeywords {
   ward?: boolean
   strikeFirst?: boolean
   lance?: boolean
+  /** how many Lance keywords are printed (Thankless Squire: "Lance, Lance, Lance") — one token each */
+  lanceCount?: number
   spellcaster?: boolean
   /** element-restricted spellcaster, e.g. 'fire' */
   spellcasterElement?: string
@@ -168,6 +170,7 @@ const ELEMENTS = ['air', 'earth', 'fire', 'water']
 /** If `low` (a lower-cased, trimmed token) is an engine keyword, record it in `kw` and return true;
  *  otherwise leave `kw` untouched and return false. Shared by the whole-line keyword harvester. */
 function applyKeywordToken(kw: ParsedKeywords, low: string): boolean {
+  if (low === 'lance') kw.lanceCount = (kw.lanceCount ?? 0) + 1
   if (SIMPLE_KEYWORDS[low]) { (kw as any)[SIMPLE_KEYWORDS[low]] = true; return true }
   let m = low.match(/^movement \+(\d+)$/)
   if (m) { kw.movement = (kw.movement ?? 0) + Number(m[1]); return true }

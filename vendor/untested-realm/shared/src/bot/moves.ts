@@ -15,11 +15,11 @@
 import type { Action, GameState, PlayerId, Region, UnitState } from '../engine/types'
 import { applyAction, canActivate, actingSeatFor } from '../engine/game'
 import { reachableWithPaths } from '../engine/movement'
-import { canCast, legalSiteSquares, validateSummonAt, validateTarget } from '../engine/casting'
+import { canCast, legalSiteSquares, validateSummonAt, legalTargetsFor, targetRefId, type TargetPick } from '../engine/casting'
 import { grantedAbilities, effAttack, effDefence, effKeywords, isCarriableArtifact, artifactController } from '../engine/statics'
-import { orthAdjacentWrapped, siteAt, GRID_W, GRID_H } from '../engine/grid'
+import { GRID_H, GRID_W, orthAdjacentWrapped, siteAt } from '../engine/grid'
 import { getCard } from '../cards/db'
-import { getScript } from '../cards/scripts/registry'
+import { getScript, type CardScript, type TargetRef } from '../cards/scripts/registry'
 import { underEnemySiteEater } from './eval'
 import { cloneState } from '../engine/clone'
 
@@ -159,41 +159,32 @@ function placementSquares(state: GameState): { x: number; y: number }[] {
 
 /** Every valid target-id COMBINATION for a spell's target specs. A targeted spell (Grapple Shot, Bolt…)
  *  needs its targets IN the cast action — casting it target-less fails "Missing targets.", so without
- *  this the search never generates any targeted spell at all. Candidates are over-generated per `what`
- *  and filtered by the engine's own `validateTarget` (the arbiter — honours owner/range/ward/filter);
- *  combos are capped so a multi-target spell can't blow up the branching. */
-// Targets are built IN ORDER and each pick is validated with the picks before it, so a range anchored to an
+ *  this the search never generates any targeted spell at all. Each pick's candidates come from the
+ *  engine's shared `legalTargetsFor` — the list the client and effect casts offer, judged by the same test
+ *  castSpell applies — so the bot never drifts from the rules; combos are capped so a multi-target spell
+ *  can't blow up the branching. */
+// Targets are built IN ORDER and each pick is judged with the picks before it, so a range anchored to an
 // earlier target (`whereOf` — Blink's "a location it's nearby" is nearby the ALLY) is measured from that
 // target, not from the caster. A dependent pick multiplies per earlier choice (ally × its own squares), so
 // those casts get a larger cap, or later allies' destinations are cut off.
-function castTargetCombos(state: GameState, me: PlayerId, specs: { what?: string; count?: number; upTo?: boolean; whereOf?: number }[], caster: UnitState): string[][] {
+function castTargetCombos(state: GameState, me: PlayerId, script: CardScript, caster: UnitState, source?: string): string[][] {
+  const specs = script.targets ?? []
+  const pick: TargetPick = { script, specs, caster, player: me, magic: true, source }
   const CAP = specs.some((s) => s.whereOf != null) ? 160 : 48
-  type Cand = { id: string; ref: unknown }
-  const candsFor = (spec: { what?: string; whereOf?: number }, picked: unknown[]): Cand[] => {
-    const w = spec.what
-    let raw: Cand[]
-    if (w === 'site') raw = Object.values(state.sites).filter((s) => !s.isRubble).map((s) => ({ id: s.id, ref: { site: s.id } }))
-    else if (w === 'artifact') raw = Object.values(state.artifacts).map((a) => ({ id: a.id, ref: { artifact: a.id } }))
-    else if (w === 'minionOrArtifact') raw = [
-      ...Object.values(state.units).filter((u) => !u.carriedBy).map((u) => ({ id: u.id, ref: { unit: u.id } })),
-      ...Object.values(state.artifacts).map((a) => ({ id: a.id, ref: { artifact: a.id } })),
-    ]
-    else if (w === 'square') {
-      raw = []
-      for (let x = 0; x < GRID_W; x++) for (let y = 0; y < GRID_H; y++) for (const region of REGIONS) raw.push({ id: `sq:${x},${y},${region}`, ref: { square: { x, y, region } } })
-    } else raw = Object.values(state.units).filter((u) => !u.carriedBy).map((u) => ({ id: u.id, ref: { unit: u.id } })) // unit / minion / avatar
-    const out: Cand[] = []
-    for (const c of raw) { try { if (validateTarget(state, spec as never, c.ref as never, caster, me, picked as never) === null) out.push(c) } catch { /* not a legal target */ } }
-    return out
-  }
+  type Cand = { id: string; ref: TargetRef }
+  // squares are offered in every region (the cast's region can matter); the cast itself re-judges each combo
+  const candsFor = (si: number, picked: TargetRef[]): Cand[] =>
+    legalTargetsFor(state, pick, picked, { squareRegions: REGIONS, specIndex: si }).map((ref) => ({ id: targetRefId(ref), ref }))
   let combos: Cand[][] = [[]]
-  for (const spec of specs) {
-    // an independent pick has the same candidates whatever came before; a dependent one is re-derived
-    const shared = spec.whereOf == null ? candsFor(spec, []) : null
+  for (let si = 0; si < specs.length; si++) {
+    const spec = specs[si]
+    // an independent pick has the same candidates whatever came before; a dependent one (an earlier
+    // target anchors it, or the card's targetOptions read the picks) is re-derived per combo
+    const shared = spec.whereOf == null && !script.targetOptions ? candsFor(si, []) : null
     const n = spec.count ?? 1
     const next: Cand[][] = []
     for (const base of combos) {
-      const ids = shared ?? candsFor(spec, base.map((c) => c.ref))
+      const ids = shared ?? candsFor(si, base.map((c) => c.ref))
       const picks: Cand[][] = []
       if (spec.upTo) picks.push([]) // may take none of this spec
       if (n <= 1) { for (const id of ids) picks.push([id]) }
@@ -306,11 +297,10 @@ export function expandActions(state: GameState, player: PlayerId, opts?: { deadl
       // enumerate valid target COMBINATIONS (Grapple Shot's ally, Bolt's victim…) — a targeted spell
       // cast without its targets fails "Missing targets." Projectile spells also need a direction.
       const script = getScript(def.name)
-      const specs = (script?.targets ?? []) as { what?: string; count?: number; upTo?: boolean; whereOf?: number }[]
       const dirs: (string | undefined)[] = script?.shootsProjectile ? ['n', 's', 'e', 'w'] : [undefined]
       const casters = minionCasters.length ? [...(canCast(state, me, cardId, avatarId).ok ? [avatarId] : []), ...minionCasters] : [avatarId]
       for (const casterId of casters) {
-        const combos = specs.length ? castTargetCombos(state, me, specs, state.units[casterId]) : [[]]
+        const combos = script?.targets?.length ? castTargetCombos(state, me, script, state.units[casterId], def.name) : [[]]
         for (const targets of combos) for (const dir of dirs) {
           push(dir ? { t: 'castSpell', cardId, casterId, targets, extra: { direction: dir } } : { t: 'castSpell', cardId, casterId, targets })
         }
@@ -325,6 +315,12 @@ export function expandActions(state: GameState, player: PlayerId, opts?: { deadl
           if (validateSummonAt(state, me, def.name, { x: sq.x, y: sq.y, region }) === null) {
             push({ t: 'castSpell', cardId, casterId: avatarId, at: { x: sq.x, y: sq.y, region } })
           }
+        }
+      }
+      // the void: a Voidwalk minion may be cast to any siteless square (The Ninth Legion's void corners)
+      for (let x = 0; x < GRID_W; x++) for (let y = 0; y < GRID_H; y++) {
+        if (!siteAt(state, x, y) && validateSummonAt(state, me, def.name, { x, y, region: 'void' }) === null) {
+          push({ t: 'castSpell', cardId, casterId: avatarId, at: { x, y, region: 'void' } })
         }
       }
     } else {
@@ -352,6 +348,10 @@ export function expandActions(state: GameState, player: PlayerId, opts?: { deadl
       if (canActivate(state, me, src.id, ab.key) !== null) continue // engine says not usable → skip
       if (banAvatarTapAbility && src.id === avatarId && ab.cost.tap) continue // develop instead (< 4 sites)
       push({ t: 'activate', sourceId: src.id, ability: ab.key }) // ability targets come via the follow-up prompt
+    }
+    // a face-down trap of mine (the bot only ever sees its OWN traps' real names) can be sprung
+    if (state.sites[src.id]?.trap?.realName && canActivate(state, me, src.id, 'trap:spring') === null) {
+      push({ t: 'activate', sourceId: src.id, ability: 'trap:spring' })
     }
   }
 

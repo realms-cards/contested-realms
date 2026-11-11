@@ -1,13 +1,19 @@
-import { pushLog, registerCont, pushPrompt, notifySiteInterference } from '../../../engine/effects'
+import { pushLog, registerCont, pushPrompt, siteCantBeMoved } from '../../../engine/effects'
 import { enterSite } from '../../../engine/casting'
-import { siteAt, occupiedSquares, GRID_W, GRID_H } from '../../../engine/grid'
+import { siteAt, GRID_W, GRID_H } from '../../../engine/grid'
+import { moveSitesWithContents } from './move-sites'
+import { strandedSites } from '../../../engine/statics'
 import type { GameState, PlayerId } from '../../../engine/types'
 
 // 'You may pull apart a partial row or column to make a void in which to play this.'
-type Shift = { axis: 'row' | 'col'; dir: 1 | -1; cells: { x: number; y: number }[]; label: string }
+export type Shift = { axis: 'row' | 'col'; dir: 1 | -1; cells: { x: number; y: number }[]; label: string }
 
 /** feasible pulls that vacate (x,y): the sub-run from (x,y) to the run's end
- *  slides one square outward into empty space */
+ *  slides one square outward into empty space, while the site on the other side of the seam stays.
+ *  FAQ: "Choose a row or column with two adjacent sites and at least one void. … one site stays in its
+ *  current square, and the other site (along with all other contiguous sites in its row or column)
+ *  shifts one square." A lone site can't be pulled apart ("No. That's not what 'pull apart' means."),
+ *  and a site that can't be moved (Bedrock, Bluecap Knockers) blocks the pull. */
 export function riftShifts(state: GameState, x: number, y: number): Shift[] {
   if (!siteAt(state, x, y)) return []
   const out: Shift[] = []
@@ -22,16 +28,19 @@ export function riftShifts(state: GameState, x: number, y: number): Shift[] {
     while (runEnd + 1 < max && siteAt(state, cellAt(runEnd + 1).x, cellAt(runEnd + 1).y)) runEnd++
     if (runEnd - runStart + 1 >= max) continue
     for (const dir of [1, -1] as const) {
-      // The seam may sit at the run's own edge, so the WHOLE run slides outward and the rift
-      // opens behind it. Requiring a site to stay behind made the card dead whenever the line
-      // was a single site — with one road on the board there was nothing to pull apart at all,
-      // even though sliding that road one square plainly opens a void to play into.
+      // the site behind the seam stays: it must exist (two adjacent sites are pulled apart)
+      const behind = coord - dir
+      if (behind < 0 || behind >= max || !siteAt(state, cellAt(behind).x, cellAt(behind).y)) continue
       const end = dir === 1 ? runEnd : runStart
       const beyond = end + dir
       if (beyond < 0 || beyond >= max) continue
       if (siteAt(state, cellAt(beyond).x, cellAt(beyond).y)) continue
       const cells: { x: number; y: number }[] = []
       for (let c = coord; dir === 1 ? c <= end : c >= end; c += dir) cells.push(cellAt(c))
+      if (cells.some((cl) => { const st = siteAt(state, cl.x, cl.y); return !!st && siteCantBeMoved(state, st) })) continue
+      // the seam is filled (the new site, or the Lavamancer's Rubble): no Edge of the World may lose its void
+      const moved = new Map(cells.map((cl) => [siteAt(state, cl.x, cl.y)!.id, axis === 'row' ? { x: cl.x + dir, y: cl.y } : { x: cl.x, y: cl.y + dir }]))
+      if (strandedSites(state, moved, [cellAt(coord)]).length) continue
       out.push({
         axis, dir, cells,
         label: axis === 'row' ? (dir === 1 ? 'push the row east' : 'push the row west') : dir === 1 ? 'push the column north' : 'push the column south',
@@ -41,41 +50,17 @@ export function riftShifts(state: GameState, x: number, y: number): Shift[] {
   return out
 }
 
-export function riftApply(state: GameState, player: PlayerId, cardId: string, x: number, y: number, shift: Shift): void {
+/** slide the shift's partial row/column one square outward, contents and all, vacating its first cell
+ *  (Rift Valley plays into it; the Lavamancer fills it with Rubble) */
+export function pullApart(state: GameState, player: PlayerId, shift: Shift): void {
   const dx = shift.axis === 'row' ? shift.dir : 0
   const dy = shift.axis === 'col' ? shift.dir : 0
-  // slide from the far end inward so nothing lands on an occupied square
-  const shifted: { id: string; x: number; y: number; controller: PlayerId | null }[] = []
-  for (const cell of [...shift.cells].reverse()) {
-    const site = siteAt(state, cell.x, cell.y)
-    if (site) {
-      shifted.push({ id: site.id, x: site.x, y: site.y, controller: site.controller })
-      site.x += dx
-      site.y += dy
-    }
-    for (const u of Object.values(state.units)) {
-      if (occupiedSquares(u).length !== 1) continue // oversized stay put (FAQ)
-      if (u.x === cell.x && u.y === cell.y && u.region !== 'void') {
-        u.x += dx
-        u.y += dy
-        for (const artId of u.carrying) {
-          const art = state.artifacts[artId]
-          if (art) {
-            art.x = u.x
-            art.y = u.y
-          }
-        }
-      }
-    }
-    for (const art of Object.values(state.artifacts)) {
-      if (!art.carriedBy && art.x === cell.x && art.y === cell.y) {
-        art.x += dx
-        art.y += dy
-      }
-    }
-  }
+  moveSitesWithContents(state, player, shift.cells.map((c) => ({ from: c, to: { x: c.x + dx, y: c.y + dy } })))
+}
+
+export function riftApply(state: GameState, player: PlayerId, cardId: string, x: number, y: number, shift: Shift): void {
+  pullApart(state, player, shift)
   pushLog(state, player, `🌋 The land itself is pulled apart — a rift opens at (${x + 1},${y + 1})!`)
-  for (const pre of shifted) notifySiteInterference(state, 'move', pre, player)
   // the vacated square now hosts the incoming site. Route it through the canonical entry so it gets
   // its mana, Ward, GENESIS, and the onSitePlayed event exactly like a normal play — this is what
   // lets Mirror Realm copy Rift Valley "the special way" (its genesis reflects once it has landed).

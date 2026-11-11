@@ -8,8 +8,10 @@ registerScript('Sling Pixies', {
   damagePreventer: true,
   damagePreviewPure: true,
   damageModifier: (state, selfId, victim, amount, source) => {
-    if (victim.id !== selfId || !source?.attackerId) return amount
-    const striker = state.units[source.attackerId]
+    // a striker, or a unit dealing damage with its ability (Infernal Legion)
+    const dealer = source?.attackerId ?? source?.sourceUnitId
+    if (victim.id !== selfId || !dealer) return amount
+    const striker = state.units[dealer]
     return striker && effAttack(state, striker) >= 4 ? 0 : amount
   },
 })

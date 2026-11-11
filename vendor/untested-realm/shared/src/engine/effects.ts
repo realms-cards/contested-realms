@@ -7,7 +7,7 @@ import { cloneState } from './clone'
 import type { GameState, PlayerId, Region, UnitState, SiteState, AuraState, Prompt, DeckName } from './types'
 import { isLocation } from './action-shape'
 import { avatarOf, siteAt, unitsAt, edgesConnected, aura2x2Squares, occupiedSquares, inBounds, GRID_W, GRID_H, squareLabel, nearbySquaresW, orthAdjacentWrapped } from './grid'
-import { affinity, effAttack, effDefence, effKeywords, canExistIn, siteSilenced, artifactSilenced, artScript, isEvilUnit, isEvilUnitIntrinsic, isDisabled, isUnmodifiable, silenceImmune, footprintAllTerrain, terrainAt, buildStaticGrantIndex, isVoidAt, protectedFromSites, artifactController, artifactActor } from './statics'
+import { abilitiesOff, affinity, effAttack, effDefence, effKeywords, canExistIn, hasRegionKeyword, siteSilenced, siteDisabled, artifactSilenced, artScript, isEvilUnit, isEvilUnitIntrinsic, isDisabled, isUnmodifiable, silenceImmune, footprintAllTerrain, terrainAt, buildStaticGrantIndex, isVoidAt, protectedFromSites, artifactController, artifactActor } from './statics'
 import { siteEntryAllowed, multiSquareDestSquares, oversizedTeleportPlacements } from './movement' // runtime-only use (teleport closure); import cycle is safe
 import { awardAchievement } from './achievements.catalog' // types-only module → no cycle
 import { noteAddedToEnd, noteSeenAtEnd, carryKnownTopIntoHand } from './knowledge'
@@ -319,10 +319,10 @@ export function isMagicProtected(state: GameState, unit: UnitState): boolean {
     if (typeof p === 'function') return p(state, id, unit)
     return false
   }
-  if (!unit.silenced && check(unit.name, unit.id)) return true
+  if (getScript(unit.name)?.magicProtected && !abilitiesOff(state, unit) && check(unit.name, unit.id)) return true
   for (const artId of unit.carrying) {
     const art = state.artifacts[artId]
-    if (art && check(art.name, art.id)) return true
+    if (art && !artifactSilenced(state, art) && check(art.name, art.id)) return true
   }
   // ground artifacts in the realm can protect other units by position (Arcade of Bones: Undead in
   // its row). The hook decides who it covers; we just need to consult every non-silenced artifact.
@@ -361,7 +361,7 @@ export function randomDeterminer(state: GameState, forPlayer: PlayerId): PlayerI
     }
   }
   for (const u of Object.values(state.units)) {
-    if (u.name === 'Black Cat' && !u.silenced && u.controller !== forPlayer) return u.controller
+    if (u.name === 'Black Cat' && u.controller !== forPlayer && !abilitiesOff(state, u)) return u.controller
   }
   return null
 }
@@ -531,13 +531,14 @@ registerCont('effect:discardChosen', (state, ctx: { player: PlayerId; __ids: str
     if (typeof id === 'string') discardCardId(state, ctx.player, id)
   }
 })
-registerCont('site:redirect', (state, ctx: { siteId: string; n: number; sourcePlayer: PlayerId }, choice) => {
+registerCont('site:redirect', (state, ctx: { siteId: string; n: number; sourcePlayer: PlayerId; controller?: PlayerId | null; name?: string }, choice) => {
   const site = state.sites[ctx.siteId]
-  if (!choice || !site) {
-    if (site?.controller !== null && site) {
-      loseLife(state, site.controller, ctx.n, false)
-      emitEvent(state, 'onLifeLost', site.controller, ctx.n, { player: ctx.sourcePlayer, kind: 'effect' })
-      pushLog(state, ctx.sourcePlayer, `${site.name} is struck for ${ctx.n}.`)
+  const controller = site ? site.controller : ctx.controller ?? null
+  if (!choice) {
+    if (controller !== null) {
+      loseLife(state, controller, ctx.n, false)
+      emitEvent(state, 'onLifeLost', controller, ctx.n, { player: ctx.sourcePlayer, kind: 'effect' })
+      pushLog(state, ctx.sourcePlayer, `${site?.name ?? ctx.name} is struck for ${ctx.n}.`)
     }
     return
   }
@@ -850,6 +851,8 @@ export function promptAnswerProblem(prompt: Prompt, choice: any): string | null 
       if (!Array.isArray(choice) || choice.some((i) => !Number.isInteger(i) || i < 0 || i >= d.cards.length)) return bad
       if (new Set(choice).size !== choice.length) return 'Each card can only be picked once.'
       if (prompt.kind === 'chooseCards' && typeof d.pick === 'number' && choice.length > d.pick) return `Choose at most ${d.pick}.`
+      // a forced pick (upTo: false) must take exactly that many — an empty Confirm can't dodge a cost (Craterize)
+      if (prompt.kind === 'chooseCards' && d.upTo === false && typeof d.pick === 'number' && choice.length < Math.min(d.pick, d.cards.length)) return `Choose ${d.pick}.`
       return null
     }
     default:
@@ -1063,6 +1066,21 @@ export function tapUnit(state: GameState, unit: UnitState): void {
   emitEvent(state, 'onUnitTapped' as any, unit)
 }
 
+/** Untap a unit — the ONE way anything untaps a unit (its untap step and every card effect), so the
+ *  rules that stop an untap always apply: "they don't untap the next time they would" (Deep Snow, Sir
+ *  Tristan, Waveshaper, Blasphemy — a skipUntap marker, spent by this untap) and Rhitta Gawr's "Other
+ *  minions can't untap". Returns whether it untapped. */
+export function untapUnit(state: GameState, unit: UnitState): boolean {
+  if (!unit.tapped) return false
+  if (unit.counters?.skipUntap) {
+    delete unit.counters.skipUntap
+    return false
+  }
+  if (!unit.isAvatar && Object.values(state.units).some((r) => r.id !== unit.id && getScript(r.name)?.preventsOtherUntaps && !abilitiesOff(state, r))) return false
+  unit.tapped = false
+  return true
+}
+
 export function toCemetery(state: GameState, cardId: string): void {
   const card = state.cards[cardId]
   if (!card) return
@@ -1120,6 +1138,15 @@ export function wardUnit(state: GameState, unit: UnitState): boolean {
   }
   if (unit.ward) return false // single-Ward clause: no stacking
   unit.ward = true
+  return true
+}
+
+/** Ward a SITE (no Evil clause for sites). Gaining Ward is gaining an ability — a modification of the site
+ *  (Monks of Kobalsa "can't be modified, except by Wards"), so Vindictive Nation hears it. */
+export function wardSite(state: GameState, site: SiteState, by: PlayerId | null): boolean {
+  if (site.ward) return false // single-Ward clause: no stacking
+  site.ward = true
+  notifySiteInterference(state, 'modify', site, by)
   return true
 }
 
@@ -1190,6 +1217,10 @@ function collectPreventers(
     ).length
     if (buddies > 0) list.push({ kind: 'wall', cardName: 'Shield Wall', label: 'Shield Wall', owner: unit.controller, apply: (n) => ({ amount: n - buddies }) })
   }
+  // 2b) encased in ice (the Frost Mage): it takes no damage until the encasing player's next turn
+  if ((state.flow?.encased ?? []).some((e: { unitId: string }) => e.unitId === unit.id)) {
+    list.push({ kind: 'reduce', cardName: 'Frost Mage', label: 'encased in ice', owner: unit.controller, apply: () => ({ amount: 0 }) })
+  }
   // 3) prevention-tagged damageModifiers (Makeshift Barricade, Goswhit, elemental immunities, Tufted…)
   const addMod = (name: string, id: string, owner: PlayerId | null) => {
     if (owner === null) return
@@ -1212,16 +1243,17 @@ function collectPreventers(
     if (sc?.damageModifier && sc.damagePreventer) addMod(o.name, o.id, o.controller)
   }
   for (const a of Object.values(state.artifacts)) {
-    const sc = getScript(a.name)
+    const sc = artScript(state, a) // a silenced artifact (Acid Rain) prevents nothing
+    if (sc?.bearerOnlyPreventer && a.carriedBy !== unit.id) continue // shields its bearer only: not asked about others
     if (sc?.damageModifier && sc.damagePreventer) addMod(a.name, a.id, entityOwner(state, a.id))
   }
   // 4) Ward — a full negation that breaks once (owned by the unit's controller). Its card image is
   // the WARDED unit itself, captioned "Ward" so a warded card with its own prevention reads as two.
-  // Ward is an ABILITY, so a silenced/disabled unit's ward doesn't function — even if checkStateBased
-  // hasn't stripped the mark yet. But a unit PARTAKING IN A BATTLE is NOT disabled (the Basilisk's gaze
+  // A DISABLED unit's ward doesn't function — even if checkStateBased hasn't stripped the mark yet. A
+  // SILENCED one keeps its Ward mark and it still works (Codex, Silenced: "it will retain the mark!"). But a unit PARTAKING IN A BATTLE is NOT disabled (the Basilisk's gaze
   // doesn't bite a fighter), so its ward works normally: it absorbs an otherwise-unprevented blow and
   // breaks, as usual. isDisabled already exempts battle/acting/entering units. (Avatars: never disabled.)
-  if (unit.ward && !unit.silenced && !isDisabled(state, unit)) {
+  if (unit.ward && !isDisabled(state, unit)) {
     list.push({ kind: 'ward', cardName: unit.name, label: 'Ward', owner: unit.controller, apply: (n) => {
       if (state.flow?.wardAbsorbed?.includes(unit.id)) return { amount: 0, done: true }
       if (checkWard(state, unit, sourcePlayer, unit.controller)) {
@@ -1313,7 +1345,9 @@ function drivePrevention(
       title: `Choose your damage prevention order — ${unit.name} would take ${n}`,
       data: { cards: mine.map((s) => s.cardName), labels: mine.map((s) => s.label), place: 'resolve' },
       cont: 'damage:prevOrder',
-      ctx: { unitId: unit.id, n, sourcePlayer, source, opts, queue },
+      // the fight it was struck in may be over by the time this is answered: keep who was fighting, so a
+      // fighter isn't "at rest" (and disabled by a Basilisk) when its prevention resolves
+      ctx: { unitId: unit.id, n, sourcePlayer, source, opts, queue, battleUnits: state.flow?.battleUnits },
     })
     return { paused: true }
   }
@@ -1323,6 +1357,12 @@ function drivePrevention(
 registerCont('damage:prevOrder', (state, ctx: any, choice) => {
   const unit = state.units[ctx.unitId]
   if (!unit) return
+  const fighting = state.flow?.battleUnits
+  if (ctx.battleUnits) state.flow.battleUnits = ctx.battleUnits
+  try { resumePrevention(state, ctx, choice, unit) } finally { if (ctx.battleUnits) state.flow.battleUnits = fighting }
+})
+
+function resumePrevention(state: GameState, ctx: any, choice: unknown, unit: UnitState): void {
   const player = ctx.queue[0] as PlayerId
   const mine = collectPreventers(state, unit, ctx.sourcePlayer, ctx.source, ctx.n as number).filter((s) => s.owner === player)
   const r = applyPreventionOrder(mine, normalizeOrder(choice, mine.length), ctx.n as number)
@@ -1332,7 +1372,7 @@ registerCont('damage:prevOrder', (state, ctx: any, choice) => {
   if ('done' in res) return
   if (res.amount <= 0) return
   applyResolvedDamage(state, unit, res.amount, ctx.sourcePlayer, ctx.source, ctx.opts)
-})
+}
 
 // ---- damage events (simultaneous-damage scope) ----
 // A single card effect (a spell's onCast, an activated/triggered ability, a Genesis) is ONE damage
@@ -1422,7 +1462,7 @@ export function dealDamageToUnit(
         // SNAPSHOT the killer's position/controller now — so a killer that DIES in the same trade
         // (Redbreast Robin taking the Albatross's retaliation) still curses its allies at killUnit.
         if (existing) existing.struck = existing.struck || struck
-        else list.push({ id: damagerId!, name: dmgr.name, x: dmgr.x, y: dmgr.y, controller: dmgr.controller, struck })
+        else list.push({ id: damagerId!, name: dmgr.name, x: dmgr.x, y: dmgr.y, region: dmgr.region, controller: dmgr.controller, struck })
       }
     }
     // magic-protection (Failed Mutation, Amulet of Niniane, Arcade of Bones)
@@ -1448,25 +1488,32 @@ export function dealDamageToUnit(
   // Increases first (Panpipes of Pnom "increased to 2"), then the modify layer ordered add → mul → cap →
   // lethal (each kind commutative — modification is additive, no player choice). PREVENTION comes AFTER.
   for (const other of Object.values(state.units)) {
-    if (other.silenced) continue
     const boost = getScript(other.name)?.damageBoost
-    if (boost) n = boost(state, other.id, unit, n, source)
+    if (boost && !abilitiesOff(state, other)) n = boost(state, other.id, unit, n, source)
   }
   for (const art of Object.values(state.artifacts)) {
     const boost = artScript(state, art)?.damageBoost // silenced artifact boosts nothing
     if (boost) n = boost(state, art.id, unit, n, source)
+  }
+  // "damage dealt to nearby units is increased by 1 this turn" (Smoldering Hollow's Genesis): an effect
+  // of the turn, not of the site, so it lasts even if the site is later silenced or destroyed
+  if (n > 0) {
+    for (const z of (state.flow?.nearbyDamageBoosts ?? []) as { siteId?: string; x: number; y: number; amount: number; turn: number }[]) {
+      const at = (z.siteId && state.sites[z.siteId]) || z // where the site is now; its old square once it's gone
+      const near = nearbySquaresW(state, at.x, at.y)
+      if (z.turn === state.turn && occupiedSquares(unit).some((q) => near.some((s) => s.x === q.x && s.y === q.y))) n += z.amount
+    }
   }
   let forceLethal = false
   {
     const KIND = { add: 0, mul: 1, cap: 2, lethal: 3 } as const
     const mods: { name: string; id: string; k: keyof typeof KIND }[] = []
     for (const o of Object.values(state.units)) {
-      if (o.silenced) continue
       const sc = getScript(o.name)
-      if (sc?.damageModifier && !sc.damagePreventer) mods.push({ name: o.name, id: o.id, k: sc.damageModifierKind ?? 'add' })
+      if (sc?.damageModifier && !sc.damagePreventer && !abilitiesOff(state, o)) mods.push({ name: o.name, id: o.id, k: sc.damageModifierKind ?? 'add' })
     }
     for (const a of Object.values(state.artifacts)) {
-      const sc = getScript(a.name)
+      const sc = artScript(state, a) // a silenced artifact (Acid Rain) modifies nothing
       if (sc?.damageModifier && !sc.damagePreventer) mods.push({ name: a.name, id: a.id, k: sc.damageModifierKind ?? 'add' })
     }
     mods.sort((x, y) => KIND[x.k] - KIND[y.k])
@@ -1550,7 +1597,7 @@ function applyResolvedDamage(
     return
   }
   // Stitched Abomination: damage lands on a chosen part, not the whole
-  if (getScript(unit.name)?.takesDamageInParts && !unit.silenced) {
+  if (getScript(unit.name)?.takesDamageInParts && !abilitiesOff(state, unit)) {
     const parts = (state.flow?.abomParts?.[unit.id] ?? []) as { name: string; damage: number }[]
     const alive = parts.filter((p) => p.damage < Math.max(1, getCard(p.name).defence ?? getCard(p.name).attack ?? 1))
     // lethal (or outright kill) destroys every part at once — no allocation
@@ -1585,16 +1632,37 @@ function applyResolvedDamage(
   const script = getScript(unit.name)
   // a disabled minion has no abilities (Codex); an Avatar's damage hooks are durations (Imposter's mask)
   if (script?.onSelfDamaged && !unit.silenced && (unit.isAvatar || !isDisabled(state, unit))) {
-    script.onSelfDamaged(makeCtx(state, unit.id, unit.controller, []), n)
+    // simultaneous strikes: the active player's "whenever this takes damage" trigger goes on the storyline
+    // with the non-active player's (their deathrites — Accursed Albatross), which resolve FIRST (codex
+    // Simultaneous Triggers). Parked here and fired by checkStateBased's death sweep, after the non-active side.
+    if (opts?.batch && !unit.isAvatar && unit.controller === state.activePlayer) {
+      state.flow = state.flow ?? {}
+      state.flow.deferredSelfDamaged = [...((state.flow.deferredSelfDamaged ?? []) as { unitId: string; n: number }[]), { unitId: unit.id, n }]
+    } else if (!opts?.batch && !unit.isAvatar && inDamageEvent(state)) {
+      // one card effect's damage ("each other nearby unit") is a single simultaneous event: the trigger
+      // resolves after the WHOLE event (Flayer hits your Avatar too before Flagellant heals you) — and
+      // even if this hit killed the unit (a snapshot routes it), since it did take the damage
+      state.flow = state.flow ?? {}
+      state.flow.deferredSelfDamaged = [...((state.flow.deferredSelfDamaged ?? []) as { unitId: string; n: number }[]),
+        { unitId: unit.id, n, name: unit.name, controller: unit.controller }]
+    } else script.onSelfDamaged(makeCtx(state, unit.id, unit.controller, []), n)
   }
   if (opts?.lethal && n > 0) {
     // lethal immunity (Sir Priamus shields nearby allies)
     const shielded = Object.values(state.units).some((o) => {
-      if (o.silenced || o.controller !== unit.controller) return false
+      if (o.controller !== unit.controller) return false
       const f = getScript(o.name)?.protectsAlliesFromLethal
-      return !!f && f(state, o.id, unit)
+      return !!f && !abilitiesOff(state, o) && f(state, o.id, unit)
     })
     if (!shielded) {
+      // strikes are simultaneous (codex Fight): inside a combat batch or an open damage event the Lethal
+      // victim dies with the others when it closes, so the rest of the exchange still sees it (its power
+      // against Fourberie Knot, Grim Reaper's kill)
+      if (opts?.batch || inDamageEvent(state)) {
+        state.flow = state.flow ?? {}
+        state.flow.lethalDoomed = [...new Set([...((state.flow.lethalDoomed ?? []) as string[]), unit.id])]
+        return
+      }
       killUnit(state, unit.id)
       return
     }
@@ -1750,14 +1818,17 @@ export function dealDamage(state: GameState, target: TargetRef, n: number, sourc
       if (prevent && prevent(state, r.id, site, n, sourcePlayer, source)) return
     }
     // City of Souls: the enemy may redirect the site damage to any unit
-    if (site.controller !== null && sourcePlayer !== site.controller && getScript(site.name)?.siteDamageRedirect) {
+    const redirect = getScript(site.name)?.siteDamageRedirect
+    if (site.controller !== null && sourcePlayer !== site.controller && (redirect === true || (typeof redirect === 'function' && redirect(state, site)))) {
       pushPrompt(state, {
         player: sourcePlayer,
         kind: 'yesNo',
         title: `Redirect the ${n} damage from ${site.name} to a unit?`,
         data: {},
         cont: 'site:redirect',
-        ctx: { siteId: site.id, n, sourcePlayer },
+        // the site's controller and name ride along: the strike already landed even if the site is gone by
+        // the time this is answered (Realm-Eater destroys what it successfully attacks)
+        ctx: { siteId: site.id, n, sourcePlayer, controller: site.controller, name: site.name },
       })
       return
     }
@@ -1768,7 +1839,7 @@ export function dealDamage(state: GameState, target: TargetRef, n: number, sourc
       pushLog(state, sourcePlayer, `${site.name} is struck for ${n}.`)
     }
     // "when this site is damaged" triggers (City of Glass, Wizard's Den)
-    if (state.sites[site.id]) emitEvent(state, 'onSiteDamaged', site, n, sourcePlayer)
+    if (state.sites[site.id]) emitEvent(state, 'onSiteDamaged', site, n, sourcePlayer, source)
   }
 }
 
@@ -1806,12 +1877,12 @@ export function loseLife(state: GameState, player: PlayerId, n: number, emit = t
  *  Old Salt Anchorman ally stops only ENEMY spells and abilities. Neither stops a unit's own step
  *  (takeOwnStep: lures, "take a step"). */
 export function moveProtected(state: GameState, unit: UnitState, by: PlayerId): boolean {
-  if (getScript(unit.name)?.immovable && !unit.silenced) return true
+  if (getScript(unit.name)?.immovable && !abilitiesOff(state, unit)) return true
   if (by === unit.controller) return false
   for (const o of Object.values(state.units)) {
-    if (o.silenced || o.controller !== unit.controller) continue
+    if (o.controller !== unit.controller) continue
     const f = getScript(o.name)?.protectsAlliesFromMoves
-    if (f && f(state, o.id, unit)) return true
+    if (f && !abilitiesOff(state, o) && f(state, o.id, unit)) return true
   }
   return false
 }
@@ -1831,17 +1902,19 @@ export function trySubmerge(state: GameState, unit: UnitState, by: PlayerId): bo
     pushLog(state, unit.controller, `${unit.name} is locked in the Cage of Sidrak — force alone can't free it.`)
     return false
   }
-  // An oversized unit is submerged only if its WHOLE footprint is water (rulebook: a
-  // forced submerge of an oversized unit fails unless it occupies a single terrain).
-  // It does NOT drown here — the effect simply fails to move a unit straddling land.
-  if (occupiedSquares(unit).length > 1 && !footprintAllTerrain(state, unit, 'water')) {
-    pushLog(state, unit.controller, `${unit.name} is too large to submerge across mixed terrain.`)
+  // A forced submerge fails on a unit occupying any land site (Codex, Submerge) — only a water
+  // site has an underwater level to sink into; an oversized unit needs its WHOLE footprint on water.
+  // It does NOT drown here — the effect simply fails to move it.
+  if (!footprintAllTerrain(state, unit, 'water')) {
+    pushLog(state, unit.controller, occupiedSquares(unit).length > 1
+      ? `${unit.name} is too large to submerge across mixed terrain.`
+      : `${unit.name} stands on land — it can't be submerged.`)
     return false
   }
   for (const o of Object.values(state.units)) {
-    if (o.silenced || o.controller !== unit.controller) continue
+    if (o.controller !== unit.controller) continue
     const f = getScript(o.name)?.protectsAlliesFromSubmerge
-    if (f && f(state, o.id, unit)) {
+    if (f && !abilitiesOff(state, o) && f(state, o.id, unit)) {
       pushLog(state, unit.controller, `${unit.name} clings on — it can't be submerged.`)
       return false
     }
@@ -1854,7 +1927,7 @@ export function trySubmerge(state: GameState, unit: UnitState, by: PlayerId): bo
     }
   }
   unit.region = 'underwater'
-  syncCarried(state, unit) // its carried artifacts (and riders) go under with it
+  syncCarried(state, unit) // its carried artifacts (and swallowed cargo) go under with it; riders on top stay
   if (!canExistIn(state, unit, 'underwater', unit.x, unit.y)) {
     pushLog(state, null, `${unit.name} drowns!`)
     const snapshot = { ...unit }
@@ -1863,6 +1936,19 @@ export function trySubmerge(state: GameState, unit: UnitState, by: PlayerId): bo
     emitEvent(state, 'onDrowned', snapshot)
   }
   return true
+}
+
+/** A strike is an interaction with the realm (rulebook: a unit interacts "if it strikes, deals damage,
+ *  casts a spell, or activates a special ability"), and a stealth mark "is lost AFTER the minion
+ *  interacts" — so once an effect's strikes are dealt, the striker loses Stealth (and can't Drop this
+ *  turn). An Infiltrated minion thus returns to its owner on the next state-based check. */
+function strikerInteracted(state: GameState, striker: UnitState): void {
+  if (!state.units[striker.id]) return
+  striker.interactedTurn = state.turn
+  if (striker.stealth) {
+    striker.stealth = false
+    pushLog(state, striker.controller, `${striker.name} loses Stealth.`)
+  }
 }
 
 /** Strike each of `targetIds` with the striker SIMULTANEOUSLY (rulebook/FAQ: a "strike
@@ -1881,7 +1967,7 @@ export function strikeAllSimultaneous(state: GameState, strikerId: string, targe
   const lethalVs = !striker.silenced ? getScript(striker.name)?.lethalVs : undefined
   const strikeHook = !striker.silenced ? getScript(striker.name)?.onStrike : undefined
   // 1. "whenever this strikes" fires for each target (a strike is an action, even at 0 power)
-  for (const tu of targets) if (strikeHook && state.units[tu.id]) strikeHook(makeCtx(state, striker.id, controller, []), tu)
+  for (const tu of targets) if (strikeHook && state.units[tu.id]) strikeHook(makeCtx(state, striker.id, striker.controller, []), tu)
   // 2. apply ALL damage before any death resolves — the strikes are simultaneous
   const snaps = targets.map((t) => ({ ...t }))
   for (const tu of targets) {
@@ -1904,10 +1990,11 @@ export function strikeAllSimultaneous(state: GameState, strikerId: string, targe
     } else {
       if (state.units[strikerId]) striker.counters = { ...striker.counters, everKilled: 1 }
       const killHook = !striker.silenced ? getScript(striker.name)?.onKill : undefined
-      if (killHook) killHook(makeCtx(state, striker.id, controller, []), snap as UnitState)
+      if (killHook) killHook(makeCtx(state, striker.id, striker.controller, [], undefined, undefined, undefined, striker.name), snap as UnitState)
       emitEvent(state, 'onUnitKilled', snap, striker)
     }
   }
+  strikerInteracted(state, striker) // after ALL the strikes — they were dealt by a still-stealthed minion
   checkStateBased(state)
 }
 
@@ -1922,7 +2009,8 @@ export function applyHealingModifier(state: GameState, n: number): number {
     if (mult !== undefined && !s.isRubble && s.controller !== null && !siteSilenced(state, s)) apply(mult)
   }
   for (const u of Object.values(state.units)) {
-    if (!u.silenced) apply(getScript(u.name)?.healingMultiplier)
+    const mult = getScript(u.name)?.healingMultiplier
+    if (mult !== undefined && !abilitiesOff(state, u)) apply(mult)
   }
   for (const a of Object.values(state.artifacts)) apply(artScript(state, a)?.healingMultiplier) // silenced → no heal mult
   for (const r of Object.values(state.auras)) apply(getScript(r.name)?.healingMultiplier)
@@ -2000,13 +2088,19 @@ export function killUnit(state: GameState, unitId: string): void {
   if (dyingUnits.has(unitId)) return
   // death-replacement effects (Gilded Aegis, Lady Iseult...) get first say
   for (const u of Object.values(state.units)) {
-    if (u.silenced) continue
     const would = getScript(u.name)?.onWouldDie
-    if (would && would(state, u.id, unit)) return
+    if (would && !abilitiesOff(state, u) && would(state, u.id, unit)) return
   }
   for (const a of Object.values(state.artifacts)) {
     const would = artScript(state, a)?.onWouldDie // silenced artifact can't replace a death
     if (would && would(state, a.id, unit)) return
+  }
+  // a killer that already left the realm in the same simultaneous exchange still replaces its victim's
+  // death (Grim Reaper traded with a Lethal minion), found through the kill credit's snapshots
+  for (const d of (state.flow?.damageCredit?.[unitId] ?? []) as { id: string; name: string }[]) {
+    if (state.units[d.id]) continue // live ones were asked above
+    const sc = getScript(d.name)
+    if (sc?.killReplacementOutlivesSelf && sc.onWouldDie?.(state, d.id, unit)) return
   }
   dyingUnits.add(unitId)
   try {
@@ -2014,19 +2108,19 @@ export function killUnit(state: GameState, unitId: string): void {
     // that damaged THIS victim in the fatal event (flow.damageCredit — strikes + ability damage,
     // scoped to the current event by checkStateBased). Else the ambient action-credit (a Magic the
     // caster just resolved = 2, or an activated/triggered ability = 3). Only units; may be several.
-    type KillerSnap = { id: string; x: number; y: number; controller: PlayerId }
-    const dmg = (state.flow?.damageCredit?.[unitId] ?? []) as { id: string; name: string; x: number; y: number; controller: PlayerId; struck: boolean }[]
+    type KillerSnap = { id: string; x: number; y: number; region?: Region; controller: PlayerId }
+    const dmg = (state.flow?.damageCredit?.[unitId] ?? []) as { id: string; name: string; x: number; y: number; region?: Region; controller: PlayerId; struck: boolean }[]
     let creditSnaps: KillerSnap[] = [] // {id,x,y,controller} — position SNAPSHOT (killer may have died in a trade)
     let creditNames: string[] = []
     let onKillHere: string[] = [] // killers whose everKilled/onKill we fire HERE (the strike path already did its own)
     if (dmg.length) {
-      creditSnaps = dmg.map((d) => ({ id: d.id, x: d.x, y: d.y, controller: d.controller }))
+      creditSnaps = dmg.map((d) => ({ id: d.id, x: d.x, y: d.y, region: d.region, controller: d.controller }))
       creditNames = dmg.map((d) => d.name)
       onKillHere = dmg.filter((d) => !d.struck).map((d) => d.id) // strikes/projectiles already fired onKill at their own site
     } else if (state.flow?.actionCredit?.unitIds?.length) {
       for (const id of state.flow.actionCredit.unitIds as string[]) {
         const u = state.units[id]
-        if (u) { creditSnaps.push({ id, x: u.x, y: u.y, controller: u.controller }); creditNames.push(u.name) }
+        if (u) { creditSnaps.push({ id, x: u.x, y: u.y, region: u.region, controller: u.controller }); creditNames.push(u.name) }
       }
       onKillHere = state.flow.actionCredit.unitIds
     }
@@ -2035,14 +2129,17 @@ export function killUnit(state: GameState, unitId: string): void {
     state.flow.killerByVictim = state.flow.killerByVictim ?? {}
     if (creditSnaps.length) state.flow.killerByVictim[unitId] = creditSnaps // read by the deathrite below (Albatross)
     const promptsBefore = state.prompts.length // to detect an ASYNC deathrite/echo (one that raises a prompt)
+    // a snapshot taken BEFORE the deathrite: a rite that takes the card elsewhere (Sir Tom Thumb's "Return
+    // to hand") doesn't undo the death — "dies nearby" triggers still see it, held artifacts included
+    const death: DeathRecord = { creditNames, creditIds, onKillHere, snap: { ...unit, carrying: [...unit.carrying] } }
     // deathrite fires before the unit leaves the realm — but a DISABLED minion "loses all
     // abilities" (rulebook glossary), so a disabled unit's Deathrite does NOT trigger.
     const script = getScript(unit.name)
     if (script?.deathrite && !unit.silenced && !isDisabled(state, unit)) {
       pushLog(state, unit.controller, `${unit.name}'s deathrite triggers.`)
       script.deathrite(makeCtx(state, unit.id, unit.controller, []))
-      // the deathrite may have moved the unit out of the realm itself (e.g. a bounce)
-      if (!state.units[unitId]) return
+      // the deathrite may have moved the unit out of the realm itself (e.g. a bounce) — it still died
+      if (!state.units[unitId]) { afterDeath(state, death.snap!, death); return }
     }
     // The Geistwood: genesis abilities here are also deathrite abilities (a disabled unit
     // loses all abilities, so this death-echo doesn't fire for one either). A site's "here"
@@ -2057,14 +2154,13 @@ export function killUnit(state: GameState, unitId: string): void {
       if (haunted) {
         pushLog(state, unit.controller, `The Geistwood echoes ${unit.name}'s genesis as it dies.`)
         script.genesis(makeCtx(state, unit.id, unit.controller, []))
-        if (!state.units[unitId]) return
+        if (!state.units[unitId]) { afterDeath(state, death.snap!, death); return }
       }
     }
     // Async deathrite/echo (it raised a prompt): the unit must stay in the realm until the rite fully
     // resolves — so its strike lands while the striker still exists (rulebook: a deathrite applies
     // BEFORE the unit leaves the realm). Defer the removal; the applyAction boundary finalizes the death
     // (completeDeferredDeaths) once the prompt chain — including the strike's own defend window — clears.
-    const death: DeathRecord = { creditNames, creditIds, onKillHere }
     if (state.prompts.length > promptsBefore) {
       state.flow.deathResolving = [...(state.flow.deathResolving ?? []), unitId]
       state.flow.pendingDeaths = [...(state.flow.pendingDeaths ?? []), { unitId, death }]
@@ -2076,17 +2172,38 @@ export function killUnit(state: GameState, unitId: string): void {
   }
 }
 
-type DeathRecord = { creditNames: string[]; creditIds: string[]; onKillHere: string[] }
+type DeathRecord = { creditNames: string[]; creditIds: string[]; onKillHere: string[]; snap?: UnitState }
+
+// Artifacts a dying unit was holding → that unit's controller. Its death drops them (uncontrolled) before
+// onAnyDeath fires, but a held "whenever a minion dies nearby" relic (Alabaster Box, Bleeding Skull) sees
+// its own bearer's death under the control it had as that death happened.
+let droppedByDeath: Map<string, PlayerId> | null = null
 
 /** Remove a dead unit from the realm and run its post-death bookkeeping (cemetery, death tracking,
  *  killer onKill/everKilled, onAnyDeath). Split out of killUnit so it can run synchronously OR — when
  *  the deathrite raised a prompt — deferred until that prompt chain resolves. */
 function finalizeDeath(state: GameState, unitId: string, death: DeathRecord): void {
   const unit = state.units[unitId]
-  if (!unit) return
+  if (!unit) {
+    // an async deathrite took the card out of the realm itself (a bounce answered later) — it still died
+    if (death.snap) afterDeath(state, death.snap, death)
+    return
+  }
+  const held = [...unit.carrying]
   removeUnitFromRealm(state, unitId)
-  toCemetery(state, unit.cardId)
+  // a kill effect already claimed the body while its Deathrite was asking (Blunderbore: banish it)
+  const banishIt = ((state.flow?.banishOnDeath ?? []) as string[]).includes(unitId)
+  if (banishIt) {
+    state.flow.banishOnDeath = (state.flow.banishOnDeath as string[]).filter((id) => id !== unitId)
+    if (!state.cards[unit.cardId]?.isToken) state.players[unit.owner].banished.push(unit.cardId)
+  } else toCemetery(state, unit.cardId)
   delete state.units[unitId]
+  afterDeath(state, { ...unit, carrying: held }, death)
+}
+
+/** the bookkeeping of a death once the unit has left the realm: log, death tracking, kill credit,
+ *  onAnyDeath. `unit` is a snapshot of the victim (with what it was carrying as it died). */
+function afterDeath(state: GameState, unit: UnitState, death: DeathRecord): void {
   pushLog(state, null, `${unit.name} dies.${death.creditNames.length ? ` (killed by ${joinNames(death.creditNames)})` : ''}`)
   // per-turn death tracking with killer attribution (Keening Banshee, Bitter Departed, Megalurker...)
   state.flow = state.flow ?? {}
@@ -2100,11 +2217,15 @@ function finalizeDeath(state: GameState, unitId: string, death: DeathRecord): vo
     const k = state.units[kid]
     if (!k) continue
     k.counters = { ...k.counters, everKilled: 1 }
-    const hook = !k.silenced ? getScript(k.name)?.onKill : undefined
-    if (hook) hook(makeCtx(state, k.id, k.controller, []), unit)
+    const hook = getScript(k.name)?.onKill
+    if (hook && !abilitiesOff(state, k)) hook(makeCtx(state, k.id, k.controller, []), unit)
   }
   trackDeathAchievements(state, unit, death)
-  emitEvent(state, 'onAnyDeath', { ...unit })
+  const prevDropped = droppedByDeath
+  droppedByDeath = new Map(unit.carrying.map((id) => [id, unit.controller]))
+  try {
+    emitEvent(state, 'onAnyDeath', { ...unit })
+  } finally { droppedByDeath = prevDropped }
 }
 
 /** Achievements that key off a KILL and its cause — resolved here where the victim + killer credit
@@ -2157,6 +2278,7 @@ export function isDyingUnit(state: GameState, unit: UnitState): boolean {
   if (unit.isAvatar) return false // avatars go to death's door, never removed here
   if (((state.flow?.pendingDeaths ?? []) as { unitId: string }[]).some((d) => d.unitId === unit.id)) return true
   if (((state.flow?.deathResolving ?? []) as string[]).includes(unit.id)) return true
+  if (((state.flow?.lethalDoomed ?? []) as string[]).includes(unit.id)) return true
   const def = effDefence(state, unit)
   return unit.damage > 0 && def >= 0 && unit.damage >= def
 }
@@ -2172,10 +2294,28 @@ export function completeDeferredDeaths(state: GameState): void {
 }
 
 /** notify every scripted card in play about a game event */
-type EventHook = 'onAnyDeath' | 'onUnitEnters' | 'onSpellCast' | 'onUnitEntersSquare' | 'onCardDrawn' | 'onUnitTapped' | 'onAllyStrikesAvatar' | 'onSitePlayed' | 'onUnitAttacked' | 'onUnitKilled' | 'onSiteDamaged' | 'onUnitDamaged' | 'onLifeLost' | 'onDeathsDoor' | 'onAllyDefends' | 'onDrowned'
+type EventHook = 'onAnyDeath' | 'onSiteAttackedSuccessfully' | 'onUnitEnters' | 'onSpellCast' | 'onUnitEntersSquare' | 'onCardDrawn' | 'onUnitTapped' | 'onAllyStrikesAvatar' | 'onSitePlayed' | 'onUnitAttacked' | 'onUnitKilled' | 'onSiteDamaged' | 'onUnitDamaged' | 'onLifeLost' | 'onDeathsDoor' | 'onAllyDefends' | 'onDrowned'
 
 export function emitEvent(state: GameState, hook: EventHook, ...args: any[]): void {
   emitEventWhere(state, undefined, hook, ...args)
+}
+
+// Units that fell in the same simultaneous moment as the event being emitted (a fight's strikes): Codex
+// Fight resolves "kill" effects BEFORE dead minions are placed, so their abilities still hear it.
+let fallenListeners: UnitState[] = []
+
+/** emitEvent that the given just-fallen units (pre-death snapshots) also hear — see fallenListeners */
+export function emitEventWithFallen(state: GameState, fallen: UnitState[], hook: EventHook, ...args: any[]): void {
+  const prev = fallenListeners
+  fallenListeners = fallen.filter((u) => !state.units[u.id])
+  try { emitEventWhere(state, undefined, hook, ...args) } finally { fallenListeners = prev }
+}
+
+/** a unit that died but whose removal is parked behind its own Deathrite's question (see killUnit):
+ *  it is still on the board, yet it was killed all the same */
+export function deathPending(state: GameState, unitId: string): boolean {
+  return ((state.flow?.pendingDeaths ?? []) as { unitId: string }[]).some((d) => d.unitId === unitId) ||
+    ((state.flow?.deathResolving ?? []) as string[]).includes(unitId)
 }
 
 /** emitEvent, keeping only the listeners whose controller `keep` accepts */
@@ -2185,7 +2325,7 @@ export function emitEventWhere(
   hook: EventHook,
   ...args: any[]
 ): void {
-  const listeners: { id: string; name: string; controller: PlayerId }[] = []
+  const listeners: TriggerListener[] = []
   // hook first: only cards that handle this event can be listeners, so skip the silence/disable
   // scans (board-wide, per entity) for everything else. Those checks are pure, so the snapshot of
   // who listens — taken before any handler runs — is unchanged.
@@ -2195,11 +2335,16 @@ export function emitEventWhere(
     // that is itself entering/acting/in a battle, so its own on-entry/strike triggers still fire.
     if (handles(u.name) && !u.silenced && !isDisabled(state, u)) listeners.push({ id: u.id, name: u.name, controller: u.controller })
   }
+  for (const u of fallenListeners) {
+    if (handles(u.name) && !u.silenced && !u.disabled) listeners.push({ id: u.id, name: u.name, controller: u.controller, fallen: true })
+  }
   for (const s of Object.values(state.sites)) {
     if (s.controller !== null && handles(s.name) && !siteSilenced(state, s)) listeners.push({ id: s.id, name: s.name, controller: s.controller })
   }
   for (const a of Object.values(state.artifacts)) {
-    const controller = artifactActor(state, a) // an uncontrolled artifact only listens if its effect names no player
+    // an uncontrolled artifact only listens if its effect names no player — or if it was just dropped by
+    // the dying bearer this onAnyDeath is about (it was still held as the death happened)
+    const controller = artifactActor(state, a) ?? (hook === 'onAnyDeath' ? droppedByDeath?.get(a.id) ?? null : null)
     if (controller !== null && handles(a.name) && !artifactSilenced(state, a)) listeners.push({ id: a.id, name: a.name, controller })
   }
   for (const r of Object.values(state.auras)) if (handles(r.name)) listeners.push({ id: r.id, name: r.name, controller: r.controller })
@@ -2304,7 +2449,7 @@ registerCont('trigger:order', (state, c: { hook: string; others: TriggerListener
   runTriggers(state, c.hook, [...c.others, ...order.map((i) => c.acting[i]), ...c.idle], args)
 })
 
-type TriggerListener = { id: string; name: string; controller: PlayerId }
+type TriggerListener = { id: string; name: string; controller: PlayerId; fallen?: boolean }
 
 /** Run event triggers in order, ONE AT A TIME: a trigger that asks something resolves completely before
  *  the next one runs, so the rest wait in flow.pendingTriggers (drained by runTurnSteps, ahead of any
@@ -2316,7 +2461,7 @@ function runTriggers(state: GameState, hook: string, listeners: TriggerListener[
     if (!fn) continue
     // the listener may have left play due to an earlier listener's effect
     const inZone = state.players.some((p) => p.cemetery.includes(l.id) || p.hand.includes(l.id))
-    if (!state.units[l.id] && !state.sites[l.id] && !state.artifacts[l.id] && !state.auras[l.id] && !inZone) continue
+    if (!l.fallen && !state.units[l.id] && !state.sites[l.id] && !state.artifacts[l.id] && !state.auras[l.id] && !inZone) continue
     const asked = state.prompts.length
     fn(makeCtx(state, l.id, l.controller, []), ...args)
     if (state.prompts.length > asked && i < listeners.length - 1) {
@@ -2342,7 +2487,7 @@ export function emitUnitEnters(state: GameState, unit: UnitState): void {
   // (Order of the White Wing — no genesis, no enter-triggers, no Lance)
   for (const u of Object.values(state.units)) {
     const f = getScript(u.name)?.interceptsUnitEnter
-    if (f && !u.silenced && u.id !== unit.id && f(state, u.id, unit)) {
+    if (f && u.id !== unit.id && !abilitiesOff(state, u) && f(state, u.id, unit)) {
       const card = state.cards[unit.cardId]
       delete state.units[unit.id]
       if (card && !card.isToken) state.players[card.owner].banished.push(card.id)
@@ -2353,7 +2498,7 @@ export function emitUnitEnters(state: GameState, unit: UnitState): void {
   // "provides ①" cards grant their mana the moment they enter the realm,
   // just like sites (Cores FAQ; Älvalinne Dryads)
   const provides = getScript(unit.name)?.extraManaEachTurn
-  if (provides && !unit.silenced) {
+  if (provides && !abilitiesOff(state, unit)) {
     const n = typeof provides === 'function' ? provides(state, unit.id) : provides
     if (n > 0) {
       state.players[unit.controller].mana += n
@@ -2431,13 +2576,20 @@ export function emitUnitEnters(state: GameState, unit: UnitState): void {
  *  once the action resolves — so a multi-token summon (Plague of Frogs) is reckoned together: if you
  *  can afford ALL you must pay for all (no prompt); if you can't, you're prompted to choose which to
  *  keep. Charging per token here would silently let unpaid tokens through when short. */
-export function applySummonTax(state: GameState, unit: UnitState): void {
-  if (unit.isAvatar) return
+/** the summon tax (Mock Court) a unit would owe on entering — also asked BEFORE an ability that summons a
+ *  token, since the tax is part of that ability's total cost (Codex, Cost: "Add anything that increases cost") */
+export function summonTaxOf(state: GameState, unit: UnitState): number {
+  if (unit.isAvatar) return 0
   let tax = 0
   for (const s of Object.values(state.sites)) {
     const f = getScript(s.name)?.summonTax
     if (f && s.controller !== null && !siteSilenced(state, s)) tax += f(state, s, unit)
   }
+  return tax
+}
+
+export function applySummonTax(state: GameState, unit: UnitState): void {
+  const tax = summonTaxOf(state, unit)
   if (tax > 0) {
     state.flow = state.flow ?? {}
     state.flow.summonTaxPending = state.flow.summonTaxPending ?? []
@@ -2463,9 +2615,18 @@ export function reconcileSummonTax(state: GameState): void {
   if (!pending.length) return
   state.flow!.summonTaxPending = []
   for (const pid of [0, 1] as PlayerId[]) {
+    const p = state.players[pid]
+    // the tax belongs to the summon itself (owner ruling 2026-09-13): a token that already left the realm
+    // (a Skeleton summoned into a Bottomless Pit) was summoned all the same, so it's paid for, while mana lasts
+    const gone = pending.filter((it) => it.player === pid && !state.units[it.unitId])
+    const owed = Math.min(p.mana, gone.reduce((s, it) => s + it.tax, 0))
+    if (owed > 0) {
+      p.mana -= owed
+      bumpManaSpent(state, pid, owed)
+      pushLog(state, pid, `Pays ${owed} to the Court for summoning.`)
+    }
     const items = pending.filter((it) => it.player === pid && state.units[it.unitId])
     if (!items.length) continue
-    const p = state.players[pid]
     const total = items.reduce((s, it) => s + it.tax, 0)
     if (p.mana >= total) {
       p.mana -= total
@@ -2524,14 +2685,17 @@ export function silencerSources(state: GameState): { sites: SiteState[]; units: 
   }
 }
 
-export function hushedByStatic(state: GameState, u: UnitState, src = silencerSources(state)): boolean {
+export function hushedByStatic(state: GameState, u: UnitState, src = silencerSources(state), unitSources = true): boolean {
   if (u.isAvatar) return false
   for (const s of src.sites) {
     const f = getScript(s.name)!.silencesUnit!
     if (s.controller !== null && !s.isRubble && !siteSilenced(state, s) && f(state, s.id, u)) return true
   }
-  for (const o of src.units) {
-    if (o.id === u.id || o.silenced) continue
+  if (unitSources) for (const o of src.units) {
+    if (o.id === u.id || abilitiesOff(state, o)) continue
+    // a silencer hushed by a site / aura / artifact (Stefánia on a Bower of Bliss) silences no one, whatever
+    // order the sweep reaches the two in (codex Layer System: the removal applies before her ability)
+    if (!silenceImmune(state, o) && hushedByStatic(state, o, src, false)) continue
     if (getScript(o.name)!.silencesUnit!(state, o.id, u)) return true
   }
   for (const r of src.auras) {
@@ -2539,10 +2703,58 @@ export function hushedByStatic(state: GameState, u: UnitState, src = silencerSou
   }
   for (const artId of u.carrying) {
     const art = state.artifacts[artId]
-    const f = art ? getScript(art.name)?.silencesUnit : undefined
-    if (f && f(state, art.id, u)) return true
+    const f = art ? artScript(state, art)?.silencesUnit : undefined // a silenced Muzzle (Acid Rain) hushes no one
+    if (f && f(state, art!.id, u)) return true
   }
   return false
+}
+
+/** Silencing UNITS that would silence each other (two Sister Stefánias): Codex, Ordering Ongoing Effects —
+ *  "if two abilities would try to remove each other, use timestamp order": the one that entered the realm
+ *  FIRST applies first, so the newer is silenced and never silences back. Settled together to a fixpoint
+ *  (entry order = creation order of the unit id). Returns, per silencing unit, whether statics hush it. */
+function settleUnitSilencers(state: GameState, src: ReturnType<typeof silencerSources>): Map<string, boolean> {
+  const out = new Map<string, boolean>()
+  const units = src.units.filter((u) => !u.isAvatar)
+  if (!units.length) return out
+  const age = (id: string) => Number(/(\d+)$/.exec(id)?.[1] ?? 0)
+  // off for another reason than a silencing static: disabled, or silenced by a spell/ability
+  const hard = (o: UnitState) => isDisabled(state, o) || (!!o.silenced && !o.counters?.hushed)
+  const silences = (t: UnitState, s: UnitState) => !!getScript(t.name)!.silencesUnit!(state, t.id, s)
+  // a silencer and a DISABLER that would switch each other off (Sister Stefánia and a Hillock Basilisk on
+  // one square): the same timestamp rule. Seed the disabler's hush the way the older one decides — the
+  // older silencer hushes it; an older disabler isn't hushed (the silencer is disabled first) — so the
+  // disable checks below start from the right side of the cycle.
+  for (const s of units) {
+    for (const d of Object.values(state.units)) {
+      const dis = d.id !== s.id ? getScript(d.name)?.disablesOther : undefined
+      if (!dis || !silences(s, d) || !dis(state, d.id, s)) continue
+      if (age(s.id) < age(d.id)) {
+        if (!d.silenced) { d.silenced = true; d.counters = { ...d.counters, hushed: 1 } }
+      } else if (d.silenced && d.counters?.hushed) {
+        d.silenced = undefined
+        delete d.counters.hushed
+      }
+    }
+  }
+  const nonUnit = { ...src, units: [] as UnitState[] }
+  let hushed = new Set<string>()
+  for (let pass = 0; pass < 8; pass++) {
+    const next = new Set<string>()
+    for (const s of units) {
+      if (silenceImmune(state, s)) continue
+      const active = (t: UnitState) => t.id !== s.id && !hushed.has(t.id) && !hard(t)
+      const byUnit = units.some((t) => active(t) && silences(t, s) &&
+        // a mutual pair: the older wins — a newer silencer doesn't hush an older, active one it is hushed by
+        !(age(s.id) < age(t.id) && !hushed.has(s.id) && !hard(s) && silences(s, t)))
+      if (byUnit || hushedByStatic(state, s, nonUnit)) next.add(s.id)
+    }
+    const same = next.size === hushed.size && [...next].every((id) => hushed.has(id))
+    hushed = next
+    if (same) break
+  }
+  for (const s of units) out.set(s.id, hushed.has(s.id))
+  return out
 }
 
 /** Tabula Rasa: "Bearer is silenced, can't be modified OTHERWISE" — the artifact that makes its bearer
@@ -2567,18 +2779,38 @@ export function firesGenesisOnEntry(state: GameState, unit: UnitState): boolean 
 
 /** Site-level summon bans (No Man's Land): may a minion be summoned to (x,y,region)? A summon is a
  *  summon whether cast by a player or created by an effect (Boulevard of Bones' Skeleton, reanimation,
- *  conjuring…), so effect-summons consult this too — not just the player-cast validation. */
-export function summonBlockedAt(state: GameState, at: { x: number; y: number; region?: Region }): boolean {
+ *  conjuring…), so effect-summons consult this too — not just the player-cast validation. Given the
+ *  summoned `unit`, also its absolute entry bans: being summoned is entering (Codex Enter), and a minion
+ *  summoned where it can't enter stays where it was (Codex Summon: Gnome Hollows, Crucifix). */
+export function summonBlockedAt(state: GameState, at: { x: number; y: number; region?: Region }, unit?: UnitState): boolean {
   for (const s of Object.values(state.sites)) {
     const block = getScript(s.name)?.blockSummon
     if (block && !siteSilenced(state, s) && block(state, s, at)) return true
   }
+  if (unit && !siteEntryAllowed(state, unit, { x: -1, y: -1, region: 'offboard' as Region }, { x: at.x, y: at.y, region: at.region ?? 'surface' }, true)) return true
   return false
 }
 
+/** Lance: a minion enters play carrying a Lance artifact token — one per printed Lance (Thankless
+ *  Squire's "Lance, Lance, Lance" brings three). Every way of entering gets them, cast or effect-summoned. */
+export function giveEntryLances(state: GameState, unit: UnitState): void {
+  const kw = getKeywords(unit.name)
+  for (let n = kw.lance ? kw.lanceCount ?? 1 : 0; n > 0; n--) {
+    const lanceCardId = newId(state, 'c')
+    state.cards[lanceCardId] = { id: lanceCardId, name: 'Lance', owner: unit.controller, isToken: true }
+    const lanceId = newId(state, 'a')
+    state.artifacts[lanceId] = {
+      id: lanceId, cardId: lanceCardId, name: 'Lance', conjuredBy: unit.controller,
+      x: unit.x, y: unit.y, region: unit.region, carriedBy: unit.id, tapped: false,
+    }
+    unit.carrying.push(lanceId)
+  }
+}
+
 export function effectSummonUnit(state: GameState, unit: UnitState, genesisTargets: TargetRef[] = []): UnitState | null {
-  if (summonBlockedAt(state, unit)) return null // No Man's Land etc. forbid a summon here — nothing enters
+  if (summonBlockedAt(state, unit, unit)) return null // No Man's Land etc. forbid a summon here — nothing enters
   state.units[unit.id] = unit
+  giveEntryLances(state, unit)
   // it is entering — not yet "at rest", so an "at rest" disabler (Hillock Basilisk) doesn't bite it
   // until it settles: its Genesis fires first, THEN it's disabled once it comes to rest.
   state.flow = state.flow ?? {}
@@ -2589,7 +2821,7 @@ export function effectSummonUnit(state: GameState, unit: UnitState, genesisTarge
   // when the Genesis needs no choice; otherwise via a deferred settle step once the prompt chain drains.
   state.flow.entering = [...(((state.flow.entering as string[] | undefined)) ?? []), unit.id]
   emitUnitEnters(state, unit)
-  if (state.units[unit.id]) applySummonTax(state, unit)
+  applySummonTax(state, unit) // owed even if its entry killed it (Bottomless Pit): the summon happened
   // the unit may have been banished before it could enter (replacement effect)
   const survived = state.units[unit.id]
   const promptsBefore = state.prompts.length
@@ -2680,6 +2912,85 @@ registerCont('core:teleportPlace', (state, ctx: { unitId: string; region?: Regio
   checkStateBased(state)
 })
 
+/** Where an oversized (2x2) unit may stand: rulebook Oversized + FAQ. Its four squares must be in the
+ *  realm (wrapping across a connected edge under Magellan Globe) and each a site — a square of void is a
+ *  void location, where a minion without Voidwalk is banished ("If an oversized minion is now occupying
+ *  the void, it will be banished", Cloud City FAQ). One left straddling an edge that is no longer
+ *  connected (the Globe left play, Flat Realm Society arrived) "can't balance on the edge of the realm …
+ *  falls to one side or the other. Its controller places it in the closest legal position, controller's
+ *  choice if tied. If there's no legal position anywhere in the realm for a minion, it dies" (Mountain
+ *  Giant / Enchantress FAQ). Returns what happened to it. */
+export function settleOversizedFootprint(state: GameState, unit: UnitState): 'ok' | 'moved' | 'gone' {
+  const wrap = edgesConnected(state)
+  const voidOk = hasRegionKeyword(state, unit, 'voidwalk')
+  const squaresAt = (ax: number, ay: number) => ([[0, 0], [1, 0], [0, 1], [1, 1]] as const).map(([dx, dy]) => {
+    let x = ax + dx
+    let y = ay + dy
+    if (wrap) { x = ((x % GRID_W) + GRID_W) % GRID_W; y = ((y % GRID_H) + GRID_H) % GRID_H }
+    return { x, y }
+  })
+  const fits = (ax: number, ay: number) => squaresAt(ax, ay).every((q) => inBounds(q.x, q.y) && (voidOk || !!siteAt(state, q.x, q.y)))
+  if (fits(unit.x, unit.y)) return 'ok'
+  if (!squaresAt(unit.x, unit.y).some((q) => !inBounds(q.x, q.y))) {
+    if (unit.isAvatar) return 'ok' // avatars are never banished (and never enter the void)
+    pushLog(state, unit.controller, `${unit.name} is left over the void — banished.`)
+    banishUnit(state, unit.id)
+    return 'gone'
+  }
+  const anchors = oversizedFallAnchors(state, unit, fits)
+  if (!anchors.length) {
+    if (unit.isAvatar) return 'ok' // shrinking an avatar is handled separately
+    pushLog(state, unit.controller, `${unit.name} has nowhere to stand in the realm and dies.`)
+    killUnit(state, unit.id)
+    return 'gone'
+  }
+  placeFallen(state, unit, anchors[0])
+  if (anchors.length > 1) {
+    pushPrompt(state, {
+      player: unit.controller,
+      kind: 'chooseSquare',
+      title: `${unit.name} falls off the edge — settle it where? (top-left square of its area)`,
+      data: { squares: anchors },
+      cont: 'core:oversizedFall',
+      ctx: { unitId: unit.id, anchors },
+    })
+  }
+  return 'moved'
+}
+
+/** the closest legal anchors for a unit falling off an edge, measured across the edge it straddled */
+function oversizedFallAnchors(state: GameState, unit: UnitState, fits: (ax: number, ay: number) => boolean): { x: number; y: number }[] {
+  const around = (a: number, b: number, n: number) => { const d = Math.abs(a - b) % n; return Math.min(d, n - d) }
+  let best = Infinity
+  let out: { x: number; y: number }[] = []
+  for (let ay = 0; ay <= GRID_H - 2; ay++) {
+    for (let ax = 0; ax <= GRID_W - 2; ax++) {
+      if (!fits(ax, ay)) continue
+      const d = Math.max(around(ax, unit.x, GRID_W), around(ay, unit.y, GRID_H))
+      if (d < best) { best = d; out = [] }
+      if (d === best) out.push({ x: ax, y: ay })
+    }
+  }
+  return out
+}
+
+function placeFallen(state: GameState, unit: UnitState, at: { x: number; y: number }): void {
+  const from = { x: unit.x, y: unit.y, region: unit.region }
+  unit.x = at.x
+  unit.y = at.y
+  syncCarried(state, unit)
+  pushLog(state, unit.controller, `${unit.name} can no longer straddle the edge and settles onto solid ground.`)
+  emitUnitMoved(state, unit, from) // an animated aura's area follows its creature
+}
+
+registerCont('core:oversizedFall', (state, ctx: { unitId: string; anchors: { x: number; y: number }[] }, choice) => {
+  const u = state.units[ctx.unitId]
+  const sq = choice as { x: number; y: number } | null
+  if (!u || !sq || !ctx.anchors.some((a) => a.x === sq.x && a.y === sq.y) || (u.x === sq.x && u.y === sq.y)) return
+  placeFallen(state, u, sq)
+  checkStateBased(state)
+})
+
 /** a unit changed square/region. `via` distinguishes a BASIC move action ('move' — the unit's own
  *  Move / Move-and-Attack) from any other relocation ('forced' — teleport, pull, blown by a site…). */
 export function emitUnitMoved(state: GameState, unit: UnitState, from: { x: number; y: number; region: Region }, via: 'move' | 'step' | 'forced' = 'forced', final = true): void {
@@ -2720,7 +3031,7 @@ export function emitUnitMoved(state: GameState, unit: UnitState, from: { x: numb
 export function banishUnit(state: GameState, unitId: string): void {
   const unit = state.units[unitId]
   if (!unit || unit.isAvatar) return
-  if (getScript(unit.name)?.unbanishable && !unit.silenced) {
+  if (getScript(unit.name)?.unbanishable && !abilitiesOff(state, unit)) {
     pushLog(state, unit.controller, `${unit.name} cannot be banished.`)
     return
   }
@@ -2755,6 +3066,7 @@ export function removeUnitFromRealm(state: GameState, unitId: string): boolean {
     const art = state.artifacts[artId]
     if (art) {
       art.carriedBy = null
+      art.droppedBy = unit.id
       art.x = unit.x
       art.y = unit.y
       art.region = unit.region
@@ -2833,7 +3145,9 @@ export function notifySiteInterference(
   kind: 'modify' | 'move' | 'destroy',
   site: { id: string; x: number; y: number; controller: PlayerId | null },
   by: PlayerId | null,
-  bypassOwnSilence = false,
+  /** true: the interfered-with site itself may trigger though this act silenced it; a set: every site
+   *  this same act silenced (Leadworks / a silencer entering silences several at once) may trigger */
+  bypassOwnSilence: boolean | ReadonlySet<string> = false,
 ): void {
   for (const s of Object.values(state.sites)) {
     const hook = getScript(s.name)?.onSiteInterference
@@ -2842,7 +3156,8 @@ export function notifySiteInterference(
     // Ability): if THIS interference is the very act that removed/silenced s, s still triggers. The verbatim
     // FAQ: "as Vindictive Nation becomes silenced, its ability triggers" — being silenced counts as the
     // modification, and fires despite the silence. Only the interfered-with site itself gets this pass.
-    if (siteSilenced(state, s) && !(bypassOwnSilence && s.id === site.id)) continue
+    const silencedByThisAct = bypassOwnSilence === true ? s.id === site.id : bypassOwnSilence !== false && bypassOwnSilence.has(s.id)
+    if (siteSilenced(state, s) && !silencedByThisAct) continue
     hook(makeCtx(state, s.id, s.controller, []), kind, site, by)
   }
 }
@@ -2862,9 +3177,10 @@ export function notifySilencerEntered(state: GameState, silencer: SiteState): vo
     if (sc.silencesSiteAt && sc.silencesSiteAt(state, silencer, { x: S.x, y: S.y })) return true
     return false
   }
-  for (const S of Object.values(state.sites)) {
-    if (!silences(S)) continue
-    notifySiteInterference(state, 'modify', { id: S.id, x: S.x, y: S.y, controller: S.controller }, silencer.controller, true)
+  const silenced = Object.values(state.sites).filter(silences)
+  const act = new Set(silenced.map((S) => S.id))
+  for (const S of silenced) {
+    notifySiteInterference(state, 'modify', { id: S.id, x: S.x, y: S.y, controller: S.controller }, silencer.controller, act)
   }
 }
 
@@ -2941,9 +3257,8 @@ export function siteStillFlooded(state: GameState, siteId: string, opts?: { excl
 export function applyFlood(state: GameState, site: SiteState, by: PlayerId, opts?: { aura?: string }): boolean {
   if (site.isRubble && siteCantBeModified(state, site)) return false
   if (!site.isRubble && siteCantBeModified(state, site)) {
-    for (const u of unitsAt(state, site.x, site.y, 'surface')) {
-      if (!u.isAvatar && !effKeywords(state, u).submerge) u.tapped = true
-    }
+    // nothing else happens here: tapping the minions a failed flood washes over is Waveshaper's own text
+    // (its FAQ), which its script applies itself — Tide Naiads, Flood & co. only flood
     pushLog(state, by, `${site.name} can't be flooded.`)
     return false
   }
@@ -3034,28 +3349,35 @@ export function destroySite(state: GameState, siteId: string, sourcePlayer?: Pla
   toCemetery(state, site.cardId)
   delete state.sites[siteId]
   // destroyed sites leave rubble, not void
-  const rubbleCardId = newId(state, 'c')
-  state.cards[rubbleCardId] = { id: rubbleCardId, name: 'Rubble', owner: site.owner, isToken: true }
-  const rubbleId = newId(state, 's')
-  state.sites[rubbleId] = {
-    id: rubbleId,
-    cardId: rubbleCardId,
-    name: 'Rubble',
-    owner: site.owner,
-    controller: null,
-    x,
-    y,
-    tapped: false,
-    isRubble: true,
-    // The Flood drowns the whole realm permanently, rubble included — so a site destroyed while
-    // the realm is flooded leaves FLOODED ruins (matches The Flood's onSitePlayed / cast behavior).
-    flooded: state.flow?.realmFlooded ? true : undefined,
-  }
+  placeRubble(state, x, y, site.owner)
   pushLog(state, null, `${site.name} is destroyed and reduced to rubble.`)
   // "when this site is destroyed" (Roots of Yggdrasil)
   const hook = getScript(site.name)?.onSelfDestroyed
   if (hook) hook(makeCtx(state, siteId, site.controller ?? sourcePlayer ?? 0, []), { x, y })
   checkStateBased(state)
+}
+
+/** Put a Rubble (a neutral land site no player controls; no mana, no threshold) at the empty square
+ *  (x,y): a destroyed site's ruins, or Rubble an effect fills a void with (Geomancer, Star-seeds of Uhr,
+ *  Lavamancer). The Flood drowns the whole realm permanently, rubble included, so Rubble that appears
+ *  while the realm is flooded is flooded too. Returns the new site's id. */
+export function placeRubble(state: GameState, x: number, y: number, owner: PlayerId, opts?: { flooded?: boolean }): string {
+  const rubbleCardId = newId(state, 'c')
+  state.cards[rubbleCardId] = { id: rubbleCardId, name: 'Rubble', owner, isToken: true }
+  const rubbleId = newId(state, 's')
+  state.sites[rubbleId] = {
+    id: rubbleId,
+    cardId: rubbleCardId,
+    name: 'Rubble',
+    owner,
+    controller: null,
+    x,
+    y,
+    tapped: false,
+    isRubble: true,
+    flooded: opts?.flooded || state.flow?.realmFlooded ? true : undefined,
+  }
+  return rubbleId
 }
 
 /** A site has been REMOVED from (x,y) leaving the square EMPTY — i.e. a void (NOT destroyed-to-rubble,
@@ -3095,6 +3417,36 @@ export function banishSite(state: GameState, siteId: string): void {
 
 // ---- state-based checks ----
 
+/** A footprint that is a CHARACTERISTIC (Yog-Sothoth: "occupies all locations") follows the card's NAME, not
+ *  its Genesis: a minion transformed INTO it (Shapeshift, Monstermorphosis, a Simulacrum copy…) covers the
+ *  whole realm at once — even silenced or disabled, size being a characteristic (FAQ) — and one transformed
+ *  OUT of it shrinks back to its own square. Its "banished without five voids" is checked here too, so a
+ *  transformed one meets it at once rather than at the next turn. */
+function settleRealmFootprints(state: GameState): void {
+  for (const u of Object.values(state.units)) {
+    const script = getScript(u.name)
+    const marked = !!u.counters?.occupiesAll
+    if (!script?.occupiesAllLocations) {
+      if (marked) { u.extraSquares = []; delete u.counters!.occupiesAll }
+      continue
+    }
+    if (!marked || (u.extraSquares?.length ?? 0) !== GRID_W * GRID_H - 1) {
+      u.extraSquares = []
+      for (let x = 0; x < GRID_W; x++) for (let y = 0; y < GRID_H; y++) if (x !== u.x || y !== u.y) u.extraSquares.push({ x, y })
+      u.counters = { ...(u.counters ?? {}), occupiesAll: 1 }
+    }
+    const min = script.occupiesAllLocations.minVoids
+    if (min && !abilitiesOff(state, u)) {
+      let voids = 0
+      for (let x = 0; x < GRID_W; x++) for (let y = 0; y < GRID_H; y++) if (isVoidAt(state, x, y)) voids++
+      if (voids < min) {
+        pushLog(state, u.controller, `The realm holds only ${voids} voids — ${u.name} is banished!`)
+        banishUnit(state, u.id)
+      }
+    }
+  }
+}
+
 export function checkStateBased(state: GameState): void {
   reconcileAuraFloods(state)
   if (state.phase === 'over') return
@@ -3114,6 +3466,7 @@ export function checkStateBased(state: GameState): void {
     if (u.carrying?.length) u.carrying = u.carrying.filter((id) => state.artifacts[id])
     if (u.carryingUnits?.length) u.carryingUnits = u.carryingUnits.filter((id) => state.units[id])
   }
+  settleRealmFootprints(state)
   // Magellan Globe edge-wrap is dynamic: re-derive each standard 2x2 aura's coverage
   // from its stored anchor so it extends across / retracts from the far edge as the
   // Globe enters or leaves play. Only reconcile auras whose squares still match their
@@ -3139,7 +3492,7 @@ export function checkStateBased(state: GameState): void {
     const a: string[] = []
     const r: string[] = []
     for (const unit of Object.values(state.units)) if (getScript(unit.name)?.disablesOther) u.push(unit.id)
-    for (const art of Object.values(state.artifacts)) if (!art.carriedBy && artScript(state, art)?.disablesOther) a.push(art.id)
+    for (const art of Object.values(state.artifacts)) if (artScript(state, art)?.disablesOther) a.push(art.id)
     for (const aura of Object.values(state.auras)) if (getScript(aura.name)?.auraDisablesUnit) r.push(aura.id)
     state.flow = state.flow ?? {}
     // stamp with nextId (bumps on every entity creation) so disabledByEffect trusts
@@ -3156,11 +3509,14 @@ export function checkStateBased(state: GameState): void {
   // hushed by a silencesUnit hook carry a marker so the hush lifts when the
   // silencer leaves
   const silencers = silencerSources(state)
-  for (const u of Object.values(state.units)) {
+  const unitSilencerHush = settleUnitSilencers(state, silencers)
+  // silencing units first, so the others are judged against their settled state
+  const order = [...silencers.units, ...Object.values(state.units).filter((u) => !unitSilencerHush.has(u.id))]
+  for (const u of order) {
     if (u.isAvatar) continue
     // a unit that "can't be silenced" (Monks of Kobalsa, Bedrock, an Onslaught'd ally…) — a silencing
     // static (Root Spider, Bower of Bliss, Sisters of Silence) simply doesn't touch it.
-    const hush = (hushedByStatic(state, u, silencers) && !silenceImmune(state, u)) || silencedByOwnShield(state, u)
+    const hush = (unitSilencerHush.get(u.id) ?? (hushedByStatic(state, u, silencers) && !silenceImmune(state, u))) || silencedByOwnShield(state, u)
     if (hush && !u.silenced) {
       u.silenced = true
       u.counters = { ...u.counters, hushed: 1 }
@@ -3169,6 +3525,13 @@ export function checkStateBased(state: GameState): void {
       delete u.counters.hushed
     }
   }
+  // Land Deed: "Bearer has 'You control this site.'" is an ongoing ability (Codex, Ordering Ongoing
+  // Effects: applied in the Control layer) — the bearer's controller holds the site as soon as the
+  // bearer is on it, not at the next turn boundary (FAQ: a site gained mid-turn gives mana at once).
+  // Rubble included (FAQ: you control the Rubble). Only the site its own square holds (Mountain Giant FAQ).
+  // The control lasts only while a bearer holds the Deed there: once none does (it died, walked off, dropped
+  // it), the site goes back to whoever controlled it before the claim (flow.deedClaims).
+  applyLandDeeds(state)
   // permanent Stealth-stripping statics from sites (Watchtower)
   for (const site of Object.values(state.sites)) {
     const mode = getScript(site.name)?.stripStealth
@@ -3184,12 +3547,12 @@ export function checkStateBased(state: GameState): void {
   }
   // permanent Stealth-stripping statics (Master Tracker, Hunting Party...)
   for (const stripper of Object.values(state.units)) {
-    if (stripper.silenced) continue
     const mode = getScript(stripper.name)?.stripStealth
-    if (mode) {
+    if (mode && !abilitiesOff(state, stripper)) {
       for (const u of Object.values(state.units)) {
         if (!u.stealth || u.controller === stripper.controller) continue
-        const near = nearbySquaresW(state, stripper.x, stripper.y).some((s) => s.x === u.x && s.y === u.y)
+        // "nearby enemies" stay in the stripper's own region (Codex, Nearby)
+        const near = u.region === stripper.region && nearbySquaresW(state, stripper.x, stripper.y).some((s) => s.x === u.x && s.y === u.y)
         if (mode === 'global' || near) {
           u.stealth = false
           pushLog(state, stripper.controller, `${u.name} is spotted by ${stripper.name}!`)
@@ -3212,41 +3575,40 @@ export function checkStateBased(state: GameState): void {
       }
     }
   }
-  // Ward is an ABILITY (like Stealth): a minion or site that becomes disabled or
-  // silenced loses all abilities, so its Ward mark gutters out. Only warded things
+  // Ward mark (like Stealth): a minion or site that becomes DISABLED loses its Ward mark (Codex,
+  // Disabled). A SILENCED one keeps it (Codex, Silenced: a minion that already has a Stealth or Ward
+  // mark and then is silenced "will retain the mark!"). Only warded things
   // are checked (cheap), and once lost it stays lost until re-warded. (A minion still
   // ENTERING isn't yet "at rest", so an at-rest disabler doesn't count against it here —
   // that exemption lives in disabledByEffect, so a just-cast Archangel Michael keeps its Ward
   // while its Genesis resolves; it only loses it if it truly comes to rest still disabled.)
   for (const u of Object.values(state.units)) {
     if (!u.ward) continue
-    // Ward is an ability: only a DISABLED (or silenced) minion loses it. A Basilisk's at-rest gaze
+    // only a DISABLED minion loses it (a silenced one keeps the mark). A Basilisk's at-rest gaze
     // disables a unit sitting still (→ ward gone), but a unit that is acting / entering / PARTAKING IN
     // A BATTLE is not disabled, so it KEEPS its ward for that fight (isDisabled already exempts those).
     // "Evil minions can't be warded" (rulebook): a minion that BECOMES Evil immediately loses its ward —
     // whether printed-Evil, a Corruptor's subtype rewrite, a transform, or a control change that puts it
     // under a Corruptor. Uses INTRINSIC Evil, so a Persecutor BRAND (not real Evil) does NOT strip it.
-    if (u.silenced || isDisabled(state, u) || (!u.isAvatar && isEvilUnitIntrinsic(state, u))) {
+    if (isDisabled(state, u) || (!u.isAvatar && isEvilUnitIntrinsic(state, u))) {
       u.ward = false
       pushLog(state, u.controller, `${u.name} loses its ward.`)
     }
   }
   for (const s of Object.values(state.sites)) {
     if (!s.ward) continue
-    if (s.isRubble || siteSilenced(state, s)) {
+    if (s.isRubble || siteDisabled(state, s)) {
       s.ward = false
       if (s.controller !== null) pushLog(state, s.controller, `${s.name} loses its ward.`)
     }
   }
-  // Stealth is likewise an ability (Codex: "similar to Ward"): a minion that becomes
-  // disabled or silenced loses its Stealth token. Once removed it stays gone even if the
-  // silence/disable later lifts — it does NOT auto-return (FAQ: "permanently lose stealth
-  // = remove the token; it can gain stealth later"). This covers Jack the Ripper cast to a
-  // Mortal on a square that silences/disables HIM: his kill still resolves (it was placed
-  // on the storyline at cast, and a silenced minion may still kill), but he is revealed.
+  // Stealth likewise (Codex, Disabled: "loses Stealth and Ward marks"): a minion that becomes
+  // DISABLED loses its Stealth token. Once removed it stays gone even if the disable later lifts —
+  // it does NOT auto-return (FAQ: "permanently lose stealth = remove the token; it can gain stealth
+  // later"). A SILENCED minion keeps the mark (Codex, Silenced: "it will retain the mark!").
   for (const u of Object.values(state.units)) {
     if (!u.stealth) continue
-    if (u.silenced || isDisabled(state, u)) {
+    if (isDisabled(state, u)) {
       u.stealth = false
       pushLog(state, u.controller, `${u.name} is revealed — its Stealth is broken.`)
     }
@@ -3335,7 +3697,7 @@ export function checkStateBased(state: GameState): void {
       u.x = cage.x
       u.y = cage.y
       u.region = cage.region ?? 'surface'
-      u.tapped = true
+      tapUnit(state, u)
       u.counters = { ...u.counters, caged: 1 }
       return true
     })
@@ -3373,8 +3735,14 @@ export function checkStateBased(state: GameState): void {
     // units dying together: the NON-ACTIVE player's go first, so their deathrites resolve first
     // (Codex, Simultaneous Triggers — the same order as emitEvent's)
     const active = state.activePlayer
+    // every unit lethally damaged as this sweep starts dies in it — together: a trigger from one of them
+    // dying first (Squirming Mass gaining the dead minion's power) can't lift another out of it
+    const lethalAtSweep = new Set(Object.values(state.units)
+      .filter((u) => !u.isAvatar && u.damage > 0 && effDefence(state, u) >= 0 && u.damage >= effDefence(state, u))
+      .map((u) => u.id))
     const byTurn = Object.values(state.units).sort((a, b) => (a.controller === active ? 1 : 0) - (b.controller === active ? 1 : 0))
     for (const unit of byTurn) {
+      if (unit.controller === active) flushDeferredSelfDamaged(state) // the non-active side's deaths are done
       // A square with a site has no void: anything left in the void of a sited square
       // is placed atop it (rulebook). Do this before region-legality so voidwalkers
       // don't linger in a phantom void — and so non-voidwalkers gifted/summoned to them
@@ -3437,8 +3805,10 @@ export function checkStateBased(state: GameState): void {
         }
         continue
       }
-      // lethal accumulated damage
-      if (unit.damage >= effDefence(state, unit) && effDefence(state, unit) >= 0 && unit.damage > 0) {
+      // lethal accumulated damage, or a deferred Lethal blow
+      const doomed = ((state.flow?.lethalDoomed ?? []) as string[]).includes(unit.id)
+      if (doomed) state.flow!.lethalDoomed = (state.flow!.lethalDoomed as string[]).filter((id) => id !== unit.id)
+      if (doomed || lethalAtSweep.has(unit.id) || (unit.damage >= effDefence(state, unit) && effDefence(state, unit) >= 0 && unit.damage > 0)) {
         killUnit(state, unit.id)
         changed = true
         continue
@@ -3449,7 +3819,7 @@ export function checkStateBased(state: GameState): void {
       // leaves it alive (Arcane Barrage, one point at a time) is wiped. A Lethal-flagged blow has
       // already destroyed it via the lethal path in dealDamageToUnit before reaching here. Not a
       // `changed` cause — healing to 0 is terminal, so this never re-loops.
-      if (unit.damage > 0 && !unit.silenced && getScript(unit.name)?.healsNonlethalDamage) {
+      if (unit.damage > 0 && getScript(unit.name)?.healsNonlethalDamage && !abilitiesOff(state, unit)) {
         unit.damage = 0
         pushLog(state, unit.controller, `${unit.name} regrows its wounded heads.`)
       }
@@ -3462,46 +3832,24 @@ export function checkStateBased(state: GameState): void {
       // underwater): the aura cannot exist there, so the creature perishes.
       if (unit.counters?.animatedAura) {
         // The minion IS its enchantment. It dies if the aura is gone (DISPELLED / banished —
-        // the animation has nothing left to embody), or if it ever leaves the surface (pulled
-        // into a void, burrowed underground, submerged/flooded underwater — the aura can't
-        // exist there). onAnyDeath drops the aura; the shared card goes to the cemetery once.
+        // the animation has nothing left to embody), or if it ever leaves the surface (burrowed
+        // underground, submerged/flooded underwater — the aura can't exist there). onAnyDeath drops
+        // the aura; the shared card goes to the cemetery once. Over the void it is a minion there like
+        // any other: banished (an oversized one by the shared footprint rule below, Cloud City FAQ).
         const auraGone = !state.auras[String(unit.counters.animatedAura)]
-        if (auraGone || unit.region !== 'surface' || occupiedSquares(unit).some((s) => !siteAt(state, s.x, s.y))) {
+        if (auraGone || unit.region !== 'surface') {
           killUnit(state, unit.id)
+          changed = true
+        } else if (unit.size === '2x2') {
+          if (settleOversizedFootprint(state, unit) !== 'ok') changed = true
+        } else if (occupiedSquares(unit).some((s) => !siteAt(state, s.x, s.y))) {
+          banishUnit(state, unit.id)
           changed = true
         }
         continue
       }
       if (unit.size === '2x2') {
-        // every part of an oversized unit needs a site under it. With Magellan Globe the footprint
-        // may straddle an edge (parts wrap to the opposite edge — Mountain Giant FAQ 3).
-        const wrap = edgesConnected(state)
-        const anchorFits = (ax: number, ay: number) =>
-          ([[0, 0], [1, 0], [0, 1], [1, 1]] as const).every(([dx, dy]) => {
-            let x = ax + dx
-            let y = ay + dy
-            if (wrap) { x = ((x % GRID_W) + GRID_W) % GRID_W; y = ((y % GRID_H) + GRID_H) % GRID_H }
-            return inBounds(x, y) && siteAt(state, x, y)
-          })
-        if (!anchorFits(unit.x, unit.y)) {
-          // FAQ 4: it can no longer occupy the edge (e.g. Magellan Globe left play while it straddled)
-          // — it can't balance, so it "falls to one side": relocate to the nearest fully in-bounds,
-          // fully sited 2x2 (prefer the side it fell from — the clamped anchor). If NO legal position
-          // exists anywhere in the realm, the minion dies. (Avatars shrinking is handled separately.)
-          const cx = Math.min(Math.max(unit.x, 0), GRID_W - 2)
-          const cy = Math.min(Math.max(unit.y, 0), GRID_H - 2)
-          let placed: { x: number; y: number } | null = anchorFits(cx, cy) ? { x: cx, y: cy } : null
-          for (let ay = 0; ay <= GRID_H - 2 && !placed; ay++)
-            for (let ax = 0; ax <= GRID_W - 2 && !placed; ax++) if (anchorFits(ax, ay)) placed = { x: ax, y: ay }
-          if (!placed) {
-            banishUnit(state, unit.id)
-          } else if (placed.x !== unit.x || placed.y !== unit.y) {
-            unit.x = placed.x
-            unit.y = placed.y
-            pushLog(state, unit.controller, `${unit.name} can no longer straddle the edge and settles onto solid ground.`)
-          }
-          changed = true
-        }
+        if (settleOversizedFootprint(state, unit) !== 'ok') changed = true
         continue
       }
       if (!canExistIn(state, unit, unit.region, unit.x, unit.y)) {
@@ -3547,12 +3895,83 @@ export function checkStateBased(state: GameState): void {
   // checkStateBased, so all the simultaneous absorptions have accrued onto the artifact by now; nested
   // (trigger-driven) checks run at sbDepth > 1 and must NOT settle/reset mid-event.
   if (sbDepth === 1) settleAbsorbBreak(state)
+  flushDeferredSelfDamaged(state)
+  flushDamageSettled(state)
+  applyLandDeeds(state) // again after this settle's deaths: a dead bearer's site reverts at once
   } finally {
     sbDepth--
     // top-level settle done → survivors weren't killed by the just-resolved damage; wipe the
     // per-victim credit so a LATER, separate attack doesn't inherit these damagers as killers.
     if (sbDepth === 0 && state.flow) state.flow.damageCredit = {}
   }
+}
+
+/** Is damage landing simultaneously right now (a combat strike pass, or one card effect's damage event)?
+ *  Then a "survives damage" check must wait for the whole of it: queue it, and the listener's
+ *  onDamageSettled runs after the deaths settle (Sawbones mustn't heal between two simultaneous blows). */
+export function deferUntilDamageSettled(state: GameState, listenerId: string, victimId: string): boolean {
+  if (!state.flow?.wardAbsorbed && !inDamageEvent(state)) return false
+  state.flow.damageSettledQueue = [...((state.flow.damageSettledQueue ?? []) as { listenerId: string; victimId: string }[]), { listenerId, victimId }]
+  return true
+}
+
+function flushDamageSettled(state: GameState): void {
+  const q = state.flow?.damageSettledQueue as { listenerId: string; victimId: string }[] | undefined
+  if (!q?.length || state.flow.wardAbsorbed || inDamageEvent(state)) return
+  state.flow.damageSettledQueue = []
+  for (const d of q) {
+    const l = state.units[d.listenerId]
+    const hook = l ? getScript(l.name)?.onDamageSettled : undefined
+    if (l && hook && !abilitiesOff(state, l)) hook(makeCtx(state, l.id, l.controller, []), d.victimId)
+  }
+}
+
+/** fire the active player's "whenever this takes damage" triggers parked during a simultaneous strike pass
+ *  (see applyResolvedDamage); a unit that has left the realm since has nothing left to trigger */
+function flushDeferredSelfDamaged(state: GameState): void {
+  const q = state.flow?.deferredSelfDamaged as { unitId: string; n: number; name?: string; controller?: PlayerId }[] | undefined
+  if (!q?.length) return
+  state.flow.deferredSelfDamaged = []
+  for (const d of q) {
+    const u = state.units[d.unitId]
+    // a damage-event entry carries a snapshot: it still resolves after the unit died of that damage
+    if (!u && d.name && d.controller !== undefined) {
+      getScript(d.name)?.onSelfDamaged?.(makeCtx(state, d.unitId, d.controller, [], undefined, undefined, undefined, d.name), d.n)
+      continue
+    }
+    const s = u ? getScript(u.name) : undefined
+    if (u && s?.onSelfDamaged && !u.silenced && !isDisabled(state, u)) s.onSelfDamaged(makeCtx(state, u.id, u.controller, []), d.n)
+  }
+}
+
+/** Land Deed's ongoing control (see checkStateBased): the bearer's controller holds the site its square holds;
+ *  a claim nobody bears any more reverts to the site's previous controller. */
+function applyLandDeeds(state: GameState): void {
+  const held = new Set<string>()
+  const claims = (state.flow?.deedClaims ?? {}) as Record<string, { prev: PlayerId | null; by: PlayerId }>
+  for (const art of Object.values(state.artifacts)) {
+    if (!art.carriedBy || !artScript(state, art)?.bearerControlsSite) continue
+    const bearer = state.units[art.carriedBy]
+    const site = bearer && bearer.region !== 'void' ? siteAt(state, art.x, art.y) : undefined
+    if (!bearer || !site) continue
+    held.add(site.id)
+    if (site.controller !== bearer.controller) {
+      if (!claims[site.id]) claims[site.id] = { prev: site.controller, by: bearer.controller }
+      else claims[site.id].by = bearer.controller
+      site.controller = bearer.controller
+      pushLog(state, bearer.controller, `The Land Deed claims ${site.name}.`)
+    }
+  }
+  for (const [siteId, c] of Object.entries(claims)) {
+    if (held.has(siteId)) continue
+    const site = state.sites[siteId]
+    if (site && site.controller === c.by && c.prev !== c.by) {
+      site.controller = c.prev
+      pushLog(state, c.prev, `With no one bearing the Land Deed, ${site.name} returns to its controller.`)
+    }
+    delete claims[siteId]
+  }
+  if (Object.keys(claims).length) { state.flow = state.flow ?? {}; state.flow.deedClaims = claims } else if (state.flow?.deedClaims) delete state.flow.deedClaims
 }
 
 /** Break any absorb-monument (Makeshift Barricade) whose damage tally reached its threshold this event,
@@ -3583,10 +4002,8 @@ function settleAbsorbBreak(state: GameState): void {
 // ---- token summoning ----
 
 export function summonToken(state: GameState, name: string, owner: PlayerId, x: number, y: number, region: Region = 'surface'): UnitState | null {
-  if (summonBlockedAt(state, { x, y, region })) return null // No Man's Land etc. — the token can't be summoned here
   const def = getCard(name)
   const cardId = newId(state, 'c')
-  state.cards[cardId] = { id: cardId, name, owner, isToken: true }
   const unitId = newId(state, 'u')
   const unit: UnitState = {
     id: unitId,
@@ -3606,10 +4023,13 @@ export function summonToken(state: GameState, name: string, owner: PlayerId, x: 
     carryingUnits: [],
     usedThisTurn: {},
   }
+  if (summonBlockedAt(state, { x, y, region }, unit)) return null // No Man's Land, Crucifix… — the token can't be summoned here
+  state.cards[cardId] = { id: cardId, name, owner, isToken: true }
   state.units[unitId] = unit
+  giveEntryLances(state, unit)
   pushLog(state, owner, `A ${def.name} token appears.`)
   emitUnitEnters(state, unit)
-  if (state.units[unitId]) applySummonTax(state, unit)
+  applySummonTax(state, unit) // owed even if its entry killed it (Bottomless Pit): the summon happened
   checkStateBased(state)
   return state.units[unitId] ?? null
 }
@@ -3960,8 +4380,11 @@ export function makeCtx(
           dealDamageToUnit(state, u, n, controller, { lethal, source: damageSource })
         }
       } else {
-        dealDamage(state, target, n, controller)
+        dealDamage(state, target, n, controller, damageSource) // who dealt it matters to sites too (Panpipes of Pnom)
       }
+      // dealing damage is interacting with the realm (codex Interact): the unit whose ability dealt it (or
+      // the bearer of the artifact that did — Bull Whip) loses its Stealth
+      if (actorUnit && damageSource.kind !== 'magic' && n > 0) strikerInteracted(state, actorUnit)
     },
     // Force the pending state-based death checks now, mid-effect. Damage during an effect is otherwise
     // simultaneous (deaths settle only when the whole effect ends), so a script that must OBSERVE a
@@ -3982,19 +4405,22 @@ export function makeCtx(
       if (!('unit' in target)) {
         // striking a site: no unit hooks, just the damage
         dealDamage(state, target, power, controller)
+        strikerInteracted(state, attacker)
         return
       }
       const tu = state.units[target.unit]
       if (!tu) return
       // "whenever this unit strikes" — fires even at 0 power (a strike still happened)
+      // the striker's OWN triggers run for its controller, whoever's effect made it strike (Backstab on an
+      // enemy minion: "kill an enemy" is judged from that minion's side)
       const strikeHook = !attacker.silenced ? getScript(attacker.name)?.onStrike : undefined
-      if (strikeHook) strikeHook(makeCtx(state, attacker.id, controller, []), tu)
+      if (strikeHook) strikeHook(makeCtx(state, attacker.id, attacker.controller, []), tu)
       // carried artifacts watching their bearer's blows (The Rack) — an EFFECT strike (Grapple Shot
       // arrival, Hotwheel's roll…) is a real strike, so these fire here exactly as on a combat blow.
       for (const artId of attacker.carrying) {
         const bart = state.artifacts[artId]
         const bhook = bart ? getScript(bart.name)?.bearerOnStrike : undefined
-        if (bart && bhook) bhook(makeCtx(state, bart.id, controller, []), bart.id, tu)
+        if (bart && bhook) bhook(makeCtx(state, bart.id, attacker.controller, []), bart.id, tu)
       }
       const snapshot = { ...tu } // pre-death snapshot for kill hooks (position intact)
       const wasAvatar = tu.isAvatar
@@ -4017,9 +4443,10 @@ export function makeCtx(
         // everKilled bookkeeping only applies while the striker is still alive.
         if (state.units[attacker.id]) attacker.counters = { ...attacker.counters, everKilled: 1 }
         const killHook = !attacker.silenced ? getScript(attacker.name)?.onKill : undefined
-        if (killHook) killHook(makeCtx(state, attacker.id, controller, []), snapshot as UnitState)
+        if (killHook) killHook(makeCtx(state, attacker.id, attacker.controller, [], undefined, undefined, undefined, attacker.name), snapshot as UnitState)
         emitEvent(state, 'onUnitKilled', snapshot, attacker)
       }
+      strikerInteracted(state, attacker)
       checkStateBased(state)
     },
     kill: (unitId) => {
@@ -4079,11 +4506,11 @@ export function makeCtx(
     },
     tap: (unitId) => {
       const u = state.units[unitId]
-      if (u) u.tapped = true
+      if (u) tapUnit(state, u)
     },
     untap: (unitId) => {
       const u = state.units[unitId]
-      if (u) u.tapped = false
+      if (u) untapUnit(state, u)
     },
     destroySite: (siteId, by, sacrifice) => destroySite(state, siteId, by ?? controller, sacrifice),
     disable: (unitId) => {
@@ -4147,6 +4574,11 @@ export function makeCtx(
       if (opts?.filter) ids = ids.filter((id) => opts.filter!(state.cards[id].name))
       const count = Math.min(opts?.pick ?? 1, ids.length)
       if (count === 0) return
+      // a forced discard with no real choice (every candidate must go) resolves without a prompt
+      if (!opts?.upTo && count === ids.length) {
+        for (const id of ids) discardCardId(state, player, id)
+        return
+      }
       pushPrompt(state, {
         player,
         kind: 'chooseCards',

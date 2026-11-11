@@ -2,9 +2,9 @@ import { getCard, type ParsedKeywords } from '../cards/db'
 import type { GameState, PlayerId, Region, Step, UnitState, SiteState, ArtifactState, AuraState } from './types'
 import { GRID_H, GRID_W, inBounds, isOrthAdjacent, isDiagAdjacent, siteAt, isWaterSite, sameSquare, nearbySquaresW, orthAdjacentWrapped, occupiedSquares, edgesConnected } from './grid'
 import { emitUnitMoved, makeCtx, pushLog, recordMoveAnim } from './effects'
-import { detachFromCarrier } from './carrying'
+import { detachFromCarrier, syncCarried } from './carrying'
 import { getScript } from '../cards/scripts/registry'
-import { effKeywords, isDisabled, isUnmodifiable, immobilizeImmune, terrainAt, siteSilenced, artifactSilenced, protectedFromSites } from './statics'
+import { abilitiesOff, effKeywords, isDisabled, isUnmodifiable, immobilizeImmune, terrainAt, siteSilenced, artifactSilenced, protectedFromSites } from './statics'
 
 
 /** Do the SITE / artifact entry restrictions (Gnome Hollows' power cap, Great Wall, walls…) permit
@@ -141,8 +141,8 @@ export interface StepCtx {
   bogSquares: { x: number; y: number }[] // Bog-immobilized sites (empty if the unit can't be immobilized)
   walls: AuraState[] // border-wall auras with a wallBlocks hook
   traps: AuraState[] // Sphere-style traps holding THIS avatar where it stands
-  selfFilter: ((state: GameState, unit: UnitState, from: Step, to: Step) => boolean) | undefined // own stepFilter, unless silenced
-  freeOwn: ((state: GameState, unit: UnitState, from: Step, to: Step) => boolean) | undefined // own freeStep, unless silenced
+  selfFilter: ((state: GameState, unit: UnitState, from: Step, to: Step) => boolean) | undefined // own stepFilter, unless silenced/disabled
+  freeOwn: ((state: GameState, unit: UnitState, from: Step, to: Step) => boolean) | undefined // own freeStep, unless silenced/disabled
   freeSites: SiteState[] // non-silenced sites with a siteFreeStep hook
   freeArts: ArtifactState[] // non-silenced artifacts with an artifactFreeStep hook
   extras: Map<string, HookExtras> // per FROM square: what the extra-step hooks grant (filled on first use)
@@ -164,7 +164,7 @@ function hookExtras(state: GameState, unit: UnitState, from: Step, ctx: StepCtx)
   const k = stepKey(from)
   const hit = ctx.extras.get(k)
   if (hit) return hit
-  const own = (!unit.silenced && getScript(unit.name)?.extraSteps?.(state, unit, from, unit.id)) || []
+  const own = (!unit.silenced && !ctx.movingDisabled && getScript(unit.name)?.extraSteps?.(state, unit, from, unit.id)) || []
   const granted = ctx.stepGranters.map((g) => getScript(g.name)!.grantsExtraSteps!(state, g.id, unit, from))
   const site = ctx.siteGranters.map((st) => getScript(st.name)!.extraSteps!(state, unit, from, st.id))
   const art = ctx.artGranters.map((a) => getScript(a.name)!.extraSteps!(state, unit, from, a.id))
@@ -218,8 +218,9 @@ export function buildStepCtx(state: GameState, unit: UnitState): StepCtx {
   const traps = unit.isAvatar
     ? Object.values(state.auras).filter((r) => getScript(r.name)?.auraTrapsAvatars && r.squares.some((q) => q.x === unit.x && q.y === unit.y))
     : []
-  const selfFilter = unit.silenced ? undefined : getScript(unit.name)?.stepFilter
-  const freeOwn = unit.silenced ? undefined : getScript(unit.name)?.freeStep
+  // a disabled mover has no abilities: its own step filter / free steps are off too
+  const selfFilter = unit.silenced || movingDisabled ? undefined : getScript(unit.name)?.stepFilter
+  const freeOwn = unit.silenced || movingDisabled ? undefined : getScript(unit.name)?.freeStep
   const freeSites = Object.values(state.sites).filter((st) => getScript(st.name)?.siteFreeStep && !siteSilenced(state, st))
   const freeArts = Object.values(state.artifacts).filter((a) => getScript(a.name)?.artifactFreeStep && !artifactSilenced(state, a))
   return {
@@ -392,7 +393,7 @@ export function isFreeStep(state: GameState, unit: UnitState, from: Step, to: St
     return false
   }
   const free = getScript(unit.name)?.freeStep
-  if (free && !unit.silenced && free(state, unit, from, to)) return true
+  if (free && !abilitiesOff(state, unit) && free(state, unit, from, to)) return true
   // sites can grant free steps too (Updraft Ridge)
   for (const s of Object.values(state.sites)) {
     const sf = getScript(s.name)?.siteFreeStep
@@ -688,7 +689,7 @@ export function resolveMovement(state: GameState, unit: UnitState, path: Step[],
       blaze.squares.push({ x: from.x, y: from.y })
     }
     // growing bodies keep every square they have ever occupied (Megamoeba, Aethermoeba)
-    if (getScript(unit.name)?.occupiesAllVisited && !unit.silenced) {
+    if (getScript(unit.name)?.occupiesAllVisited && !abilitiesOff(state, unit)) {
       unit.extraSquares = unit.extraSquares ?? []
       if (!unit.extraSquares.some((s) => s.x === from.x && s.y === from.y)) {
         unit.extraSquares.push({ x: from.x, y: from.y, region: from.region })
@@ -711,6 +712,9 @@ export function resolveMovement(state: GameState, unit: UnitState, path: Step[],
       const carrier = state.units[unit.carriedBy]
       if (!carrier || carrier.x !== unit.x || carrier.y !== unit.y || carrier.region !== unit.region) detachFromCarrier(state, unit)
     }
+    // its riders come along on its OWN step — into another region too (it confers Burrowing / Submerge /
+    // Voidwalk) — before any entry trigger's state check could treat the region change as forced
+    if (unit.carryingUnits.length) syncCarried(state, unit, undefined, true)
     // walls the step passed through burn/prick the mover (Wall of Fire, Brambles)
     if (from.region === 'surface' && step.region === 'surface') {
       for (const r of Object.values(state.auras)) {

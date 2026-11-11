@@ -6,7 +6,7 @@ import { isCarriableArtifact } from '../../../engine/statics'
 // 'Caster snatches and picks up target nearby artifact they can carry.'
 registerScript('Telekinesis', {
   // 'they can carry' — Monuments and Automatons are not carriable
-  targets: [{ what: 'artifact', count: 1, targeted: true, label: 'target nearby artifact', filter: (state, cand) => !!state.artifacts[cand?.id] && isCarriableArtifact(state.artifacts[cand.id].name) }],
+  targets: [{ what: 'artifact', count: 1, targeted: true, where: 'nearby', label: 'target nearby artifact', filter: (state, cand) => !!state.artifacts[cand?.id] && isCarriableArtifact(state.artifacts[cand.id].name) }],
   onCast: (ctx) => {
     const t = ctx.targets[0]
     const caster = ctx.caster!

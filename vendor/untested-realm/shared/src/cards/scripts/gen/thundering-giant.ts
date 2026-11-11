@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { pushLog } from '../../../engine/effects'
+import { pushLog, tapUnit } from '../../../engine/effects'
 import { nearbySquaresW, unitsAt } from '../../../engine/grid'
 import { regionPresentAt } from '../../../engine/statics'
 
@@ -30,7 +30,7 @@ registerScript('Thundering Giant', {
       if (!ctx.teleport(self.id, sq.x, sq.y, region)) return
       if (!ctx.state.units[self.id]) return
       for (const u of unitsAt(ctx.state, sq.x, sq.y, region)) {
-        if (u.id !== self.id) u.tapped = true
+        if (u.id !== self.id) tapUnit(ctx.state, u)
       }
       pushLog(ctx.state, ctx.controller, 'THOOM. The very ground staggers everyone nearby.')
     },

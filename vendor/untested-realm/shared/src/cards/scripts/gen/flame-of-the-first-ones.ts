@@ -7,7 +7,9 @@ registerScript('Flame of the First Ones', {
   onUnitEntersSquare: (ctx, moved, _from, _via, final) => {
     if (final === false) return // "whenever the flame STOPS at a new site" — not squares merely passed through
     const art = ctx.state.artifacts[ctx.sourceId]
-    if (!art || art.carriedBy !== moved.id) return
+    // carried in by `moved` — or dropped there as its bearer died on arrival (Briar Patch): the flame still
+    // stopped at the new site, for the player who controlled it as it stopped (the listener's controller)
+    if (!art || (art.carriedBy !== moved.id && !(art.carriedBy === null && art.droppedBy === moved.id))) return
     const site = siteAt(ctx.state, moved.x, moved.y)
     if (!site) return
     const key = `flame:${site.id}`

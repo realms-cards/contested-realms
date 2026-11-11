@@ -6,6 +6,10 @@ import type { UnitState } from '../../../engine/types'
 // 'Minions below nearby sites die.'
 registerScript('Sea of Ash', {
   onUnitEntersSquare: (ctx, moved) => seaOfAshCheck(ctx, moved),
+  // a passive ability: minions already below a nearby site die the moment Sea of Ash arrives
+  genesis: (ctx) => {
+    for (const u of Object.values(ctx.state.units)) seaOfAshCheck(ctx, u)
+  },
   startOfEachTurn: (ctx) => {
     for (const u of Object.values(ctx.state.units)) seaOfAshCheck(ctx, u)
   },

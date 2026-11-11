@@ -1,5 +1,5 @@
 import { registerScript, type EffectAPI } from '../registry'
-import { pushLog, killUnit, checkStateBased, emitUnitMoved } from '../../../engine/effects'
+import { pushLog, killUnit, checkStateBased, emitUnitMoved, tapUnit } from '../../../engine/effects'
 import { orthAdjacentWrapped, siteAt, unitsAt } from '../../../engine/grid'
 import { isLegalStep } from '../../../engine/movement'
 
@@ -22,7 +22,7 @@ registerScript('Purge Juggernaut', {
       if (!self || !sq) return
       const from = { x: self.x, y: self.y, region: self.region }
       const to = { x: sq.x, y: sq.y, region: self.region }
-      self.tapped = true
+      tapUnit(ctx.state, self)
       if (isLegalStep(ctx.state, self, from, to)) { self.x = sq.x; self.y = sq.y; emitUnitMoved(ctx.state, self, from) }
       if (ctx.state.units[self.id]) purgeKill(ctx, self.x, self.y)
     },
@@ -32,7 +32,7 @@ registerScript('Purge Juggernaut', {
 // Taps the Juggernaut and kills every other (non-avatar) minion at (x,y).
 function purgeKill(ctx: EffectAPI, x: number, y: number): void {
   const self = ctx.state.units[ctx.sourceId]
-  if (self) self.tapped = true
+  if (self) tapUnit(ctx.state, self)
   for (const u of unitsAt(ctx.state, x, y, self?.region ?? 'surface')) {
     if (!u.isAvatar && u.id !== ctx.sourceId) killUnit(ctx.state, u.id)
   }

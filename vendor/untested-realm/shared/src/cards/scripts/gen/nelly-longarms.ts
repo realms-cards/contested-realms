@@ -22,7 +22,7 @@ registerScript('Nelly Longarms', {
       if (impact.candidates.length === 1) return grabPull(ctx, self.id, impact.candidates[0])
       // a projectile hit, not a target: a Ward doesn't break over it (Codex, Ward)
       ctx.ask(
-        { kind: 'chooseTargets', title: 'Grab — which unit do you seize?', data: { candidates: impact.candidates, count: 1, kind: 'unit', notTargeted: true } },
+        { kind: 'chooseTargets', title: 'Grab — which unit do you seize?', data: { candidates: impact.candidates, count: 1, upTo: false, kind: 'unit', notTargeted: true } },
         'grabPick',
         { selfId: self.id },
       )

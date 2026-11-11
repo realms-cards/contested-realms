@@ -1,4 +1,4 @@
-import { registerScript } from '../registry'
+import { registerScript, isStrikeDamage } from '../registry'
 import { pushLog } from '../../../engine/effects'
 
 // "Damage dealt to units by Hemogolem's strikes heals you, but damage it takes
@@ -8,7 +8,7 @@ registerScript('Hemogolem', {
     const self = ctx.state.units[ctx.sourceId]
     if (!self) return
     // the golem's strike connected: drink the blood
-    if (source?.kind === 'strike' && source.attackerId === self.id && victim.id !== self.id) {
+    if (isStrikeDamage(source) && source?.attackerId === self.id && victim.id !== self.id) {
       ctx.gainLife(ctx.controller, amount)
       pushLog(ctx.state, ctx.controller, `The Hemogolem feeds you ${amount} life.`)
       return

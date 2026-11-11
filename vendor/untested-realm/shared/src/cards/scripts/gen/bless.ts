@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { nearbySquaresW, unitsAt } from '../../../engine/grid'
-import { pushLog, wardUnit } from '../../../engine/effects'
+import { pushLog, wardUnit, wardSite } from '../../../engine/effects'
 import { isEvilU } from '../multi-card-utils/is-evil-u'
 
 // 'Ward a nearby minion or site.'
@@ -26,7 +26,7 @@ registerScript('Bless', {
       const u = ctx.state.units[id]
       const s = ctx.state.sites[id]
       if (u) wardUnit(ctx.state, u)
-      if (s) s.ward = true // sites have no Evil clause — kept direct
+      if (s) wardSite(ctx.state, s, ctx.controller) // sites have no Evil clause
       pushLog(ctx.state, ctx.controller, 'A ward of light descends.')
     },
   },

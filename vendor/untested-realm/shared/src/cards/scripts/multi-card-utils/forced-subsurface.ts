@@ -47,7 +47,7 @@ export function forcedSubsurface(terrain: 'land' | 'water'): CardScript {
         return ctx.log(occupiedSquares(u).length > 1 ? straddleMsg(u.name) : noneMsg)
       if (moveProtected(ctx.state, u, ctx.controller)) return ctx.log(`${u.name} holds its ground.`)
       u.region = region
-      syncCarried(ctx.state, u) // carried artifacts/units are dragged down along with the bearer
+      syncCarried(ctx.state, u) // carried artifacts (and swallowed cargo) go down with the bearer; riders on top stay
       pushLog(ctx.state, ctx.controller, sunkMsg(u.name))
       checkStateBased(ctx.state)
     },

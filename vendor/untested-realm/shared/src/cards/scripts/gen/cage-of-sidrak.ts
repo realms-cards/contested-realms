@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { pushLog } from '../../../engine/effects'
+import { pushLog, tapUnit } from '../../../engine/effects'
 import { effAttack } from '../../../engine/statics'
 
 // 'Genesis → Lock all minions with 2 or less power in this cage, tapped and disabled.'
@@ -24,7 +24,7 @@ registerScript('Cage of Sidrak', {
       ctx.teleport(id, cage.x, cage.y, cage.region ?? 'surface') // a genuine teleport into the Cage
       const now = ctx.state.units[id]
       if (!now || now.x !== cage.x || now.y !== cage.y) continue // couldn't be locked in (move-protected / can't enter)
-      now.tapped = true
+      tapUnit(ctx.state, now)
       now.counters = { ...now.counters, caged: 1 }
       ctx.state.flow.cagedUnits.push({ unitId: id, cageId: cage.id })
       n++

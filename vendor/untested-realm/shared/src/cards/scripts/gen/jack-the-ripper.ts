@@ -6,16 +6,17 @@ import { pushLog, checkStateBased, killUnit } from '../../../engine/effects'
 // 'Stealth / May be cast to any Mortal, silencing then killing them, without
 // breaking Stealth.'
 registerScript('Jack the Ripper', {
-  summonAnywhere: true,
+  // "MAY be cast to any Mortal": an extra permission on top of everywhere a minion can normally be cast
+  summonAnywhere: (state, _player, at) => unitsAt(state, at.x, at.y, at.region).some((u) => !u.isAvatar && hasSubtype(state, u, 'Mortal')),
   genesis: (ctx) => {
     let self = ctx.state.units[ctx.sourceId]
     if (!self) return
     // FAQ (Jack the Ripper): the "silence then kill" is placed on the storyline when he is
     // CAST and resolves as he enters. Continuous statics apply the instant he enters — BEFORE
     // his storyline kill resolves — so settle them now, while the target Mortal is still alive.
-    // This matters because that Mortal may itself be Jack's silencer (e.g. Sister Stefánia,
-    // "other nearby minions are silenced"): being silenced/disabled on entry breaks his Stealth
-    // (checkStateBased) even though he then kills the silencer and the silence lifts.
+    // This matters because that Mortal may itself be Jack's DISABLER: being disabled on entry
+    // breaks his Stealth (checkStateBased) even though the disable may lift later. Being merely
+    // SILENCED on entry (Sister Stefánia) doesn't: a silenced minion keeps its Stealth mark (Codex).
     checkStateBased(ctx.state)
     self = ctx.state.units[ctx.sourceId]
     if (!self) return

@@ -1,4 +1,5 @@
 import { registerScript } from '../registry'
+import { tapUnit } from '../../../engine/effects'
 import { nearbySquaresW, unitsAt } from '../../../engine/grid'
 
 // 'At the start of your turn, tap target nearby enemy.'
@@ -20,7 +21,7 @@ registerScript('Tooth Faeries', {
     pester: (ctx, _c, choice) => {
       const id = Array.isArray(choice) ? choice[0] : choice
       const u = typeof id === 'string' ? ctx.state.units[id] : null
-      if (u) u.tapped = true
+      if (u) tapUnit(ctx.state, u)
     },
   },
 })

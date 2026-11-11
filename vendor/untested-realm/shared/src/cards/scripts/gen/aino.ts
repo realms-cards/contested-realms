@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { GRID_H, siteAt } from '../../../engine/grid'
+import { GRID_H, siteAt, realmIsFlat } from '../../../engine/grid'
 import { pushLog } from '../../../engine/effects'
 import { isLegalStep, takeOwnStep } from '../../../engine/movement'
 import type { GameState, Step, UnitState } from '../../../engine/types'
@@ -11,6 +11,7 @@ import type { GameState, Step, UnitState } from '../../../engine/types'
 // resolves: `flow.ainoSlip` names the Aino taking it, and her extraSteps offers it then.
 function slipStep(state: GameState, unit: UnitState): Step | null {
   if (unit.region !== 'surface' || (unit.y !== 0 && unit.y !== GRID_H - 1)) return null
+  if (realmIsFlat(state)) return null // Flat Realm Society: the edges can't be crossed
   const y = unit.y === 0 ? GRID_H - 1 : 0
   return siteAt(state, unit.x, y) ? { x: unit.x, y, region: 'surface' } : null
 }

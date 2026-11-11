@@ -1,5 +1,6 @@
 import { registerScript } from '../registry'
 import { unitsAt } from '../../../engine/grid'
+import { disableUntilYourNextTurn } from '../multi-card-utils/disable-until-next-turn'
 
 // "Deal 1 damage to each minion here. They're disabled until your next turn."
 registerScript('Psionic Blast', {
@@ -7,7 +8,7 @@ registerScript('Psionic Blast', {
     const c = ctx.caster!
     for (const u of unitsAt(ctx.state, c.x, c.y, c.region)) {
       if (u.isAvatar) continue
-      u.modifiers.push({ kind: 'keyword', keyword: 'disabled', duration: 'untilYourNextTurn', turn: ctx.state.turn, sourcePlayer: ctx.controller })
+      disableUntilYourNextTurn(ctx.state, u.id, ctx.controller)
       ctx.dealDamage({ unit: u.id }, 1)
     }
   },

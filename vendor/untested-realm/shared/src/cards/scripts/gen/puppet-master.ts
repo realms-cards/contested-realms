@@ -2,6 +2,7 @@ import { registerScript } from '../registry'
 import { pushLog } from '../../../engine/effects'
 import { unitsAt } from '../../../engine/grid'
 import type { PlayerId } from '../../../engine/types'
+import { takeControl } from '../multi-card-utils/take-control'
 
 // 'Genesis → Gain control of all tapped minions here until Puppet Master leaves the realm.'
 registerScript('Puppet Master', {
@@ -11,9 +12,10 @@ registerScript('Puppet Master', {
     // "tapped minions here" = the Puppet Master's own location (its region), not a burrowed/submerged one below
     for (const u of unitsAt(ctx.state, self.x, self.y, self.region)) {
       if (u.isAvatar || !u.tapped || u.controller === ctx.controller) continue
+      const back = u.controller
+      if (!takeControl(ctx.state, u, ctx.controller)) continue // King Arthur
       ctx.state.flow = ctx.state.flow ?? {}
-      ctx.state.flow.puppets = [...(ctx.state.flow.puppets ?? []), { unitId: u.id, back: u.controller, master: self.id }]
-      u.controller = ctx.controller
+      ctx.state.flow.puppets = [...(ctx.state.flow.puppets ?? []), { unitId: u.id, back, master: self.id }]
       pushLog(ctx.state, ctx.controller, `${u.name} dances on the Puppet Master's strings.`)
     }
   },

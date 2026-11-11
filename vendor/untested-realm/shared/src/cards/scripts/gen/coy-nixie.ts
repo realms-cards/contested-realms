@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { selfStepsCloser, takeOwnStep } from '../../../engine/movement'
-import { checkStateBased } from '../../../engine/effects'
+import { checkStateBased, tapUnit } from '../../../engine/effects'
 
 // 'Submerge / Once on your turn, Coy Nixie may force target nearby enemy to take
 // a step towards her. Tap that enemy.'
@@ -17,7 +17,7 @@ registerScript('Coy Nixie', {
       if (!self || !t || !('unit' in t)) return
       const u = ctx.state.units[t.unit]
       if (!u) return
-      u.tapped = true // "Tap that enemy" — happens whether or not a step is possible
+      tapUnit(ctx.state, u) // "Tap that enemy" — happens whether or not a step is possible
       // "take a step towards her" is Sorcery step-definition 2 (the enemy moves
       // itself): Airborne may step diagonally, Immobile can't step, region rules
       // apply. A diagonally-adjacent grounded enemy therefore has TWO legal steps

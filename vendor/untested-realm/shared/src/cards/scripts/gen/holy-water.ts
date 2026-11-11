@@ -1,7 +1,8 @@
 import { registerScript, type EffectAPI } from '../registry'
-import { wardUnit } from '../../../engine/effects'
+import { wardUnit, tapUnit } from '../../../engine/effects'
 import { firstProjectileImpact } from '../../../engine/combat'
 import { isEvilU } from '../multi-card-utils/is-evil-u'
+import { canTapForCost } from '../../../engine/statics' // a summoning-sick bearer can't be tapped to pay a cost (codex)
 
 // 'Bearer has "Tap, Sacrifice this Holy Water → Throw a projectile. If it hits a
 // minion, banish it if Evil, Ward it if not."'
@@ -10,11 +11,13 @@ registerScript('Holy Water', {
     key: 'splash',
     label: 'Throw the Holy Water',
     cost: {},
+    // the cost taps the bearer: not offered while it can't pay (tapped, disabled, summoning sick)
+    available: (state, id) => { const b = state.units[state.artifacts[id]?.carriedBy ?? '']; return !!b && canTapForCost(state, b) },
     effect: (ctx) => {
       const art = ctx.state.artifacts[ctx.sourceId]
       const bearer = art?.carriedBy ? ctx.state.units[art.carriedBy] : null
-      if (!art || !bearer || bearer.tapped) return ctx.log('The bearer must be untapped.')
-      bearer.tapped = true
+      if (!art || !bearer || !canTapForCost(ctx.state, bearer)) return ctx.log('The bearer must be untapped.')
+      tapUnit(ctx.state, bearer)
       ctx.ask({ kind: 'chooseOption', title: 'Throw in which direction?', data: { options: ['n', 's', 'e', 'w'] } }, 'splash', { from: { x: bearer.x, y: bearer.y }, region: bearer.region })
     },
   }],

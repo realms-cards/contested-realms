@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { pushLog } from '../../../engine/effects'
 import { unitsAt } from '../../../engine/grid'
-import { effAttack } from '../../../engine/statics'
+import { effAttack, protectedFromSites } from '../../../engine/statics'
 import { awardAchievement } from '../../../engine/achievements.catalog'
 import { submergeOrDrown } from '../multi-card-utils/submerge-or-drown'
 
@@ -16,7 +16,8 @@ registerScript('Thin Ice', {
     pushLog(ctx.state, ctx.controller, 'CRACK — the ice gives way!')
     if (!self.flooded) self.flooded = true
     const enemyIds = atop.filter((u) => u.controller !== ctx.controller).map((u) => u.id)
-    for (const u of atop) submergeOrDrown(ctx, u)
+    // a unit that ignores site abilities (Yog-Sothoth, a Key to the City bearer) isn't submerged by it
+    for (const u of atop) if (!protectedFromSites(ctx.state, u)) submergeOrDrown(ctx, u)
     // Call of the siren — an enemy drowned through the ice with a Coy Nixie on/under it
     const enemyDrowned = enemyIds.some((id) => !ctx.state.units[id])
     const nixieHere = Object.values(ctx.state.units).some((u) => u.name === 'Coy Nixie' && u.x === self.x && u.y === self.y)

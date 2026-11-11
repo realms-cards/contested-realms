@@ -8,6 +8,7 @@ import { canRespond, payResponse } from '../multi-card-utils/response'
 //  adjacent location to evade the attack.'
 registerScript('Dodge Roll', {
   listensFromHand: true,
+  responseOnly: true,
   onUnitAttacked: (ctx, target) => {
     if (target.controller !== ctx.controller) return
     if (!canRespond(ctx, ctx.sourceId)) return

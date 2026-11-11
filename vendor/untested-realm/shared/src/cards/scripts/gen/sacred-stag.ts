@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { pushLog } from '../../../engine/effects'
+import { pushLog, wardSite } from '../../../engine/effects'
 import { siteAt } from '../../../engine/grid'
 
 // 'Ward / Deathrite → You may Ward this site.'
@@ -14,7 +14,7 @@ registerScript('Sacred Stag', {
     bless: (ctx, c, yes) => {
       const site = ctx.state.sites[c.siteId as string]
       if (yes && site) {
-        ;(site as any).ward = true // site ward — no Evil clause, kept direct
+        wardSite(ctx.state, site, ctx.controller) // site ward — no Evil clause
         pushLog(ctx.state, ctx.controller, `${site.name} is warded by the Sacred Stag's spirit.`)
       }
     },

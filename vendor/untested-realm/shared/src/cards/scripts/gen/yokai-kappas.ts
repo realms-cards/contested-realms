@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
-import { pushLog, toCemetery } from '../../../engine/effects'
+import { pushLog, toCemetery, untapUnit } from '../../../engine/effects'
 
 // 'Discard a water site → Untap Yokai Kappas. Use only once per turn.'
 registerScript('Yokai Kappas', {
@@ -30,7 +30,7 @@ registerScript('Yokai Kappas', {
       p.hand.splice(at, 1)
       toCemetery(ctx.state, id)
       const self = ctx.state.units[ctx.sourceId]
-      if (self) self.tapped = false
+      if (self) untapUnit(ctx.state, self)
       pushLog(ctx.state, ctx.controller, 'The Kappas refill their head-bowls and perk up.')
     },
   },

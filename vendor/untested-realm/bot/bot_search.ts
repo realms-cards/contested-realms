@@ -29,6 +29,8 @@ import {
   expandActions,
   cloneState,
   evaluate,
+  avatarConduct,
+  lastOwnTurn,
   opponent,
   avatarOf,
   actingSeatFor,
@@ -628,8 +630,12 @@ function searchNode(state: GameState, me: PlayerId, cfg: SearchConfig, deadline:
 
   // ── leaf: my turn has ended (control is fully the opponent's) → roll the game forward (opponent's
   //     reply, and in the early game several turns ahead) then evaluate ──
+  //     — plus my Avatar's conduct on the turn just ended when the roll went past it (early game: several
+  //     turns ahead), where evaluate judges a later, played-out turn of mine instead
   if (!controlMine(state, me) && !oppMustAnswer(state, me)) {
-    return { val: evaluate(rollForward(state, me, cfg, deadline), me, w) + drawBonus, plan: { kind: 'end' } }
+    const rolled = rollForward(state, me, cfg, deadline)
+    const conduct = lastOwnTurn(rolled, me) === lastOwnTurn(state, me) ? 0 : avatarConduct(state, me, w)
+    return { val: evaluate(rolled, me, w) + conduct + drawBonus, plan: { kind: 'end' } }
   }
 
   // ── MIN node: an opponent DEFEND during my turn — enumerate every answer, take the worst for me ──
@@ -657,7 +663,9 @@ function searchNode(state: GameState, me: PlayerId, cfg: SearchConfig, deadline:
     if (Date.now() > deadline || NODES > cfg.nodeBudget) TIMED_OUT = true // depth cap is a clean horizon; time/node bail is not
     const ended = clone(state)
     if (applyAction(ended, me, { t: 'endTurn' }).ok) {
-      return { val: evaluate(opponentBoardReply(ended, me, cfg, deadline), me, w) + drawBonus, plan: { kind: 'act', action: { t: 'endTurn' }, next: { kind: 'end' } } }
+      const replied = opponentBoardReply(clone(ended), me, cfg, deadline)
+      const conduct = lastOwnTurn(replied, me) === lastOwnTurn(ended, me) ? 0 : avatarConduct(ended, me, w)
+      return { val: evaluate(replied, me, w) + conduct + drawBonus, plan: { kind: 'act', action: { t: 'endTurn' }, next: { kind: 'end' } } }
     }
     // can't end (an open prompt of mine) → fall back to the single shallow-best child, no recursion
     let kids = expandActions(state, me, { deadline, minionCasters: cfg.minionCasters })

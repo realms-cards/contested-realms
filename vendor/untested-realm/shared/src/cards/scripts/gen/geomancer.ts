@@ -1,8 +1,8 @@
 import { registerScript, type EffectAPI } from '../registry'
 import { getCard } from '../../db'
-import { pushLog } from '../../../engine/effects'
-import { enterSite } from '../../../engine/casting'
-import { orthAdjacentWrapped, siteAt } from '../../../engine/grid'
+import { pushLog, placeRubble } from '../../../engine/effects'
+import { adjacentSquaresW, orthAdjacentWrapped, siteAt } from '../../../engine/grid'
+import { playTopAtlasOntoRubble } from '../multi-card-utils/atlas-onto-rubble'
 
 // (Necromancer scripted in m7; Avatar of Air, Avatar of Water in m1; Druid in m9.)
 
@@ -11,13 +11,7 @@ import { orthAdjacentWrapped, siteAt } from '../../../engine/grid'
 //  of your atlas.'
 function geomancerFill(ctx: EffectAPI, sq: { x: number; y: number } | null | undefined) {
   if (!sq || siteAt(ctx.state, sq.x, sq.y)) return
-  const rubbleCardId = `c${ctx.state.nextId++}`
-  ctx.state.cards[rubbleCardId] = { id: rubbleCardId, name: 'Rubble', owner: ctx.controller, isToken: true }
-  const rubbleId = `s${ctx.state.nextId++}`
-  ctx.state.sites[rubbleId] = {
-    id: rubbleId, cardId: rubbleCardId, name: 'Rubble', owner: ctx.controller,
-    controller: null, x: sq.x, y: sq.y, tapped: false, isRubble: true,
-  }
+  placeRubble(ctx.state, sq.x, sq.y, ctx.controller)
   pushLog(ctx.state, ctx.controller, 'The earth heaves up a spur of Rubble.')
 }
 
@@ -26,16 +20,8 @@ function geomancerReclaim(ctx: EffectAPI, sq: { x: number; y: number } | null | 
   const p = ctx.state.players[ctx.controller]
   const rubble = sq ? siteAt(ctx.state, sq.x, sq.y) : null
   if (!self || !rubble || !rubble.isRubble || !p.atlas.length) return
-  if (!orthAdjacentWrapped(ctx.state, self.x, self.y).some((s) => s.x === rubble.x && s.y === rubble.y)) return
-  const { x, y } = rubble
-  delete ctx.state.sites[rubble.id]
-  const cardId = p.atlas.shift()!
-  pushLog(ctx.state, ctx.controller, `The Rubble is reshaped into ${ctx.state.cards[cardId].name}.`)
-  // Route through enterSite (not a raw insert) so the reclaimed site behaves exactly like a
-  // normally-played site: its printed Ward, the mana it provides, its Genesis, void-lift, and
-  // the onSitePlayed event ALL fire — the last is what makes an adjacent Boulevard of Bones
-  // summon its Skeleton (and Cursed Land react), which a raw insert silently skipped.
-  enterSite(ctx.state, ctx.controller, cardId, x, y)
+  if (!adjacentSquaresW(ctx.state, self.x, self.y).some((s) => s.x === rubble.x && s.y === rubble.y)) return
+  playTopAtlasOntoRubble(ctx, rubble.id)
 }
 
 // An earth site is one that provides (E). A Bloom provides its Genesis thresholds the turn it comes
@@ -64,7 +50,8 @@ registerScript('Geomancer', {
       const self = ctx.state.units[ctx.sourceId]
       const p = ctx.state.players[ctx.controller]
       if (!self || !p.atlas.length) return ctx.log('Your atlas is empty.')
-      const adj = orthAdjacentWrapped(ctx.state, self.x, self.y)
+      // "adjacent" includes the Geomancer's own square (Codex Adjacent): the Rubble he stands on qualifies
+      const adj = adjacentSquaresW(ctx.state, self.x, self.y)
       const rubble = Object.values(ctx.state.sites).filter(
         (s) => s.isRubble && adj.some((a) => a.x === s.x && a.y === s.y),
       )

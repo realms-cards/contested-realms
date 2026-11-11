@@ -15,7 +15,7 @@ import type { GameState, PlayerId, UnitState } from '../engine/types'
 import { avatarOf, siteAt, orthAdjacentWrapped } from '../engine/grid'
 import { opponent } from '../engine/effects'
 import { effAttack, effDefence, effKeywords, siteSilenced, siteDisabledByArtifact, cemeteryActivations, isBlanked, isDisabled, withFrozenState } from '../engine/statics'
-import { affinity } from '../engine/casting'
+import { affinity, baseSiteSquares } from '../engine/casting'
 import { stepDistance } from '../engine/movement'
 import { getCard } from '../cards/db'
 import { getScript } from '../cards/scripts/registry'
@@ -231,6 +231,8 @@ function avatarDefended(state: GameState, player: PlayerId, avatar: UnitState): 
 }
 
 const isInterrogator = (av: UnitState): boolean => av.name === 'Interrogator'
+/** "caster" Avatars → the key of the threshold-gated ability their Tap should be saved for (see casterEarlyTap) */
+const CASTER_AVATARS: Record<string, string> = { 'Frost Mage': 'encase', 'Lavamancer': 'rift' }
 
 /** Can a Pathfinder-style avatar fire its blaze ability right now? — untapped, a site left in its atlas,
  *  and an orthogonally-adjacent square (Magellan-wrapped, as the ability itself computes) that is a bare
@@ -272,6 +274,76 @@ function harmfulAuraCoverage(state: GameState, r: { squares: { x: number; y: num
     }
   }
   return net
+}
+
+/** The Avatar's conduct on MY turn `turn` (my latest turn — see lastOwnTurn): its one Tap each turn belongs on developing — a site played or drawn — while developing.
+ *
+ *  - `avatarIdle` (< 6 sites): the Tap went unused (still untapped), OR it was spent on Move & Attack
+ *    (flow.avatarRoamed) while there was a site to play or draw — a site play lost either way.
+ *  - `avatarWander` (< 6 sites, something to develop): on top, it ROAMED — moved or attacked (tapped), or
+ *    cast/used an ability and still hasn't developed (untapped). Scaled by how badly it should be
+ *    developing instead: a WEAK Avatar (power ≤ 1, or a caster Avatar) 2×; a strong one 1× under 4
+ *    sites, 0.5× at 4–5.
+ *  - `avatarTapWaste` (≤ 6 sites): the Tap spent on a non-site ability (Sorcerer's "Draw a spell", …):
+ *    heavy under 5 sites, moderate at 5, slight at 6. Below 4 the move generator bans it outright.
+ *  - `casterEarlyTap` (caster Avatars, any site count): any non-site Tap before the ability's threshold.
+ *  - Pathfinders (noStandardSiteAction) develop by blazing instead: `pathfinderIdle` while it could blaze
+ *    but hasn't, or when it roamed instead; `pathfinderWander` on top when it roamed or acted. */
+function avatarDisciplineTerms(state: GameState, me: PlayerId, turn: number, w: EvalWeights, terms: Record<string, number>): void {
+  const myAv = avatarOf(state, me)
+  if (!myAv) return
+  const mySites = Object.values(state.sites).filter((s) => s.controller === me && !s.isRubble).length
+  const roamed = state.flow?.avatarRoamed?.[me] === turn // spent its Tap on Move & Attack
+  const acted = myAv.interactedTurn === turn // attacked, cast, or used an ability
+  const tapAbility = state.flow?.avatarTapAbility?.[me] === turn
+  const script = getScript(myAv.name)
+
+  if (script?.noStandardSiteAction === true) {
+    const blazeable = state.players[me].atlas.length > 0
+    if (canPathfinderBlaze(state, me, myAv) || (roamed && blazeable)) terms.pathfinderIdle = -w.pathfinderIdle
+    if ((roamed && blazeable) || (canPathfinderBlaze(state, me, myAv) && acted)) terms.pathfinderWander = -w.avatarWander
+    return
+  }
+
+  if (mySites < 6) {
+    const canDevelop = state.players[me].atlas.length > 0 || hasSiteInHand(state, me)
+    if (!myAv.tapped || (roamed && canDevelop)) terms.avatarIdle = -w.avatarIdle
+    if (canDevelop && (roamed || (!myAv.tapped && acted))) {
+      const weak = effAttack(state, myAv) <= 1 || !!CASTER_AVATARS[myAv.name]
+      const mult = weak ? 2 : mySites < 4 ? 1 : 0.5
+      terms.avatarWander = -w.avatarWander * mult
+    }
+  }
+
+  if (mySites <= 6 && tapAbility) {
+    const mult = mySites < 5 ? 1 : mySites < 6 ? 0.5 : 0.2 // heavy < 5, moderate at 5, slight at 6
+    terms.avatarTapWaste = -w.avatarTapWaste * mult
+  }
+
+  // "caster" Avatars (Frost Mage, Lavamancer): power 1, their strength a non-Tap ability behind an
+  // elemental threshold — until that's met, any non-site Tap (move, attack, Tap ability) costs extra
+  const casterKey = CASTER_AVATARS[myAv.name]
+  const need = casterKey ? script?.abilities?.find((a) => a.key === casterKey)?.threshold : undefined
+  if (need && (roamed || tapAbility)) {
+    const have = affinity(state, me)
+    if ((['air', 'earth', 'fire', 'water'] as const).some((el) => (need[el] ?? 0) > have[el])) terms.casterEarlyTap = -w.casterEarlyTap
+  }
+}
+
+/** my latest turn: the current one, or — while the opponent plays — the one just before it */
+export function lastOwnTurn(state: GameState, me: PlayerId): number {
+  return state.activePlayer === me ? state.turn : state.turn - 1
+}
+
+/** My Avatar's conduct on my latest turn, as evaluate scores it. The search adds it at a leaf whose
+ *  rolled-forward state has moved past the turn being decided (early game: several turns ahead), where
+ *  evaluate itself would judge a later, played-out turn instead. */
+export function avatarConduct(state: GameState, me: PlayerId, w: EvalWeights = DEFAULT_WEIGHTS): number {
+  const terms: Record<string, number> = {}
+  avatarDisciplineTerms(state, me, lastOwnTurn(state, me), w, terms)
+  let total = 0
+  for (const k in terms) total += terms[k]
+  return total
 }
 
 export interface EvalBreakdown {
@@ -382,47 +454,8 @@ function explainEvalRaw(state: GameState, me: PlayerId, w: EvalWeights): EvalBre
   terms.siteMana = siteWorth(mySites, w) - siteWorth(foeSites, w)
   terms.thresholdFit = w.thresholdFit * thresholdFit(state, me)
 
-  // ── avatar discipline while DEVELOPING (< 6 sites): the avatar's turn action should ESTABLISH a site
-  //    (play or draw one), not be squandered on running around. Pathfinders develop via their own
-  //    ability and WANT to edge toward the void — they're exempt. `avatarIdle` = still untapped (could
-  //    still play/draw a site). On top of that, if it ROAMED (interactedTurn set by a move/attack/cast —
-  //    a site play does NOT set it), it burned the turn wandering instead of planting: penalised extra,
-  //    and DOUBLE for a WEAK avatar (power ≤ 1) whose whole job is to develop, not to fight. ──
-  if (mySites < 6 && getScript(myAv.name)?.noStandardSiteAction !== true) {
-    if (!myAv.tapped) {
-      terms.avatarIdle = -w.avatarIdle
-      if (myAv.interactedTurn === state.turn) {
-        // roaming penalty, scaled by how badly it should be developing instead:
-        //   WEAK avatar (power ≤ 1), < 6 sites → heaviest (its only job is to develop) → 2×
-        //   STRONG avatar, < 4 sites (still early) → full penalty → 1×
-        //   STRONG avatar, 4–5 sites (nearly developed) → punish, but less → 0.5×
-        const weak = effAttack(state, myAv) <= 1
-        const mult = weak ? 2 : mySites < 4 ? 1 : 0.5
-        terms.avatarWander = -w.avatarWander * mult
-      }
-    }
-  }
-
-  // ── avatar Tap SQUANDERED on a non-site ability (Sorcerer's "Draw a spell", …) instead of developing.
-  //    Below 4 sites the bot's move generator BANS this outright (moves.ts); the eval discourages it on a
-  //    gradient for the range the ban doesn't cover: HEAVY under 5 sites, moderate at 5, SLIGHT at 6, and
-  //    NOTHING above 6 (fully developed — the avatar's Tap is free to be spent however). Set by the
-  //    activate handler (game.ts); Pathfinders never trip it (never flagged). ──
-  if (getScript(myAv.name)?.noStandardSiteAction !== true && mySites <= 6 && state.flow?.avatarTapAbility?.[me] === state.turn) {
-    const mult = mySites < 5 ? 1 : mySites < 6 ? 0.5 : 0.2 // heavy < 5, moderate at 5, slight at 6
-    terms.avatarTapWaste = -w.avatarTapWaste * mult
-  }
-
-  // ── Pathfinder discipline: a Pathfinder (noStandardSiteAction) is EXEMPT from the avatar-development
-  //    penalties above because it develops via its blaze ability, not a normal site play. So give it its
-  //    own, SEVERE "don't waste the turn" penalty: while it CAN blaze (untapped, atlas non-empty, an
-  //    adjacent void/rubble) but hasn't, punish hard — blazing is both a site AND a board advance, so it
-  //    should always lay the trail rather than wander or attack. Roaming (a non-blaze move) is punished
-  //    extra, exactly like a normal avatar's avatarWander. Once it blazes it's tapped → penalty clears. ──
-  if (canPathfinderBlaze(state, me, myAv)) {
-    terms.pathfinderIdle = -w.pathfinderIdle
-    if (myAv.interactedTurn === state.turn) terms.pathfinderWander = -w.avatarWander
-  }
+  // the avatar's conduct on my latest turn (this one, or the one just ended while the opponent plays)
+  avatarDisciplineTerms(state, me, lastOwnTurn(state, me), w, terms)
   terms.exposedSite = -w.exposedSite * predictedSiteLoss(state, me) // my sites the foe can raze (life + mana)
   terms.foeExposedSite = w.foeExposedSite * predictedSiteLoss(state, foe) // enemy sites I can raze
 
@@ -450,14 +483,25 @@ function explainEvalRaw(state: GameState, me: PlayerId, w: EvalWeights): EvalBre
   terms.harbingerEnemySlot = -w.harbingerEnemySlot * myOnEnemyHarb // HEAVY — wasting a site on the enemy's slot
   terms.harbingerOwnSlot = w.harbingerOwnSlot * myOnMyHarb         // prized — developing onto my own portents
 
+  // ── my face-down traps, still unsprung: a threat kept in reserve. A small bonus each, so a spring has to
+  //    win more than that — the bot no longer springs a trap for a trivial gain. ──
+  const myTraps = Object.values(state.sites).filter((s) => s.trap && s.owner === me && s.controller === me).length
+  if (myTraps) terms.trapUnsprung = w.trapUnsprung * myTraps
+
   // premature expansion: a NON-Pathfinder holding sites OUTSIDE home while its home still has fillable
-  // voids. A void that is an ENEMY harbinger slot doesn't count (I shouldn't plant there anyway).
+  // voids. A home square holding ANY site (mine, the foe's, rubble) is full. A void counts only if I could
+  // actually play a site there now (borders a site I control): one I can't reach doesn't make building
+  // elsewhere "premature". Nor does an ENEMY harbinger slot (I shouldn't plant there anyway).
   if (mySitesOutsideHome > 0 && getScript(myAv.name)?.noStandardSiteAction !== true) {
     let fillableHomeVoids = 0
+    let legal: { x: number; y: number }[] | undefined
     // a void under an enemy Realm-Eater isn't fillable either (the site would just be eaten) — when that's
     // the only one left, building outside home is the right call, not "premature"
-    for (const x of [1, 2, 3]) for (const y of homeRows)
-      if (!siteAt(state, x, y) && !isEnemyHarbSlot(x, y) && !underEnemySiteEater(state, me, x, y)) fillableHomeVoids++
+    for (const x of [1, 2, 3]) for (const y of homeRows) {
+      if (siteAt(state, x, y) || isEnemyHarbSlot(x, y) || underEnemySiteEater(state, me, x, y)) continue
+      legal = legal ?? baseSiteSquares(state, me)
+      if (legal.some((s) => s.x === x && s.y === y)) fillableHomeVoids++
+    }
     if (fillableHomeVoids > 0) terms.homePremature = -w.homePremature * mySitesOutsideHome
   }
 

@@ -1,6 +1,7 @@
 import { registerScript } from '../registry'
 import { pushLog } from '../../../engine/effects'
 import type { GameState } from '../../../engine/types'
+import { abilitiesOff } from '../../../engine/statics'
 
 // 'Players can't control cards owned by other players.' (King Arthur — a
 // continuous sweep returning stolen cards)
@@ -11,7 +12,7 @@ registerScript('King Arthur', {
 })
 
 function arthurSweep(state: GameState) {
-  const arthurInPlay = Object.values(state.units).some((u) => u.name === 'King Arthur' && !u.silenced)
+  const arthurInPlay = Object.values(state.units).some((u) => u.name === 'King Arthur' && !abilitiesOff(state, u))
   if (!arthurInPlay) return
   for (const u of Object.values(state.units)) {
     if (!u.isAvatar && u.controller !== u.owner) {

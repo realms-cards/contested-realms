@@ -28,7 +28,7 @@ registerScript('Clamor of Harpies', {
     const t = ctx.targets[0]
     if (t && 'unit' in t) return summon(ctx, t.unit)
     const candidates = Object.values(ctx.state.units)
-      .filter((u) => u.id !== self.id && !validateTarget(ctx.state, victimSpec, { unit: u.id }, self, ctx.controller))
+      .filter((u) => u.id !== self.id && !validateTarget(ctx.state, victimSpec, { unit: u.id }, self, ctx.controller, undefined, self.name))
       .map((u) => u.id)
     if (!candidates.length) return
     ctx.ask({ kind: 'chooseTargets', title: 'Clamor of Harpies — teleport which weaker minion here?', data: { candidates, count: 1, upTo: false, kind: 'unit' } }, 'summon')

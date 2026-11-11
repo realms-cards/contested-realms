@@ -1,5 +1,7 @@
 import { registerScript, type EffectAPI } from '../registry'
+import { tapUnit } from '../../../engine/effects'
 import { firstProjectileImpact, fightUnits } from '../../../engine/combat'
+import { canTapForCost } from '../../../engine/statics' // a summoning-sick bearer can't be tapped to pay a cost (codex)
 
 // 'Bearer has "Tap → Shoot a projectile. If a unit is hit, drag it here, and
 // bearer may fight it when it arrives."'
@@ -8,11 +10,13 @@ registerScript('Meat Hook', {
     key: 'hook',
     label: 'Tap bearer → Hook a unit in',
     cost: {},
+    // the cost taps the bearer: not offered while it can't pay (tapped, disabled, summoning sick)
+    available: (state, id) => { const b = state.units[state.artifacts[id]?.carriedBy ?? '']; return !!b && canTapForCost(state, b) },
     effect: (ctx) => {
       const art = ctx.state.artifacts[ctx.sourceId]
       const bearer = art?.carriedBy ? ctx.state.units[art.carriedBy] : null
-      if (!art || !bearer || bearer.tapped) return ctx.log('The bearer must be untapped.')
-      bearer.tapped = true
+      if (!art || !bearer || !canTapForCost(ctx.state, bearer)) return ctx.log('The bearer must be untapped.')
+      tapUnit(ctx.state, bearer)
       ctx.ask({ kind: 'chooseOption', title: 'Hook in which direction?', data: { options: ['n', 's', 'e', 'w'] } }, 'hook', { bearerId: bearer.id })
     },
   }],
@@ -48,7 +52,7 @@ registerScript('Meat Hook', {
       if (!a || !b) return
       // "may fight it when it arrives" — only if the pull actually landed it at the bearer's square.
       if (b.x !== a.x || b.y !== a.y || b.region !== a.region) return
-      fightUnits(ctx.state, a, b) // a real fight: both strike (fires Interrogator, Lethal, kill triggers…)
+      fightUnits(ctx.state, a, b, [a, b]) // the bearer used the Hook, the victim was dragged; a real fight: both strike (fires Interrogator, Lethal, kill triggers…)
     },
   },
 })

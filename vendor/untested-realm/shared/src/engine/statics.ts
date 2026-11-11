@@ -5,7 +5,7 @@ import { getCard, findCard, getKeywords, type ParsedKeywords } from '../cards/db
 import { applyGrant, grantsFlag, isStatusMarker, keywordKeyOf, removeKeyword, type KeywordGrant, type KeywordKey, type ModifierKeyword } from './keywords'
 import { getScript, type AbilityDef } from '../cards/scripts/registry'
 import type { GameState, UnitState, Region, PlayerId, AuraState, SiteState, ArtifactState, Thresholds } from './types'
-import { siteAt, isWaterSite, nearbySquaresW, adjacentSquaresW, orthAdjacentWrapped, occupiedSquares, sitesOf } from './grid'
+import { siteAt, siteFlooded, isWaterSite, nearbySquaresW, adjacentSquaresW, orthAdjacentWrapped, occupiedSquares, sitesOf, setGridDisabledCheck, setGridRegionCheck, setGridSiteSilencedCheck } from './grid'
 
 // ---- affinity ----
 // A player's elemental threshold = everything they have "in play": controlled sites (with all the
@@ -38,9 +38,9 @@ export function affinity(state: GameState, player: PlayerId): Thresholds {
   // transformed sites walking around as minions still provide their affinity
   // (Horns of Behemoth, Island Leviathan — FAQ: the golden rule)
   for (const u of Object.values(state.units)) {
-    if (u.controller !== player || u.silenced) continue
+    if (u.controller !== player) continue
     const def = getCard(u.name)
-    if (def.type !== 'Site') continue
+    if (def.type !== 'Site' || abilitiesOff(state, u)) continue
     total.air += def.thresholds.air
     total.earth += def.thresholds.earth
     total.fire += def.thresholds.fire
@@ -49,7 +49,8 @@ export function affinity(state: GameState, player: PlayerId): Thresholds {
   // sites that provide for everyone (Avalon), even under enemy control
   for (const site of Object.values(state.sites)) {
     if (site.isRubble || site.controller === player || site.controller === null) continue
-    if (!getScript(site.name)?.providesForEveryone || siteDisabled(state, site)) continue
+    // an ability: lost to silence (Smokestacks of Gnaak) as well as to a disable
+    if (!getScript(site.name)?.providesForEveryone || siteSilenced(state, site)) continue
     const th = getCard(site.name).thresholds
     // Drought dries even "provides for everyone" water sites — no water threshold while covered
     const dried = Object.values(state.auras).some(
@@ -68,8 +69,8 @@ export function affinity(state: GameState, player: PlayerId): Thresholds {
     if (gate && !siteSilenced(state, site) && !gate(state, site)) continue
     const suppressed = Object.values(state.units).some(
       (u) =>
-        (!u.silenced && u.x === site.x && u.y === site.y && getScript(u.name)?.suppressSiteThreshold) ||
-        (!u.silenced && getScript(u.name)?.unitSuppressesSiteThreshold?.(state, u.id, site)),
+        (u.x === site.x && u.y === site.y && getScript(u.name)?.suppressSiteThreshold && !abilitiesOff(state, u)) ||
+        (getScript(u.name)?.unitSuppressesSiteThreshold?.(state, u.id, site) && !abilitiesOff(state, u)),
     )
     if (suppressed) continue
     const th = getCard(site.name).thresholds
@@ -87,7 +88,7 @@ export function affinity(state: GameState, player: PlayerId): Thresholds {
     total.earth += drowned ? 0 : th.earth
     total.fire += drowned ? 0 : th.fire
     total.water += dried ? 0 : th.water
-    if (!dried && site.flooded && th.water === 0) total.water += 1
+    if (!dried && siteFlooded(state, site) && th.water === 0 && isWaterSite(state, site, getCard)) total.water += 1 // a printed Flooded is lost to Smokestacks; a granted one isn't
     // per-instance extra threshold (Valley of Delight, Sow the Earth)
     const extraTh = getScript(site.name)?.siteExtraThreshold?.(state, site)
     if (extraTh) {
@@ -149,6 +150,19 @@ export function affinity(state: GameState, player: PlayerId): Thresholds {
   total.earth = Math.max(0, total.earth)
   total.fire = Math.max(0, total.fire)
   total.water = Math.max(0, total.water)
+  // "Your (E) and (F) are equal to the highest of the two" (Scoria, Tundra) — after every other source;
+  // also from such a site walking around as a minion (it still provides, above — the golden rule)
+  const equalizers = [
+    ...sitesOf(state, player).filter((s) => !s.isRubble && !siteSilenced(state, s)).map((s) => s.name),
+    ...Object.values(state.units).filter((u) => u.controller === player && getCard(u.name).type === 'Site' && !abilitiesOff(state, u)).map((u) => u.name),
+  ]
+  for (const name of equalizers) {
+    const pair = getScript(name)?.equalizesThresholds
+    if (!pair) continue
+    const top = Math.max(total[pair[0]], total[pair[1]])
+    total[pair[0]] = top
+    total[pair[1]] = top
+  }
   return total
 }
 
@@ -227,6 +241,12 @@ export function markZoneTollPaid(state: GameState, player: PlayerId): void {
   state.flow.zoneTollPaid = player
 }
 
+/** could `player` pay the zone-access toll now (or has it already been paid for this effect)? */
+export function canPayZoneToll(state: GameState, player: PlayerId): boolean {
+  const toll = zoneAccessToll(state)
+  return !toll || state.flow?.zoneTollPaid === player || state.players[player].mana >= toll
+}
+
 /** pay the zone-access toll if affordable; false means the vault stays shut */
 export function payZoneToll(state: GameState, player: PlayerId): boolean {
   const toll = zoneAccessToll(state)
@@ -253,6 +273,16 @@ export function isVoidAt(state: GameState, x: number, y: number): boolean {
 // Smokestacks silencing each other can't loop; the mutual case resolves in the queried site's favour.
 const siteSilenceStack = new Set<string>()
 
+/** does site `a`'s own text silence site `b` (Smokestacks of Gnaak, Fields of Phyxis)? */
+function siteSilencesSite(state: GameState, a: SiteState, b: { x: number; y: number }): boolean {
+  if (a.isRubble) return false
+  const script = getScript(a.name)
+  return (!!script?.silencesNearbySites && nearbySquaresW(state, a.x, a.y).some((q) => q.x === b.x && q.y === b.y))
+    || (!!script?.silencesSiteAt && script.silencesSiteAt(state, a, b))
+}
+/** a site's timestamp: ids are minted in entry order */
+const siteAge = (s: { id: string }): number => Number(s.id.replace(/\D/g, '')) || 0
+
 export function siteSilenced(state: GameState, site: { x: number; y: number }): boolean {
   // Bedrock "can't be modified" — it can't be silenced or lose its abilities (FAQ).
   const here = Object.values(state.sites).find((s) => s.x === site.x && s.y === site.y && !s.isRubble)
@@ -275,6 +305,13 @@ export function siteSilenced(state: GameState, site: { x: number; y: number }): 
     const silencesThis = (!!script?.silencesNearbySites && nearbySquaresW(state, src.x, src.y).some((q) => q.x === site.x && q.y === site.y))
       || (!!script?.silencesSiteAt && script.silencesSiteAt(state, src, site))
     if (!silencesThis) continue
+    // two sites that remove each other's abilities: timestamp order decides — the OLDER one's ability
+    // applies first and switches the newer one off (Codex, Layer System: "If two abilities would try to
+    // remove each other, use timestamp order")
+    if (here && siteSilencesSite(state, here, src)) {
+      if (siteAge(here) < siteAge(src)) continue // this site is older: src is the one silenced
+      return true
+    }
     if (siteSilenced(state, { x: src.x, y: src.y })) continue // a silencer that is itself silenced silences nothing (FAQ layering)
     return true
   }
@@ -303,8 +340,10 @@ export function siteSilenced(state: GameState, site: { x: number; y: number }): 
  *  abilities") grants this to its bearer; Yog-Sothoth ("ignores the abilities of sites") to itself.
  *  Covers passive site grants (keywords/power), site entry filters, and site enter-triggers. */
 export function protectedFromSites(state: GameState, unit: UnitState): boolean {
-  if (unit.carrying.some((id) => getScript(state.artifacts[id]?.name ?? '')?.bearerIgnoresSites)) return true
-  if (!!getScript(unit.name)?.ignoresSites && !unit.silenced) return true
+  // a silenced Key (Acid Rain) gives nothing; a DISABLED bearer has no abilities at all, the Key's included
+  // (a silenced bearer keeps it: silence only strips printed abilities)
+  if (unit.carrying.some((id) => { const a = state.artifacts[id]; return !!a && !!artScript(state, a)?.bearerIgnoresSites }) && !(state.units[unit.id] && isDisabled(state, unit))) return true
+  if (!!getScript(unit.name)?.ignoresSites && !abilitiesOff(state, unit)) return true
   return false
 }
 
@@ -328,11 +367,17 @@ export function artScript(state: GameState, art: { name: string; x: number; y: n
   return artifactSilenced(state, art) ? undefined : getScript(art.name)
 }
 
-/** an artifact sitting on this site turns it off entirely (Blightstone) */
+/** an artifact sitting on this site turns it off entirely (Blightstone) — carried too: a carried
+ *  artifact is at its bearer's location, so a bearer standing on (or under) a site disables it */
 export function siteDisabledByArtifact(state: GameState, site: { x: number; y: number }): boolean {
-  return Object.values(state.artifacts).some(
-    (a) => !a.carriedBy && a.x === site.x && a.y === site.y && a.region === 'surface' && getScript(a.name)?.disablesSite && !artifactSilenced(state, a),
-  )
+  return Object.values(state.artifacts).some((a) => {
+    if (!getScript(a.name)?.disablesSite) return false
+    const bearer = a.carriedBy ? state.units[a.carriedBy] : undefined
+    const here = bearer
+      ? bearer.x === site.x && bearer.y === site.y && bearer.region !== 'void'
+      : !a.carriedBy && a.x === site.x && a.y === site.y && a.region === 'surface'
+    return here && !artifactSilenced(state, a)
+  })
 }
 
 /** A double-faced card flipped to a side it doesn't have (Vivien borrowing the
@@ -386,11 +431,14 @@ export function effKeywords(state: GameState, unit: UnitState, seen: Set<string>
       if (ckw.voidwalk) kw.voidwalk = true
     }
   }
-  // carried artifacts granting keywords to the bearer
+  // carried artifacts granting keywords to the bearer — not to one that "can't be modified" (Monks of
+  // Kobalsa can't gain abilities: no Burrowing/Submerge/Voidwalk from All-terrain Vestments)
+  const unmodBearer = isUnmodifiable(state, unit)
   for (const artId of unit.carrying) {
     const art = state.artifacts[artId]
     if (!art) continue
-    const script = getScript(art.name)
+    const script = artScript(state, art) // a silenced artifact (Acid Rain) grants nothing
+    if (unmodBearer && !script?.bearerUnmodifiable) continue
     if (script?.bearerKeywords) {
       for (const k of script.bearerKeywords) applyGrant(kw, k)
     }
@@ -603,7 +651,7 @@ function powerModifiers(state: GameState, unit: UnitState): number {
   for (const artId of unit.carrying) {
     const art = state.artifacts[artId]
     if (!art) continue
-    const script = getScript(art.name)
+    const script = artScript(state, art) // a silenced artifact (Acid Rain) grants nothing
     if (script?.bearerPower) n += script.bearerPower
     if (script?.bearerPowerFn) n += script.bearerPowerFn(state, artId, unit)
   }
@@ -859,7 +907,7 @@ function computeDisabledByEffect(state: GameState, unit: UnitState): boolean {
     }
     for (const aid of ix.a) {
       const art = state.artifacts[aid]
-      if (!art || art.carriedBy) continue
+      if (!art) continue // a carried disabler acts at its bearer's location (Cold Iron Rod on a Faerie)
       if (disablesNow(art.name, art.id)) return true
     }
     for (const rid of ix.r) {
@@ -875,7 +923,7 @@ function computeDisabledByEffect(state: GameState, unit: UnitState): boolean {
       if (disablesNow(o.name, o.id)) return true
     }
     for (const a of Object.values(state.artifacts)) {
-      if (!a.carriedBy && disablesNow(a.name, a.id)) return true
+      if (disablesNow(a.name, a.id)) return true
     }
     for (const r of Object.values(state.auras)) {
       if (getScript(r.name)?.auraDisablesUnit?.(state, r, unit)) return true
@@ -905,6 +953,8 @@ export function isDisabled(state: GameState, unit: UnitState): boolean {
   // loses nothing.) Immune / undisableable already short-circuited to false above.
   if (getScript(unit.name)?.immuneToDisable && !unit.silenced) return false
   if (unit.modifiers.some((m) => m.kind === 'keyword' && m.keyword === 'undisableable')) return false
+  // [X]bound is a keyword ability: a silenced minion has lost it, so nothing disables it off its terrain
+  if (unit.silenced) return false
   const kw = getKeywords(unit.name)
   const terrain = terrainAt(state, unit.x, unit.y)
   if (kw.waterbound && terrain !== 'water') return true
@@ -912,10 +962,21 @@ export function isDisabled(state: GameState, unit: UnitState): boolean {
   return false
 }
 
-/** Codex: a disabled minion "cannot be tapped to pay for costs" (effects may still tap it). Use this for
- *  every unit a cost taps — a bearer, a helper, "tap an allied X", "tap any number of allies". */
+/** Has this unit lost its OWN abilities? Rulebook: a disabled minion "has no abilities" — passive, static,
+ *  triggered, replacement and activated alike — exactly like a silenced one. Gate every unit script hook
+ *  on this, not on `.silenced` alone. In loops over many units look the hook up FIRST and only ask this
+ *  when the unit actually has it (isDisabled scans the board's disablers). Only a unit IN THE REALM can be
+ *  disabled — an off-board probe (cardSubtypesFor) or a caster stand-in is judged on silence alone. */
+export function abilitiesOff(state: GameState, unit: UnitState): boolean {
+  return !!unit.silenced || (!!state.units[unit.id] && isDisabled(state, unit))
+}
+
+/** Can `unit` be tapped to pay a cost? Codex: a disabled minion "cannot be tapped to pay for costs"; and
+ *  rulebook: "A minion suffering from summoning sickness cannot tap, or be tapped, to pay for costs
+ *  associated with any ability" (effects may still tap either — Dhol Chants, FAQ). Use this for every
+ *  unit a cost taps — a bearer, a helper, "tap an allied X", "tap any number of allies". */
 export function canTapForCost(state: GameState, unit: UnitState): boolean {
-  return !unit.tapped && !isDisabled(state, unit)
+  return !unit.tapped && !isDisabled(state, unit) && !isSummoningSick(state, unit)
 }
 
 /** Codex: a disabled site "has no abilities and cannot provide any mana or affinity". Disabled by an
@@ -963,9 +1024,11 @@ export function hasRegionKeyword(state: GameState, unit: UnitState, key: 'burrow
     if (carrier) has = hasRegionKeyword(state, carrier, key, seen)
   }
   if (!has) {
+    const unmodBearer = isUnmodifiable(state, unit) // can't gain the abilities a carried artifact gives
     for (const artId of unit.carrying) {
-      const kws = state.artifacts[artId] ? getScript(state.artifacts[artId].name)?.bearerKeywords : undefined
-      if (kws?.some(grants)) { has = true; break }
+      const sc = state.artifacts[artId] ? artScript(state, state.artifacts[artId]) : undefined
+      if (unmodBearer && !sc?.bearerUnmodifiable) continue
+      if (sc?.bearerKeywords?.some(grants)) { has = true; break }
     }
   }
   if (!has && !silenced) {
@@ -1005,7 +1068,7 @@ export function projectileCanHit(state: GameState, unit: UnitState): boolean {
   if (unit.stealth) return false
   const t = getScript(unit.name)?.projectileTransparent
   if (t === true) return false
-  if (typeof t === 'function' && !unit.silenced && t(state, unit)) return false
+  if (typeof t === 'function' && !abilitiesOff(state, unit) && t(state, unit)) return false
   // Crawling Congregation also shields adjacent allies
   for (const other of Object.values(state.units)) {
     if (other.id === unit.id || other.silenced || disabledByEffect(state, other) || other.controller !== unit.controller) continue
@@ -1018,6 +1081,25 @@ export function projectileCanHit(state: GameState, unit: UnitState): boolean {
   return true
 }
 
+/** a targeting sanctuary shields `unit` from `player`, one of its enemies (Varmint Warrens: Beasts here
+ *  can't be targeted by enemies — FAQ: the enemies of the BEAST) */
+export function sanctuaryShields(state: GameState, unit: UnitState, player: PlayerId): boolean {
+  if (unit.controller === player) return false
+  for (const s of Object.values(state.sites)) {
+    const f = getScript(s.name)?.protectsFromTargeting
+    if (f && !s.isRubble && !siteSilenced(state, s) && f(state, s, unit)) return true
+  }
+  return false
+}
+
+/** `target` can't be attacked by `attacker`: an attack targets the unit it is declared on, so anything that
+ *  refuses targeting refuses the attack (Earl of the Ivory Towers vs the Ordinary, a Beast in Varmint Warrens) */
+export function attackForbidden(state: GameState, attacker: UnitState, target: UnitState): boolean {
+  const f = getScript(target.name)?.cantBeTargetedBy
+  if (f && !abilitiesOff(state, target) && f(state, target.id, attacker.name)) return true
+  return sanctuaryShields(state, target, attacker.controller)
+}
+
 /** attacks against the site at (x,y) and surface units atop it are blocked
  *  (Dome of Osiros, Blizzard, White Hart) */
 export function attackBlockedAt(state: GameState, x: number, y: number, target?: UnitState): boolean {
@@ -1028,9 +1110,9 @@ export function attackBlockedAt(state: GameState, x: number, y: number, target?:
     if (getScript(aura.name)?.auraBlocksAttacks && aura.squares.some((s) => s.x === x && s.y === y)) return true
   }
   for (const u of Object.values(state.units)) {
-    if (u.silenced || u.id === target?.id) continue
+    if (u.id === target?.id) continue
     const f = getScript(u.name)?.unitBlocksAttacksAt
-    if (f && f(state, u.id, x, y)) return true
+    if (f && !abilitiesOff(state, u) && f(state, u.id, x, y)) return true
   }
   return false
 }
@@ -1065,10 +1147,10 @@ export function effSubtypes(state: GameState, unit: UnitState): string[] {
   // have no printed subtypes, so this returns [] for them anyway.
   let st = [...getCard(unit.name).subtypes]
   const own = getScript(unit.name)?.selfSubtypes
-  if (own && !unit.silenced) st = own(state, unit, st)
+  if (own && !abilitiesOff(state, unit)) st = own(state, unit, st)
   for (const u of Object.values(state.units)) {
     const o = getScript(u.name)?.subtypeOverride
-    if (o && !u.silenced) st = o(state, u.id, unit, st)
+    if (o && !abilitiesOff(state, u)) st = o(state, u.id, unit, st)
   }
   for (const s of Object.values(state.sites)) {
     const o = getScript(s.name)?.subtypeOverride
@@ -1146,7 +1228,7 @@ export function hasSubtype(state: GameState, unit: UnitState, subtype: string): 
 export function effElements(state: GameState, unit: UnitState): string[] {
   let els = [...getCard(unit.name).elements]
   const own = getScript(unit.name)?.selfElements
-  if (own && !unit.silenced) els = own(state, unit, els)
+  if (own && !abilitiesOff(state, unit)) els = own(state, unit, els)
   return els
 }
 
@@ -1190,8 +1272,9 @@ export function grantedAbilities(state: GameState, unit: UnitState): AbilityDef[
   const tag = (abilities: AbilityDef[], origin: string) =>
     abilities.map((a) => (a.contOwner ? a : { ...a, contOwner: origin }))
   for (const u of Object.values(state.units)) {
-    const g = getScript(u.name)?.grantsAbilities
-    if (g && !u.silenced && !isBlanked(u)) out.push(...tag(g(state, u.id, unit), u.name))
+    const sc = getScript(u.name)
+    const g = sc?.grantsAbilities
+    if (g && (sc.grantsAbilitiesWhileDisabled ? !u.silenced && !isBlanked(u) : !abilitiesOff(state, u))) out.push(...tag(g(state, u.id, unit), u.name))
   }
   for (const art of Object.values(state.artifacts)) {
     const g = artScript(state, art)?.artifactGrantsAbilities // silenced → grants no abilities
@@ -1307,4 +1390,26 @@ export function isSummoningSick(state: GameState, unit: UnitState): boolean {
 export function canTap(state: GameState, unit: UnitState): boolean {
   if (unit.tapped) return false
   return !isSummoningSick(state, unit)
+}
+
+// grid.realmIsFlat needs isDisabled without importing statics (cycle)
+setGridDisabledCheck(isDisabled)
+setGridRegionCheck(regionPresentAt)
+setGridSiteSilencedCheck(siteSilenced)
+
+/** The sites that "must always be adjacent to the void" (Edge of the World) left WITHOUT a void beside
+ *  them — on the board as it is, or as it would be with the sites in `moved` at new squares and the
+ *  squares in `filled` taken by a new site. A move or play that strands one can't happen. */
+export function strandedSites(
+  state: GameState,
+  moved?: Map<string, { x: number; y: number }>,
+  filled: { x: number; y: number }[] = [],
+): SiteState[] {
+  const pos = (s: SiteState) => moved?.get(s.id) ?? { x: s.x, y: s.y }
+  const occupied = new Set([...Object.values(state.sites).map((s) => { const p = pos(s); return `${p.x},${p.y}` }), ...filled.map((f) => `${f.x},${f.y}`)])
+  return Object.values(state.sites).filter((s) => {
+    if (!getScript(s.name)?.mustAdjoinVoid) return false
+    const p = pos(s)
+    return !adjacentSquaresW(state, p.x, p.y).some((q) => !(q.x === p.x && q.y === p.y) && !occupied.has(`${q.x},${q.y}`))
+  })
 }

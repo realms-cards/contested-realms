@@ -1,7 +1,7 @@
 // Card script registry. A script teaches the engine what a card's rules text
 // does. Cards whose text is only engine-native keywords need no script.
 
-import type { GameState, UnitState, SiteState, AuraState, PlayerId, Thresholds, Region, Duration, Prompt } from '../../engine/types'
+import type { GameState, UnitState, SiteState, AuraState, PlayerId, Thresholds, Region, Duration, Prompt, Element } from '../../engine/types'
 import { scriptedNames, getCard } from '../db'
 import type { KeywordGrant, KeywordKey, ModifierKeyword } from '../../engine/keywords'
 
@@ -210,6 +210,16 @@ export interface CardScript {
    * replace your avatar" (faq_dump.md:1954). Keep true Genesis in `genesis`.
    */
   castRider?: (ctx: EffectAPI) => void
+  /** a footprint CHARACTERISTIC: this minion occupies every location of the realm (Yog-Sothoth), applied by
+   *  checkStateBased from the card's name — so transforms into/out of it and silence/disable are honoured.
+   *  `minVoids`: "is banished without N voids" (an ability: ignored while its abilities are off). */
+  occupiesAllLocations?: { minVoids?: number }
+  /** minions the caster MAY sacrifice as part of the cost (Gnarled Wendigo: those at its summoning location).
+   *  The player picks any subset in the cast's `extra.sacrifice` (ids); the engine checks it against this list,
+   *  then kills them with the mana payment, before the minion enters — so the sacrifice is paid even if the
+   *  minion then enters disabled/silenced and fires no Genesis. A cast that names no `sacrifice` (a bot)
+   *  sacrifices every candidate. The discount itself is the card's selfCostModifier (it gets `extra`). */
+  castSacrificeCandidates?: (state: GameState, player: PlayerId, at: { x: number; y: number; region?: Region }) => string[]
   /** triggered when the unit dies (before cemetery) */
   deathrite?: (ctx: EffectAPI) => void
   /** activated abilities beyond the basic ones */
@@ -225,6 +235,9 @@ export interface CardScript {
    *  endOfEveryTurn instead strips the buff while the carrier is still damaged, killing it
    *  before the heal. */
   returnToHandAfterTurn?: boolean
+  /** artifact: "Bearer has 'You control this site.'" (Land Deed) — a continuous control grant, applied
+   *  at every state check, so the bearer's controller takes the site the moment the bearer stands on it */
+  bearerControlsSite?: boolean
   // ---- event triggers (self = the listening card in play) ----
   /** any unit died (fires after it left the realm; `dead` is a value snapshot) */
   onAnyDeath?: (ctx: EffectAPI, dead: UnitState) => void
@@ -233,7 +246,8 @@ export interface CardScript {
   /** a spell was cast by `by` (targets are the cast-time choices, if any) */
   onSpellCast?: (ctx: EffectAPI, by: PlayerId, cardName: string, casterId?: string, targets?: TargetRef[]) => void
   /** this unit was struck by `striker` (combat or projectile) */
-  onSelfStruck?: (ctx: EffectAPI, striker: UnitState) => void
+  /** `striker` is absent when a SITE strikes (Troll Bridge) */
+  onSelfStruck?: (ctx: EffectAPI, striker?: UnitState) => void
   /** this unit attacked and killed `victim` */
   onAttackKill?: (ctx: EffectAPI, victim: UnitState) => void
   /** artifact: keywords granted to the bearer (e.g. ['airborne']) */
@@ -280,7 +294,10 @@ export interface CardScript {
    *  immobilizers (the Bog) don't hold it (e.g. Gossamer Ghost). Distinct from immuneToDisable:
    *  a card grants whichever of the two its own text names, never both-by-implication. */
   immuneToImmobilize?: boolean
-  /** this unit's attacks can't be defended (e.g. Harassing Ruffians) */
+  /** this unit takes part in a fight — attacking, defending, intercepting or a forced fight; once per fight
+   *  (Sir Lancelot) */
+  onSelfFights?: (ctx: EffectAPI) => void
+  /** this unit's attacks on UNITS can't be defended (Harassing Ruffians); an attack on a site still can */
   cantBeDefended?: boolean
   /** minion must be summoned at a position passing this check (e.g. Forsaken → outer column) */
   summonFilter?: (state: GameState, player: PlayerId, at: { x: number; y: number }) => string | null
@@ -330,6 +347,9 @@ export interface CardScript {
     cost: AbilityDef['cost']
     threshold?: Partial<Thresholds>
     targets?: TargetSpec[]
+    /** false while a "target …" trap has no legal target (Icicle Dome, Deep Snow): it can't be activated.
+     *  Any other trap may always be sprung — paying its cost is all a spring needs (rulebook). */
+    available?: (state: GameState, siteId: string, player: PlayerId) => boolean
     effect: (ctx: EffectAPI) => void
   }
   /** fires at the start of EVERY turn (any player); second arg is the player whose turn begins */
@@ -373,6 +393,9 @@ export interface CardScript {
   noStandardSiteAction?: boolean
   /** unit grants activated abilities to units — incl. possibly itself (Dragonlord's borrowed dragon) */
   grantsAbilities?: (state: GameState, selfId: string, unit: UnitState) => AbilityDef[]
+  /** its grantsAbilities is the way OUT of its own disable (Shackled Demon's "until an adjacent Spellcaster
+   *  taps to release him"), so it stays offered while the unit is disabled — still lost to silence */
+  grantsAbilitiesWhileDisabled?: boolean
   /** fires after this unit finishes resolving an attack it initiated and survived
    *  (Bladedancer, Captain Baldassare — target/site of the attack included) */
   afterAttack?: (ctx: EffectAPI, attacker: UnitState, targetUnitId?: string | null, siteId?: string | null) => void
@@ -403,6 +426,9 @@ export interface CardScript {
   auraFloodsSite?: (state: GameState, site: SiteState) => boolean
   /** on a site: OTHER nearby sites are silenced (Smokestacks of Gnaak) */
   silencesNearbySites?: boolean
+  /** on a site: printed "Flooded." (Mismanaged Mortuary) — a static of its own, lost while it is silenced,
+   *  unlike `site.flooded` (a flood granted by another card), which silence doesn't remove (see siteFlooded) */
+  printedFlooded?: boolean
   /** on a site: silences specific other sites (Fields of Phyxis: directly in front) */
   silencesSiteAt?: (state: GameState, self: { id: string; x: number; y: number; controller: PlayerId | null }, target: { x: number; y: number }) => boolean
   /** on a site: provides its mana and threshold to BOTH players (Avalon) */
@@ -489,6 +515,9 @@ export interface CardScript {
   /** a non-Avatar unit took damage (fires after it's applied; the victim may
    *  already be dead — check state.units) (Sawbones, Hemogolem) */
   onUnitDamaged?: (ctx: EffectAPI, victim: UnitState, amount: number, source: DamageSource) => void
+  /** a check queued with deferUntilDamageSettled, run once the simultaneous damage that queued it has
+   *  fully landed and its deaths are settled (Sawbones: "if it survives damage") */
+  onDamageSettled?: (ctx: EffectAPI, victimId: string) => void
   /** a player lost life (avatar damage or direct loss) (Mordric Druids) */
   onLifeLost?: (ctx: EffectAPI, player: PlayerId, amount: number, source: DamageSource | null) => void
   /** on a unit or artifact: shields matching allies (or bearer) from submerging (Driftwood Marrows) */
@@ -530,6 +559,9 @@ export interface CardScript {
   /** this card's event hooks also fire while it sits in a HAND, with
    *  ctx.sourceId = its card id (Dodge Roll, Valor response spells) */
   listensFromHand?: boolean
+  /** "May be cast when …" response spells: only castable from their response window, never as an ordinary
+   *  main-phase cast with nothing to respond to (Dodge Roll, Valor) */
+  responseOnly?: boolean
   /** an ally just tapped to defend (Valor's response window) */
   onAllyDefends?: (ctx: EffectAPI, defender: UnitState) => void
   /** abilities usable straight from the hand, surfaced on the owner's Avatar
@@ -580,7 +612,7 @@ export interface CardScript {
   /** the subsurface of squares near this unit may be attacked from above (Putrid Presence) */
   allowsSubsurfaceAttackAt?: (state: GameState, selfId: string, x: number, y: number) => boolean
   /** site: enemies may redirect damage dealt to this site onto any unit (City of Souls) */
-  siteDamageRedirect?: boolean
+  siteDamageRedirect?: boolean | ((state: GameState, site: SiteState) => boolean)
   /** artifact placement restriction at conjure time (The Round Table's back row) */
   conjureFilter?: (state: GameState, player: PlayerId, at: { x: number; y: number }) => string | null
   /** artifact: bearer can't gain modifiers at all, ward included (Tabula Rasa) */
@@ -593,6 +625,9 @@ export interface CardScript {
   ignoresSites?: boolean
   /** may attack up to N units at the same location simultaneously (Karkemish Chimera) */
   multiAttack?: number
+  /** this unit can't be targeted by the card `sourceName` — its spells, its abilities, and its attacks (the
+   *  defender of an attack is targeted). Earl of the Ivory Towers: "Can't be targeted … by the Ordinary" */
+  cantBeTargetedBy?: (state: GameState, selfId: string, sourceName: string) => boolean
   /** artifact: fires per blow the bearer lands (The Rack) */
   bearerOnStrike?: (ctx: EffectAPI, artifactId: string, target: UnitState) => void
   /** damage to this unit is assigned to one of its stitched parts (Stitched Abomination) */
@@ -648,7 +683,9 @@ export interface CardScript {
    *  need not stand on the site. The engine prompts and applies the sacrifice. */
   avatarDeathSave?: (state: GameState, selfId: string, avatar: UnitState) => string[]
   /** a site took damage; fires for all cards in play (City of Glass, Wizard's Den) */
-  onSiteDamaged?: (ctx: EffectAPI, site: { id: string; x: number; y: number; name: string }, n: number, by: PlayerId) => void
+  onSiteDamaged?: (ctx: EffectAPI, site: { id: string; x: number; y: number; name: string }, n: number, by: PlayerId, source?: DamageSource) => void
+  /** a site was "successfully attacked": struck undefended in an attack — even for 0 (Codex Attack) */
+  onSiteAttackedSuccessfully?: (ctx: EffectAPI, site: { id: string; x: number; y: number; name: string }, attacker: UnitState) => void
   /** dynamic extra mana for SITES (e.g. Myrrh's Trophy Room) */
   siteExtraManaFn?: (state: GameState, siteId: string) => number
   /** site forbids summoning at given squares (e.g. No Man's Land) */
@@ -674,7 +711,7 @@ export interface CardScript {
     at?: { x: number; y: number },
   ) => number
   /** cost modification printed on the card being cast itself (e.g. Black Knight) */
-  selfCostModifier?: (state: GameState, player: PlayerId, at?: { x: number; y: number }) => number
+  selfCostModifier?: (state: GameState, player: PlayerId, at?: { x: number; y: number }, extra?: any) => number
   /** site: extra mana this site charges the summoner PER effect-summon (not per cast —
    *  the cast path uses costModifier). Fires once for every unit that enters the realm
    *  from a non-cast summon, so it taxes each token of a multi-token effect (Mock Court). */
@@ -712,6 +749,9 @@ export interface CardScript {
    *  player's prevention SOURCES (the player orders them when ≥2 apply), and are skipped once damage is 0
    *  (so a consumable isn't wasted). Default (undefined) = a MODIFICATION. */
   damagePreventer?: boolean
+  /** this carried `damagePreventer` only ever protects its own bearer (Plate of the Whale, Goswhit Helmet,
+   *  Fourberie Knot), so it isn't one of the prevention sources for any other unit's damage */
+  bearerOnlyPreventer?: boolean
   /** PERF/UX: this `damagePreventer` modifier is a PURE read — evaluating it (calling damageModifier)
    *  has NO side effects (an elemental/subtype immunity: return `0` or `amount`, no counters, no bounce,
    *  no log). Set true so the prevention pipeline can DRY-RUN it to decide whether it would actually
@@ -745,10 +785,13 @@ export interface CardScript {
   bearerStrikeMultiplier?: number
   /** unit/bearer can't be damaged or targeted by Magic spells (e.g. Failed Mutation, Amulet of Niniane) */
   magicProtected?: boolean | ((state: GameState, selfId: string, unit: UnitState) => boolean)
+  /** on a site: its controller's affinity in these two elements is the higher of the two (Scoria, Tundra) */
+  equalizesThresholds?: [Element, Element]
   /** extra elemental affinity granted to the controller (e.g. Elementalist, elemental Cores) */
   affinityBonus?: Partial<Thresholds>
-  /** minion may be summoned atop ANY site (e.g. Roaming Monster) */
-  summonAnywhere?: boolean
+  /** minion may be summoned atop ANY site (e.g. Roaming Monster). A predicate is an EXTRA permission for
+   *  just those squares, on top of the usual ones (Jack the Ripper: "may be cast to any Mortal"). */
+  summonAnywhere?: boolean | ((state: GameState, player: PlayerId, at: { x: number; y: number; region: Region }) => boolean)
   /** minion can't move to defend (e.g. Skeleton tokens) */
   cantDefend?: boolean
   /** minion can never defend, even in place (e.g. Recurring Specter) */
@@ -837,8 +880,17 @@ export interface CardScript {
    * `selfId` is the listening card's instance id (unit or artifact).
    */
   onWouldDie?: (state: GameState, selfId: string, dying: UnitState) => boolean
+  /** site: "Enters the realm under an opponent's control" (Postern Gate) — HOW it arrives, not a Genesis, so a
+   *  silence that meets it on arrival (Smokestacks of Gnaak) doesn't stop it */
+  entersUnderOpponent?: boolean
+  /** this unit's onWouldDie is a "whenever this kills" replacement: it is still asked for the victims it
+   *  killed in the same simultaneous exchange that killed it (Grim Reaper; codex Fight: kill effects
+   *  resolve before dead minions are placed). Called with its id even though it has left the realm. */
+  killReplacementOutlivesSelf?: boolean
   // ---- movement topology ----
   /** restrict this unit's own steps (e.g. Dalcean Phalanx: forward only) */
+  /** while in the realm: edges of the realm can't be connected, crossed, or shifted (Flat Realm Society) */
+  flattensRealm?: boolean
   stepFilter?: (state: GameState, unit: UnitState, from: Step, to: Step) => boolean
   /** site/artifact blocks OTHER units from entering/stepping (e.g. Gnome Hollows, Great Wall) */
   entryFilter?: (state: GameState, selfId: string, unit: UnitState, from: Step, to: Step) => boolean
@@ -858,6 +910,9 @@ export interface CardScript {
   freeStep?: (state: GameState, unit: UnitState, from: Step, to: Step) => boolean
   /** an ARTIFACT grants a free (0-cost) step to a qualifying unit — Arcade of Bones: Undead in its row */
   artifactFreeStep?: (state: GameState, artifactId: string, unit: UnitState, from: Step, to: Step) => boolean
+  /** a site that must ALWAYS be adjacent to the void (Edge of the World): not just where it's played —
+   *  no site move, pull-apart or site play may leave it without a void beside it (statics.strandedSites) */
+  mustAdjoinVoid?: boolean
   /** site placement extension/restriction (e.g. Cornerstone corners, Edge of the World) */
   sitePlacement?: (state: GameState, player: PlayerId, at: { x: number; y: number }) => 'allow' | 'deny' | null
   // ---- combat roles & strike effects ----
@@ -880,6 +935,12 @@ export interface CardScript {
 }
 
 type Step = { x: number; y: number; region: Region }
+
+/** Is this damage from a STRIKE — a fight's blow or a Ranged shot (Codex, Ranged: "the ranged shooter strikes
+ *  the hit unit. This follows normal strike rules")? Use it wherever a card cares about strike damage. */
+export function isStrikeDamage(source: DamageSource | undefined): boolean {
+  return source?.kind === 'strike' || !!source?.rangedStrike
+}
 
 /** who/what is dealing this damage */
 export interface DamageSource {

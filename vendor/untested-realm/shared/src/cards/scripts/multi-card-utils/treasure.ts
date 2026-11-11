@@ -1,7 +1,7 @@
 import { type CardScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog, opponent, toCemetery } from '../../../engine/effects'
-import { siteAt } from '../../../engine/grid'
+import { siteAt, siteFlooded } from '../../../engine/grid'
 
 // Buried/Sunken Treasure: conjured underneath an allied site of the OPPONENT's
 // choice; sacrificed for two cards when carried to the surface.
@@ -12,7 +12,7 @@ export function treasureScript(name: string, water: boolean): CardScript {
       if (!art) return
       const spots = Object.values(ctx.state.sites)
         .filter((s) => s.controller === ctx.controller && !s.isRubble)
-        .filter((s) => (s.flooded || getCard(s.name).thresholds.water > 0) === water)
+        .filter((s) => (siteFlooded(ctx.state, s) || getCard(s.name).thresholds.water > 0) === water)
         .map((s) => ({ x: s.x, y: s.y }))
       if (!spots.length) return
       ctx.ask(

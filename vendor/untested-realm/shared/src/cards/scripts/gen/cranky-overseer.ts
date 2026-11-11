@@ -1,4 +1,5 @@
 import { registerScript } from '../registry'
+import { untapUnit } from '../../../engine/effects'
 import { getCard } from '../../db'
 
 // 'Once on your turn, the Overseer may deal 1 damage to target adjacent Ordinary
@@ -18,7 +19,7 @@ registerScript('Cranky Overseer', {
       if (!('unit' in t)) return
       ctx.dealDamage({ unit: t.unit }, 1)
       const u = ctx.state.units[t.unit]
-      if (u) u.tapped = false
+      if (u) untapUnit(ctx.state, u)
     },
   }],
 })

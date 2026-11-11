@@ -29,7 +29,8 @@ registerScript('Locusts of Illyria', {
     // sites the copy is made in the cont, AFTER every Locust's trigger already ran → 2+ copies.)
     if (ctx.state.flow.locustSpreadTurn === ctx.state.turn) return
     // a copy may spread onto ANY nearby site, including the opponent's (siteAt = any site).
-    const spots = nearbySquaresW(ctx.state, self.x, self.y).filter((s) => siteAt(ctx.state, s.x, s.y) && !(s.x === self.x && s.y === self.y))
+    // nearby includes its own square (Codex, Nearby)
+    const spots = nearbySquaresW(ctx.state, self.x, self.y).filter((s) => siteAt(ctx.state, s.x, s.y))
     if (spots.length === 0) return // this Locust has nowhere to spread — leave the claim for another
     ctx.state.flow.locustSpreadTurn = ctx.state.turn // claim BEFORE any prompt
     if (spots.length === 1) {

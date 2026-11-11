@@ -1,5 +1,5 @@
 import { type EffectAPI } from '../registry'
-import { pushLog, registerSpellDraw } from '../../../engine/effects'
+import { emitEvent, pushLog, registerSpellDraw } from '../../../engine/effects'
 
 /** draw the top spell into hand and bond it to a caster */
 // `grantsCasting`: does the drawing effect confer the ability to cast (Archangel
@@ -17,6 +17,10 @@ export function drawLocked(ctx: EffectAPI, casterId: string, label: string, gran
   ctx.state.flow = ctx.state.flow ?? {}
   const casterName = ctx.state.units[casterId]?.name ?? ctx.state.artifacts[casterId]?.name
   ctx.state.flow.lockedCards = [...(ctx.state.flow.lockedCards ?? []), { cardId: top, casterId, casterName, grantsCasting }]
+  // it still counts as the player drawing (Codex, Draw: "e.g. Morgana le Fay, Omphalos") — Chains of Prometheus
+  ctx.state.flow.drawsThisTurn = ctx.state.flow.drawsThisTurn ?? { 0: 0, 1: 0 }
+  ctx.state.flow.drawsThisTurn[ctx.controller] = (ctx.state.flow.drawsThisTurn[ctx.controller] ?? 0) + 1
+  emitEvent(ctx.state, 'onCardDrawn' as any, ctx.controller, 'spellbook')
   // don't name the drawn card in the shared log (it's a hidden hand card — the
   // controller sees it in hand with the caster-lock badge; naming it would leak)
   pushLog(ctx.state, ctx.controller, `A spell is drawn — only ${label} may cast it.`)

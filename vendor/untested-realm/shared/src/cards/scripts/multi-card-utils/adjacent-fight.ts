@@ -7,7 +7,8 @@ import type { UnitState } from '../../../engine/types'
 export function adjacentFightTargets(allyLabel: string): TargetSpec[] {
   return [
     { what: 'unit', count: 1, targeted: false, owner: 'ally', label: allyLabel },
-    { what: 'unit', count: 1, targeted: true, owner: 'enemy', label: 'target adjacent enemy' },
+    // adjacent to the ALLY picked first (whereOf 0), not the caster: a far enemy is never offered
+    { what: 'unit', count: 1, targeted: true, owner: 'enemy', where: 'adjacent', whereOf: 0, label: 'target adjacent enemy' },
   ]
 }
 

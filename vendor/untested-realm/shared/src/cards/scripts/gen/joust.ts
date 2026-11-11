@@ -26,6 +26,6 @@ registerScript('Joust!', {
     if (!aMoved || !bMoved || !ctx.state.units[a.id] || !ctx.state.units[b.id]) return // a step failed or a trigger removed a jouster
     pushLog(ctx.state, ctx.controller, `${a.name} and ${b.name} joust past each other!`)
     // they pass each other and fight — a real simultaneous strike exchange (Interrogator, Lethal, …)
-    fightUnits(ctx.state, a, b)
+    fightUnits(ctx.state, a, b, [a, b]) // both stepped: neither is at rest
   },
 })

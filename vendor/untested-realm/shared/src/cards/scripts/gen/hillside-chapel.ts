@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { nearbySquaresW, unitsAt } from '../../../engine/grid'
-import { wardUnit } from '../../../engine/effects'
+import { wardUnit, tapUnit } from '../../../engine/effects'
 import { isEvilU } from '../multi-card-utils/is-evil-u'
 
 // 'Genesis → You may pay (1) to tap and Ward a nearby allied minion.'
@@ -23,7 +23,7 @@ registerScript('Hillside Chapel', {
       const p = ctx.state.players[ctx.controller]
       if (!u || p.mana < 1) return
       ctx.spendMana(ctx.controller, 1)
-      u.tapped = true
+      tapUnit(ctx.state, u)
       wardUnit(ctx.state, u)
     },
   },

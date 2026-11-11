@@ -14,7 +14,8 @@ registerScript('The Green Knight', {
       .filter((u) => u.controller !== ctx.controller)
       .map((u) => u.id)
     if (!prey.length) return
-    ctx.ask({ kind: 'chooseTargets', title: "The Green Knight's head laughs — and strikes whom?", data: { candidates: prey, count: 1, upTo: true, kind: 'unit' } }, 'beheaded')
+    // "Strike target nearby enemy" — no "may": with an enemy there, choosing one is required (Codex Target)
+    ctx.ask({ kind: 'chooseTargets', title: "The Green Knight's head laughs — and strikes whom?", data: { candidates: prey, count: 1, upTo: false, kind: 'unit' } }, 'beheaded')
   },
   conts: {
     beheaded: (ctx, _c, choice) => {

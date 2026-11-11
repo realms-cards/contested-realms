@@ -1,4 +1,5 @@
 import { registerScript } from '../registry'
+import { disableUntilYourNextTurn } from '../multi-card-utils/disable-until-next-turn'
 
 // 'Disable target nearby minion until your next turn.'
 registerScript('Freeze', {
@@ -7,6 +8,6 @@ registerScript('Freeze', {
     const t = ctx.targets[0]
     if (!('unit' in t)) return
     const u = ctx.state.units[t.unit]
-    if (u) u.modifiers.push({ kind: 'keyword', keyword: 'disabled', duration: 'untilYourNextTurn', turn: ctx.state.turn, sourcePlayer: ctx.controller })
+    if (u) disableUntilYourNextTurn(ctx.state, u.id, ctx.controller)
   },
 })

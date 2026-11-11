@@ -13,7 +13,9 @@ registerScript('Sir Galahad', {
     // "Nearby allies" is self-inclusive, so Galahad also takes no damage from Demons/Spirits/Undead himself.
     if (!self || self.silenced || victim.controller !== self.controller) return amount
     if (!nearbySquaresW(state, self.x, self.y).some((s) => s.x === victim.x && s.y === victim.y)) return amount
-    const striker = source?.attackerId ? state.units[source.attackerId] : null
+    // a striker, or a unit dealing damage with its ability (Draconian Bonekite): "from" covers both
+    const dealer = source?.attackerId ?? source?.sourceUnitId
+    const striker = dealer ? state.units[dealer] : null
     if (!striker) return amount
     const st = effSubtypes(state, striker)
     return st.includes('Demon') || st.includes('Spirit') || st.includes('Undead') ? 0 : amount

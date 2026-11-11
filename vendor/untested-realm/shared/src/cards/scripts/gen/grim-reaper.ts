@@ -2,6 +2,7 @@ import { registerScript } from '../registry'
 import { pushLog, removeUnitFromRealm } from '../../../engine/effects'
 import { cemeteryProtected, payZoneToll } from '../../../engine/statics'
 import { shuffleDeck } from '../../../engine/knowledge'
+import type { PlayerId } from '../../../engine/types'
 
 // ---------- killer tracking ----------
 
@@ -11,11 +12,15 @@ registerScript('Grim Reaper', {
   // FAQ: the victim is banished INSTEAD of dying (no deathrite), along with
   // all in-play copies (any controller), and all copies in the owner's
   // cemetery, hand and spellbook. They shuffle.
+  killReplacementOutlivesSelf: true,
   onWouldDie: (state, selfId, dying) => {
-    const reaper = state.units[selfId]
-    if (!reaper || reaper.name !== 'Grim Reaper' || dying.isAvatar) return false
-    const hit = state.flow?.lastHitBy
-    if (!hit || hit.unitId !== dying.id || hit.attackerId !== selfId) return false
+    const live = state.units[selfId]
+    if ((live && live.name !== 'Grim Reaper') || dying.isAvatar) return false
+    // "kills" = the Reaper damaged the victim in its fatal event (the kill credit). The credit holds a
+    // snapshot, so a Reaper that fell in the same simultaneous strike (a Lethal trade) still reaps.
+    const credit = ((state.flow?.damageCredit?.[dying.id] ?? []) as { id: string; controller: PlayerId }[]).find((d) => d.id === selfId)
+    if (!credit) return false
+    const reaper = { controller: live?.controller ?? credit.controller }
     const name = dying.name
     const owner = state.players[dying.owner]
     // the victim never reaches the cemetery

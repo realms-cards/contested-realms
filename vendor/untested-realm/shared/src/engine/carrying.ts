@@ -8,7 +8,7 @@ import { getScript } from '../cards/scripts/registry'
 import type { GameState, PlayerId, Region, UnitState } from './types'
 import { pushLog } from './effects'
 import { siteEntryAllowed } from './movement' // runtime-only use; import cycle is safe
-import { hasRegionKeyword } from './statics'
+import { abilitiesOff, hasRegionKeyword } from './statics'
 
 /** true if `carrierId` transitively carries `unitId` */
 export function carriesTransitively(state: GameState, carrierId: string, unitId: string): boolean {
@@ -31,8 +31,12 @@ export function carriesTransitively(state: GameState, carrierId: string, unitId:
 /**
  * Move everything a unit carries (artifacts + units, recursively) to its
  * location. Call after ANY movement of the carrier.
+ * `ownStep`: the carrier moved by its OWN step (Move and Attack, Defend, "take a step"). Only then does a
+ * unit carried ON TOP follow it into another region (the carrier confers Burrowing / Submerge / Voidwalk);
+ * being carried is forced movement, so when the carrier is FORCED into another region (Bury, Drown,
+ * Cave-In, a drag into the void) the rider stays behind in its own region and stops being carried.
  */
-export function syncCarried(state: GameState, carrier: UnitState, visited: Set<string> = new Set()): void {
+export function syncCarried(state: GameState, carrier: UnitState, visited: Set<string> = new Set(), ownStep = false): void {
   if (visited.has(carrier.id)) return
   visited.add(carrier.id)
   for (const artId of carrier.carrying) {
@@ -47,8 +51,8 @@ export function syncCarried(state: GameState, carrier: UnitState, visited: Set<s
   // ON-TOP cargo with it — those units are left behind on the surface (dropped in place, at the
   // carrier's old square, since they haven't been moved yet). Cargo carried INSIDE the carrier
   // (a Brobdingnag Bullfrog's belly — carriedAreDisabled) rides down into the void with it, and so does
-  // the cargo of a carrier with Voidwalk, which confers it (Codex, Carrying Units: a Phantom Steed carries
-  // a Bosk Troll into the void, and the Troll survives there while it is carried).
+  // the cargo of a carrier with Voidwalk that STEPS into the void itself, which confers it (Codex, Carrying
+  // Units: a Phantom Steed carries a Bosk Troll into the void, and the Troll survives there while carried).
   const carrierSwallows = !!getScript(carrier.name)?.carriedAreDisabled && !carrier.silenced
   const voidRide = carrier.region === 'void' && (carrierSwallows || hasRegionKeyword(state, carrier, 'voidwalk'))
   for (const unitId of [...carrier.carryingUnits]) {
@@ -56,6 +60,13 @@ export function syncCarried(state: GameState, carrier: UnitState, visited: Set<s
     if (!u) continue
     if (carrier.region === 'void' && !voidRide) {
       detachFromCarrier(state, u) // stays behind on the surface — it doesn't follow into the void
+      continue
+    }
+    // forced into another region: the on-top rider isn't carried across (forced movement never changes a
+    // unit's region); only swallowed cargo goes along
+    if (u.region !== carrier.region && !ownStep && !carrierSwallows) {
+      detachFromCarrier(state, u)
+      pushLog(state, u.controller, `${u.name} is left behind as ${carrier.name} is forced ${carrier.region === 'void' ? 'into the void' : carrier.region}.`)
       continue
     }
     // Being carried is forced movement: cargo that can't enter the carrier's new site (a Bosk Troll on a
@@ -79,7 +90,7 @@ export function syncCarried(state: GameState, carrier: UnitState, visited: Set<s
     u.x = carrier.x
     u.y = carrier.y
     u.region = carrier.region
-    syncCarried(state, u, visited)
+    syncCarried(state, u, visited, ownStep)
   }
 }
 
@@ -126,7 +137,7 @@ export function pickUpUnits(state: GameState, player: PlayerId, carrier: UnitSta
   // some cargo invites itself onto any matching carrier (Sir Tom Thumb on Beasts)
   const invited = (u: UnitState): boolean => {
     const f = getScript(u.name)?.carriedByAnyone
-    return !!f && !u.silenced && f(state, carrier)
+    return !!f && !abilitiesOff(state, u) && f(state, carrier)
   }
   if (!spec && !unitIds.every((id) => state.units[id] && invited(state.units[id]))) return `${carrier.name} cannot carry units.`
   const capacity = !spec || spec.capacity === 'any' ? Infinity : spec.capacity
@@ -142,7 +153,7 @@ export function pickUpUnits(state: GameState, player: PlayerId, carrier: UnitSta
     if (u.x !== carrier.x || u.y !== carrier.y || u.region !== carrier.region) return `${u.name} is not at this location.`
     if (carriesTransitively(state, u.id, carrier.id)) return 'That would create a carrying loop.'
     // being carried is forced movement, which "can't be moved by force" refuses (Iron Man Talus)
-    if (getScript(u.name)?.immovable && !u.silenced) return `${u.name} can't be moved by force.`
+    if (getScript(u.name)?.immovable && !abilitiesOff(state, u)) return `${u.name} can't be moved by force.`
     if (!invited(u) && spec?.filter && !spec.filter(state, carrier, u)) return `${carrier.name} cannot carry ${u.name}.`
   }
   for (const id of unitIds) {
@@ -157,7 +168,7 @@ export function pickUpUnits(state: GameState, player: PlayerId, carrier: UnitSta
 export function dropUnits(state: GameState, player: PlayerId, carrier: UnitState, unitIds: string[]): string | null {
   // some carriers can't set their cargo down at will (Brobdingnag Bullfrog's belly:
   // the meal is only freed when the Bullfrog leaves the realm)
-  if (getScript(carrier.name)?.carriedCantDrop && !carrier.silenced) return `${carrier.name} can't release what it carries.`
+  if (getScript(carrier.name)?.carriedCantDrop && !abilitiesOff(state, carrier)) return `${carrier.name} can't release what it carries.`
   for (const id of unitIds) {
     if (!carrier.carryingUnits.includes(id)) return 'Not carrying that unit.'
   }

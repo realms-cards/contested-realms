@@ -10,8 +10,9 @@ registerScript('Doctor Demetrius', {
     cost: {},
     oncePerTurn: true,
     targets: [{
-      what: 'minion', count: 1, targeted: true, where: 'adjacent', label: 'another adjacent minion',
-      filter: (state, u) => !isEvilU(state, u),
+      // no "target" in the text: a Stealthed minion may be chosen (codex Target / Stealth)
+      what: 'minion', count: 1, targeted: false, where: 'adjacent', label: 'another adjacent minion',
+      filter: (state, u, src) => u.id !== src.id && !isEvilU(state, u),
     }],
     effect: (ctx) => {
       const t = ctx.targets[0]

@@ -81,7 +81,7 @@ function fight(ctx: EffectAPI, sharkId: string, preyId: string): void {
   const prey = ctx.state.units[preyId]
   if (!shark || !prey) return
   pushLog(ctx.state, ctx.controller, `The Giant Shark smells blood — it attacks ${prey.name}!`)
-  fightUnits(ctx.state, shark, prey) // a real fight: both strike (fires Interrogator, Lethal, kill triggers…)
+  fightUnits(ctx.state, shark, prey, [shark, prey]) // both moved; a real fight: both strike (fires Interrogator, Lethal, kill triggers…)
 }
 
 // Every DISTINCT shortest route (full step list) from `start` to `goal`, following only steps that shorten
@@ -149,12 +149,28 @@ function chase(ctx: EffectAPI, sharkId: string, preyId: string): void {
 }
 
 registerScript('Giant Shark', {
+  // A summoned unit ENTERS as it is summoned (Codex Enter), but its location trigger is resolved only
+  // after its Genesis. Whether it entered THIS body of water is judged at the entry: note the ones that
+  // didn't, so a Genesis that joins the water afterwards (Great Old One's flood) doesn't make them prey.
+  onUnitEnters: (ctx, entered) => {
+    const self = ctx.state.units[ctx.sourceId]
+    if (!self || entered.id === self.id) return
+    if (bodyOfWaterAt(ctx.state, self.x, self.y).has(`${entered.x},${entered.y}`)) return
+    ctx.state.flow = ctx.state.flow ?? {}
+    ctx.state.flow.sharkMissed = [...((ctx.state.flow.sharkMissed ?? []) as string[]), `${self.id}:${entered.id}`]
+  },
   onUnitEntersSquare: (ctx, moved, from) => {
     const self = ctx.state.units[ctx.sourceId]
     if (!self || moved.id === self.id) return // never reacts to its own entry/moves
     // FAQ: a unit merely changing REGION within the SAME site (surface↔underwater) is not "entering or
     // moving between sites" — the Shark does not react to it.
     if (from && from.x === moved.x && from.y === moved.y) return
+    const missed = (ctx.state.flow?.sharkMissed ?? []) as string[]
+    const key = `${self.id}:${moved.id}`
+    if ((from?.region as string | undefined) === 'offboard' && missed.includes(key)) {
+      ctx.state.flow.sharkMissed = missed.filter((k) => k !== key)
+      return
+    }
     const body = bodyOfWaterAt(ctx.state, self.x, self.y)
     if (!body.has(`${moved.x},${moved.y}`)) return // the mover isn't in the Shark's body of water
     if (!ctx.state.units[moved.id]) return

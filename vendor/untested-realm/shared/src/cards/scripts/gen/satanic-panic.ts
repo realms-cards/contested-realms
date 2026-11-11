@@ -4,7 +4,8 @@ import { effSubtypes } from '../../../engine/statics'
 
 // 'Kill all Demons, and one other target minion.'
 registerScript('Satanic Panic', {
-  targets: [{ what: 'minion', count: 1, targeted: true, label: 'one other target minion' }],
+  // "other": a minion besides the Demons the spell already kills
+  targets: [{ what: 'minion', count: 1, targeted: true, label: 'one other target minion', filter: (state, u) => !effSubtypes(state, u).includes('Demon') }],
   onCast: (ctx) => {
     const t = ctx.targets[0]
     for (const u of Object.values(ctx.state.units)) {

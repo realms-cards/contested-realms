@@ -41,7 +41,53 @@ export function edgesConnected(state: GameState): boolean {
     const x = a.carriedBy ? state.units[a.carriedBy]?.x ?? a.x : a.x
     const y = a.carriedBy ? state.units[a.carriedBy]?.y ?? a.y : a.y
     return !Object.values(state.auras).some((r) => getScript(r.name)?.auraSilencesArtifacts && r.squares.some((q) => q.x === x && q.y === y))
-  })
+  }) && !realmIsFlat(state) // only scanned when a live Globe exists (hot path)
+}
+
+// statics.isDisabled, injected by statics at load (grid can't import statics: import cycle)
+let unitDisabled: (state: GameState, unit: UnitState) => boolean = () => false
+export function setGridDisabledCheck(fn: (state: GameState, unit: UnitState) => boolean): void {
+  unitDisabled = fn
+}
+// statics.siteSilenced, injected the same way
+let siteLosesAbilities: (state: GameState, site: SiteState) => boolean = () => false
+export function setGridSiteSilencedCheck(fn: (state: GameState, site: SiteState) => boolean): void {
+  siteLosesAbilities = fn
+}
+/** Is this site flooded right now? `site.flooded` is a flood GRANTED by another card (The Flood, Floodplain,
+ *  Great Old One, an aura…): a silenced site keeps it (Codex, Silenced: a site flooded via Floodplain / The
+ *  Flood / Great Old One "will still be Flooded"). A PRINTED Flooded (Mismanaged Mortuary) is the site's own
+ *  ability, so it is lost while the site is silenced (Smokestacks of Gnaak) or disabled. */
+export function siteFlooded(state: GameState, site: SiteState): boolean {
+  if (site.flooded) return true
+  return !site.isRubble && !!getScript(site.name)?.printedFlooded && !siteLosesAbilities(state, site)
+}
+// statics.regionPresentAt, injected the same way
+let regionPresent: (state: GameState, region: Region, x: number, y: number) => boolean = () => false
+export function setGridRegionCheck(fn: (state: GameState, region: Region, x: number, y: number) => boolean): void {
+  regionPresent = fn
+}
+
+/** Flat Realm Society: "Edges of the realm can't be connected, crossed, or shifted." True while a
+ *  `flattensRealm` minion with its abilities (not silenced or disabled) is in the realm. */
+export function realmIsFlat(state: GameState): boolean {
+  for (const u of Object.values(state.units)) {
+    if (!u.silenced && getScript(u.name)?.flattensRealm && !unitDisabled(state, u)) return true
+  }
+  return false
+}
+
+/** The step across the top/bottom edge of the realm from `from` ("can move as if the top and bottom
+ *  edges of the realm were connected": Polar Bears, Polar Explorers, Ruler of Thul): top row ↔ bottom
+ *  row of the same column, staying in its region (a burrowing or submerging mover wraps below ground or
+ *  water too) where that region exists. None while the realm is flat. */
+export function topBottomWrapSteps(state: GameState, from: Step): Step[] {
+  if ((from.y !== 0 && from.y !== GRID_H - 1) || realmIsFlat(state)) return []
+  const out: Step[] = []
+  for (const y of [from.y === 0 ? GRID_H - 1 : null, from.y === GRID_H - 1 ? 0 : null]) {
+    if (y !== null && regionPresent(state, from.region, from.x, y)) out.push({ x: from.x, y, region: from.region })
+  }
+  return out
 }
 
 /** the squares a standard 2x2 aura anchored at `at` (top-left) covers: clipped to
@@ -101,13 +147,15 @@ export function isWaterSite(state: GameState, site: SiteState, defs: (name: stri
   // it leaves behind), making it a body of water: its subsurface is underwater, so a Submerge
   // minion sunk there survives while everything else drowns (was: all rubble read as 'land', so
   // canExistIn('underwater') was false there and even Submerge minions drowned).
-  if (site.isRubble) return !!site.flooded
+  // a granted flood survives silence; a printed one (Mismanaged Mortuary) doesn't — see siteFlooded
+  const flooded = siteFlooded(state, site)
+  if (site.isRubble) return flooded
   // Drought: covered sites provide no water threshold (and no flood bonus)
   const dried = Object.values(state.auras).some(
     (r) => getScript(r.name)?.driesSites && r.squares.some((s) => s.x === site.x && s.y === site.y),
   )
   if (dried) return false
-  if (site.flooded) return true
+  if (flooded) return true
   let water = defs(site.name).thresholds.water
   water += getScript(site.name)?.siteExtraThreshold?.(state, site)?.water ?? 0
   for (const r of Object.values(state.auras)) {

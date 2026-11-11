@@ -1,10 +1,10 @@
 import { getCard } from '../cards/db'
-import { getScript, type AbilityDef, type EffectAPI } from '../cards/scripts/registry'
+import { getScript, type AbilityDef, type EffectAPI, type TargetRef } from '../cards/scripts/registry'
 import type { Action, ActionResult, GameState, PlayerId, UnitState } from './types'
 import { doMulligan, keepHand } from './setup'
 import { endTurn, reconcileControlledMana } from './turn'
 import { activePrompt, resolvePrompt, pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkStateBased, killUnit, tapUnit, checkWard, luckyCandidates, bumpManaSpent, beginAreaReveal, sealAbilityReveal, revealAbility, setActionCredit, restoreActionCredit, reconcileSummonTax, completeDeferredDeaths, finishBattleCapture, runDamageEvent, loseLife } from './effects'
-import { castSpell, playSite, affinity, validateTarget, legalTargetOptions, sameTargetRef, resolvePendingCast, resolveQueuedCopyCasts, castExtrasProblem, isRegion, settleResolvedMagics } from './casting'
+import { castSpell, playSite, affinity, targetPickProblem, type TargetPick, resolvePendingCast, resolveQueuedCopyCasts, castExtrasProblem, isRegion, settleResolvedMagics } from './casting'
 import { moveAttack, shootProjectile, pickUp, drop, enforceForcedAttacks, resolvePendingMoveAttack } from './combat'
 import { applyJudge } from './judge'
 import { actionShapeProblem } from './action-shape'
@@ -202,20 +202,18 @@ function dispatch(state: GameState, player: PlayerId, action: Action): string | 
         revealAbility(state, avatar.id, `${avatar.name} draws a site`) // golden avatar + writing over its site
         return null
       }
-      const siteNm = state.cards[action.cardId]?.name ?? 'a site'
       const err = playSite(state, player, action.cardId, action.x, action.y)
       if (err) {
         avatar.tapped = false // refund the tap on an illegal placement
         return err
       }
       state.players[player].established = true // the avatar now has a domain (gates the void rule)
-      revealAbility(state, avatar.id, `${avatar.name} plays ${siteNm}`, { x: action.x, y: action.y }) // golden avatar + writing over the played site
+      // caption with the site AS PLAYED: a face-down Trap shows only its disguise (flow is public)
+      const played = Object.values(state.sites).find((s) => s.cardId === action.cardId)
+      revealAbility(state, avatar.id, `${avatar.name} plays ${played?.name ?? 'a site'}`, { x: action.x, y: action.y }) // golden avatar + writing over the played site
       // avatar riders on the site play (Geomancer's rubble-fill)
       const after = getScript(avatar.name)?.afterAvatarSitePlay
-      if (after && !avatar.silenced) {
-        const played = Object.values(state.sites).find((s) => s.cardId === action.cardId)
-        if (played) after(makeCtx(state, avatar.id, player, []), played.id)
-      }
+      if (after && !avatar.silenced && played) after(makeCtx(state, avatar.id, player, []), played.id)
       return null
     }
     case 'castSpell':
@@ -329,6 +327,12 @@ export function isTentativeActivate(state: GameState, action: Action): boolean {
   return !!ability?.tentativePlay
 }
 
+/** flip a face-down trap face up: it is now its real self (name, threshold, passives, abilities) */
+function revealTrap(state: GameState, siteId: string): void {
+  const s = state.sites[siteId]
+  if (s?.trap?.realName) { s.name = s.trap.realName; delete s.trap }
+}
+
 /** The one-shot "spring" ability of a face-down site TRAP, synthesized from the real card's
  *  `siteTrapAbility`. Activating it reveals the true site (name ← real, `trap` cleared, so its real
  *  threshold/passives/abilities come online) and fires the trap's effect. Surfaced with the SITE as
@@ -344,9 +348,9 @@ function trapSpringAbility(state: GameState, siteId: string): AbilityDef | undef
     cost: ta.cost,
     threshold: ta.threshold,
     targets: ta.targets,
+    available: ta.available ? (s, id) => ta.available!(s, id, s.sites[id]?.controller ?? 0) : undefined,
     effect: (ctx: EffectAPI) => {
-      const s = ctx.state.sites[siteId]
-      if (s?.trap?.realName) { s.name = s.trap.realName; delete s.trap } // reveal: it is now its real self
+      revealTrap(ctx.state, siteId)
       ta.effect(ctx)
     },
   }
@@ -362,6 +366,12 @@ export function canActivate(
   if (!source) return 'No such card.'
   const script = getScript(source.name)
   const unit = state.units[sourceId]
+  // springing a face-down trap: only its owner knows what it is, so only its owner — while controlling
+  // it — may spring it. Judged before any lookup, so a foe probing it learns nothing from the error.
+  if (abilityKey === 'trap:spring' && state.sites[sourceId]) {
+    const site = state.sites[sourceId]
+    if (site.controller !== player || site.owner !== player) return 'You do not control that.'
+  }
   let ability = script?.abilities?.find((a) => a.key === abilityKey)
   if (!ability && unit) {
     ability = grantedAbilities(state, unit).find((a) => a.key === abilityKey)
@@ -374,7 +384,9 @@ export function canActivate(
   if (unit) {
     if (unit.controller !== player) return 'Not your unit.'
     if (isDisabled(state, unit)) return `${unit.name} is disabled.`
-    if (unit.silenced) return `${unit.name} is silenced.`
+    // silence takes only the unit's OWN abilities; one granted by another card (Temple of Moloch's
+    // sacrifice, a weapon's ability) stays usable (owner ruling: rulebook "Silenced")
+    if (unit.silenced && script?.abilities?.some((a) => a.key === abilityKey)) return `${unit.name} is silenced.`
   } else {
     const art = state.artifacts[sourceId]
     // a CARRIED artifact is controlled by its BEARER (so a stolen Toolbox, now carried by your unit,
@@ -480,16 +492,14 @@ function activateAbility(
   const caster = abilityAnchor(state, action.sourceId, player)
   let ti = 0
   const abilitySpecs = ability.targets ?? []
+  const pick: TargetPick = { script, specs: abilitySpecs, caster, player, source: source.name }
   for (let si = 0; si < abilitySpecs.length; si++) {
     const spec = abilitySpecs[si]
     for (let i = 0; i < spec.count && ti < targets.length; i++, ti++) {
-      const err = validateTarget(state, spec, targets[ti] as any, caster, player)
+      // the shared pick test: spec + earlier picks (whereOf) + the card's targetOptions set (Midland
+      // Army's bombard range…) — a too-far pick is refused before the tap/discard cost is spent
+      const err = targetPickProblem(state, pick, targets.slice(0, ti) as TargetRef[], targets[ti] as TargetRef, si)
       if (err) return err
-      // engine-authoritative legal set for spatial/interdependent ability picks (Midland Army's
-      // bombard, Corpse Catapult's fling — "up to three steps away") — reject a too-far pick up front
-      // so the tap/discard cost isn't spent on a shot that would just fizzle out of range.
-      const opts = legalTargetOptions(state, script, caster, targets.slice(0, ti) as any, si)
-      if (opts && !opts.some((o) => sameTargetRef(o, targets[ti] as any))) return 'Not a legal target.'
     }
     if (!spec.upTo && ti < spec.count) return 'Missing targets.'
   }
@@ -538,6 +548,8 @@ function activateAbility(
     state.flow.abilityUsed[`${action.sourceId}:${ability.key}`] = state.turn
   }
 
+  // a springing trap flips face up first, so the log, the damage and the reveal name the real card
+  if (action.ability === 'trap:spring') revealTrap(state, action.sourceId)
   pushLog(state, player, `${source.name}: ${ability.label}.`)
   // codex: an opponent's ability targeting breaks wards instead
   {

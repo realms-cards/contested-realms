@@ -8,7 +8,8 @@ registerScript('Sneak Thief', {
     key: 'steal',
     label: 'Steal an artifact from a unit here',
     cost: { tap: true },
-    targets: [{ what: 'unit', count: 1, targeted: true, where: 'here', label: 'target unit here' }],
+    // "ANOTHER target unit here": never the Thief itself — alone, it has no legal target
+    targets: [{ what: 'unit', count: 1, targeted: true, where: 'here', label: 'another target unit here', filter: (_state, u, self) => u.id !== self?.id }],
     effect: (ctx) => {
       const self = ctx.state.units[ctx.sourceId]
       const t = ctx.targets[0]

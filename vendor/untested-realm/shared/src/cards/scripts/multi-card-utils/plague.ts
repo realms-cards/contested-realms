@@ -1,5 +1,5 @@
 import { type CardScript, type EffectAPI } from '../registry'
-import { pushLog, killUnit, checkStateBased, checkWard } from '../../../engine/effects'
+import { pushLog, killUnit, checkStateBased, checkWard, deathPending } from '../../../engine/effects'
 import { siteAt, unitsAt } from '../../../engine/grid'
 import { avgPower } from '../gen/minion-helpers'
 import { removeAura } from './remove-aura'
@@ -22,7 +22,8 @@ export function plagueScript(name: string, strongest: boolean): CardScript {
     }
     killUnit(ctx.state, unitId)
     checkStateBased(ctx.state)
-    if (ctx.state.units[unitId]) passOn(ctx)
+    // still on the board only because its Deathrite is asking a question (Sacred Stag) — it died all the same
+    if (ctx.state.units[unitId] && !deathPending(ctx.state, unitId)) passOn(ctx)
   }
   return {
     endOfTurn: (ctx) => {

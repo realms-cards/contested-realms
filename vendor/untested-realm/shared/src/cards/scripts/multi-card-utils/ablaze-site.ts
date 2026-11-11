@@ -20,11 +20,12 @@ export function ablazeSite(opts: { name: string; rarities: string[]; rarityLabel
       const aura = ctx.state.auras[ctx.sourceId]
       if (!aura || !aura.squares.length) return
       const sq = aura.squares[0]
-      for (const u of unitsAt(ctx.state, sq.x, sq.y, 'surface')) {
-        if (!u.isAvatar) killUnit(ctx.state, u.id)
-      }
+      // one destruction of all of them: the site is already Rubble when a dying minion's Deathrite looks
+      // (Bladderblimp counting nearby sites, Sir Lamorak's strike)
+      const doomed = unitsAt(ctx.state, sq.x, sq.y, 'surface').filter((u) => !u.isAvatar)
       const site = siteAt(ctx.state, sq.x, sq.y)
       if (site) ctx.destroySite(site.id)
+      for (const u of doomed) if (ctx.state.units[u.id]) killUnit(ctx.state, u.id)
       removeAura(ctx)
       pushLog(ctx.state, ctx.controller, burnLog)
     },

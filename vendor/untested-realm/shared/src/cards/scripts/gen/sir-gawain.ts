@@ -7,7 +7,8 @@ import { effDefence } from '../../../engine/statics'
 //  taken this way, draw a card.'
 registerScript('Sir Gawain', {
   damageModifier: (state, selfId, victim, amount, source) => {
-    if (victim.id === selfId || victim.isAvatar || amount <= 0) return amount
+    // an ally is any unit you control, your Avatar included (Codex, Ally)
+    if (victim.id === selfId || amount <= 0) return amount
     const gawain = state.units[selfId]
     if (!gawain || gawain.silenced || gawain.controller !== victim.controller) return amount
     if (!isAdjacentW(state, gawain.x, gawain.y, victim.x, victim.y)) return amount

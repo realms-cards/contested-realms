@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { pushLog } from '../../../engine/effects'
+import { pushLog, tapUnit } from '../../../engine/effects'
 
 // 'Once on your turn, Sir Tristan may tap target nearby enemy minion. That
 //  enemy doesn't untap the next time it would.'
@@ -15,7 +15,7 @@ registerScript('Sir Tristan', {
       if (!t || !('unit' in t)) return
       const u = ctx.state.units[t.unit]
       if (!u) return
-      u.tapped = true
+      tapUnit(ctx.state, u)
       u.counters = { ...u.counters, skipUntap: 1 }
       pushLog(ctx.state, ctx.controller, `${u.name} is laid low by Tristan's sorrowful blade.`)
     },

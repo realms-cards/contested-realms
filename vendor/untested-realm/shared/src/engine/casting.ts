@@ -1,9 +1,9 @@
 import { getCard, cardSupport, getKeywords, spiritCastName } from '../cards/db'
 import { getScript, type CardScript, type TargetRef, type TargetSpec } from '../cards/scripts/registry'
 import type { GameState, PlayerId, Region, Thresholds, UnitState } from './types'
-import { occupiedLocations, adjacentSquares, adjacentSquaresW, avatarOf, chebyshev, chebyshevW, orthAdjacentWrapped, nearbySquares, nearbySquaresW, siteAt, sitesOf, inBounds, unitsAt, occupies, occupiedSquares, GRID_W, GRID_H, edgesConnected, aura2x2Squares } from './grid'
-import { newId, pushLog, makeCtx, checkStateBased, opponent, emitUnitEnters, directionReach, emitEvent, isMagicProtected, loseLife, checkWard, pushPrompt, registerCont, runCont, toCemetery, bumpManaSpent, beginAreaReveal, recordAffectedSites, snapshotRealm, recordTouchedSites, sealSpellReveal, setActionCredit, restoreActionCredit, firesGenesisOnEntry, recordManaGain, deferTurnStep, settleEntering, runDamageEvent, notifySilencerEntered, applyFlood } from './effects'
-import { affinity, effKeywords, isDisabled, disabledByEffect, canExistIn, siteSilenced, siteDisabledByArtifact, artifactSilenced, artScript, zoneAccessToll, isArtifactUnit, isEvilUnit, isEvilUnitIntrinsic, isEvilCardName, isEvilCardNameFor, cardSubtypesFor, collectionBanned, payZoneToll, takeFromCollection, carriedInside, isBlanked, isCarriableArtifact, terrainAt, artifactController, grantedAbilities } from './statics'
+import { occupiedLocations, adjacentSquares, adjacentSquaresW, avatarOf, chebyshev, chebyshevW, orthAdjacentWrapped, nearbySquares, nearbySquaresW, siteAt, siteFlooded, sitesOf, inBounds, unitsAt, occupies, occupiedSquares, GRID_W, GRID_H, edgesConnected, aura2x2Squares } from './grid'
+import { newId, pushLog, makeCtx, checkStateBased, killUnit, opponent, emitUnitEnters, giveEntryLances, directionReach, emitEvent, isMagicProtected, loseLife, checkWard, pushPrompt, registerCont, runCont, toCemetery, bumpManaSpent, beginAreaReveal, recordAffectedSites, snapshotRealm, recordTouchedSites, sealSpellReveal, setActionCredit, restoreActionCredit, firesGenesisOnEntry, recordManaGain, deferTurnStep, settleEntering, runDamageEvent, notifySilencerEntered, notifySiteInterference, applyFlood } from './effects'
+import { abilitiesOff, sanctuaryShields, affinity, effKeywords, isDisabled, disabledByEffect, canExistIn, siteSilenced, siteDisabledByArtifact, artifactSilenced, artScript, zoneAccessToll, isArtifactUnit, isEvilUnit, isEvilUnitIntrinsic, isEvilCardName, isEvilCardNameFor, cardSubtypesFor, collectionBanned, payZoneToll, takeFromCollection, carriedInside, isBlanked, isCarriableArtifact, terrainAt, artifactController, grantedAbilities, strandedSites } from './statics'
 import { siteEntryAllowed } from './movement'
 import { applyGrant } from './keywords'
 import { TRAP_DISGUISE, trapElementOf } from './traps'
@@ -112,9 +112,11 @@ export function legalSiteSquares(state: GameState, player: PlayerId, cardName?: 
   if (extra) {
     for (const s of extra) if (!result.some((r) => r.x === s.x && r.y === s.y)) result.push(s)
   }
-  // walls of salt: some auras forbid playing sites on their squares
+  // walls of salt: some auras forbid playing sites on their squares; and no site may fill the last void
+  // beside a site that must always adjoin one (Edge of the World)
   return result.filter(
-    (r) => !Object.values(state.auras).some((a) => getScript(a.name)?.auraBlocksSitePlay && a.squares.some((q) => q.x === r.x && q.y === r.y)),
+    (r) => !Object.values(state.auras).some((a) => getScript(a.name)?.auraBlocksSitePlay && a.squares.some((q) => q.x === r.x && q.y === r.y))
+      && (siteAt(state, r.x, r.y) || !strandedSites(state, undefined, [r]).length),
   )
 }
 
@@ -217,11 +219,12 @@ export function enterSite(
     cardId,
     name: displayName,
     owner: player,
-    controller: inheritController ?? player,
+    controller: inheritController ?? (!trapElement && script?.entersUnderOpponent ? opponent(player) : player),
     x,
     y,
     tapped: false,
     isRubble: false,
+    enteredTurn: state.turn,
     // printed Ward enters with the site (Blessed Well, Pilgrim's Shrine...); a face-down trap shows
     // the basic site's face, which is an Ordinary site with no Ward
     ward: trapElement ? undefined : (getKeywords(def.name).ward || undefined),
@@ -230,7 +233,7 @@ export function enterSite(
   // a site provides one mana the moment it enters the realm (aura boosts like Abundance apply
   // immediately per the FAQ). A face-down trap gives the basic site's 1 (its real mana mods stay hidden).
   if (trapElement || !script?.noMana) {
-    let gain = 1 + (trapElement ? 0 : (script?.siteExtraMana ?? 0))
+    let gain = 1 + (trapElement ? 0 : (script?.siteExtraMana ?? 0) + (script?.siteExtraManaFn?.(state, siteId) ?? 0))
     for (const r of Object.values(state.auras)) {
       const extra = getScript(r.name)?.auraSiteExtraMana
       if (extra && r.squares.some((q) => q.x === x && q.y === y)) gain += extra
@@ -240,6 +243,7 @@ export function enterSite(
   }
   // log/lastPlay carry the DISGUISE name — the shared log must never leak a face-down trap's real card
   pushLog(state, player, `${p.name} plays ${displayName} at (${x + 1},${y + 1}).`)
+  if (inheritController == null && !trapElement && script?.entersUnderOpponent) pushLog(state, player, `The ${displayName} opens for the enemy.`)
   state.lastPlay = { name: displayName, player, n: (state.lastPlay?.n ?? 0) + 1 }
 
   // a flooding aura over this square (Flood, Atlantean Fate) floods the site the moment it's in play — the
@@ -295,13 +299,15 @@ export function effectiveCost(
   caster: UnitState,
   at?: { x: number; y: number },
   cardId?: string,
+  /** the cast's choices (a Gnarled Wendigo's `sacrifice` picks) — absent for the optimistic estimate */
+  extra?: any,
 ): number {
   // free-cast credits (Archimago echoes etc.)
   if (cardId && state.flow?.freeCast?.includes(cardId)) return 0
   const def = getCard(cardName)
   let cost = def.cost ?? 0
   const self = getScript(cardName)?.selfCostModifier
-  if (self) cost += self(state, player, at)
+  if (self) cost += self(state, player, at, extra)
   const applyFrom = (name: string, id: string) => {
     const mod = getScript(name)?.costModifier
     if (mod) cost += mod(state, id, caster, cardName, at)
@@ -314,7 +320,7 @@ export function effectiveCost(
   for (const d of state.flow?.spellDiscounts ?? []) {
     if (spellDiscountMatches(state, d, player, cardName, at, false, caster?.id)) cost -= d.amount
   }
-  for (const u of Object.values(state.units)) if (!u.silenced) applyFrom(u.name, u.id)
+  for (const u of Object.values(state.units)) if (getScript(u.name)?.costModifier && !abilitiesOff(state, u)) applyFrom(u.name, u.id)
   for (const s of Object.values(state.sites)) if (s.controller !== null && getScript(s.name)?.costModifier && !siteSilenced(state, s)) applyFrom(s.name, s.id)
   for (const a of Object.values(state.artifacts)) applyFrom(a.name, a.id)
   for (const r of Object.values(state.auras)) applyFrom(r.name, r.id)
@@ -325,7 +331,7 @@ export function effectiveCost(
 export function spellMorphName(state: GameState, player: PlayerId, cardName: string): string | null {
   const av = avatarOf(state, player)
   const morph = getScript(av.name)?.handSpellMorph
-  if (!morph || av.silenced) return null
+  if (!morph || abilitiesOff(state, av)) return null
   return morph(state, player, cardName)
 }
 
@@ -413,6 +419,7 @@ export function canCast(state: GameState, player: PlayerId, cardId: string, cast
   const def = getCard(morphed ?? card.name)
   if (def.type === 'Site' || def.type === 'Avatar') return { ok: false, reason: 'That card cannot be cast.' }
   if (cardSupport(def) === 'unsupported') return { ok: false, reason: `${card.name} is not implemented by the engine yet.` }
+  if (getScript(morphed ?? card.name)?.responseOnly) return { ok: false, reason: `${card.name} can only be cast in response.` }
   // named spells sealed away (Hyter Sprites)
   if ((state.flow?.castBans ?? []).some((b: { name: string }) => b.name === (morphed ?? card.name)))
     return { ok: false, reason: `${card.name} can't be cast right now.` }
@@ -496,9 +503,9 @@ export function canCast(state: GameState, player: PlayerId, cardId: string, cast
   // position discount — so a minion only affordable there (e.g. costs mana+1) isn't blocked.
   if (def.type === 'Minion') {
     for (const u of Object.values(state.units)) {
-      if (u.silenced || u.controller !== player) continue
+      if (u.controller !== player) continue
       const extra = getScript(u.name)?.extraSummonSquares
-      if (extra) for (const sq of extra(state, player)) {
+      if (extra && !abilitiesOff(state, u)) for (const sq of extra(state, player)) {
         cost = Math.min(cost, effectiveCost(state, player, morphed ?? card.name, costCaster, sq, cardId))
       }
     }
@@ -677,10 +684,12 @@ export function validateTarget(
   player: PlayerId,
   /** the targets already picked this cast — lets `spec.whereOf` anchor `where` to an earlier target. */
   picked?: TargetRef[],
+  /** the card whose spell or ability targets — a unit may refuse it (Earl of the Ivory Towers vs the Ordinary) */
+  source?: string,
 ): string | null {
-  const err = validateTargetCore(state, spec, ref, caster, player, picked)
+  const err = validateTargetCore(state, spec, ref, caster, player, picked, source)
   if (err) return err
-  return targetCompulsion(state, spec, ref, caster, player)
+  return targetCompulsion(state, spec, ref, caster, player, source)
 }
 
 /** The engine-authoritative legal-target set for a card's pick at `specIndex`, given the targets
@@ -702,6 +711,102 @@ export function legalTargetOptions(
   }
 }
 
+/** What a target pick is judged against: the card's script (its targetOptions), the spec list the picks
+ *  fill (a Magic's `targets`, a minion's `genesisTargets`, an ability's `targets`), the anchor the specs
+ *  are measured from, and the choosing player. `magic`: a Magic spell — an enemy unit protected from
+ *  magic can't be its target. */
+export interface TargetPick {
+  script: CardScript | null | undefined
+  specs: readonly TargetSpec[]
+  caster: UnitState
+  player: PlayerId
+  magic?: boolean
+  /** the card whose spell or ability makes the pick — a unit may refuse targeting by it (Earl of the Ivory
+   *  Towers vs the Ordinary) */
+  source?: string
+}
+
+/** Which spec the `pickIndex`-th pick belongs to: picks fill the specs in order, `count` each — exactly how
+ *  castSpell and ability activation assign submitted targets. -1 past the last spec. */
+export function specIndexForPick(specs: readonly TargetSpec[], pickIndex: number): number {
+  let acc = 0
+  for (let i = 0; i < specs.length; i++) { acc += specs[i].count; if (pickIndex < acc) return i }
+  return -1
+}
+
+/** one pick's legality once the spec and its targetOptions set (null = none declared) are known */
+function pickProblem(state: GameState, pick: TargetPick, spec: TargetSpec, opts: TargetRef[] | null, picked: TargetRef[], ref: TargetRef): string | null {
+  const err = validateTarget(state, spec, ref, pick.caster, pick.player, picked, pick.source)
+  if (err) return err
+  if (opts && !opts.some((o) => sameTargetRef(o, ref))) return 'Not a legal target.'
+  // "can't be TARGETED or damaged by magic": a choice without the word target (Begone!) may pick it; its damage
+  // is still stopped where it is dealt
+  if (pick.magic && spec.targeted && 'unit' in ref) {
+    const tu = state.units[ref.unit]
+    if (tu && tu.controller !== pick.player && isMagicProtected(state, tu)) return `${tu.name} can't be targeted by magic.`
+  }
+  return null
+}
+
+/** THE legality test for one target pick, given the picks before it — the spec's type/owner/range
+ *  (`where`, measured from an earlier pick for `whereOf`), Ward/Stealth/Blasted Oak (validateTarget),
+ *  the card's targetOptions set, and magic protection. castSpell and ability activation judge submitted
+ *  targets with it; legalTargetsFor offers exactly what it accepts. */
+export function targetPickProblem(state: GameState, pick: TargetPick, picked: TargetRef[], ref: TargetRef, specIndex = specIndexForPick(pick.specs, picked.length)): string | null {
+  const spec = pick.specs[specIndex]
+  if (!spec) return 'Too many targets.'
+  return pickProblem(state, pick, spec, legalTargetOptions(state, pick.script, pick.caster, picked, specIndex), picked, ref)
+}
+
+const ALL_REGIONS: readonly Region[] = ['surface', 'underground', 'underwater', 'void']
+
+/** Every legal ref for the next pick (after `picked`) — the one candidate list the client's highlights,
+ *  an effect cast's prompts and both bots offer, so none of them can drift from what castSpell accepts.
+ *  `squareRegions`: which region(s) a square candidate is offered in (default: none named — the cast
+ *  decides, as the client sends it); a targetOptions square that names its region keeps it.
+ *  `specIndex` overrides the pick→spec mapping (a caller that skipped an optional spec). */
+export function legalTargetsFor(
+  state: GameState, pick: TargetPick, picked: TargetRef[],
+  o?: { squareRegions?: readonly (Region | undefined)[]; specIndex?: number },
+): TargetRef[] {
+  const si = o?.specIndex ?? specIndexForPick(pick.specs, picked.length)
+  const spec = pick.specs[si]
+  if (!spec) return []
+  const regions = o?.squareRegions ?? [undefined]
+  const withRegions = (x: number, y: number): TargetRef[] => regions.map((region) => ({ square: region ? { x, y, region } : { x, y } }))
+  const opts = legalTargetOptions(state, pick.script, pick.caster, picked, si)
+  let cands: TargetRef[]
+  if (opts) {
+    // the card's own set — a square without a region is offered in each requested region
+    cands = opts.flatMap((r) => ('square' in r && !r.square.region ? withRegions(r.square.x, r.square.y) : [r]))
+  } else if (spec.what === 'square') {
+    cands = []
+    for (let x = 0; x < GRID_W; x++) for (let y = 0; y < GRID_H; y++) cands.push(...withRegions(x, y))
+  } else if (spec.what === 'site') {
+    cands = Object.keys(state.sites).map((id) => ({ site: id }))
+  } else {
+    // units for every non-site spec (Automatons are minion-artifacts: an 'artifact' spec reaches them)
+    cands = Object.keys(state.units).map((id) => ({ unit: id }))
+    if (spec.what === 'artifact' || spec.what === 'minionOrArtifact' || spec.what === 'minionArtifactOrAura')
+      for (const id of Object.keys(state.artifacts)) cands.push({ artifact: id })
+    if (spec.what === 'minionArtifactOrAura') for (const id of Object.keys(state.auras)) cands.push({ aura: id })
+  }
+  const out: TargetRef[] = []
+  for (const ref of cands) {
+    try { if (pickProblem(state, pick, spec, opts, picked, ref) === null) out.push(ref) } catch { /* a filter that throws → not legal */ }
+  }
+  return out
+}
+
+/** a TargetRef as the id a cast/ability action carries ('sq:x,y[,region]' for a square) */
+export function targetRefId(ref: TargetRef): string {
+  if ('square' in ref) return `sq:${ref.square.x},${ref.square.y}${ref.square.region ? `,${ref.square.region}` : ''}`
+  if ('unit' in ref) return ref.unit
+  if ('site' in ref) return ref.site
+  if ('artifact' in ref) return ref.artifact
+  return (ref as { aura: string }).aura
+}
+
 /** structural equality of two target refs (same unit/site/artifact/aura, or same square). */
 export function sameTargetRef(a: TargetRef, b: TargetRef): boolean {
   if ('unit' in a && 'unit' in b) return a.unit === b.unit
@@ -720,10 +825,11 @@ function targetCompulsion(
   ref: TargetRef,
   caster: UnitState,
   player: PlayerId,
+  source?: string,
 ): string | null {
   const oaks = Object.values(state.artifacts).filter((a) => artScript(state, a)?.compelsTargets) // silenced Oak doesn't compel
   if (!oaks.length) return null
-  const ok = (r: TargetRef) => !validateTargetCore(state, spec, r, caster, player)
+  const ok = (r: TargetRef) => !validateTargetCore(state, spec, r, caster, player, undefined, source)
   // precedence 1: a compelling artifact itself
   const targetableOaks = oaks.filter((a) => spec.what === 'artifact' && ok({ artifact: a.id }))
   if (targetableOaks.length) {
@@ -800,6 +906,7 @@ function validateTargetCore(
   caster: UnitState,
   player: PlayerId,
   picked?: TargetRef[],
+  source?: string,
 ): string | null {
   const anchors = whereAnchors(state, spec, caster, picked)
   if ('unit' in ref) {
@@ -820,13 +927,11 @@ function validateTargetCore(
       // "target" keyword: same region as the caster, and stealth blocks it
       if (unit.region !== caster.region) return 'Targets must be in the same region as the caster.'
       if (unit.stealth && unit.controller !== player) return 'That minion has Stealth.'
+      // a unit that refuses targeting by this card (Earl of the Ivory Towers vs the Ordinary)
+      const refuses = source ? getScript(unit.name)?.cantBeTargetedBy : undefined
+      if (refuses && !abilitiesOff(state, unit) && refuses(state, unit.id, source!)) return `${unit.name} can't be targeted by ${source}.`
       // targeting sanctuaries (Varmint Warrens: Beasts here can't be targeted by enemies)
-      if (unit.controller !== player) {
-        for (const s of Object.values(state.sites)) {
-          const f = getScript(s.name)?.protectsFromTargeting
-          if (f && !s.isRubble && !siteSilenced(state, s) && f(state, s, unit)) return `${unit.name} is protected there.`
-        }
-      }
+      if (sanctuaryShields(state, unit, player)) return `${unit.name} is protected there.`
     }
     if (spec.where && spec.where !== 'anywhere') {
       if (!inReach(state, spec.where, anchors, unit.x, unit.y)) return `Target must be ${spec.where}.`
@@ -854,6 +959,17 @@ function validateTargetCore(
     if (spec.what !== 'artifact' && spec.what !== 'minionOrArtifact' && spec.what !== 'minionArtifactOrAura') return 'Wrong target type.'
     const art = state.artifacts[ref.artifact]
     if (!art) return 'No such artifact.'
+    // "nearby target artifact" (Shatter, Dispel…): bounded like a unit or site target — a carried
+    // artifact is where its bearer is (art.x/y follow the bearer)
+    if (spec.where && spec.where !== 'anywhere' && !inReach(state, spec.where, anchors, art.x, art.y)) return `Target must be ${spec.where}.`
+    if (spec.targeted) {
+      // rulebook: "Carriable artifacts carried by a stealthed minion also cannot be targeted"; and a
+      // target shares the (real-unit) caster's region — a carried artifact is in its bearer's
+      const bearer = art.carriedBy ? state.units[art.carriedBy] : undefined
+      if (bearer?.stealth && bearer.controller !== player) return 'That artifact is carried by a Stealthed minion.'
+      const region = bearer?.region ?? art.region
+      if (state.units[caster.id] && region && region !== caster.region) return 'Targets must be in the same region as the caster.'
+    }
     if (spec.filter && !spec.filter(state, art, caster)) return 'Not a legal target.'
     return null
   }
@@ -950,6 +1066,8 @@ function summonCastMinion(
   at: { x: number; y: number; region?: Region } | undefined,
   targets: ReturnType<typeof parseTargetRefs>,
   extra: any,
+  /** cast from the player's own hand — not a card held by Morgana/an Omphalos, nor a cemetery/collection cast */
+  fromHand: boolean,
 ): void {
   const card = state.cards[cardId]
   if (!card || !at) return
@@ -977,7 +1095,9 @@ function summonCastMinion(
     stealth: kw.stealth || undefined,
     ward: kw.ward || undefined,
     size: script?.oversized ? '2x2' : undefined,
-    counters: { castFromHand: 1 }, // real casts, vs script-summons (Order of the White Wing)
+    // Order of the White Wing lets only a minion cast from HAND enter; every other summon (script, cemetery,
+    // collection, a card held by Morgana / an Omphalos) is turned away
+    counters: fromHand ? { castFromHand: 1 } : {},
   }
   // an Animist Spirit: the magic card in the realm, with power equal to its printed cost
   if (extra?.asSpirit) {
@@ -988,17 +1108,7 @@ function summonCastMinion(
   // rulebook: "Evil minions can't be warded" — strip a printed Ward that seeded onto an entering Evil
   // minion (defensive against future data / subtype-override entrants). Avatars keep it.
   if (unit.ward && !unit.isAvatar && isEvilUnitIntrinsic(state, unit)) unit.ward = undefined
-  // Lance: the minion enters play carrying a Lance artifact token
-  if (kw.lance) {
-    const lanceCardId = newId(state, 'c')
-    state.cards[lanceCardId] = { id: lanceCardId, name: 'Lance', owner: player, isToken: true }
-    const lanceId = newId(state, 'a')
-    state.artifacts[lanceId] = {
-      id: lanceId, cardId: lanceCardId, name: 'Lance', conjuredBy: player,
-      x: unit.x, y: unit.y, region: unit.region, carriedBy: unitId, tapped: false,
-    }
-    unit.carrying.push(lanceId)
-  }
+  giveEntryLances(state, unit)
   // It is ENTERING — not yet "at rest" — so an at-rest disabler (Hillock Basilisk) can't bite it until
   // its Genesis, INCLUDING any prompt it raises, fully resolves. (An Archangel Michael cast in front of
   // a Basilisk thus takes its step + strike, and keeps its Ward, before it ever comes to rest.)
@@ -1006,7 +1116,11 @@ function summonCastMinion(
   const prevActing = state.flow.actingUnitId
   state.flow.actingUnitId = unitId
   state.flow.entering = [...(((state.flow.entering as string[] | undefined)) ?? []), unitId]
+  // entering by being CAST (not an effect summon) — "you may cast minions to this void" (Lucid Dreamers)
+  const prevCastEntering = state.flow.castEntering
+  state.flow.castEntering = unitId
   emitUnitEnters(state, unit)
+  state.flow.castEntering = prevCastEntering
   // the entry triggers have resolved: settle what they did (a Mariner's Curse submerged a minion that can't
   // live underwater → it drowns) before the Genesis, which then finds its minion gone and is ignored
   checkStateBased(state)
@@ -1145,10 +1259,23 @@ function resolveAuraCast(state: GameState, cardId: string, castName: string, pla
   const auraId = newId(state, 'r')
   const single = !!script?.singleSiteAura
   const squares = single ? [{ x: at.x, y: at.y }] : aura2x2Squares(at, edgesConnected(state))
+  // an aura that silences the sites it covers (Acid Rain) modifies each one it newly silences
+  const alreadySilent = script?.auraSilencesSites
+    ? new Set(Object.values(state.sites).filter((s) => !s.isRubble && siteSilenced(state, s)).map((s) => s.id))
+    : undefined
   state.auras[auraId] = { id: auraId, cardId, name: card.name, controller: player, squares, ...(single ? {} : { anchor: { x: at.x, y: at.y } }), enteredTurn: state.turn }
   if (script?.genesis) script.genesis(makeCtx(state, auraId, player, targets, at, extra))
   const placed = state.auras[auraId]
   if (placed && placed.squares !== squares) delete placed.anchor // genesis-managed footprint (Wildfire)
+  if (placed && alreadySilent) {
+    // silencing a site is modifying it (Vindictive Nation charges per site), even the Nation itself
+    // (Codex, Triggered Ability: the act that silences it still triggers it)
+    const silenced = placed.squares
+      .map((q) => siteAt(state, q.x, q.y))
+      .filter((s): s is NonNullable<typeof s> => !!s && !s.isRubble && !alreadySilent.has(s.id) && siteSilenced(state, s))
+    const act = new Set(silenced.map((s) => s.id))
+    for (const s of silenced) notifySiteInterference(state, 'modify', s, player, act)
+  }
   // mana follows control (FAQ): an aura that boosts a site's mana (Abundance) provides that extra mana
   // IMMEDIATELY to each affected site's controller, the moment the site is affected — not next turn.
   const auraMana = script?.auraSiteExtraMana
@@ -1170,11 +1297,11 @@ function resolveAuraCast(state: GameState, cardId: string, castName: string, pla
 export function resolvePendingCast(state: GameState): void {
   if (state.prompts.length > 0) return
   const p = state.flow?.pendingCast as
-    | { type: 'minion' | 'magic' | 'artifact' | 'aura'; cardId: string; castName: string; player: PlayerId; casterId: string; at: any; targets: ReturnType<typeof parseTargetRefs>; extra: any; fromCemetery: boolean }
+    | { type: 'minion' | 'magic' | 'artifact' | 'aura'; cardId: string; castName: string; player: PlayerId; casterId: string; at: any; targets: ReturnType<typeof parseTargetRefs>; extra: any; fromCemetery: boolean; fromHand?: boolean }
     | undefined
   if (!p) return
   state.flow.pendingCast = undefined
-  if (p.type === 'minion') summonCastMinion(state, p.cardId, p.castName, p.player, p.at, p.targets, p.extra)
+  if (p.type === 'minion') summonCastMinion(state, p.cardId, p.castName, p.player, p.at, p.targets, p.extra, !!p.fromHand)
   else if (p.type === 'magic') resolveMagicCast(state, p.cardId, p.castName, p.player, p.casterId, p.targets, p.at, p.extra, p.fromCemetery)
   else if (p.type === 'artifact') resolveArtifactCast(state, p.cardId, p.castName, p.player, p.at, p.targets, p.extra)
   else if (p.type === 'aura') resolveAuraCast(state, p.cardId, p.castName, p.player, p.at, p.targets, p.extra)
@@ -1246,6 +1373,7 @@ export function castSpell(
   // pseudo-caster placed at `at`. Magic spells keep the real caster as the anchor.
   const targetAnchor: UnitState =
     def.type === 'Magic' || !at ? caster : { ...caster, x: at.x, y: at.y, region: at.region ?? 'surface' } // lands where summonCastMinion puts it
+  const pick: TargetPick = { script, specs, caster: targetAnchor, player, magic: def.type === 'Magic', source: castName }
   let ti = 0
   for (let si = 0; si < specs.length; si++) {
     const spec = specs[si]
@@ -1258,21 +1386,10 @@ export function castSpell(
         if (err) return err
         continue
       }
-      const err = validateTarget(state, spec, targets[ti], targetAnchor, player, targets)
+      // the shared pick test (spec + earlier picks, the card's targetOptions set, magic protection) — the
+      // same one every picker offers from (legalTargetsFor), so an offered pick is never refused here
+      const err = targetPickProblem(state, pick, targets.slice(0, ti), targets[ti], si)
       if (err) return err
-      // engine-authoritative legal set for spatial/interdependent picks (explosion range, Meteor
-      // Shower's no-shared-border) — reject anything the card's targetOptions wouldn't offer, so an
-      // illegal pick is refused up front instead of fizzling mid-resolution and wasting the spell.
-      const opts = legalTargetOptions(state, script, targetAnchor, targets.slice(0, ti), si)
-      if (opts && !opts.some((o) => sameTargetRef(o, targets[ti]))) return 'Not a legal target.'
-      // magic-protection blocks targeting by enemy Magic spells
-      const ref = targets[ti]
-      if (def.type === 'Magic' && 'unit' in ref) {
-        const tu = state.units[ref.unit]
-        if (tu && tu.controller !== player && isMagicProtected(state, tu)) {
-          return `${tu.name} can't be targeted by magic.`
-        }
-      }
     }
   }
   // picks past the card's declared specs were never validated — scripts index targets by position
@@ -1362,6 +1479,11 @@ export function castSpell(
 
   const extraErr = castExtrasProblem(state, caster.id, extra)
   if (extraErr) return extraErr
+  // minions sacrificed as part of the cost: the picks must be among the card's candidates
+  const sacCands = at ? getScript(castName)?.castSacrificeCandidates?.(state, player, at) : undefined
+  const sacrifice: string[] = sacCands ? (extra?.sacrifice ?? sacCands) : []
+  if (sacCands && (!Array.isArray(sacrifice) || new Set(sacrifice).size !== sacrifice.length || sacrifice.some((id) => !sacCands.includes(id))))
+    return 'You can only sacrifice your own minions there.'
 
   // canCast's threshold pass is optimistic for position-bound waivers; verify
   // with the real square now
@@ -1371,7 +1493,7 @@ export function castSpell(
   // pay costs (site/aura discounts see the destination square); the Bureau of
   // Occult Control tolls cemetery casts
   const cemToll = !p.hand.includes(cardId) && p.cemetery.includes(cardId) ? zoneAccessToll(state) : 0
-  const finalCost = effectiveCost(state, player, castName, caster, at, cardId) + cemToll
+  const finalCost = effectiveCost(state, player, castName, caster, at, cardId, sacCands ? { ...extra, sacrifice } : extra) + cemToll
   if (state.flow?.bloodMana?.[player]) {
     // Blood Mana: this spell costs life instead of mana
     if ((avatarOf(state, player).life ?? 0) < finalCost) return `Not enough life (${finalCost}).`
@@ -1381,6 +1503,12 @@ export function castSpell(
     if (p.mana < finalCost) return `Not enough mana (${p.mana}/${finalCost}).`
     p.mana -= finalCost
     bumpManaSpent(state, player, finalCost)
+  }
+  for (const id of sacrifice) {
+    const u = state.units[id]
+    if (!u) continue
+    pushLog(state, player, `${u.name} is sacrificed to cast ${castName}.`)
+    killUnit(state, id)
   }
   // one-shot discounts are spent by the first matching cast
   if (state.flow?.spellDiscounts?.length) {
@@ -1397,6 +1525,12 @@ export function castSpell(
   if (state.flow?.noThresholdCards?.includes(cardId)) {
     state.flow.noThresholdCards = state.flow.noThresholdCards.filter((id: string) => id !== cardId)
   }
+  // Cast "from hand" (Order of the White Wing): from the player's own hand. A card HELD by another card
+  // (Morgana le Fay, an Omphalos, Vivien, Cradle of Etherrum, a "cast from your collection" bearer) sits
+  // in the hand only for bookkeeping, under a lock — FAQ: those are other "hand" zones, not your hand.
+  const fromHand = p.hand.includes(cardId)
+    && !(state.flow?.lockedCards ?? []).some((e: any) => e.cardId === cardId)
+    && !(state.flow?.castAtOnly ?? []).some((e: any) => e.cardId === cardId)
   // plundered/lent cards were cast — no need to return them
   if (state.flow?.plunder?.length) {
     state.flow.plunder = state.flow.plunder.filter((e: any) => e.cardId !== cardId)
@@ -1461,8 +1595,8 @@ export function castSpell(
   }
   // "whenever X targets a minion" (Sir Kay)
   {
-    const hook = !caster.silenced ? getScript(caster.name)?.onTargetsUnit : undefined
-    if (hook) {
+    const hook = getScript(caster.name)?.onTargetsUnit
+    if (hook && !abilitiesOff(state, caster)) {
       for (const ref of targets) {
         if ('unit' in ref && state.units[ref.unit]) hook(makeCtx(state, caster.id, player, []), state.units[ref.unit])
       }
@@ -1531,8 +1665,8 @@ export function castSpell(
   }
 
   if (def.type === 'Minion') {
-    if (castTriggerAsked) { state.flow.pendingCast = { type: 'minion', cardId, castName, player, casterId, at, targets, extra, fromCemetery }; return null }
-    summonCastMinion(state, cardId, castName, player, at, targets, extra)
+    if (castTriggerAsked) { state.flow.pendingCast = { type: 'minion', cardId, castName, player, casterId, at, targets, extra, fromCemetery, fromHand }; return null }
+    summonCastMinion(state, cardId, castName, player, at, targets, extra, fromHand)
     return null
   }
 
@@ -1609,7 +1743,7 @@ export function validateSummonAt(state: GameState, player: PlayerId, cardName: s
   if (region === 'void') {
     // a friendly voidwalker that hosts summons opens its void square (Lucid Dreamers)
     const voidHost = Object.values(state.units).some(
-      (u) => u.controller === player && !u.silenced && u.x === at.x && u.y === at.y && u.region === 'void' && getScript(u.name)?.allowsSummonHere,
+      (u) => u.controller === player && u.x === at.x && u.y === at.y && u.region === 'void' && getScript(u.name)?.allowsSummonHere && !abilitiesOff(state, u),
     )
     if (!kw.voidwalk && !voidHost) return `${cardName} cannot be summoned to the void.`
     if (site) return 'That square is not void.'
@@ -1620,7 +1754,7 @@ export function validateSummonAt(state: GameState, player: PlayerId, cardName: s
     // let you cast a minion to a fated square even if it is void ground).
     const av = avatarOf(state, player)
     const grants = getScript(av.name)?.allowsSummonAt
-    if (region === 'surface' && grants && !av.silenced && grants(state, player, at)) {
+    if (region === 'surface' && grants && !abilitiesOff(state, av) && grants(state, player, at)) {
       // a siteless granted square IS void ground: the void-placement rule outranks the grant, so only a
       // voidwalker may be summoned there. A non-voidwalk minion still can't be cast into the void.
       if (!kw.voidwalk) return `${cardName} cannot be summoned to the void.`
@@ -1646,10 +1780,11 @@ export function validateSummonAt(state: GameState, player: PlayerId, cardName: s
     const block = getScript(s.name)?.blockSummon
     if (block && !siteSilenced(state, s) && block(state, s, at)) return `${s.name} forbids summoning there.`
   }
-  const summonAnywhere = getScript(cardName)?.summonAnywhere
+  const anywhere = getScript(cardName)?.summonAnywhere
+  const summonAnywhere = typeof anywhere === 'function' ? anywhere(state, player, { x: at.x, y: at.y, region }) : !!anywhere
   // a friendly unit that opens its square to summons (Ominous Owl)
   const hostHere = Object.values(state.units).some(
-    (u) => u.controller === player && !u.silenced && u.x === at.x && u.y === at.y && getScript(u.name)?.allowsSummonHere,
+    (u) => u.controller === player && u.x === at.x && u.y === at.y && getScript(u.name)?.allowsSummonHere && !abilitiesOff(state, u),
   )
   // a site open to everyone's minions (Donnybrook Inn, Tournament Grounds)
   const anySummon = getScript(site.name)?.siteAllowsAnySummon
@@ -1660,7 +1795,7 @@ export function validateSummonAt(state: GameState, player: PlayerId, cardName: s
   const avatarSpot = (() => {
     const av = avatarOf(state, player)
     const f = getScript(av.name)?.allowsSummonAt
-    return !!f && !av.silenced && f(state, player, at)
+    return !!f && !abilitiesOff(state, av) && f(state, player, at)
   })()
   // aura-granted summon squares (Summoning Sphere, Crusade, Jihad, Evil Presence)
   const auraSpot = Object.values(state.auras).some((r) => {
@@ -1678,7 +1813,7 @@ export function validateSummonAt(state: GameState, player: PlayerId, cardName: s
   if (region === 'underground' && !kw.burrowing && forcedRegion !== 'underground') return `${cardName} cannot be summoned underground.`
   if (region === 'underwater' && !kw.submerge && forcedRegion !== 'underwater') return `${cardName} cannot be summoned underwater.`
   if (region === 'underground' || region === 'underwater') {
-    const water = getCard(site.name).thresholds.water > 0 || site.flooded
+    const water = getCard(site.name).thresholds.water > 0 || siteFlooded(state, site)
     if (region === 'underground' && water) return 'That is a water site — no underground there.'
     if (region === 'underwater' && !water) return 'That is a land site — no underwater there.'
   }
@@ -1945,19 +2080,43 @@ function dropCastCredit(state: GameState, cardId: string): void {
   if (state.flow?.noThresholdCards) state.flow.noThresholdCards = state.flow.noThresholdCards.filter((id: string) => id !== cardId)
 }
 
-/** legal target refs for one spec (engine-side mirror of the client's picker). */
-function effectSpecCandidates(state: GameState, player: PlayerId, caster: UnitState, spec: TargetSpec): string[] {
-  const out: string[] = []
-  if (spec.what === 'site') {
-    for (const s of Object.values(state.sites)) if (!s.isRubble && !validateTarget(state, spec, { site: s.id }, caster, player)) out.push(s.id)
-  } else {
-    // minion/unit/avatar/artifact/minionOrArtifact: try units (Automatons pass an 'artifact' spec),
-    // and also artifacts for 'artifact'/'minionOrArtifact'. validateTarget rejects the wrong type.
-    for (const u of Object.values(state.units)) if (!validateTarget(state, spec, { unit: u.id }, caster, player)) out.push(u.id)
-    if (spec.what === 'artifact' || spec.what === 'minionOrArtifact')
-      for (const a of Object.values(state.artifacts)) if (!validateTarget(state, spec, { artifact: a.id }, caster, player)) out.push(a.id)
+/** An effect cast's next pick, prompted from the shared candidate list (legalTargetsFor) — the same one a
+ *  cast from hand offers. A square prompt carries each offered square's region, so the answer is recorded
+ *  in the region it was offered in (a `whereOf` square is in the earlier-picked unit's region). */
+function promptEffectPick(
+  state: GameState, cardId: string, pick: TargetPick, picked: TargetRef[], spec: TargetSpec, title: string,
+  squareRegion: Region, cont: { square: string; target: string }, none: () => void,
+): void {
+  const player = pick.player
+  if (spec.what === 'square') {
+    const regions: Record<string, Region> = {}
+    const spots: { x: number; y: number }[] = []
+    for (const r of legalTargetsFor(state, pick, picked, { squareRegions: [squareRegion] })) {
+      if (!('square' in r)) continue
+      const k = `${r.square.x},${r.square.y}`
+      if (regions[k]) continue
+      regions[k] = r.square.region ?? squareRegion
+      spots.push({ x: r.square.x, y: r.square.y })
+    }
+    if (!spots.length) return none()
+    pushPrompt(state, { player, kind: 'chooseSquare', title, data: { squares: spots }, cont: cont.square, ctx: { cardId, regions } })
+    return
   }
-  return out
+  const cands = legalTargetsFor(state, pick, picked).map(targetRefId)
+  if (!cands.length) return none()
+  pushPrompt(state, {
+    player, kind: 'chooseTargets', title,
+    data: { candidates: cands, count: 1, kind: spec.what === 'site' ? 'site' : 'unit', upTo: !!spec.upTo },
+    cont: cont.target, ctx: { cardId },
+  })
+}
+
+/** the region a picked target SQUARE lies in: a `whereOf` square (Blink: "a location it's nearby") is in
+ *  the region of the earlier-picked unit it's measured from, otherwise the caster's. */
+function effectSquareRegion(state: GameState, spec: TargetSpec, caster: UnitState, picked: TargetRef[]): Region {
+  const ref = spec.whereOf != null ? picked[spec.whereOf] : undefined
+  const u = ref && 'unit' in ref ? state.units[ref.unit] : undefined
+  return u?.region ?? caster.region
 }
 
 /** Legal placements for conjuring artifact `castName` as `player` — EXACTLY the set castSpell's
@@ -2069,22 +2228,15 @@ function advanceEffectCast(state: GameState, cardId: string): void {
   for (; idx < specs.length; idx++) { if (pc.targets.length < acc + specs[idx].count) break; acc += specs[idx].count }
   if (idx >= specs.length) return finishEffectCast(state, cardId, undefined, pc.targets)
   const spec = specs[idx]
-  if (spec.what === 'square') {
-    const spots: { x: number; y: number }[] = []
-    for (let x = 0; x < GRID_W; x++) for (let y = 0; y < GRID_H; y++)
-      if (!validateTarget(state, spec, { square: { x, y, region: caster.region } }, caster, pc.player)) spots.push({ x, y })
-    if (!spots.length) return spec.upTo ? finishEffectCast(state, cardId, undefined, pc.targets) : fizzleEffectCast(state, cardId)
-    pushPrompt(state, { player: pc.player, kind: 'chooseSquare', title: `${label} — ${spec.label ?? 'target location'}`, data: { squares: spots }, cont: 'effectcast:sqtarget', ctx: { cardId } })
-    return
-  }
-  const cands = effectSpecCandidates(state, pc.player, caster, spec)
-  if (!cands.length) return spec.upTo ? finishEffectCast(state, cardId, undefined, pc.targets) : fizzleEffectCast(state, cardId)
-  pushPrompt(state, {
-    player: pc.player, kind: 'chooseTargets',
-    title: `${label} — ${spec.label ?? 'choose a target'}`,
-    data: { candidates: cands, count: 1, kind: spec.what === 'site' ? 'site' : 'unit', upTo: !!spec.upTo },
-    cont: 'effectcast:target', ctx: { cardId },
-  })
+  // the targets picked so far: a `whereOf` pick (Blink's square nearby the chosen ally) is measured from
+  // that target, and the card's targetOptions narrow it — exactly as for a cast from hand
+  const picked = parseTargetRefs(pc.targets)
+  const pick: TargetPick = { script, specs, caster, player: pc.player, magic: true, source: name }
+  promptEffectPick(
+    state, cardId, pick, picked, spec, `${label} — ${spec.label ?? (spec.what === 'square' ? 'target location' : 'choose a target')}`,
+    effectSquareRegion(state, spec, caster, picked), { square: 'effectcast:sqtarget', target: 'effectcast:target' },
+    () => (spec.upTo ? finishEffectCast(state, cardId, undefined, pc.targets) : fizzleEffectCast(state, cardId)),
+  )
 }
 
 const isSquare = (c: unknown): c is { x: number; y: number } =>
@@ -2098,8 +2250,8 @@ function advanceChaosTwister(state: GameState, cardId: string): void {
   const caster = state.units[pc.casterId] ?? avatarOf(state, pc.player)
   const label = pc.isCopy && !pc.realCard ? 'Copy of Chaos Twister' : 'Chaos Twister'
   if (pc.targets.length === 0) {
-    const spec = getScript('Chaos Twister')?.targets?.[0]
-    const cands = spec ? effectSpecCandidates(state, pc.player, caster, spec) : []
+    const script = getScript('Chaos Twister')
+    const cands = script?.targets?.length ? legalTargetsFor(state, { script, specs: script.targets, caster, player: pc.player, magic: true, source: 'Chaos Twister' }, []).map(targetRefId) : []
     if (!cands.length) return fizzleEffectCast(state, cardId)
     pushPrompt(state, { player: pc.player, kind: 'chooseTargets', title: `${label} — which minion?`, data: { candidates: cands, count: 1, kind: 'unit' }, cont: 'effectcast:target', ctx: { cardId } })
     return
@@ -2156,22 +2308,13 @@ function advanceMinionGenesisTargets(state: GameState, cardId: string): void {
   const caster = state.units[pc.casterId] ?? avatarOf(state, pc.player)
   // Genesis targets are relative to the minion, so anchor a pseudo-caster at the landing square.
   const anchor: UnitState = { ...caster, x: at.x, y: at.y, region: at.region ?? caster.region }
-  if (spec.what === 'square') {
-    const spots: { x: number; y: number }[] = []
-    for (let x = 0; x < GRID_W; x++) for (let y = 0; y < GRID_H; y++)
-      if (!validateTarget(state, spec, { square: { x, y, region: anchor.region } }, anchor, pc.player)) spots.push({ x, y })
-    if (!spots.length) return finishEffectCast(state, cardId, at, pc.targets) // no valid spot → summon, Genesis just fizzles
-    pushPrompt(state, { player: pc.player, kind: 'chooseSquare', title: `${name} — ${spec.label ?? 'target location'}`, data: { squares: spots }, cont: 'effectcast:gsqtarget', ctx: { cardId } })
-    return
-  }
-  const cands = effectSpecCandidates(state, pc.player, anchor, spec)
-  if (!cands.length) return finishEffectCast(state, cardId, at, pc.targets) // no valid target → summon anyway
-  pushPrompt(state, {
-    player: pc.player, kind: 'chooseTargets',
-    title: `${name} — ${spec.label ?? 'choose a target'}`,
-    data: { candidates: cands, count: 1, kind: spec.what === 'site' ? 'site' : 'unit', upTo: !!spec.upTo },
-    cont: 'effectcast:gtarget', ctx: { cardId },
-  })
+  const picked = parseTargetRefs(pc.targets)
+  promptEffectPick(
+    state, cardId, { script: getScript(name), specs, caster: anchor, player: pc.player, source: name }, picked, spec,
+    `${name} — ${spec.label ?? (spec.what === 'square' ? 'target location' : 'choose a target')}`,
+    effectSquareRegion(state, spec, anchor, picked), { square: 'effectcast:gsqtarget', target: 'effectcast:gtarget' },
+    () => finishEffectCast(state, cardId, at, pc.targets), // nothing legal → summon anyway, the Genesis just fizzles
+  )
 }
 registerCont('effectcast:gtarget', (state, ctx: { cardId: string }, choice) => {
   const pc = pcMap(state)[ctx.cardId]; if (!pc) return
@@ -2180,9 +2323,9 @@ registerCont('effectcast:gtarget', (state, ctx: { cardId: string }, choice) => {
   for (const id of picked) if (typeof id === 'string') pc.targets.push(id)
   advanceMinionGenesisTargets(state, ctx.cardId)
 })
-registerCont('effectcast:gsqtarget', (state, ctx: { cardId: string }, choice) => {
+registerCont('effectcast:gsqtarget', (state, ctx: { cardId: string; regions?: Record<string, Region> }, choice) => {
   const pc = pcMap(state)[ctx.cardId]; if (!pc) return
-  if (isSquare(choice)) pc.targets.push(`sq:${choice.x},${choice.y},${pc.summonAt?.region ?? 'surface'}`)
+  if (isSquare(choice)) pc.targets.push(`sq:${choice.x},${choice.y},${ctx.regions?.[`${choice.x},${choice.y}`] ?? pc.summonAt?.region ?? 'surface'}`)
   advanceMinionGenesisTargets(state, ctx.cardId)
 })
 registerCont('effectcast:place', (state, ctx: { cardId: string }, choice) => {
@@ -2199,11 +2342,11 @@ registerCont('effectcast:dir', (state, ctx: { cardId: string }, choice) => {
   if (!['n', 's', 'e', 'w'].includes(choice as string)) return fizzleEffectCast(state, ctx.cardId)
   finishEffectCast(state, ctx.cardId, undefined, [], { direction: choice })
 })
-registerCont('effectcast:sqtarget', (state, ctx: { cardId: string }, choice) => {
+registerCont('effectcast:sqtarget', (state, ctx: { cardId: string; regions?: Record<string, Region> }, choice) => {
   const pc = pcMap(state)[ctx.cardId]; if (!pc) return
   if (!isSquare(choice)) return fizzleEffectCast(state, ctx.cardId)
   const caster = state.units[pc.casterId] ?? avatarOf(state, pc.player)
-  pc.targets.push(`sq:${choice.x},${choice.y},${caster.region}`)
+  pc.targets.push(`sq:${choice.x},${choice.y},${ctx.regions?.[`${choice.x},${choice.y}`] ?? caster.region}`)
   advanceEffectCast(state, ctx.cardId)
 })
 registerCont('effectcast:ctorigin', (state, ctx: { cardId: string }, choice) => {

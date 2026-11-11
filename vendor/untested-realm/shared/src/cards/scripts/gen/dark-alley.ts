@@ -1,5 +1,6 @@
 import { registerScript } from '../registry'
 import { pushLog } from '../../../engine/effects'
+import { isUnmodifiable } from '../../../engine/statics'
 
 // 'The first minion that enters here gains Stealth.'
 // onUnitEntersSquare covers walking/teleporting in AND being summoned/conjured
@@ -16,7 +17,8 @@ registerScript('Dark Alley', {
     if ((self as any).usedAlley) return // one-time: only the FIRST minion
     ;(self as any).usedAlley = true
     const u = ctx.state.units[moved.id]
-    if (u) {
+    // Stealth is an ability: a card that can't be modified can't gain it (Codex: Monks of Kobalsa)
+    if (u && !isUnmodifiable(ctx.state, u)) {
       u.stealth = true
       pushLog(ctx.state, ctx.controller, `${u.name} slips into the shadows of the Dark Alley.`)
     }

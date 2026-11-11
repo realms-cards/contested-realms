@@ -6,6 +6,7 @@ import { footprintAllTerrain } from '../../../engine/statics'
 import { syncCarried, buryArtifactsAt } from '../../../engine/carrying'
 import { getScript } from '../registry'
 import { getCard } from '../../db'
+import { captureSquare, placeCapture, type SquareCapture } from '../multi-card-utils/move-sites'
 
 // 'You may rearrange sites within a two-by-two area, carrying along everything of normal size.
 // Then burrow all minions and artifacts on those sites.'
@@ -74,14 +75,6 @@ function areaSquares(state: GameState, c: any): { x: number; y: number }[] {
   return aura2x2Squares({ x: c.ax, y: c.ay }, edgesConnected(state))
 }
 
-type Cap = {
-  x: number; y: number
-  site: ReturnType<typeof siteAt>
-  units: GameState['units'][string][]
-  arts: GameState['artifacts'][string][]
-  auras: GameState['auras'][string][]
-}
-
 // Validate the client's permutation and, if legal, relocate every site + its normal-size contents
 // (units in all regions, loose artifacts, 1×1 auras atop it) simultaneously. A permutation that
 // moves an immovable site or strands a placement-restricted site (Edge of the World must stay
@@ -111,34 +104,19 @@ function applyPermutation(ctx: EffectAPI, c: any, placements: { x: number; y: nu
   }
 
   // capture each source square's contents + original coords, keyed by source square
-  const cap: Cap[] = area.map((sq) => ({
-    x: sq.x, y: sq.y,
-    site: siteAt(state, sq.x, sq.y),
-    units: Object.values(state.units).filter((u) => u.x === sq.x && u.y === sq.y && !(getScript(u.name)?.oversized && !u.silenced)),
-    arts: Object.values(state.artifacts).filter((a) => !a.carriedBy && a.x === sq.x && a.y === sq.y),
-    auras: Object.values(state.auras).filter((r) => getScript(r.name)?.singleSiteAura && r.squares.length === 1 && r.squares[0].x === sq.x && r.squares[0].y === sq.y),
-  }))
+  const cap: SquareCapture[] = area.map((sq) => captureSquare(state, sq))
   const bySrc = new Map(cap.map((c0) => [key(c0), c0]))
   const preMove = cap.filter((c0) => c0.site).map((c0) => ({ id: c0.site!.id, x: c0.x, y: c0.y, controller: c0.site!.controller }))
 
   // relocate simultaneously (contents were captured by their ORIGINAL square first)
   for (const p of placements) {
     const src = bySrc.get(key({ x: p.sx, y: p.sy }))
-    if (!src) continue
-    if (src.site) { src.site.x = p.x; src.site.y = p.y }
-    for (const u of src.units) { u.x = p.x; u.y = p.y }
-    for (const a of src.arts) { a.x = p.x; a.y = p.y }
-    for (const r of src.auras) r.squares = [{ x: p.x, y: p.y }]
+    if (src) placeCapture(state, src, p)
   }
 
   // a rearrangement that strands a placement-restricted site is illegal — restore everything
   if (area.some((sq) => quakeStrands(state, sq))) {
-    for (const c0 of cap) {
-      if (c0.site) { c0.site.x = c0.x; c0.site.y = c0.y }
-      for (const u of c0.units) { u.x = c0.x; u.y = c0.y }
-      for (const a of c0.arts) { a.x = c0.x; a.y = c0.y }
-      for (const r of c0.auras) r.squares = [{ x: c0.x, y: c0.y }]
-    }
+    for (const c0 of cap) placeCapture(state, c0, c0)
     return bad('that arrangement would strand a site')
   }
   for (const pre of preMove) {

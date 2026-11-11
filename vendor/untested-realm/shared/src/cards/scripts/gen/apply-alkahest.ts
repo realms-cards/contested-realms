@@ -1,4 +1,5 @@
 import { registerScript } from '../registry'
+import { destroyTogether } from '../multi-card-utils/destroy-together'
 import { unitsAt } from '../../../engine/grid'
 import { toCemetery } from '../../../engine/effects'
 
@@ -10,10 +11,11 @@ registerScript('Apply Alkahest', {
     if (!('site' in t)) return
     const site = ctx.state.sites[t.site]
     if (!site) return
-    for (const u of unitsAt(ctx.state, site.x, site.y)) if (!u.isAvatar) ctx.kill(u.id)
-    for (const a of Object.values(ctx.state.artifacts)) {
-      if (a.x === site.x && a.y === site.y) ctx.breakArtifact(a.id)
-    }
+    destroyTogether(
+      ctx,
+      unitsAt(ctx.state, site.x, site.y).map((u) => u.id),
+      Object.values(ctx.state.artifacts).filter((a) => a.x === site.x && a.y === site.y).map((a) => a.id),
+    )
     for (const r of Object.values(ctx.state.auras)) {
       if (r.squares.some((s) => s.x === site.x && s.y === site.y)) {
         const card = ctx.state.cards[r.cardId]

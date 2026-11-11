@@ -18,7 +18,7 @@ registerScript('Sow the Earth', {
     const siteId = `s${ctx.state.nextId++}`
     ctx.state.sites[siteId] = {
       id: siteId, cardId, name: ctx.state.cards[cardId].name, owner: ctx.controller,
-      controller: ctx.controller, x: at.x, y: at.y, tapped: false, isRubble: false,
+      controller: ctx.controller, x: at.x, y: at.y, tapped: false, isRubble: false, enteredTurn: ctx.state.turn,
     }
     p.mana += 1
     aura.counters = { sownSite: Number(siteId.slice(1)) }

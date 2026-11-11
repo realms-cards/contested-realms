@@ -50,9 +50,11 @@ registerScript('Persecutor', {
         }
         ctx.ask({ kind: 'chooseSquare', title: 'The Persecutor stalks — which way?', data: { squares: steps.map((s) => ({ x: s.x, y: s.y })) } }, 'persecutorStep')
       } else {
-        const enemies = Object.values(ctx.state.units).filter((u) => u.controller !== ctx.controller && !u.stealth).map((u) => u.id)
+        // "brand an enemy" doesn't target (codex Ward: the branded minion keeps its Ward), so Stealth
+        // doesn't hide it either
+        const enemies = Object.values(ctx.state.units).filter((u) => u.controller !== ctx.controller).map((u) => u.id)
         if (!enemies.length) return
-        ctx.ask({ kind: 'chooseTargets', title: 'Brand which enemy as Evil this turn?', data: { candidates: enemies, count: 1, upTo: false, kind: 'unit' } }, 'brand')
+        ctx.ask({ kind: 'chooseTargets', title: 'Brand which enemy as Evil this turn?', data: { candidates: enemies, count: 1, upTo: false, kind: 'unit', notTargeted: true } }, 'brand')
       }
     },
     brand: (ctx, _c, choice) => {

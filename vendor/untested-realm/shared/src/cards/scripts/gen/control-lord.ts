@@ -12,9 +12,10 @@ export type LordMatch = (state: GameState, u: UnitState) => boolean
 
 // claim one matching enemy minion, recording the return-to (its current controller) keyed by lord id
 function claim(state: GameState, u: UnitState, controller: PlayerId, lordId: string): void {
+  const back = u.controller
+  if (!takeControl(state, u, controller)) return // King Arthur keeps it with its owner — nothing to record
   state.flow = state.flow ?? {}
-  state.flow.kingsCourt = [...(state.flow.kingsCourt ?? []), { unitId: u.id, back: u.controller, by: lordId }]
-  takeControl(state, u, controller)
+  state.flow.kingsCourt = [...(state.flow.kingsCourt ?? []), { unitId: u.id, back, by: lordId }]
 }
 
 // a silenced/disabled (or absent) lord exerts NO control — it claims nothing here, and its existing

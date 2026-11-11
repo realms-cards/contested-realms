@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { pushLog } from '../../../engine/effects'
+import { pushLog, untapUnit } from '../../../engine/effects'
 
 // 'Whenever bearer attacks and kills an enemy, it untaps.'
 registerScript('Screaming Skull', {
@@ -7,7 +7,7 @@ registerScript('Screaming Skull', {
     const art = ctx.state.artifacts[ctx.sourceId]
     const bearer = art?.carriedBy ? ctx.state.units[art.carriedBy] : null
     if (bearer) {
-      bearer.tapped = false
+      untapUnit(ctx.state, bearer)
       pushLog(ctx.state, ctx.controller, `The Screaming Skull howls — ${bearer.name} fights on!`)
     }
   },

@@ -9,16 +9,17 @@ import { isWaterSite, orthAdjacentWrapped, siteAt } from '../../../engine/grid'
 registerScript('Wrath of the Sea', {
   onCast: (ctx) => {
     // flood every DRY site orthogonally adjacent to any water site — INCLUDING rubble, which floods into
-    // water just like The Great Drowning of Men does (only already-water sites are skipped)
-    const flooded: string[] = []
-    for (const site of Object.values(ctx.state.sites)) {
-      if (isWaterSite(ctx.state, site, getCard)) continue
-      const nearWater = orthAdjacentWrapped(ctx.state, site.x, site.y).some((s) => {
+    // water just like The Great Drowning of Men does (only already-water sites are skipped). One step:
+    // the sites to flood are picked from the water as the spell starts, so a site this spell floods
+    // doesn't flood its own neighbours in a chain.
+    const toFlood = Object.values(ctx.state.sites).filter((site) =>
+      !isWaterSite(ctx.state, site, getCard) &&
+      orthAdjacentWrapped(ctx.state, site.x, site.y).some((s) => {
         const o = siteAt(ctx.state, s.x, s.y)
         return !!o && isWaterSite(ctx.state, o, getCard)
-      })
-      if (nearWater && applyFlood(ctx.state, site, ctx.controller)) flooded.push(site.id)
-    }
+      }))
+    const flooded: string[] = []
+    for (const site of toFlood) if (applyFlood(ctx.state, site, ctx.controller)) flooded.push(site.id)
     ctx.state.flow = ctx.state.flow ?? {}
     ctx.state.flow.unfloodAtEnd = [...(ctx.state.flow.unfloodAtEnd ?? []), ...flooded]
     // submerge every surface minion standing on water (avatars can't submerge); its cargo rides down

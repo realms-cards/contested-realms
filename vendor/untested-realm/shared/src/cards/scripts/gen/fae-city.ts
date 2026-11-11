@@ -1,4 +1,5 @@
 import { registerScript } from '../registry'
+import { tapUnit } from '../../../engine/effects'
 import { unitsAt } from '../../../engine/grid'
 import { canTapForCost, hasSubtype } from '../../../engine/statics'
 import { fireVolleyProjectiles } from '../../../engine/combat'
@@ -19,7 +20,7 @@ registerScript('Fae City', {
       )
       if (faeries.length === 0) return ctx.log('No untapped Faerie here.')
       if (faeries.length === 1) {
-        faeries[0].tapped = true
+        tapUnit(ctx.state, faeries[0])
         ctx.ask({ kind: 'chooseOption', title: 'Shoot in which direction?', data: { options: ['n', 's', 'e', 'w'] } }, 'bolt')
         return
       }
@@ -32,7 +33,7 @@ registerScript('Fae City', {
       const id = Array.isArray(choice) ? choice[0] : choice
       const fae = id ? ctx.state.units[id] : null
       if (!fae || !canTapForCost(ctx.state, fae)) return
-      fae.tapped = true
+      tapUnit(ctx.state, fae)
       ctx.ask({ kind: 'chooseOption', title: 'Shoot in which direction?', data: { options: ['n', 's', 'e', 'w'] } }, 'bolt')
     },
     bolt: (ctx, _c, dir) => {

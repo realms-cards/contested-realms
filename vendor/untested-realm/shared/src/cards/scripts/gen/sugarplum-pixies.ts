@@ -1,4 +1,5 @@
 import { registerScript } from '../registry'
+import { untapUnit } from '../../../engine/effects'
 import { nearbySquaresW, unitsAt } from '../../../engine/grid'
 
 // 'At the end of your turn, untap another nearby ally.'
@@ -18,7 +19,7 @@ registerScript('Sugarplum Pixies', {
     refresh: (ctx, _c, choice) => {
       const id = Array.isArray(choice) ? choice[0] : choice
       const u = typeof id === 'string' ? ctx.state.units[id] : null
-      if (u) u.tapped = false
+      if (u) untapUnit(ctx.state, u)
     },
   },
 })

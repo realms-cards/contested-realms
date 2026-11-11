@@ -10,6 +10,8 @@ registerScript('Order of the White Wing', {
     if (!self || entering.isAvatar) return false
     if (entering.counters?.castFromHand) return false
     if (entering.counters?.transformed) return false // a transform (Behemoth/Leviathan waking) isn't a summon
+    // a nearby minion/location respects region boundaries (Codex, Nearby): a surface Order doesn't see a summon underground
+    if (entering.region !== self.region) return false
     if (!nearbySquaresW(state, self.x, self.y).some((s) => s.x === entering.x && s.y === entering.y)) return false
     pushLog(state, self.controller, `The White Wing suffers no conjured thing: ${entering.name} is turned away!`)
     return true

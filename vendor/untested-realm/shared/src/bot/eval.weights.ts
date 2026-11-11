@@ -79,6 +79,11 @@ export interface EvalWeights {
    *  site play), so this is their equivalent "don't squander the turn" penalty — and it's heavier, since
    *  a Pathfinder blazing is both its site development AND its board advance. */
   pathfinderIdle: number
+  /** penalty for a "caster" Avatar (Frost Mage, Lavamancer: power 1, a strong non-Tap ability behind an
+   *  elemental threshold) that spends its Tap on anything but a site — moving, attacking, a Tap ability —
+   *  while its ability's threshold isn't met yet: it should be building toward that threshold. On top
+   *  of avatarWander. */
+  casterEarlyTap: number
 
   // ── Material (per non-avatar unit, mine − foe) ─────────────────────────────
   /** per point of (effective attack + FULL defence). Non-lethal damage is ignored — it heals each turn,
@@ -135,6 +140,8 @@ export interface EvalWeights {
   harbingerEnemySlot: number
   /** bonus per site I planted on one of MY OWN Harbinger portent slots (prized development). */
   harbingerOwnSlot: number
+  /** small bonus per face-down trap of mine still unsprung: springing must gain more than keeping it. */
+  trapUnsprung: number
 
   // ── Economy / cards ────────────────────────────────────────────────────────
   /** per SPELL in my hand — kept tiny on purpose. A card's value is realised by PLAYING it; a large hand
@@ -179,6 +186,7 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   //                     it beats even a strong Tap while developing; scaled ×1 <5 / ×0.5 at 5 / ×0.2 at 6 / 0 above 6
   pathfinderIdle: 50, // SEVERE — a Pathfinder that can blaze but doesn't is wasting a site play AND a board
   //                     advance; must outweigh the lure of wandering/attacking so it always lays its trail
+  casterEarlyTap: 30, // a caster Avatar tapping for anything but a site before its ability's threshold is met
   myAvatarExposed: 9, // (was 6) — flinch harder from incoming avatar threat; don't over-extend into it
 
   // Material: DAMAGE still leads, but placing minions is worth a bit more so the bot plays cards from
@@ -211,6 +219,7 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   homePremature: 12, // expanding outside home before filling it — penalised, but less
   harbingerEnemySlot: 35, // HEAVY — a site wasted on the enemy's Harbinger portent
   harbingerOwnSlot: 20, // prized — developing onto your own Harbinger portents
+  trapUnsprung: 6, // small: about one mana's worth of board — keeps a trap for a spring that really pays
 
   drawValue: 35, // ≈ 3.5 HP flat per card drawn this turn (search-applied; drawn card stays unknown)
   myHand: 5, // deliberately tiny — a card's real value is realised by PLAYING it, not holding it. A big

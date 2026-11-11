@@ -18,6 +18,6 @@ registerScript('Awakened Mummies', {
     const prey = ctx.state.units[moved.id]
     if (!prey) return
     pushLog(ctx.state, ctx.controller, 'The Mummies burst from the sand!')
-    fightUnits(ctx.state, self, prey) // a real fight: both strike (fires Interrogator, Lethal, kill triggers…)
+    fightUnits(ctx.state, self, prey, [self, prey]) // both moved; a real fight: both strike (fires Interrogator, Lethal, kill triggers…)
   },
 })

@@ -13,6 +13,8 @@ registerScript('Lucid Dreamers', {
     const self = ctx.state.units[ctx.sourceId]
     if (!self || self.region !== 'void' || entered.id === self.id) return
     if (entered.controller !== ctx.controller || entered.enteredTurn !== ctx.state.turn) return
+    // only a minion CAST here — a summoned token (Gift of the Frog) gets no Voidwalk and is banished
+    if (ctx.state.flow?.castEntering !== entered.id) return
     if (entered.x === self.x && entered.y === self.y && entered.region === 'void') {
       entered.counters = { ...entered.counters, lucidDream: 1 }
       pushLog(ctx.state, ctx.controller, `${entered.name} walks the dreamers' dream.`)

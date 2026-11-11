@@ -1,9 +1,9 @@
 import { getScript } from '../cards/scripts/registry'
 import { getCard } from '../cards/db'
 import type { GameState, PlayerId } from './types'
-import { pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkStateBased, killUnit, deferTurnStep, tapUnit, noAtlasDrawChoice, recordManaGain, siteStillFlooded, beginAreaReveal, sealAbilityReveal, snapshotRealm, recordTouchedSites, turnFingerprint } from './effects'
+import { pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkStateBased, killUnit, deferTurnStep, reconcileSummonTax, tapUnit, runDamageEvent, untapUnit, noAtlasDrawChoice, recordManaGain, siteStillFlooded, beginAreaReveal, sealAbilityReveal, snapshotRealm, recordTouchedSites, turnFingerprint } from './effects'
 import { sitesOf, unitsOf, avatarOf, siteAt } from './grid'
-import { siteSilenced, artifactSilenced, siteDisabled, canTap, isDisabled, artifactController, artifactActor } from './statics'
+import { abilitiesOff, siteSilenced, artifactSilenced, siteDisabled, canTap, isDisabled, artifactController, artifactActor } from './statics'
 import { playSite } from './casting'
 import { noteAddedToEnd } from './knowledge'
 
@@ -14,7 +14,7 @@ export function sourceMana(state: GameState, player: PlayerId): number {
   let mana = 0
   for (const site of Object.values(state.sites)) {
     if (site.isRubble || site.controller === player || site.controller === null) continue
-    if (getScript(site.name)?.providesForEveryone && !siteDisabled(state, site)) mana += 1
+    if (getScript(site.name)?.providesForEveryone && !siteSilenced(state, site)) mana += 1 // silenced/disabled → its own only
   }
   for (const site of sitesOf(state, player)) {
     if (site.isRubble || siteDisabled(state, site)) continue
@@ -36,7 +36,7 @@ export function sourceMana(state: GameState, player: PlayerId): number {
     return typeof e === 'function' ? e(state, id) : e ?? 0
   }
   for (const unit of unitsOf(state, player)) {
-    if (unit.silenced) continue
+    if (!getScript(unit.name)?.extraManaEachTurn || abilitiesOff(state, unit)) continue
     mana += extraOf(unit.name, unit.id)
   }
   for (const art of Object.values(state.artifacts)) {
@@ -135,7 +135,7 @@ export function beginTurn(state: GameState, player: PlayerId): void {
     )
   }
   // "until your next turn" area effects expire (Babbling Brook, Bog, Leadworks)
-  for (const key of ['areaDisables', 'immobileSites', 'siteSilences', 'enduringFaith', 'shieldWall', 'courtDisables'] as const) {
+  for (const key of ['areaDisables', 'immobileSites', 'siteSilences', 'enduringFaith', 'shieldWall', 'courtDisables', 'encased'] as const) {
     if (state.flow?.[key]) {
       state.flow[key] = state.flow[key].filter(
         (e: { player: PlayerId; turn: number }) => !(e.player === player && e.turn < state.turn),
@@ -143,19 +143,16 @@ export function beginTurn(state: GameState, player: PlayerId): void {
     }
   }
 
-  // untap all of this player's cards ("they don't untap the next time they
-  // would" effects — Waveshaper, Blasphemy — consume a skipUntap marker instead)
-  const untapBan = Object.values(state.units).some(
-    (u) => !u.silenced && getScript(u.name)?.preventsOtherUntaps,
-  )
+  // "this turn" damage boosts (Smoldering Hollow) from an earlier turn are spent
+  if (state.flow?.nearbyDamageBoosts) {
+    state.flow.nearbyDamageBoosts = state.flow.nearbyDamageBoosts.filter((z: { turn: number }) => z.turn === state.turn)
+    if (!state.flow.nearbyDamageBoosts.length) delete state.flow.nearbyDamageBoosts
+  }
+
+  // untap all of this player's cards (untapUnit honors "they don't untap the next time they would"
+  // and Rhitta Gawr's "Other minions can't untap")
   for (const unit of unitsOf(state, player)) {
-    if (unit.tapped && unit.counters?.skipUntap) {
-      delete unit.counters.skipUntap
-    } else if (unit.tapped && untapBan && !unit.isAvatar && !(getScript(unit.name)?.preventsOtherUntaps && !unit.silenced)) {
-      // Rhitta Gawr: other minions can't untap
-    } else {
-      unit.tapped = false
-    }
+    untapUnit(state, unit)
     unit.usedThisTurn = {}
   }
   for (const site of sitesOf(state, player)) site.tapped = false
@@ -172,7 +169,7 @@ export function beginTurn(state: GameState, player: PlayerId): void {
   // enemy sites that provide for everyone (Avalon)
   for (const site of Object.values(state.sites)) {
     if (site.isRubble || site.controller === player || site.controller === null) continue
-    if (getScript(site.name)?.providesForEveryone && !siteDisabled(state, site)) {
+    if (getScript(site.name)?.providesForEveryone && !siteSilenced(state, site)) {
       mana += 1
       recordManaGain(state, site.x, site.y, 'surface', 1)
     }
@@ -200,7 +197,7 @@ export function beginTurn(state: GameState, player: PlayerId): void {
     return typeof e === 'function' ? e(state, id) : e ?? 0
   }
   for (const unit of unitsOf(state, player)) {
-    if (unit.silenced) continue
+    if (!getScript(unit.name)?.extraManaEachTurn || abilitiesOff(state, unit)) continue
     const e = extraOf(unit.name, unit.id)
     mana += e
     recordManaGain(state, unit.x, unit.y, unit.region, e) // Dryads / Finwife next to the enemy avatar
@@ -477,6 +474,12 @@ registerCont('turn:finishEnd', (state, ctx: { player: PlayerId }) => finishEndTu
 /** globals + cleanup + hand-off to the next turn: runs after the player's ordered
  *  end-of-turn triggers. */
 function finishEndTurn(state: GameState, player: PlayerId): void {
+  // a token your end-of-turn effect summoned (Invasion's Foot Soldiers) pays its Mock Court tax NOW, from
+  // this turn's mana — not after the hand-off, when that mana is gone
+  if (!state.prompts.length) {
+    reconcileSummonTax(state)
+    if (state.prompts.length) { deferTurnStep(state, 'turn:finishEnd', { player }); return }
+  }
   // "at the end of each turn" triggers, for everything in play
   for (const unit of Object.values(state.units)) {
     const script = getScript(unit.name)
@@ -706,6 +709,10 @@ function runTurnTrigger(state: GameState, player: PlayerId, ref: TriggerRef, hoo
     if (script?.listensFromCemetery && state.players[player].cemetery.includes(ref.sourceId)) { srcId = ref.sourceId; srcName = name!; fire = () => script[hook]?.(makeCtx(state, ref.sourceId, player, [])) }
   }
   if (!fire || !srcId) return
+  // one simultaneous damage event, like a cast or an activated ability: an area trigger (Rite of
+  // Eruption's grid) resolves every victim's damage before a single death settles
+  const effect = fire
+  fire = () => runDamageEvent(state, effect)
   // Start-of-turn triggers don't animate (the incoming turn's draw/steps would clobber the single
   // reveal slot). END-of-turn triggers animate like a cast — but ONLY if they ACTUALLY did something
   // (a whole-realm fingerprint diff decides), so an idle conditional trigger doesn't flash every turn.

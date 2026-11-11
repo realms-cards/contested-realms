@@ -9,7 +9,9 @@ registerScript('Nosferatu', {
   deathrite: (ctx) => {
     const self = ctx.state.units[ctx.sourceId]
     if (!self) return
-    if (self.counters?.diedTurn === ctx.state.turn) {
+    // echoed as a Genesis (Saintweald) he never died: "if he dies again" doesn't apply, and it isn't a death
+    const echo = ctx.state.flow?.riteEcho === self.id
+    if (!echo && self.counters?.diedTurn === ctx.state.turn) {
       pushLog(ctx.state, ctx.controller, 'Nosferatu is destroyed for good.')
       ctx.banish(self.id)
       return
@@ -28,7 +30,7 @@ registerScript('Nosferatu', {
       id: unitId, cardId, name: ctx.state.cards[cardId]?.name ?? 'Nosferatu', owner: ctx.state.cards[cardId]?.owner ?? ctx.controller,
       controller: ctx.controller, isAvatar: false, x, y, region: 'underground', tapped: false,
       damage: 0, enteredTurn: ctx.state.turn, modifiers: [], carrying: [], carryingUnits: [],
-      usedThisTurn: {}, counters: { diedTurn: ctx.state.turn },
+      usedThisTurn: {}, counters: echo ? {} : { diedTurn: ctx.state.turn },
     })
     pushLog(ctx.state, ctx.controller, 'Nosferatu seeps into the earth, unquiet...')
   },

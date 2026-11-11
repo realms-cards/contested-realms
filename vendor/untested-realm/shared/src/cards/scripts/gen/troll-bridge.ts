@@ -1,6 +1,7 @@
-import { registerScript, type EffectAPI } from '../registry'
+import { registerScript, getScript, type EffectAPI } from '../registry'
 import type { GameState, PlayerId } from '../../../engine/types'
-import { pushLog, toCemetery, isCasterLocked } from '../../../engine/effects'
+import { pushLog, toCemetery, isCasterLocked, dealDamageToUnit, makeCtx } from '../../../engine/effects'
+import { isDisabled } from '../../../engine/statics'
 
 // 'The first time a lone enemy enters here each turn, strike it unless they discard a card.'
 registerScript('Troll Bridge', {
@@ -92,7 +93,11 @@ function trollStrike(ctx: EffectAPI, unitId: string): void {
   const site = ctx.state.sites[ctx.sourceId]
   const u = ctx.state.units[unitId]
   if (!site || !u) return
-  // the bridge itself strikes with power 3 (the troll beneath)
-  ctx.dealDamage({ unit: unitId }, 3)
+  // the bridge itself strikes with power 3 (the troll beneath) — a STRIKE, so strike effects apply and the
+  // struck unit's "when struck" fires (Phantasmal Shade)
+  dealDamageToUnit(ctx.state, u, 3, ctx.controller, { source: { player: ctx.controller, kind: 'strike', name: 'Troll Bridge' } })
   pushLog(ctx.state, null, `The troll lashes out at ${u.name}!`)
+  const survivor = ctx.state.units[unitId]
+  const struck = survivor ? getScript(survivor.name)?.onSelfStruck : undefined
+  if (survivor && struck && !survivor.silenced && !isDisabled(ctx.state, survivor)) struck(makeCtx(ctx.state, survivor.id, survivor.controller, []))
 }

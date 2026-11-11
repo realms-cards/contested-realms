@@ -20,7 +20,7 @@ function deathspeakerFlickerWithGenesis(ctx: EffectAPI, name: string, at: { x: n
   const anchor = { ...anchorBase, x: at.x, y: at.y, region } as UnitState
   const cands: string[] = []
   for (const u of Object.values(ctx.state.units)) {
-    if (validateTarget(ctx.state, spec, { unit: u.id }, anchor, ctx.controller) === null) cands.push(u.id)
+    if (validateTarget(ctx.state, spec, { unit: u.id }, anchor, ctx.controller, undefined, name) === null) cands.push(u.id)
   }
   if (!cands.length) return deathspeakerFlicker(ctx, name, at, region, [])
   ctx.ask(

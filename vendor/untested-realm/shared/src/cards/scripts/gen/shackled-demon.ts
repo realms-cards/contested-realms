@@ -9,6 +9,7 @@ registerScript('Shackled Demon', {
     const self = ctx.state.units[ctx.sourceId]
     if (self) self.disabled = true
   },
+  grantsAbilitiesWhileDisabled: true, // the release ends his own disable
   grantsAbilities: (state, selfId, unit) => {
     const self = state.units[selfId]
     if (!self || !self.disabled || unit.id === selfId) return []

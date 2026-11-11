@@ -1,6 +1,7 @@
 import { registerScript, type EffectAPI } from '../registry'
 import { GRID_H, GRID_W, inBounds, siteAt } from '../../../engine/grid'
 import type { GameState } from '../../../engine/types'
+import { placeRubble } from '../../../engine/effects'
 
 /** every empty (site-less) square — a void */
 function allVoids(state: GameState): { x: number; y: number }[] {
@@ -15,13 +16,7 @@ registerScript('Star-seeds of Uhr', {
   conts: {
     seed: (ctx, c, sq) => {
       if (sq && inBounds(sq.x, sq.y) && !siteAt(ctx.state, sq.x, sq.y)) {
-        const rubbleCardId = `c${ctx.state.nextId++}`
-        ctx.state.cards[rubbleCardId] = { id: rubbleCardId, name: 'Rubble', owner: ctx.controller, isToken: true }
-        const rubbleId = `s${ctx.state.nextId++}`
-        ctx.state.sites[rubbleId] = {
-          id: rubbleId, cardId: rubbleCardId, name: 'Rubble', owner: ctx.controller,
-          controller: null, x: sq.x, y: sq.y, tapped: false, isRubble: true,
-        }
+        placeRubble(ctx.state, sq.x, sq.y, ctx.controller)
       }
       seedNext(ctx, (c.n as number) + 1)
     },

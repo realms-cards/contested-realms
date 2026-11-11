@@ -17,6 +17,7 @@ function freeCityPseudo(state: GameState, siteId: string): UnitState | null {
     isAvatar: false, x: site.x, y: site.y, region: 'surface', tapped: false, damage: 0,
     enteredTurn: state.turn - 1, // the city was always here — no summoning sickness
     modifiers: [], carrying: [], carryingUnits: [], usedThisTurn: {},
+    counters: { garrison: 1 }, // temporary: the engine removes it once the battle is over (combat endBattle)
   }
   state.units[unitId] = unit
   return unit

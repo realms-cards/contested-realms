@@ -4,11 +4,11 @@ import { pushLog } from '../../../engine/effects'
 // -------------------------------------------------------- Mismanaged Mortuary ----
 // 'Flooded. Treat your opponent's cemetery as yours, and vice versa.'
 registerScript('Mismanaged Mortuary', {
+  printedFlooded: true, // its own ability: lost to a silence (Codex, Silenced), unlike a granted flood
   // Each Mortuary TOGGLES the swap — an even number cancels out (FAQ)
   genesis: (ctx) => {
     const site = ctx.state.sites[ctx.sourceId]
     if (!site) return
-    site.flooded = true
     ctx.state.flow = ctx.state.flow ?? {}
     const a = ctx.state.players[0].cemetery
     ctx.state.players[0].cemetery = ctx.state.players[1].cemetery

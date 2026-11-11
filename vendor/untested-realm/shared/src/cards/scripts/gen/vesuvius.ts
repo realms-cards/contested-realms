@@ -15,7 +15,8 @@ registerScript('Vesuvius', {
       if (!self) return
       for (const sq of nearbySquaresW(ctx.state, self.x, self.y)) {
         if (!siteAt(ctx.state, sq.x, sq.y)) continue
-        for (const u of unitsAt(ctx.state, sq.x, sq.y, 'surface')) {
+        // "occupying nearby sites": a site's surface AND its subsurface (burrowed/submerged units too)
+        for (const u of unitsAt(ctx.state, sq.x, sq.y).filter((v) => v.region !== 'void')) {
           if (u.isAvatar && u.controller !== ctx.controller) awardAchievement(ctx.state, 'cleanse-with-fire', ctx.controller)
           ctx.dealDamage({ unit: u.id }, 3)
         }

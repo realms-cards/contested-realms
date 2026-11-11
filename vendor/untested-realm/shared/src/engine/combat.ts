@@ -1,11 +1,11 @@
 // Move & Attack, Defend, Intercept, fights, projectiles.
 
-import { getScript } from '../cards/scripts/registry'
+import { getScript, type DamageSource } from '../cards/scripts/registry'
 import { findCard } from '../cards/db'
 import { pickUpUnits, dropUnits, syncCarried, detachFromCarrier } from './carrying'
 import type { GameState, PlayerId, Region, Step, UnitState, AttackTarget } from './types'
-import { pushLog, pushPrompt, registerCont, resumeWhenSettled, dealDamageToUnit, dealDamage, checkStateBased, opponent, makeCtx, emitUnitMoved, gainLife, tapUnit, emitEvent, drawCards, askDrawCard, recordAreaReveal, markRevealShoots, beginAreaReveal, sealAbilityReveal, beginBattleCapture, finishBattleCapture, avatarTrappedAt, isMagicProtected } from './effects'
-import { effAttack, effKeywords, isDisabled, canTap, projectileCanHit, attackBlockedAt, interceptBlockedAt, siteSilenced as siteSilencedC, artScript, regionPresentAt, carriedInside, isBlanked, isCarriableArtifact } from './statics'
+import { pushLog, pushPrompt, registerCont, resumeWhenSettled, dealDamageToUnit, dealDamage, checkStateBased, opponent, makeCtx, emitUnitMoved, gainLife, tapUnit, untapUnit, emitEvent, emitEventWithFallen, beginDamageEvent, endDamageEvent, deathPending, drawCards, askDrawCard, recordAreaReveal, markRevealShoots, beginAreaReveal, sealAbilityReveal, beginBattleCapture, finishBattleCapture, avatarTrappedAt, isMagicProtected, isDyingUnit, killUnit } from './effects'
+import { abilitiesOff, effAttack, effKeywords, isDisabled, canTap, projectileCanHit, attackBlockedAt, attackForbidden, interceptBlockedAt, siteSilenced as siteSilencedC, artScript, regionPresentAt, carriedInside, isBlanked, isCarriableArtifact } from './statics'
 import { findPath, isFreeStep, isLegalStep, maxSteps, reachableLocations, reachableWithPaths, resolveMovement, type Walk } from './movement'
 import { unitsAt, occupies, occupiedSquares, sharedLocation, inBounds, edgesConnected, GRID_W, GRID_H, squareLabel } from './grid'
 
@@ -27,6 +27,16 @@ export function moveAttack(state: GameState, player: PlayerId, unitId: string, p
     }
     if (cost > maxSteps(state, unit)) return `${unit.name} can take at most ${maxSteps(state, unit)} step(s).`
   }
+  // a declared target that refuses this attacker outright (Earl of the Ivory Towers, a Beast in Varmint
+  // Warrens, Stealth) is illegal at declaration — refuse it before anything taps, not after the walk
+  {
+    const target = attack && 'unit' in attack ? state.units[attack.unit] : undefined
+    if (target && target.controller !== unit.controller) {
+      if (attackForbidden(state, unit, target)) return `${target.name} can't be attacked by ${unit.name}.`
+      const truesight = unit.carrying.some((id) => { const a = state.artifacts[id]; return !!a && !!artScript(state, a)?.bearerTruesight })
+      if (target.stealth && !truesight) return `${target.name} has Stealth.`
+    }
+  }
 
   // while it resolves its own Move & Attack the unit is NOT "at rest", so an at-rest disabler
   // (Hillock Basilisk / Stone-gaze Gorgons) doesn't bite it — it finishes the attack, then is
@@ -37,6 +47,9 @@ export function moveAttack(state: GameState, player: PlayerId, unitId: string, p
   state.flow.actingUnitId = unitId
   try {
     tapUnit(state, unit)
+    // an Avatar spending its Tap on Move & Attack instead of a site (the bot's eval reads this; a site
+    // play taps without it). Keyed to state.turn, so it expires on its own.
+    if (unit.isAvatar) state.flow.avatarRoamed = { ...(state.flow.avatarRoamed ?? {}), [unit.controller]: state.turn }
     delete state.flow.lastStepFrom // set by resolveMovement only if THIS move takes a step
     // the walk stops at a step whose trigger asked something; the rest of the path waits (Storyline)
     const promptsBefore = state.prompts.length
@@ -71,9 +84,12 @@ function afterMovement(state: GameState, player: PlayerId, unit: UnitState, take
     checkStateBased(state)
     if (!state.units[unitId]) return null
   }
+  // it died on the way (a Bottomless Pit, a Giant Shark's fight): it is at no location, so it has no
+  // legal attack target (Codex Attack: "no attack happened") and there is no mover left to intercept
+  if (!state.units[unitId]) return null
   if (taken > 0) {
     if (unit.carriedBy) detachFromCarrier(state, unit) // moving on your own ends the ride
-    syncCarried(state, unit)
+    syncCarried(state, unit, undefined, true)
     pushLog(state, player, `${unit.name} moves to ${squareLabel(unit.x, unit.y)}${unit.region !== 'surface' ? ' ' + unit.region : ''}.`)
   }
   // stealth is lost when the minion interacts; moving alone doesn't break it
@@ -105,11 +121,26 @@ function afterMovement(state: GameState, player: PlayerId, unit: UnitState, take
     finishMoveAttack(state, unit, attack)
     return null
   }
+  // a plain move: settle what its arrival changed (a carried Blightstone now disables the site here, so
+  // that site loses its Ward) before the intercept window opens
+  checkStateBased(state)
+  if (!state.units[unitId]) return null
   offerIntercept(state, unit)
   return null
 }
 
 // ---------- deferred Move & Attack (target declared after all movement + its triggers) ----------
+
+/** Putrid Presence: "The subsurface of nearby sites can be attacked" — a surface attacker may attack a
+ *  burrowed/submerged unit directly below it when that square is near an active Presence. */
+export function subsurfaceAttackable(state: GameState, attacker: UnitState, target: UnitState): boolean {
+  if (attacker.region !== 'surface' || (target.region !== 'underground' && target.region !== 'underwater')) return false
+  if (!occupiedSquares(attacker).some((a) => occupies(target, a.x, a.y))) return false
+  return Object.values(state.units).some((u) => {
+    const f = getScript(u.name)?.allowsSubsurfaceAttackAt
+    return f && !u.silenced && !isDisabled(state, u) && f(state, u.id, target.x, target.y)
+  })
+}
 
 /** Is the declared attack target still present where the mover now stands? An entry trigger (Sold-out
  *  Cemetery pushing an Undead), a death, etc. may have removed it while it resolved. */
@@ -117,7 +148,7 @@ function attackTargetPresent(state: GameState, unit: UnitState, attack: AttackTa
   if ('unit' in attack) {
     const t = state.units[attack.unit]
     if (!t || carriedInside(state, t)) return false
-    return !!sharedLocation(unit, t)
+    return !!sharedLocation(unit, t) || subsurfaceAttackable(state, unit, t)
   }
   const site = state.sites[attack.site]
   return !!site && !site.isRubble && occupies(unit, site.x, site.y, 'surface')
@@ -127,11 +158,12 @@ function attackTargetPresent(state: GameState, unit: UnitState, attack: AttackTa
  *  originally declared target has been moved away. */
 function coLocatedAttackTargets(state: GameState, unit: UnitState): string[] {
   const kw = effKeywords(state, unit)
-  const truesight = unit.carrying.some((id) => getScript(state.artifacts[id]?.name ?? '')?.bearerTruesight)
+  const truesight = unit.carrying.some((id) => { const a = state.artifacts[id]; return !!a && !!artScript(state, a)?.bearerTruesight })
   return unitsAt(state, unit.x, unit.y, unit.region)
     .filter((t) => {
       if (t.id === unit.id || t.controller === unit.controller || t.carriedBy) return false
       if (t.stealth && !truesight) return false
+      if (attackForbidden(state, unit, t)) return false
       if (effKeywords(state, t).airborne && !kw.airborne && t.region === 'surface') return false
       if (t.region === 'surface' && attackBlockedAt(state, t.x, t.y, t)) return false
       return true
@@ -255,15 +287,7 @@ export function beginAttack(
     // different regions — compare each part's own region, not the anchor's)
     const shared = sharedLocation(attacker, target)
     const sameSquare = occupiedSquares(attacker).some((a) => occupies(target, a.x, a.y))
-    // Putrid Presence: the subsurface of nearby sites can be attacked from above
-    const digDown =
-      sameSquare &&
-      attacker.region === 'surface' &&
-      (target.region === 'underground' || target.region === 'underwater') &&
-      Object.values(state.units).some((u) => {
-        const f = getScript(u.name)?.allowsSubsurfaceAttackAt
-        return f && !u.silenced && !isDisabled(state, u) && f(state, u.id, target.x, target.y)
-      })
+    const digDown = sameSquare && subsurfaceAttackable(state, attacker, target)
     // allowSubsurface: a SITE-sourced attacker (Free City) reaches down into its own subsurface — it may
     // strike a burrowed/submerged enemy sharing its square without needing a Putrid-Presence dig.
     const overlap = !!shared || (sameSquare && (digDown || !!opts?.allowSubsurface))
@@ -272,8 +296,9 @@ export function beginAttack(
     const where = shared ?? { x: target.x, y: target.y, region: target.region }
     const tkw = effKeywords(state, target)
     if (tkw.airborne && !kw.airborne && where.region === 'surface') return 'only Airborne units can attack an Airborne unit'
-    const truesight = attacker.carrying.some((id) => getScript(state.artifacts[id]?.name ?? '')?.bearerTruesight)
+    const truesight = attacker.carrying.some((id) => { const a = state.artifacts[id]; return !!a && !!artScript(state, a)?.bearerTruesight })
     if (target.stealth && !truesight) return 'that minion has Stealth'
+    if (attackForbidden(state, attacker, target)) return `${target.name} can't be attacked by ${attacker.name}`
     if (where.region === 'surface' && attackBlockedAt(state, where.x, where.y, target)) return 'that location is protected from attacks'
     // start the two-sided battle reveal BEFORE the declaration log so it's captured. The snapshot
     // survives the defend / allocate prompts in flow.pendingBattle.
@@ -286,7 +311,14 @@ export function beginAttack(
     // prompts resolve first, and fightSides drops a target that got away.
     // (A "fight" — Pudge Butcher, Lord of Lies… — is NOT an attack and never comes here: it goes
     // straight to the strike exchange via fightUnits, firing no "when attacked" and no defend window.)
+    const promptsBefore = state.prompts.length
     emitEvent(state, 'onUnitAttacked', target, attacker)
+    // a "when attacked" response that asks something (Wills-o'-the-Wisp may teleport away) resolves
+    // BEFORE the defend window and the fight (Codex, Attack) — park the rest of the attack until it has
+    if (state.prompts.length > promptsBefore || state.flow?.pendingTriggers?.length) {
+      resumeWhenSettled(state, 'combat:attackedResponded', { attackerId: attacker.id, targetId: target.id })
+      return null
+    }
     openDefendWindow(state, attacker, { unitId: target.id })
     return null
   }
@@ -304,6 +336,21 @@ export function beginAttack(
   openDefendWindow(state, attacker, { siteId: site.id })
   return null
 }
+
+// the attacked unit's responses have resolved: if it is still where the attacker engaged it the attack
+// goes on (defend window, fight); if it got away (or either side left the realm), the attack is over
+registerCont('combat:attackedResponded', (state, c: { attackerId: string; targetId: string }) => {
+  const attacker = state.units[c.attackerId]
+  const target = state.units[c.targetId]
+  if (attacker && target && (sharedLocation(attacker, target) || subsurfaceAttackable(state, attacker, target))) {
+    openDefendWindow(state, attacker, { unitId: target.id })
+    return
+  }
+  if (attacker) pushLog(state, attacker.controller, `${attacker.name}'s attack finds no one there.`)
+  endBattle(state)
+  finishBattleCapture(state)
+  checkStateBased(state)
+})
 
 // ---------- The Green Knight: "Whenever an enemy minion CAN attack The Green Knight, it MUST." ----------
 //
@@ -328,7 +375,7 @@ function compelledAttackPath(state: GameState, attacker: UnitState, target: Unit
   const kw = effKeywords(state, attacker)
   const tkw = effKeywords(state, target)
   if (tkw.airborne && !kw.airborne && target.region === 'surface') return null // only Airborne attacks Airborne
-  const truesight = attacker.carrying.some((id) => getScript(state.artifacts[id]?.name ?? '')?.bearerTruesight)
+  const truesight = attacker.carrying.some((id) => { const a = state.artifacts[id]; return !!a && !!artScript(state, a)?.bearerTruesight })
   if (target.stealth && !truesight) return null
   if (target.region === 'surface' && attackBlockedAt(state, target.x, target.y, target)) return null
   for (const t of (state.flow?.peaceTruce ?? []) as { bound: PlayerId; protectedPlayer: PlayerId; turn: number }[]) {
@@ -413,6 +460,11 @@ registerCont('forceAttack', (state, ctx: { knightByUnit: Record<string, string> 
   if (path) launchCompelledAttack(state, id, knightId, path)
 })
 
+/** the interaction that broke a unit's Stealth is over (its fight ended, its shot landed or missed) */
+function endStealthGrace(unit: UnitState | undefined): void {
+  if (unit?.counters?.stealthInteractedTurn !== undefined) delete unit.counters.stealthInteractedTurn
+}
+
 export function breakStealth(state: GameState, unit: UnitState): void {
   // breakStealth is called at the unit's realm-interaction moments (declaring an attack,
   // firing a Ranged shot, or a triggered projectile like Colicky Dragonettes' end-of-turn
@@ -421,12 +473,18 @@ export function breakStealth(state: GameState, unit: UnitState): void {
   unit.interactedTurn = state.turn
   if (unit.stealth) {
     unit.stealth = false
+    // the mark "is lost AFTER the minion interacts" (rulebook): this interaction is still a stealthed one
+    // (The White Death's "Lethal while Stealthed" shot)
+    unit.counters = { ...unit.counters, stealthInteractedTurn: state.turn }
     pushLog(state, unit.controller, `${unit.name} loses Stealth.`)
   }
 }
 
 interface FightCtx {
   attackerId: string
+  /** the attacker as it entered the fight — its "after the attack" watchers (Sir Agravaine) still fire
+   *  when it died in the fight */
+  attackerSnap?: UnitState
   /** true when the attacker initiated this fight with an attack (not an interception) */
   isAttack?: boolean
   targetUnitId?: string
@@ -442,6 +500,11 @@ interface FightCtx {
    *  scopes over, so an attacker with a splash weapon (Flaming Sword) draws once per enemy its
    *  attack fells, not just its single struck target, while staying scoped to THIS attack. */
   enemiesAtStart?: string[]
+  /** the units in it have been told they fight (onSelfFights) — once per fight, not per strike pass */
+  fightNoted?: boolean
+  /** a forced fight's combatants that moved or acted in the effect bringing it about — only these are
+   *  not "at rest" during it (Codex, At Rest). Absent on attacks and intercepts, which work it out. */
+  awakeIds?: string[]
 }
 
 function openDefendWindow(state: GameState, attacker: UnitState, target: { unitId?: string; siteId?: string }): void {
@@ -470,7 +533,8 @@ function openDefendWindow(state: GameState, attacker: UnitState, target: { unitI
   }
 
   let candidates: UnitState[] = []
-  let undefendable = getScript(attacker.name)?.cantBeDefended && !attacker.silenced
+  // "UNITS attacked by … can't be defended" (Harassing Ruffians) — an attack on a site stays defendable
+  let undefendable = !!target.unitId && getScript(attacker.name)?.cantBeDefended && !attacker.silenced
   // Dread Thicket: the first attack OUT OF the site each turn can't be defended. FAQ: "out of" = the
   // attacker's last step left the Thicket (exactly one step away from it), then it attacks.
   {
@@ -519,8 +583,8 @@ function openDefendWindow(state: GameState, attacker: UnitState, target: { unitI
         return reaches(c)
       }
       if (occupies(u, loc.x, loc.y, loc.region)) return true
-      // "can't move to defend" minions may only defend in place
-      if (getScript(u.name)?.cantDefend) return false
+      // "can't move to defend" minions may only defend in place (a silenced one has lost that restriction)
+      if (getScript(u.name)?.cantDefend && !u.silenced) return false
       return reaches(u)
     })
   }
@@ -542,11 +606,13 @@ function openDefendWindow(state: GameState, attacker: UnitState, target: { unitI
     enemiesAtStart: Object.values(state.units).filter((u) => u.controller !== attacker.controller).map((u) => u.id),
   }
 
-  // Combatants are NOT "at rest" until the battle fully resolves, so an at-rest disabler (Hillock
-  // Basilisk / Stone-gaze Gorgons) can't freeze one mid-fight — including a Basilisk that itself moves
-  // in to defend. Seed with the attacker + target; defenders join as they commit / when sides resolve.
+  // Units that ACT in the battle are NOT "at rest" until it fully resolves, so an at-rest disabler
+  // (Hillock Basilisk / Stone-gaze Gorgons) can't freeze them mid-fight — including a Basilisk that
+  // itself moves in to defend. The attacked unit did nothing: it stays at rest, so an at-rest disable
+  // on it holds and it doesn't strike back (owner ruling 2026-11-08, LOOP #35). Seed with the attacker;
+  // defenders join as they commit.
   state.flow = state.flow ?? {}
-  state.flow.battleUnits = [attacker.id, ...(target.unitId ? [target.unitId] : [])]
+  state.flow.battleUnits = [attacker.id]
 
   if (candidates.length === 0) {
     afterDefenders(state, ctx)
@@ -601,9 +667,7 @@ registerCont('combat:defenders', (state, ctx: FightCtx, choice: DefendPick[]) =>
   // attacked unit fights alongside it). Only a truly lone defender (attack on a site, or the attacked
   // unit already gone) is cowed.
   if (chosen.length === 1) {
-    const fear = Object.values(state.units).some(
-      (u) => u.controller === attacker.controller && !u.silenced && !isDisabled(state, u) && getScript(u.name)?.enemiesCantDefendAlone,
-    )
+    const fear = lordOfFearAttacks(state, attacker)
     const attacked = ctx.targetUnitId ? state.units[ctx.targetUnitId] : undefined
     const attackedStillInFight = !!attacked && attacked.x === loc.x && attacked.y === loc.y && attacked.region === loc.region
     if (fear && !attackedStillInFight) {
@@ -649,6 +713,10 @@ function walkInDefenders(state: GameState, ctx: FightCtx, loc: Step, chosen: Def
       const path = validDeclaredDefendPath(state, u, pick.path, loc) ?? findPath(state, u, loc)
       if (!path) continue // can't reach the fight
       tapUnit(state, u)
+      // codex At Rest: a defender that used its Defend isn't at rest until the attack sequence ends, so an
+      // at-rest disabler it walks past (the square in front of a Basilisk) doesn't stop it on the way
+      state.flow = state.flow ?? {}
+      state.flow.battleUnits = [...new Set([...(state.flow.battleUnits ?? []), u.id])]
       const asked = state.prompts.length
       const walk: Walk = { pauseWhen: () => state.prompts.length > asked }
       resolveMovement(state, u, path, walk)
@@ -692,7 +760,7 @@ function arriveDefender(state: GameState, ctx: FightCtx, loc: Step, id: string, 
     return
   }
   breakStealth(state, survivor) // defending breaks Stealth (movement usually already did)
-  syncCarried(state, survivor)
+  syncCarried(state, survivor, undefined, true) // the defender walked there itself
   ctx.defenderIds.push(id)
   pushLog(state, survivor.controller, `${survivor.name} defends!`)
   emitEvent(state, 'onAllyDefends', state.units[id])
@@ -713,6 +781,20 @@ registerCont('combat:defendersWalk', (state, c: { ctx: FightCtx; loc: Step; chos
   walkInDefenders(state, c.ctx, c.loc, c.chosen, c.index + 1)
 })
 
+/** Lord of Fear on the attacker's side: "Enemies can't defend alone." */
+function lordOfFearAttacks(state: GameState, attacker: UnitState): boolean {
+  return Object.values(state.units).some(
+    (u) => u.controller === attacker.controller && !u.silenced && !isDisabled(state, u) && getScript(u.name)?.enemiesCantDefendAlone,
+  )
+}
+
+/** a lone added defender against a Lord of Fear was allowed only because the attacked unit fights beside
+ *  it — so that unit can't then be taken out of the fight (it would leave the defender alone) */
+function targetMustStay(state: GameState, ctx: FightCtx): boolean {
+  const attacker = state.units[ctx.attackerId]
+  return !!attacker && ctx.defenderIds.length === 1 && lordOfFearAttacks(state, attacker)
+}
+
 function afterDefenders(state: GameState, ctx: FightCtx): void {
   // a defended site is automatically removed from the fight
   if (ctx.siteId && ctx.defenderIds.length > 0) ctx.siteId = undefined
@@ -720,7 +802,10 @@ function afterDefenders(state: GameState, ctx: FightCtx): void {
   if (ctx.targetUnitId && ctx.defenderIds.length > 0) {
     // the defender's controller decides if the original target stays in
     const target = state.units[ctx.targetUnitId]
-    if (target) {
+    if (target && targetMustStay(state, ctx)) {
+      ctx.targetStays = true
+      pushLog(state, target.controller, `${target.name} must stay in the fight — enemies of the Lord of Fear cannot defend alone.`)
+    } else if (target) {
       pushPrompt(state, {
         player: target.controller,
         kind: 'stayInFight',
@@ -737,13 +822,13 @@ function afterDefenders(state: GameState, ctx: FightCtx): void {
 }
 
 registerCont('combat:stay', (state, ctx: FightCtx, choice: boolean) => {
-  ctx.targetStays = !!choice
+  ctx.targetStays = !!choice || targetMustStay(state, ctx)
   startFight(state, ctx)
 })
 
 function startFight(state: GameState, ctx: FightCtx): void {
   const attacker = state.units[ctx.attackerId]
-  if (!attacker) return
+  if (!attacker) { endBattle(state); return } // the attacker died before the fight: the battle is over
 
   // undefended site attack: just strike the site
   if (ctx.siteId && ctx.defenderIds.length === 0) {
@@ -774,9 +859,16 @@ function startFight(state: GameState, ctx: FightCtx): void {
  *  Airborne are Move-and-Attack rules only), opens no defend window, fires no "when attacked", and runs
  *  no afterAttack. `a` is nominally the attacker but both sides strike; `b` goes on the defending side
  *  directly (via defenderIds, not targetUnitId) so no positional check drops it and no stay-in-fight
- *  prompt appears. A 1-on-1 fight needs no damage-allocation prompt, so it resolves synchronously. */
-export function fightUnits(state: GameState, a: UnitState, b: UnitState): void {
+ *  prompt appears. A 1-on-1 fight needs no damage-allocation prompt, so it resolves synchronously.
+ *  Being made to fight doesn't wake a unit (Codex, At Rest): `awake` lists the fighters that moved or
+ *  acted in the effect bringing the fight about (Joust's riders, a dragged victim, the Shark). Any other
+ *  fighter stays at rest, so an at-rest disable (Basilisk / Gorgons) holds and it doesn't strike. */
+export function fightUnits(state: GameState, a: UnitState, b: UnitState, awake: UnitState[] = []): void {
   if (!a || !b || a.id === b.id) return
+  // fighting is interacting with the realm: a Stealthed fighter loses its Stealth (after this fight,
+  // which is still a stealthed one — rulebook "lost after the minion interacts")
+  breakStealth(state, a)
+  breakStealth(state, b)
   startFight(state, {
     attackerId: a.id,
     isAttack: false,
@@ -785,6 +877,7 @@ export function fightUnits(state: GameState, a: UnitState, b: UnitState): void {
     stage: 'strikeFirst',
     allocations: {},
     struck: [],
+    awakeIds: awake.map((u) => u.id),
   })
 }
 
@@ -798,7 +891,7 @@ export function strikeSite(state: GameState, attackerId: string, siteId: string)
   let power = effAttack(state, attacker)
   for (const u of Object.values(state.units)) {
     const bonus = getScript(u.name)?.siteStrikeBonus
-    if (bonus && !u.silenced) power += bonus(state, u.id, attacker)
+    if (bonus && !abilitiesOff(state, u)) power += bonus(state, u.id, attacker)
   }
   dealDamage(state, { site: site.id }, power, attacker.controller, {
     player: attacker.controller,
@@ -807,6 +900,8 @@ export function strikeSite(state: GameState, attackerId: string, siteId: string)
     name: attacker.name,
     undefended: true,
   })
+  // this strike is "successfully attacking" the site — even a 0-power one that dealt nothing (Codex Attack)
+  emitEvent(state, 'onSiteAttackedSuccessfully', site, attacker)
   const script = getScript(attacker.name)
   if (script?.onStrikeSite && !attacker.silenced && state.sites[site.id]) {
     script.onStrikeSite(makeCtx(state, attacker.id, attacker.controller, []), site.id)
@@ -881,20 +976,35 @@ function hasUnbrokenLance(state: GameState, unit: UnitState): boolean {
   return unbrokenLances(state, unit).length > 0
 }
 
+/** The fight is over and damage allocated: combatants come to rest (an at-rest disabler may bite now), and
+ *  a site's temporary garrison (Free City's 3/3, `counters.garrison`) leaves the board — it is no card. If it
+ *  fought (tapped to defend or attack), the city's once-per-turn is spent. */
+function endBattle(state: GameState): void {
+  if (!state.flow) return
+  state.flow.battleUnits = undefined
+  for (const u of Object.values(state.units)) endStealthGrace(u)
+  for (const u of Object.values(state.units)) {
+    if (!u.counters?.garrison) continue
+    const site = Object.values(state.sites).find((s) => s.cardId === u.cardId)
+    if (site && u.tapped) state.flow.freeCityUsed = { ...(state.flow.freeCityUsed ?? {}), [site.id]: state.turn }
+    delete state.units[u.id]
+  }
+}
+
 function fireAfterAttack(state: GameState, ctx: FightCtx): void {
-  // the fight is over and damage allocated → combatants come to rest (an at-rest disabler may bite now)
-  if (state.flow) state.flow.battleUnits = undefined
+  endBattle(state)
   if (!ctx.isAttack) return
   if (state.flow?.multiTargets?.attackerId === ctx.attackerId) delete state.flow.multiTargets
   const atk = state.units[ctx.attackerId]
   const after = atk ? getScript(atk.name)?.afterAttack : undefined
   if (atk && after && !atk.silenced) after(makeCtx(state, atk.id, atk.controller, []), atk, ctx.targetUnitId ?? null, ctx.siteId ?? null)
-  // allies watching the attack resolve (Sir Agravaine)
-  if (atk) {
+  // allies watching the attack resolve (Sir Agravaine) — the attack happened even if the attacker died in it
+  const attacked = atk ?? ctx.attackerSnap
+  if (attacked) {
     for (const ally of Object.values(state.units)) {
-      if (ally.id === atk.id || ally.silenced || ally.controller !== atk.controller) continue
+      if (ally.id === attacked.id || ally.controller !== attacked.controller) continue
       const hook = getScript(ally.name)?.afterAllyAttack
-      if (hook) hook(makeCtx(state, ally.id, ally.controller, []), atk, ctx.targetUnitId ?? null)
+      if (hook && !abilitiesOff(state, ally)) hook(makeCtx(state, ally.id, ally.controller, []), attacked, ctx.targetUnitId ?? null)
     }
   }
   // battle fully resolved (incl. afterAttack triggers + their deaths) → finalise the reveal
@@ -907,20 +1017,39 @@ function runFightPass(state: GameState, ctx: FightCtx): void {
   // keep the live combatant set exempt from at-rest disables (intercepts / multi-targets that joined
   // this pass show up here too), so a Basilisk in the fight can't stop a combatant from striking
   state.flow = state.flow ?? {}
-  state.flow.battleUnits = [...new Set([...(state.flow.battleUnits ?? []), ...attackers.map((u) => u.id), ...defenders.map((u) => u.id)])]
+  // Only units that ACTED are not at rest (Codex, At Rest): being attacked or made to fight wakes no one.
+  // An attack: the attacker and its committed defenders (not the targets). A forced fight: the fighters
+  // its effect moved or used (awakeIds). An intercept: both — the interceptor triggered, the mover moves.
+  const acted = ctx.awakeIds
+    ? [...attackers, ...defenders].filter((u) => ctx.awakeIds!.includes(u.id))
+    : [...attackers, ...defenders.filter((u) => !ctx.isAttack || ctx.defenderIds.includes(u.id))]
+  state.flow.battleUnits = [...new Set([...(state.flow.battleUnits ?? []), ...acted.map((u) => u.id)])]
   // pre-death reference to the original attacker: an "attacks and kills" trigger (Sea Raider)
   // must still fire even if the attacker died in the same trade (FAQ), so we snapshot the live
   // object at the top of the pass rather than re-looking it up after deaths resolve.
   const attackerRef = state.units[ctx.attackerId]
+  if (attackerRef && !ctx.attackerSnap) ctx.attackerSnap = { ...attackerRef }
   if (attackers.length === 0 || defenders.length === 0) {
     checkStateBased(state)
     if (ctx.stage === 'normal') fireAfterAttack(state, ctx)
-    else { finishBattleCapture(state); if (state.flow) state.flow.battleUnits = undefined } // strikeFirst terminal: fireAfterAttack won't run here
+    else { finishBattleCapture(state); endBattle(state) } // strikeFirst terminal: fireAfterAttack won't run here
     return
+  }
+  // "whenever this fights" (Sir Lancelot): once per fight, for every unit in it — a defender that is
+  // never struck has fought all the same
+  if (!ctx.fightNoted) {
+    ctx.fightNoted = true
+    for (const u of [...attackers, ...defenders]) {
+      const hook = getScript(u.name)?.onSelfFights
+      if (hook && !abilitiesOff(state, u)) hook(makeCtx(state, u.id, u.controller, []))
+    }
   }
 
   const pass = ctx.stage
-  const roleOf = (u: UnitState) => (attackers.includes(u) ? 'attacking' : 'defending')
+  const sideOf = (u: UnitState) => (attackers.includes(u) ? 'attacking' : 'defending')
+  // "while attacking/defending" only exists in an ATTACK: in a plain fight (Giant Shark, an intercept)
+  // nobody attacks or defends (Codex Fight), so a role-restricted ability doesn't apply
+  const roleOf = (u: UnitState) => (ctx.isAttack === true ? sideOf(u) : null)
   const strikers = [...attackers, ...defenders].filter((u) => {
     if (ctx.struck.includes(u.id) || isDisabled(state, u)) return false
     // role-restricted strikers (Escyllion Cyclops doesn't strike back defending)
@@ -928,7 +1057,7 @@ function runFightPass(state: GameState, ctx: FightCtx): void {
     if (noStrike && !u.silenced && noStrike === roleOf(u)) return false
     const sf = strikesFirst(state, u)
       || (getScript(u.name)?.strikesFirstWhen === roleOf(u) && !u.silenced)
-      || evilTwinStrikesFirst(state, u, roleOf(u) === 'attacking' ? defenders : attackers)
+      || evilTwinStrikesFirst(state, u, sideOf(u) === 'attacking' ? defenders : attackers)
     return pass === 'strikeFirst' ? sf : true
   })
 
@@ -1006,17 +1135,7 @@ function runFightPass(state: GameState, ctx: FightCtx): void {
         gainLife(state, striker.controller, dealt * lifelinkSources) // N sources → N× the heal
       }
     }
-    {
-      // every lance held adds +1 to the strike (see strikePower) and ALL of them break afterwards
-      const lances = unbrokenLances(state, striker)
-      if (lances.length) {
-        for (const lanceId of lances) {
-          striker.carrying = striker.carrying.filter((id) => id !== lanceId)
-          delete state.artifacts[lanceId]
-        }
-        pushLog(state, striker.controller, `${striker.name}'s lance${lances.length > 1 ? 's' : ''} shatter${lances.length > 1 ? '' : 's'} after the blow.`)
-      }
-    }
+    breakLances(state, striker)
     // striking (even at 0 power) "interacts with the realm" → this unit can't Drop this
     // turn. Marking every striker also covers an INTERCEPTED mover (it struck the
     // interceptor), so only a truly unintercepted move leaves a carrier free to drop.
@@ -1034,46 +1153,62 @@ function runFightPass(state: GameState, ctx: FightCtx): void {
   // serializable (survives a prevention-ordering prompt's cont / online sync); cleared after the pass
   state.flow = state.flow ?? {}
   state.flow.wardAbsorbed = []
-  for (const blow of blows) {
-    if (!state.units[blow.target.id]) continue // damage is simultaneous; unit map only loses entries after the pass
-    // 0 damage "is not any damage at all" (rulebook) — the strike still happened (events below),
-    // and damage modifiers may boost it (Panpipes of Pnom raises 0-power strikes to 2). We always
-    // call dealDamageToUnit for strikes; it skips kill-credit/ward/actual damage when n stays ≤0
-    // after modifiers, but it still runs the modifier layer so a booster can take effect.
-    dealDamageToUnit(state, blow.target, blow.damage, blow.striker.controller, {
-      lethal: blow.lethal && !blow.target.isAvatar,
-      // batch: the strikes in this pass are simultaneous, so defer death resolution to the
-      // single checkStateBased after the loop. Without this, an earlier blow's kill removes
-      // a striker before a later (simultaneous) blow's damage modifiers can consult it — e.g.
-      // in a trade Sirian Templar's "no damage from Undead" lost sight of the Undead that
-      // died to Sirian's own strike, and Sirian wrongly took the fatal blow.
-      batch: true,
-      source: {
-        player: blow.striker.controller,
-        kind: 'strike',
-        attackerId: blow.striker.id,
-        name: blow.striker.name,
-        undefended: ctx.isAttack === true && ctx.defenderIds.length === 0,
-      },
-    })
-    if (blow.target.isAvatar) emitEvent(state, 'onAllyStrikesAvatar', blow.striker, blow.target)
-    // "when this unit is struck" triggers (if it survived the blow)
-    const survivor = state.units[blow.target.id]
-    if (survivor) {
-      const script = getScript(survivor.name)
-      if (script?.onSelfStruck && !survivor.silenced && !isDisabled(state, survivor)) {
-        script.onSelfStruck(makeCtx(state, survivor.id, survivor.controller, []), blow.striker)
+  // the whole pass is ONE damage event: damage a strike causes on the side (a Flaming Sword splash) is
+  // part of that strike, so whatever it kills dies with the rest after every blow has landed (Codex Fight)
+  beginDamageEvent(state)
+  try {
+    for (const blow of blows) {
+      if (!state.units[blow.target.id]) continue // damage is simultaneous; unit map only loses entries after the pass
+      // 0 damage "is not any damage at all" (rulebook) — the strike still happened (events below),
+      // and damage modifiers may boost it (Panpipes of Pnom raises 0-power strikes to 2). We always
+      // call dealDamageToUnit for strikes; it skips kill-credit/ward/actual damage when n stays ≤0
+      // after modifiers, but it still runs the modifier layer so a booster can take effect.
+      dealDamageToUnit(state, blow.target, blow.damage, blow.striker.controller, {
+        lethal: blow.lethal && !blow.target.isAvatar,
+        // batch: the strikes in this pass are simultaneous, so defer death resolution to the
+        // single checkStateBased after the loop. Without this, an earlier blow's kill removes
+        // a striker before a later (simultaneous) blow's damage modifiers can consult it — e.g.
+        // in a trade Sirian Templar's "no damage from Undead" lost sight of the Undead that
+        // died to Sirian's own strike, and Sirian wrongly took the fatal blow.
+        batch: true,
+        source: {
+          player: blow.striker.controller,
+          kind: 'strike',
+          attackerId: blow.striker.id,
+          name: blow.striker.name,
+          undefended: ctx.isAttack === true && ctx.defenderIds.length === 0,
+        },
+      })
+      if (blow.target.isAvatar) emitEvent(state, 'onAllyStrikesAvatar', blow.striker, blow.target)
+    }
+    // "when this unit is struck" triggers (if it survived the blow) — only once EVERY strike has landed:
+    // the strikes are simultaneous, so a Phantasmal Shade destroyed for being struck still strikes back
+    // as a living unit, next to whatever protects its victim (The Faerie Queene, Golden Harp)
+    for (const blow of blows) {
+      const survivor = state.units[blow.target.id]
+      if (survivor) {
+        const script = getScript(survivor.name)
+        if (script?.onSelfStruck && !survivor.silenced && !isDisabled(state, survivor)) {
+          // lethal damage from the strike is a death of its own that comes first: a Gilded Aegis heals it
+          // and is spent, then "destroy it when struck" still lands (one Aegis can't cover both deaths)
+          if (isDyingUnit(state, survivor)) killUnit(state, survivor.id)
+          if (state.units[survivor.id]) script.onSelfStruck(makeCtx(state, survivor.id, survivor.controller, []), blow.striker)
+        }
       }
     }
-  }
+  } finally { endDamageEvent(state) }
   delete state.flow.wardAbsorbed // the simultaneous pass is over — the shared ward-break ends here
   checkStateBased(state)
   if (state.phase === 'over') return
 
   // "has ever killed" bookkeeping + kill events for every fatal blow (the
   // victim object is the pre-death snapshot, position intact)
+  // everyone who fell in this pass still hears the kills (Codex Fight: "kill" effects resolve before the
+  // dead are placed) — Blunderbore trading with its victim still banishes it
+  const fallen = blows.flatMap((bl) => [bl.striker, bl.target]).filter((u, i, all) => all.findIndex((v) => v.id === u.id) === i)
   for (const blow of blows) {
-    if (state.units[blow.target.id]) continue // victim survived — not a kill
+    // victim survived — not a kill (one whose removal waits on its own Deathrite's question died all the same)
+    if (state.units[blow.target.id] && !deathPending(state, blow.target.id)) continue
     // Kill triggers fire even on a TRADE: a minion that dies in the same fight it
     // scored a kill still triggers its "whenever this kills…" ability (rulebook:
     // simultaneous triggers resolve). So Stygian Archers summon their Skeleton even
@@ -1083,12 +1218,12 @@ function runFightPass(state: GameState, ctx: FightCtx): void {
     // "has ever killed" bookkeeping + untap-on-kill boons only matter on a live striker.
     if (strikerAlive) blow.striker.counters = { ...blow.striker.counters, everKilled: 1 }
     const hook = !blow.striker.silenced ? getScript(blow.striker.name)?.onKill : undefined
-    if (hook) hook(makeCtx(state, blow.striker.id, blow.striker.controller, []), blow.target)
-    emitEvent(state, 'onUnitKilled', blow.target, blow.striker)
+    // routed by name: a killer that died in the trade still gets the answer to what it asks (Sir Pellinore's tie)
+    if (hook) hook(makeCtx(state, blow.striker.id, blow.striker.controller, [], undefined, undefined, undefined, blow.striker.name), blow.target)
+    emitEventWithFallen(state, fallen, 'onUnitKilled', blow.target, blow.striker)
     // one-turn untap-on-kill boons (Warp Spasm)
     if (strikerAlive && (state.flow?.untapOnKill ?? []).some((e: any) => e.unitId === blow.striker.id && e.turn === state.turn)) {
-      blow.striker.tapped = false
-      pushLog(state, blow.striker.controller, `${blow.striker.name} surges on!`)
+      if (untapUnit(state, blow.striker)) pushLog(state, blow.striker.controller, `${blow.striker.name} surges on!`)
     }
   }
 
@@ -1130,11 +1265,22 @@ function runFightPass(state: GameState, ctx: FightCtx): void {
   }
 }
 
-/** strike damage including a carried lance's bonus and strike multipliers. A RANGED strike skips the
- *  lance bonus (a lance rewards charging into melee, not loosing an arrow) but still gets the strike
- *  multiplier (Grim Guisarme ×2 — a ranged strike is a strike). */
-function strikePower(state: GameState, striker: UnitState, ranged = false): number {
-  let n = effAttack(state, striker) + (ranged ? 0 : unbrokenLances(state, striker).length)
+/** every lance held adds +1 to the strike (see strikePower) and ALL of them break afterwards */
+function breakLances(state: GameState, striker: UnitState): void {
+  const lances = unbrokenLances(state, striker)
+  if (!lances.length) return
+  for (const lanceId of lances) {
+    striker.carrying = striker.carrying.filter((id) => id !== lanceId)
+    delete state.artifacts[lanceId]
+  }
+  pushLog(state, striker.controller, `${striker.name}'s lance${lances.length > 1 ? 's' : ''} shatter${lances.length > 1 ? '' : 's'} after the blow.`)
+}
+
+/** strike damage including a carried lance's bonus and strike multipliers. A RANGED strike is a strike
+ *  too (Codex, Ranged: "follows normal strike rules… a Lance will inflict +1 damage and break"), so it
+ *  gets both the lance bonus and the strike multiplier (Grim Guisarme ×2). */
+function strikePower(state: GameState, striker: UnitState): number {
+  let n = effAttack(state, striker) + unbrokenLances(state, striker).length
   for (const artId of striker.carrying) {
     const art = state.artifacts[artId]
     const mult = art ? artScript(state, art)?.bearerStrikeMultiplier : undefined // silenced → no multiplier
@@ -1209,6 +1355,7 @@ registerCont('combat:intercept', (state, ctx: { moverId: string }, choice: strin
   if (interceptor.controller === mover.controller || !canTap(state, interceptor) || isDisabled(state, interceptor)) return
   if (interceptor.x !== mover.x || interceptor.y !== mover.y || interceptor.region !== mover.region) return
   tapUnit(state, interceptor)
+  breakStealth(state, interceptor) // intercepting is interacting with the realm (the fight is still a stealthed one)
   pushLog(state, interceptor.controller, `${interceptor.name} intercepts ${mover.name}!`)
   const ctx2: FightCtx = {
     attackerId: interceptor.id,
@@ -1251,13 +1398,24 @@ function resolveProjectileHit(state: GameState, shooterId: string, targetId: str
   pushLog(state, shooter.controller, `${shooter.name} shoots ${target.name}.`)
   const snapshot = { ...target }
   const kw = effKeywords(state, shooter)
-  // a ranged strike IS a strike: it uses strike power (so a carried Grim Guisarme ×2 applies — the
+  // a ranged strike IS a strike: it uses strike power (a carried Lance's +1, a Grim Guisarme ×2 — the
   // shooter "deals double"), and is tagged rangedStrike so strike-damage modifiers (the same Guisarme
-  // when the VICTIM wears it) double it too.
-  dealDamageToUnit(state, target, strikePower(state, shooter, true), shooter.controller, {
+  // when the VICTIM wears it) double it too. The Lance breaks, strike lifelink heals (Blood Ravens), and
+  // the struck unit's "when struck" trigger fires (Phantasmal Shade), exactly as in a melee strike.
+  const power = strikePower(state, shooter)
+  dealDamageToUnit(state, target, power, shooter.controller, {
     lethal: !!kw.lethal && !target.isAvatar,
     source: { player: shooter.controller, kind: 'projectile', rangedStrike: true, attackerId: shooter.id, name: shooter.name },
   })
+  // "whenever an ally strikes an enemy Avatar" (Interrogator, Men of Leng) — a ranged hit is a strike too
+  if (target.isAvatar) emitEvent(state, 'onAllyStrikesAvatar', shooter, target)
+  breakLances(state, shooter)
+  if (power > 0 && getScript(shooter.name)?.strikeLifelink && !shooter.silenced) gainLife(state, shooter.controller, power)
+  const survivor = state.units[target.id]
+  const struckHook = survivor ? getScript(survivor.name)?.onSelfStruck : undefined
+  if (survivor && struckHook && !survivor.silenced && !isDisabled(state, survivor)) {
+    struckHook(makeCtx(state, survivor.id, survivor.controller, []), shooter)
+  }
   checkStateBased(state)
   if (!state.units[snapshot.id]) {
     // Kill triggers fire even if the shooter died simultaneously (rulebook:
@@ -1266,10 +1424,11 @@ function resolveProjectileHit(state: GameState, shooterId: string, targetId: str
     const shooter2 = state.units[shooterId]
     if (shooter2) shooter2.counters = { ...shooter2.counters, everKilled: 1 }
     const killHook = !shooter.silenced ? getScript(shooter.name)?.onKill : undefined
-    if (killHook) killHook(makeCtx(state, shooterId, shooter.controller, []), snapshot as UnitState)
+    if (killHook) killHook(makeCtx(state, shooterId, shooter.controller, [], undefined, undefined, undefined, shooter.name), snapshot as UnitState)
     emitEvent(state, 'onUnitKilled', snapshot, shooter2 ?? shooter)
   }
   const s = state.units[shooterId]
+  endStealthGrace(s)
   const after = s ? getScript(s.name)?.afterRangedStrike : undefined
   if (s && after && !s.silenced) after(makeCtx(state, s.id, s.controller, []), s)
 }
@@ -1279,6 +1438,7 @@ function resolveProjectileHit(state: GameState, shooterId: string, targetId: str
 registerCont('projectile:hit', (state, ctx: { shooterId: string }, choice) => {
   const targetId = Array.isArray(choice) ? choice[0] : choice
   if (typeof targetId === 'string') resolveProjectileHit(state, ctx.shooterId, targetId)
+  else endStealthGrace(state.units[ctx.shooterId]) // no hit: the stealthed shot is over all the same
 })
 
 // an oversized/stretched shooter picked which of its squares the Ranged shot flies from → fire it there
@@ -1312,7 +1472,7 @@ export function shootProjectile(state: GameState, player: PlayerId, unitId: stri
   const dx = direction === 'e' ? 1 : direction === 'w' ? -1 : 0
   const dy = direction === 'n' ? 1 : direction === 's' ? -1 : 0
   // Truesight Crossbow: the bearer sees through Stealth
-  const truesight = unit.carrying.some((id) => getScript(state.artifacts[id]?.name ?? '')?.bearerTruesight)
+  const truesight = unit.carrying.some((id) => { const a = state.artifacts[id]; return !!a && !!artScript(state, a)?.bearerTruesight })
   const hittable = (u: UnitState) => projectileCanHit(state, u) || (truesight && u.stealth)
   // resolve the impact: one hittable unit → resolve now; 2+ → the SHOOTER chooses
   // which is hit (rulebook Projectiles), never an engine auto-pick.
@@ -1322,7 +1482,7 @@ export function shootProjectile(state: GameState, player: PlayerId, unitId: stri
       player,
       kind: 'chooseTargets',
       title: `${unit.name}'s shot — which unit does it hit?`,
-      data: { candidates: here.map((u) => u.id), count: 1, kind: 'unit' },
+      data: { candidates: here.map((u) => u.id), count: 1, upTo: false, kind: 'unit' }, // which one, not whether
       cont: 'projectile:hit',
       ctx: { shooterId: unitId },
     })
@@ -1349,17 +1509,19 @@ export function shootProjectile(state: GameState, player: PlayerId, unitId: stri
       y = ((y % GRID_H) + GRID_H) % GRID_H
     }
     if (visited.has(`${x},${y}`)) break // wrapped all the way around the realm → stop
+    if (!regionPresentAt(state, unit.region, x, y)) break // a void square is the edge of the shot's region
     // Impenetrable Copse: projectiles can't enter from outside
     const cover = Object.values(state.sites).find((s) => s.x === x && s.y === y && !s.isRubble)
     if (cover && getScript(cover.name)?.blocksProjectiles && !siteSilencedC(state, cover)) break
     // Sir Morien: enemy projectiles can't enter his square — but only in the projectile's own region
     // ("here" = his location), so a surface blocker doesn't stop a subsurface shot and vice-versa
-    if (unitsAt(state, x, y, unit.region).some((u) => !u.silenced && u.controller !== player && getScript(u.name)?.unitBlocksProjectiles)) break
+    if (unitsAt(state, x, y, unit.region).some((u) => u.controller !== player && getScript(u.name)?.unitBlocksProjectiles && !abilitiesOff(state, u))) break
     visited.add(`${x},${y}`)
     const here = unitsAt(state, x, y, unit.region).filter(hittable)
     if (here.length > 0) { impact(here); return null }
   }
   pushLog(state, player, `${unit.name}'s shot hits nothing.`)
+  endStealthGrace(state.units[unitId])
   return null
 }
 
@@ -1377,10 +1539,16 @@ export type ProjFilterKind = 'canHit' | 'notStealth'
 /** A projectile counts as MAGIC when its source card is a Magic (Firebolts, Magic Missiles, Fireball,
  *  Ice Lance…). A unit/artifact/ability shot (Ranged strikes, Sparkmage, Balor's gaze, Meat Hook…) is
  *  NOT magic. A magic-protected minion (Failed Mutation) BLOCKS a magic projectile at its square —
- *  absorbing the shot, taking no damage, and stopping anything beyond from being hit (magicBlockedAt) —
- *  while remaining an ordinary target for non-magic shots. */
+ *  absorbing the shot, taking no damage, and stopping anything at or beyond its location from being
+ *  hit (magicBlockedAt) — while remaining an ordinary target for non-magic shots. */
 function projSrcIsMagic(srcName?: string): boolean {
   return !!srcName && findCard(srcName)?.type === 'Magic'
+}
+
+/** who/what deals a fired projectile's damage: a Magic's projectile is MAGIC damage (Tragedy Worrywart's
+ *  "no damage from Magic spells", Lethal stays with the spell…); any other source's shot is effect damage */
+function projectileSource(player: PlayerId, srcName: string): DamageSource {
+  return { player, kind: projSrcIsMagic(srcName) ? 'magic' : 'effect', name: srcName }
 }
 
 function projHittable(kind: ProjFilterKind, state: GameState, u: UnitState): boolean {
@@ -1391,7 +1559,7 @@ function projHittable(kind: ProjFilterKind, state: GameState, u: UnitState): boo
  *  projectile travels within its own `region` and STOPS at the edge of that region:
  *  a void square (no site) has no surface/subsurface, so the ray ends there and
  *  does NOT cross it (rulebook: "…until it reaches the edge of its region"). */
-function raySquares(state: GameState, region: Region, x: number, y: number, dir: string, maxRange: number, player?: PlayerId): { x: number; y: number }[] {
+export function raySquares(state: GameState, region: Region, x: number, y: number, dir: string, maxRange: number, player?: PlayerId): { x: number; y: number }[] {
   const dx = dir === 'e' ? 1 : dir === 'w' ? -1 : 0
   const dy = dir === 'n' ? 1 : dir === 's' ? -1 : 0
   const wrap = edgesConnected(state) // Magellan Globe: projectiles fly around the edge (same region)
@@ -1413,7 +1581,7 @@ function raySquares(state: GameState, region: Region, x: number, y: number, dir:
     const cover = state.sites ? Object.values(state.sites).find((s) => s.x === cx && s.y === cy && !s.isRubble) : undefined
     if (cover && getScript(cover.name)?.blocksProjectiles && !siteSilencedC(state, cover)) break
     // Sir Morien: enemy projectiles can't enter his square — only in the projectile's own region ("here")
-    if (player !== undefined && unitsAt(state, cx, cy, region).some((u) => !u.silenced && u.controller !== player && getScript(u.name)?.unitBlocksProjectiles)) break
+    if (player !== undefined && unitsAt(state, cx, cy, region).some((u) => u.controller !== player && getScript(u.name)?.unitBlocksProjectiles && !abilitiesOff(state, u))) break
     visited.add(`${cx},${cy}`)
     out.push({ x: cx, y: cy })
   }
@@ -1457,6 +1625,13 @@ function magicBlockedAt(state: GameState, sq: { x: number; y: number; origin: bo
   return here.length > 0
 }
 
+/** a magic shot that reaches a magic-protected unit some other way (a resumed choice) is absorbed too */
+function absorbsMagicShot(state: GameState, srcName: string, u: UnitState): boolean {
+  if (!projSrcIsMagic(srcName) || !isMagicProtected(state, u)) return false
+  pushLog(state, null, `${srcName} fizzles against ${u.name}.`)
+  return true
+}
+
 /** serializable — rides the choice prompt so the volley loop resumes after it */
 export interface VolleyProjectileSpec {
   player: PlayerId
@@ -1485,7 +1660,7 @@ export function fireVolleyProjectiles(state: GameState, spec: VolleyProjectileSp
   const srcMagic = projSrcIsMagic(spec.srcName)
   for (const sq of projectilePath(state, spec.region, spec.ox, spec.oy, spec.dir, range, spec.player)) {
     // a magic-protected body (Failed Mutation) absorbs a magic projectile here — no damage, shot spent,
-    // nothing beyond is hit; this projectile ends and the next volley (if any) fires.
+    // nothing at or beyond this location is hit; this projectile ends and the next volley (if any) fires.
     if (srcMagic && magicBlockedAt(state, sq, spec.region, spec.player, spec.excludeId)) {
       pushLog(state, spec.player, `${spec.srcName} fizzles against a magic-immune minion.`)
       return fireVolleyProjectiles(state, { ...spec, volleys: spec.volleys - 1 })
@@ -1498,7 +1673,7 @@ export function fireVolleyProjectiles(state: GameState, spec: VolleyProjectileSp
       player: spec.player,
       kind: 'chooseTargets',
       title: `${spec.srcName} — which unit does the projectile hit?`,
-      data: { candidates: here, count: 1, kind: 'unit' },
+      data: { candidates: here, count: 1, upTo: false, kind: 'unit' }, // which one, not whether
       cont: 'spell-proj:volley',
       ctx: spec as any,
     })
@@ -1510,11 +1685,12 @@ export function fireVolleyProjectiles(state: GameState, spec: VolleyProjectileSp
 
 function applyVolleyHit(state: GameState, spec: VolleyProjectileSpec, targetId: string): void {
   const u = state.units[targetId]
-  if (u) {
+  // a magic-protected body (Failed Mutation) absorbs it: no damage, this projectile is spent
+  if (u && !absorbsMagicShot(state, spec.srcName, u)) {
     recordAreaReveal(state, [{ x: u.x, y: u.y, dmg: spec.damage }]) // both-player grid reveal
     dealDamageToUnit(state, u, spec.damage, spec.player, {
       lethal: projectileShotIsLethal(state, spec.excludeId, spec.srcName, u),
-      source: { player: spec.player, kind: 'effect', name: spec.srcName },
+      source: projectileSource(spec.player, spec.srcName),
     })
     checkStateBased(state)
   }
@@ -1533,12 +1709,12 @@ registerCont('spell-proj:volley', (state, spec: VolleyProjectileSpec, choice) =>
 export function firstProjectileImpact(
   state: GameState,
   opts: { player: PlayerId; ox: number; oy: number; region: Region; dir: string; maxRange?: number; filter?: ProjFilterKind; excludeId?: string; avatarImmune?: boolean; excludeIds?: string[] },
-): { candidates: string[] } | null {
+): { candidates: string[]; x: number; y: number } | null {
   markRevealShoots(state) // ability shooters read "<card> shoots!" (ignored for spells)
   const filter = opts.filter ?? 'canHit'
   for (const sq of projectilePath(state, opts.region, opts.ox, opts.oy, opts.dir, opts.maxRange ?? Infinity, opts.player)) {
     const here = projCandidates(state, sq, opts.region, opts.player, filter, opts.excludeId, opts.avatarImmune, opts.excludeIds)
-    if (here.length > 0) return { candidates: here }
+    if (here.length > 0) return { candidates: here, x: sq.x, y: sq.y } // x,y: the square it hit (an oversized unit spans more)
   }
   return null
 }
@@ -1584,14 +1760,14 @@ export function firePerSquareProjectile(state: GameState, spec: PerSquareProject
     const here = projCandidates(state, path[i], spec.region, spec.player, filter, spec.excludeId)
     if (here.length === 0) continue
     if (here.length === 1) {
-      applyPerSquareHit(state, spec, i, here[0])
+      if (!applyPerSquareHit(state, spec, i, here[0])) return // the piercing shot is stopped dead by the blocker
       continue
     }
     pushPrompt(state, {
       player: spec.player,
       kind: 'chooseTargets',
       title: `${spec.srcName} — which unit does the projectile hit here?`,
-      data: { candidates: here, count: 1, kind: 'unit' },
+      data: { candidates: here, count: 1, upTo: false, kind: 'unit' },
       cont: 'spell-proj:perSquare',
       ctx: { ...spec, idx: i } as any,
     })
@@ -1599,22 +1775,25 @@ export function firePerSquareProjectile(state: GameState, spec: PerSquareProject
   }
 }
 
-function applyPerSquareHit(state: GameState, spec: PerSquareProjectileSpec, i: number, targetId: string): void {
+/** false when a magic-protected unit absorbed the shot (it goes no further) */
+function applyPerSquareHit(state: GameState, spec: PerSquareProjectileSpec, i: number, targetId: string): boolean {
   const u = state.units[targetId]
+  if (u && absorbsMagicShot(state, spec.srcName, u)) return false
   if (u) {
     recordAreaReveal(state, [{ x: u.x, y: u.y, dmg: spec.damages[i] }]) // both-player grid reveal
     dealDamageToUnit(state, u, spec.damages[i], spec.player, {
       lethal: projectileShotIsLethal(state, spec.excludeId, spec.srcName, u),
-      source: { player: spec.player, kind: 'effect', name: spec.srcName },
+      source: projectileSource(spec.player, spec.srcName),
     })
     checkStateBased(state)
   }
+  return true
 }
 
 registerCont('spell-proj:perSquare', (state, spec: PerSquareProjectileSpec, choice) => {
   const id = Array.isArray(choice) ? choice[0] : choice
   const i = spec.idx ?? 0
-  if (typeof id === 'string') applyPerSquareHit(state, spec, i, id)
+  if (typeof id === 'string' && !applyPerSquareHit(state, spec, i, id)) return
   firePerSquareProjectile(state, { ...spec, idx: i + 1 })
 })
 
@@ -1630,7 +1809,6 @@ export interface EvilEyeGazeSpec {
   dir: string
   damage: number
   maxRange?: number
-  filter?: ProjFilterKind
   excludeId?: string
   srcName: string
   /** computed once from the board, then carried across per-location choice prompts */
@@ -1641,16 +1819,27 @@ export interface EvilEyeGazeSpec {
 /** the ordered list of (square, region) locations a gaze touches: every square from the origin
  *  outward in `dir`, and at each the regions actually present there (surface + subsurface, or void). */
 function gazeLocations(state: GameState, spec: EvilEyeGazeSpec): { x: number; y: number; region: Region }[] {
-  const dx = spec.dir === 'e' ? 1 : spec.dir === 'w' ? -1 : 0
-  const dy = spec.dir === 'n' ? 1 : spec.dir === 's' ? -1 : 0
-  const max = spec.maxRange ?? Infinity
+  const out: { x: number; y: number; region: Region }[] = []
+  for (const sq of gazeSquares(state, spec.ox, spec.oy, spec.dir, spec.maxRange ?? Infinity)) {
+    for (const region of ['surface', 'underground', 'underwater', 'void'] as Region[]) {
+      if (regionPresentAt(state, region, sq.x, sq.y)) out.push({ x: sq.x, y: sq.y, region })
+    }
+  }
+  return out
+}
+
+/** the squares a gaze line crosses, origin excluded: it isn't a projectile, so voids and
+ *  projectile-blocking sites don't stop it — only the board edge does (or wraps, with a Globe). */
+function gazeSquares(state: GameState, ox: number, oy: number, dir: string, max: number): { x: number; y: number }[] {
+  const dx = dir === 'e' ? 1 : dir === 'w' ? -1 : 0
+  const dy = dir === 'n' ? 1 : dir === 's' ? -1 : 0
   // Magellan Globe: the gaze is a directional line, so it wraps around the joined edge (a `visited`
   // guard stops it once it circles back — essential since maxRange may be Infinity). No Globe → it
   // stops at the board edge as before.
   const wrap = edgesConnected(state)
-  const out: { x: number; y: number; region: Region }[] = []
-  const visited = new Set<string>([`${spec.ox},${spec.oy}`])
-  let cx = spec.ox, cy = spec.oy
+  const out: { x: number; y: number }[] = []
+  const visited = new Set<string>([`${ox},${oy}`])
+  let cx = ox, cy = oy
   for (let step = 0; step < max; step++) {
     cx += dx; cy += dy
     if (!inBounds(cx, cy)) {
@@ -1660,20 +1849,24 @@ function gazeLocations(state: GameState, spec: EvilEyeGazeSpec): { x: number; y:
     }
     if (visited.has(`${cx},${cy}`)) break // wrapped all the way around → stop
     visited.add(`${cx},${cy}`)
-    for (const region of ['surface', 'underground', 'underwater', 'void'] as Region[]) {
-      if (regionPresentAt(state, region, cx, cy)) out.push({ x: cx, y: cy, region })
-    }
+    out.push({ x: cx, y: cy })
   }
   return out
 }
 
+/** direction-picker lanes for a gaze (same shape as directionReach: origin first, then the line) */
+export function gazeReach(state: GameState, x: number, y: number): Record<'n' | 's' | 'e' | 'w', { x: number; y: number }[]> {
+  const lane = (dir: string) => [{ x, y }, ...gazeSquares(state, x, y, dir, Infinity)]
+  return { n: lane('n'), s: lane('s'), e: lane('e'), w: lane('w') }
+}
+
 export function fireEvilEyeGaze(state: GameState, spec: EvilEyeGazeSpec): void {
-  const filter = spec.filter ?? 'notStealth'
   const locations = spec.locations ?? gazeLocations(state, spec)
   for (let i = spec.idx ?? 0; i < locations.length; i++) {
     const loc = locations[i]
     const here = unitsAt(state, loc.x, loc.y, loc.region)
-      .filter((u) => u.id !== spec.excludeId && projHittable(filter, state, u))
+      // the gaze isn't a projectile and doesn't target: Stealth doesn't hide anyone from it
+      .filter((u) => u.id !== spec.excludeId)
       .map((u) => u.id)
     if (here.length === 0) continue
     if (here.length === 1) { applyGazeHit(state, spec, loc, here[0]); continue }
@@ -1697,7 +1890,7 @@ function applyGazeHit(state: GameState, spec: EvilEyeGazeSpec, loc: { x: number;
   recordAreaReveal(state, [{ x: loc.x, y: loc.y, dmg: spec.damage }])
   dealDamageToUnit(state, u, spec.damage, spec.player, {
     lethal: projectileShotIsLethal(state, spec.excludeId, spec.srcName, u),
-    source: { player: spec.player, kind: 'effect', name: spec.srcName },
+    source: projectileSource(spec.player, spec.srcName),
   })
   checkStateBased(state)
 }
@@ -1734,8 +1927,8 @@ export interface PiercingProjectileSpec {
 
 export function firePiercingProjectile(state: GameState, spec: PiercingProjectileSpec): void {
   const filter = spec.filter ?? 'canHit'
-  const srcMagic = projSrcIsMagic(spec.srcName)
   const path = projectilePath(state, spec.region, spec.ox, spec.oy, spec.dir, spec.maxRange ?? Infinity, spec.player)
+  const srcMagic = projSrcIsMagic(spec.srcName)
   for (let i = spec.pathIdx ?? 0; i < path.length; i++) {
     if (srcMagic && magicBlockedAt(state, path[i], spec.region, spec.player, spec.excludeId)) {
       pushLog(state, spec.player, `${spec.srcName} fizzles against a magic-immune minion.`)
@@ -1743,13 +1936,16 @@ export function firePiercingProjectile(state: GameState, spec: PiercingProjectil
     }
     const here = projCandidates(state, path[i], spec.region, spec.player, filter, spec.excludeId, spec.avatarImmune)
     if (here.length === 0) continue
-    if (here.length === 1) { applyPiercingHit(state, spec, here[0]); continue }
+    if (here.length === 1) {
+      if (!applyPiercingHit(state, spec, here[0])) return // the piercing ray is stopped dead by the blocker
+      continue
+    }
     // 2+ share this location → the shooter chooses which one the ray burns here
     pushPrompt(state, {
       player: spec.player,
       kind: 'chooseTargets',
       title: `${spec.srcName} — which unit does the projectile hit here?`,
-      data: { candidates: here, count: 1, kind: 'unit' },
+      data: { candidates: here, count: 1, upTo: false, kind: 'unit' },
       cont: 'spell-proj:pierce',
       ctx: { ...spec, pathIdx: i } as any,
     })
@@ -1757,21 +1953,24 @@ export function firePiercingProjectile(state: GameState, spec: PiercingProjectil
   }
 }
 
-function applyPiercingHit(state: GameState, spec: PiercingProjectileSpec, targetId: string): void {
+/** false when a magic-protected unit absorbed the ray (it goes no further) */
+function applyPiercingHit(state: GameState, spec: PiercingProjectileSpec, targetId: string): boolean {
   const u = state.units[targetId]
+  if (u && absorbsMagicShot(state, spec.srcName, u)) return false
   if (u) {
     recordAreaReveal(state, [{ x: u.x, y: u.y, dmg: spec.damage }]) // both-player grid reveal
     dealDamageToUnit(state, u, spec.damage, spec.player, {
       lethal: projectileShotIsLethal(state, spec.excludeId, spec.srcName, u),
-      source: { player: spec.player, kind: 'effect', name: spec.srcName },
+      source: projectileSource(spec.player, spec.srcName),
     })
     checkStateBased(state)
   }
+  return true
 }
 
 registerCont('spell-proj:pierce', (state, spec: PiercingProjectileSpec, choice) => {
   const id = Array.isArray(choice) ? choice[0] : choice
-  if (typeof id === 'string') applyPiercingHit(state, spec, id)
+  if (typeof id === 'string' && !applyPiercingHit(state, spec, id)) return
   // resume at the NEXT location (recomputing the path — geometry is terrain-stable)
   firePiercingProjectile(state, { ...spec, pathIdx: (spec.pathIdx ?? 0) + 1 })
 })

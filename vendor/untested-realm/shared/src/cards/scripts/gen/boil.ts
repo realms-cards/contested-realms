@@ -1,4 +1,5 @@
 import { registerScript } from '../registry'
+import { destroyTogether } from '../multi-card-utils/destroy-together'
 import { getCard } from '../../db'
 import { isWaterSite, unitsAt } from '../../../engine/grid'
 import { realStepDistanceW } from '../../../engine/movement'
@@ -18,8 +19,6 @@ registerScript('Boil', {
     const site = ctx.state.sites[t.site]
     const caster = ctx.caster!
     if (!site || realStepDistanceW(ctx.state, caster, site) > 2) return ctx.log('Too far away.') // "up to two steps away" (def. 1)
-    for (const u of unitsAt(ctx.state, site.x, site.y)) {
-      if (!u.isAvatar && (u.region === 'surface' || u.region === 'underwater')) ctx.kill(u.id)
-    }
+    destroyTogether(ctx, unitsAt(ctx.state, site.x, site.y).filter((u) => u.region === 'surface' || u.region === 'underwater').map((u) => u.id))
   },
 })

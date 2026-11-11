@@ -17,7 +17,7 @@ registerScript("Baba Yaga's Hut", {
       const squares: { x: number; y: number }[] = []
       for (let x = 0; x < GRID_W; x++) {
         const s = siteAt(ctx.state, x, backY)
-        if (!s || s.id === hut.id || s.isRubble) continue
+        if (!s || s.id === hut.id) continue // Rubble is a site like any other (Codex)
         // "an empty site" — nothing on it: no units (any region, incl. a face-down card), artifacts or auras
         if (isSiteEmpty(ctx.state, x, backY)) squares.push({ x, y: backY })
       }
@@ -31,7 +31,7 @@ registerScript("Baba Yaga's Hut", {
       if (!hut || !sq) return
       const backY = ctx.controller === 0 ? 0 : GRID_H - 1
       const target = siteAt(ctx.state, sq.x, sq.y)
-      if (!target || target.isRubble || sq.y !== backY || !isSiteEmpty(ctx.state, sq.x, sq.y)) return
+      if (!target || sq.y !== backY || !isSiteEmpty(ctx.state, sq.x, sq.y)) return
       if (swapSquares(ctx.state, { x: hut.x, y: hut.y }, sq, ctx.controller))
         pushLog(ctx.state, ctx.controller, `Baba Yaga's Hut strides to ${squareLabel(sq.x, sq.y)} on its chicken legs!`)
     },

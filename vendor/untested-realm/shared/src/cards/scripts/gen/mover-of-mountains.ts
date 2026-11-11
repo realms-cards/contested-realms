@@ -1,6 +1,7 @@
 import { registerScript } from '../registry'
 import { nearbySquaresW, isSiteEmpty } from '../../../engine/grid'
 import { pushLog } from '../../../engine/effects'
+import { swapSquares } from './site-move'
 
 // 'Spellcaster / Once on your turn, you may swap two nearby empty sites.'
 registerScript('Mover of Mountains', {
@@ -26,9 +27,8 @@ registerScript('Mover of Mountains', {
       if (!near(a) || !near(b)) return ctx.log('Both sites must be nearby.')
       // "empty sites" — nothing on them: no units (any region, incl. a face-down card), artifacts or auras
       if (!isSiteEmpty(ctx.state, a.x, a.y) || !isSiteEmpty(ctx.state, b.x, b.y)) return ctx.log('Both sites must be empty.')
-      const ax = a.x, ay = a.y
-      a.x = b.x; a.y = b.y
-      b.x = ax; b.y = ay
+      // the shared site swap: refuses an immovable site (Bedrock) and tells Vindictive Nation both sites moved
+      if (!swapSquares(ctx.state, { x: a.x, y: a.y }, { x: b.x, y: b.y }, ctx.controller)) return
       pushLog(ctx.state, ctx.controller, `${a.name} and ${b.name} trade places!`)
     },
   }],

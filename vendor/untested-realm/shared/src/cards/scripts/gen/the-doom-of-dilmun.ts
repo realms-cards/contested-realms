@@ -6,7 +6,6 @@ import { pushLog } from '../../../engine/effects'
 // set flow.sacrificing to the unit id before calling killUnit; when that marks THIS unit we
 // let the death proceed instead of preventing it.
 registerScript('The Doom of Dilmun', {
-  immovable: true,
   unbanishable: true,
   unmodifiable: true,
   onWouldDie: (state, selfId, dying) => {

@@ -6,6 +6,7 @@ import { effAttack } from '../../../engine/statics'
 //  prevent the first instance of damage it would take each turn.'
 registerScript('Plate of the Whale', {
   damagePreventer: true,
+  bearerOnlyPreventer: true,
   artifactGrantsKeywords: (state, artifactId, unit) => {
     const art = state.artifacts[artifactId]
     if (art?.carriedBy !== unit.id) return []

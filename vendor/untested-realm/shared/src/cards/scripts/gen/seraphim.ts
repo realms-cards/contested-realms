@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { pushLog, wardUnit } from '../../../engine/effects'
+import { pushLog, wardUnit, wardSite } from '../../../engine/effects'
 import { nearbySquaresW, siteAt, unitsAt } from '../../../engine/grid'
 
 // 'At the end of your turn, you may transfer a nearby Ward onto a nearby minion or site.'
@@ -49,7 +49,7 @@ registerScript('Seraphim', {
           pushLog(ctx.state, ctx.controller, `The Seraphim carries the Ward to ${toU.name}.`)
         }
       } else if (toS && !toS.ward) {
-        toS.ward = true // sites have no Evil clause
+        wardSite(ctx.state, toS, ctx.controller) // sites have no Evil clause
         if (fromU) fromU.ward = false; else if (fromS) fromS.ward = false
         pushLog(ctx.state, ctx.controller, `The Seraphim carries the Ward to ${toS.name}.`)
       }

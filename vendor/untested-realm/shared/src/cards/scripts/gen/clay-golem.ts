@@ -38,7 +38,7 @@ function clayGolemPlace(ctx: EffectAPI, spot: { x: number; y: number }) {
   const siteId = `s${ctx.state.nextId++}`
   ctx.state.sites[siteId] = {
     id: siteId, cardId: topId, name: ctx.state.cards[topId].name, owner: ctx.controller,
-    controller: ctx.controller, x: spot.x, y: spot.y, tapped: false, isRubble: false,
+    controller: ctx.controller, x: spot.x, y: spot.y, tapped: false, isRubble: false, enteredTurn: ctx.state.turn,
     ward: getKeywords(ctx.state.cards[topId].name).ward || undefined,
   }
   p.mana += 1

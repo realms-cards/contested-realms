@@ -1,4 +1,4 @@
-import { registerScript } from '../registry'
+import { registerScript, isStrikeDamage } from '../registry'
 import { nearbySquaresW } from '../../../engine/grid'
 
 // 'Whenever a nearby minion can attack, it must. / Nearby strikes against units
@@ -7,7 +7,7 @@ registerScript('Mask of Mayhem', {
   damageModifierKind: 'mul',
   forcesNearbyAttacks: true,
   damageModifier: (state, selfId, victim, amount, source) => {
-    if (source?.kind !== 'strike' || !source.attackerId) return amount
+    if (!isStrikeDamage(source) || !source.attackerId) return amount
     const art = state.artifacts[selfId]
     if (!art) return amount
     const striker = state.units[source.attackerId]

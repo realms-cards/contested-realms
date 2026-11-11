@@ -1,12 +1,10 @@
 import { registerScript } from '../registry'
-import { GRID_H, siteAt } from '../../../engine/grid'
+import { topBottomWrapStepsFor } from '../multi-card-utils/wrap-step'
 
-// 'The top and bottom edges of the realm are adjacent for Polar Bears.'
-registerScript('Polar Bears', {
-  extraSteps: (state, unit, from) => {
-    if (unit.name !== 'Polar Bears' || from.region !== 'surface') return []
-    const wrapY = from.y === 0 ? GRID_H - 1 : from.y === GRID_H - 1 ? 0 : null
-    if (wrapY === null || !siteAt(state, from.x, wrapY)) return []
-    return [{ x: from.x, y: wrapY, region: 'surface' as const }]
-  },
-})
+// 'Can move as if the top and bottom edges of the realm were connected.' — the same text on the
+// Frost Mage vs Lavamancer version (Polar Bears 2, a 3-cost 3/3).
+for (const name of ['Polar Bears', 'Polar Bears 2']) {
+  registerScript(name, {
+    extraSteps: (state, unit, from) => topBottomWrapStepsFor(state, unit, from),
+  })
+}

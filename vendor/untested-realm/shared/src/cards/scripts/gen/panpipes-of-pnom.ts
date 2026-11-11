@@ -5,9 +5,11 @@ import { nearbySquaresW } from '../../../engine/grid'
 // 'Damage caused by nearby units is increased to 2.' — applies to ANY damage a
 // nearby unit deals, whether the victim is a unit or a site.
 function panpipesBoost(state: GameState, selfId: string, amount: number, source: DamageSource | undefined): number {
-  if (!source?.attackerId) return amount
+  // a strike (attackerId) or a unit's ability/effect damage (sourceUnitId: Desecrator Kite, Cranky Overseer)
+  const dealerId = source?.attackerId ?? source?.sourceUnitId
+  if (!dealerId) return amount
   const art = state.artifacts[selfId]
-  const striker = state.units[source.attackerId]
+  const striker = state.units[dealerId]
   if (!art || !striker) return amount
   // boost a 0- or 1-damage hit to 2 (incl. a 0-power strike); a fully-prevented/negative hit is left alone
   if (amount >= 0 && amount < 2 && nearbySquaresW(state, art.x, art.y).some((s) => s.x === striker.x && s.y === striker.y)) {

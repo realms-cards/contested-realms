@@ -14,8 +14,10 @@ registerScript('Scarecrow', {
     }
   },
   entryFilter: (state, selfId, unit, _from, to) => {
+    // a carried Scarecrow is at its bearer's location (art.x/y/region follow the bearer); the bearer
+    // itself carries it along, so only OTHER Airborne minions are kept out
     const art = state.artifacts[selfId]
-    if (!art || art.carriedBy) return true
+    if (!art || art.carriedBy === unit.id) return true
     if (to.x !== art.x || to.y !== art.y || to.region !== art.region) return true
     return !effKeywords(state, unit).airborne
   },

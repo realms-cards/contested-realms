@@ -1,5 +1,5 @@
 import { registerScript } from '../registry'
-import { pushLog } from '../../../engine/effects'
+import { pushLog, tapUnit } from '../../../engine/effects'
 
 // 'Genesis → Tap target nearby enemy. It drops everything it's carrying.'
 registerScript('Shameless Squire', {
@@ -9,7 +9,7 @@ registerScript('Shameless Squire', {
     if (!t || !('unit' in t)) return
     const foe = ctx.state.units[t.unit]
     if (!foe) return
-    foe.tapped = true
+    tapUnit(ctx.state, foe)
     for (const artId of [...foe.carrying]) {
       const art = ctx.state.artifacts[artId]
       if (art) {

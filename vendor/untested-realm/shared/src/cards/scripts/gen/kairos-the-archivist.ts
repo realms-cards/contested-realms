@@ -17,7 +17,7 @@ type SiteRec = { x: number; y: number; controller: PlayerId | null; owner: Playe
 
 type ArtRec = { x: number; y: number; region: Region; conjuredBy: PlayerId; carrierCard: string | null; name: string }
 
-type AuraRec = { squares: { x: number; y: number }[]; controller: PlayerId; name: string }
+type AuraRec = { squares: { x: number; y: number }[]; controller: PlayerId; name: string; anchor?: { x: number; y: number }; edge?: { a: { x: number; y: number }; b: { x: number; y: number } } }
 
 /** The archive itself pulls the card back — no PLAYER accesses a zone, so neither the Bureau of Occult
  *  Control's toll nor Wormelow Tump's seal applies (user ruling, 2026-10-21). The card always leaves the
@@ -53,7 +53,9 @@ registerScript('Kairos the Archivist', {
     }
     for (const r of Object.values(s.auras)) {
       if (s.cards[r.cardId]?.isToken) continue
-      auras[r.cardId] = { squares: r.squares.map((q) => ({ ...q })), controller: r.controller, name: r.name }
+      // the anchor (2x2) and border (wall) travel with the squares: an aura restored without them is drawn,
+      // animated (Enchantress) and re-derived from where it was LATER, not where it was archived
+      auras[r.cardId] = { squares: r.squares.map((q) => ({ ...q })), controller: r.controller, name: r.name, anchor: r.anchor ? { ...r.anchor } : undefined, edge: r.edge ? { a: { ...r.edge.a }, b: { ...r.edge.b } } : undefined }
     }
     s.flow = s.flow ?? {}
     s.flow.kairos = { units, sites, artifacts, auras }
@@ -138,12 +140,19 @@ registerScript('Kairos the Archivist', {
       if (existing) {
         existing.controller = r.controller
         existing.squares = r.squares.map((q) => ({ ...q }))
+        if (r.anchor) existing.anchor = { ...r.anchor }
+        else delete existing.anchor
+        if (r.edge) existing.edge = { a: { ...r.edge.a }, b: { ...r.edge.b } }
+        else delete existing.edge
         continue
       }
       if (isBanished(s, cardId)) continue // banished since the archive → permanently out, not restored
       removeFromZones(s, cardId)
       const auraId = newId(s, 'r')
-      s.auras[auraId] = { id: auraId, cardId, name: r.name, controller: r.controller, squares: r.squares.map((q) => ({ ...q })) }
+      s.auras[auraId] = {
+        id: auraId, cardId, name: r.name, controller: r.controller, squares: r.squares.map((q) => ({ ...q })),
+        ...(r.anchor ? { anchor: { ...r.anchor } } : {}), ...(r.edge ? { edge: { a: { ...r.edge.a }, b: { ...r.edge.b } } } : {}),
+      }
     }
     // then banish Kairos: pre-empt the cemetery trip (he's an automaton UNIT)
     const self = s.units[ctx.sourceId]

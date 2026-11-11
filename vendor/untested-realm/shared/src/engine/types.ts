@@ -126,6 +126,10 @@ export interface SiteState {
   ward?: boolean
   /** flooded sites gain ≥1 water affinity and count as water sites */
   flooded?: boolean
+  /** turn the site entered the realm (absent for setup/editor sites → not this turn). A site
+   *  that awakens as a minion (Island Leviathan, Horns of Behemoth) is summoning sick only if
+   *  it entered this turn (FAQ). */
+  enteredTurn?: number
   /** A face-down SITE TRAP. While set, `name` is the basic site of `element` (Spire/Valley/
    *  Wasteland/Stream) and the site masquerades as it for every purpose; the true card is revealed
    *  (name ← realName, this field cleared) only when the trap is sprung or destroyed. `realName` /
@@ -145,6 +149,8 @@ export interface ArtifactState {
   y: number
   region: Region
   carriedBy: string | null
+  /** the unit that last dropped it by leaving the realm (Flame of the First Ones: it still "stops" there) */
+  droppedBy?: string
   tapped: boolean
   counters?: Record<string, number>
 }

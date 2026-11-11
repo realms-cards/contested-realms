@@ -6,6 +6,7 @@ import { canRespond, payResponse } from '../multi-card-utils/response'
 //  power this turn.'
 registerScript('Valor', {
   listensFromHand: true,
+  responseOnly: true,
   onAllyDefends: (ctx, defender) => {
     if (!defender || defender.controller !== ctx.controller) return
     if (!canRespond(ctx, ctx.sourceId)) return

@@ -1,6 +1,12 @@
 import { registerScript, type EffectAPI } from '../registry'
-import { pushLog, luckyChoiceIndex, toCemetery } from '../../../engine/effects'
+import { pushLog, luckyChoiceIndex, toCemetery, emitUnitMoved, checkStateBased } from '../../../engine/effects'
 import { inBounds, siteAt, unitsAt } from '../../../engine/grid'
+import type { AuraState, GameState, UnitState } from '../../../engine/types'
+
+/** the Enchantress' creature embodying this aura, if it is animated */
+function animatedBody(state: GameState, aura: AuraState): UnitState | undefined {
+  return Object.values(state.units).find((u) => String(u.counters?.animatedAura ?? '') === aura.id)
+}
 
 // 'At the end of your turn, deal 3 damage to a random unit atop affected sites,
 //  then you may move Thunderstorm one step. Lasts 3 of your turns.'
@@ -28,9 +34,21 @@ registerScript('Thunderstorm', {
       if (!aura || typeof choice !== 'string' || choice === 'stay') return
       const dx = choice === 'east' ? 1 : choice === 'west' ? -1 : 0
       const dy = choice === 'north' ? 1 : choice === 'south' ? -1 : 0
-      if (aura.squares.every((s) => inBounds(s.x + dx, s.y + dy))) {
-        aura.squares = aura.squares.map((s) => ({ x: s.x + dx, y: s.y + dy }))
+      if (!aura.squares.every((s) => inBounds(s.x + dx, s.y + dy))) return
+      // an animated storm is a creature: it moves, and its aura's area follows it (emitUnitMoved)
+      const body = animatedBody(ctx.state, aura)
+      if (body) {
+        const from = { x: body.x, y: body.y, region: body.region }
+        body.x += dx
+        body.y += dy
+        emitUnitMoved(ctx.state, body, from)
+        checkStateBased(ctx.state) // over the void now? (oversized footprint rule)
+        return
       }
+      // the storm and its anchor move together, so nothing reading the anchor (the Enchantress
+      // animating it, the Magellan re-derive) puts it back where it was
+      aura.squares = aura.squares.map((s) => ({ x: s.x + dx, y: s.y + dy }))
+      if (aura.anchor) aura.anchor = { x: aura.anchor.x + dx, y: aura.anchor.y + dy }
     },
   },
 })

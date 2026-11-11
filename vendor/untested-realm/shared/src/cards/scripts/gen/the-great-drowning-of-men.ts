@@ -9,12 +9,15 @@ registerScript('The Great Drowning of Men', {
   startOfTurn: (ctx) => {
     const aura = ctx.state.auras[ctx.sourceId]
     if (!aura) return
+    // destroy ALL the affected sites first, then flood and submerge — not square by square, so a minion
+    // drowning here finds every affected site already Rubble (Bladderblimp's Deathrite counting sites)
     for (const sq of aura.squares) {
       const site = siteAt(ctx.state, sq.x, sq.y)
       if (site && !site.isRubble) ctx.destroySite(site.id)
+    }
+    for (const sq of aura.squares) {
       const rubble = siteAt(ctx.state, sq.x, sq.y)
-      // Bedrock survives the destroy and won't flood — applyFlood taps its
-      // occupants instead; only actually-flooded squares drown/submerge.
+      // Bedrock survives the destroy and won't flood; only actually-flooded squares drown/submerge.
       if (rubble && applyFlood(ctx.state, rubble, ctx.controller)) {
         for (const u of unitsAt(ctx.state, sq.x, sq.y, 'surface')) submergeOrDrown(ctx, u)
         for (const a of Object.values(ctx.state.artifacts)) {

@@ -9,10 +9,12 @@ registerScript('Accursed Albatross', {
     // whoever got kill CREDIT (unified system): a striker, an ability-damager, a Magic caster, or an
     // activator. `killerByVictim` is a per-victim list of position SNAPSHOTS — so a killer that DIED
     // in the same trade (Redbreast Robin eating the Albatross's retaliation) still curses its allies.
-    const killers: { id: string; x: number; y: number; controller: number }[] = ctx.state.flow?.killerByVictim?.[ctx.sourceId] ?? []
+    const killers: { id: string; x: number; y: number; region?: string; controller: number }[] = ctx.state.flow?.killerByVictim?.[ctx.sourceId] ?? []
     for (const killer of killers) {
       for (const u of Object.values(ctx.state.units)) {
         if (u.isAvatar || u.id === killer.id || u.controller !== killer.controller) continue
+        // "minions it's nearby" is region-locked to the killer's own region (Codex Nearby)
+        if (killer.region && u.region !== killer.region) continue
         if (nearbySquaresW(ctx.state, killer.x, killer.y).some((s) => s.x === u.x && s.y === u.y)) {
           // Ward protects against an opponent's destruction (the curse is the Albatross controller's
           // ability): a warded minion's Ward BREAKS instead of dying (rulebook).

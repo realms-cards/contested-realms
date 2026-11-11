@@ -1,7 +1,8 @@
 import { registerScript, type EffectAPI } from '../registry'
-import { pushLog, killUnit, checkStateBased } from '../../../engine/effects'
+import { pushLog, killUnit, checkStateBased, tapUnit } from '../../../engine/effects'
 import { unitsAt } from '../../../engine/grid'
 import { takeOwnStep } from '../../../engine/movement'
+import { validateTarget } from '../../../engine/casting'
 import { mayStepSquares, mayStepOption, readMayStep } from '../multi-card-utils/own-step'
 
 // 'Tap → Tringh Constrictor may take a step, then it constricts target minion
@@ -31,7 +32,7 @@ registerScript('Tringh Constrictor', {
       checkStateBased(ctx.state)
     }
     delete self.counters.constricting
-    self.tapped = true
+    tapUnit(ctx.state, self)
     self.counters = { ...self.counters, skipUntap: 0 } // consume next-turn kill cycle
   },
   conts: {
@@ -67,7 +68,11 @@ registerScript('Tringh Constrictor', {
 function constrict(ctx: EffectAPI): void {
   const self = ctx.state.units[ctx.sourceId]
   if (!self) return
-  const prey = unitsAt(ctx.state, self.x, self.y, self.region).filter((u) => u.id !== self.id && !u.isAvatar).map((u) => u.id)
+  // "target minion here": an enemy's Stealth (and the other targeting rules) apply
+  const spec = { what: 'minion' as const, count: 1, targeted: true, label: 'target minion here' }
+  const prey = unitsAt(ctx.state, self.x, self.y, self.region)
+    .filter((u) => u.id !== self.id && !validateTarget(ctx.state, spec, { unit: u.id }, self, ctx.controller, undefined, self.name))
+    .map((u) => u.id)
   if (!prey.length) return
   ctx.ask({ kind: 'chooseTargets', title: 'Constrict which minion here?', data: { candidates: prey, count: 1, upTo: true, kind: 'unit' } }, 'squeeze')
 }

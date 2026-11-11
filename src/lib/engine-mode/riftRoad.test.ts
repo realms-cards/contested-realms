@@ -1,4 +1,4 @@
-import { applyAction, createGame, forcedSiteSquares, playSite, siteAt } from "@sorcery/shared";
+import { createGame, forcedSiteSquares, playSite, siteAt } from "@sorcery/shared";
 import type { GameState as EngineState, PlayerId } from "@sorcery/shared";
 import { describe, expect, it } from "vitest";
 import { enginePrecons, toEngineDeck } from "./decks";
@@ -59,14 +59,15 @@ describe("a forced placement honours the card's own placement script", () => {
     const card = intoHand(g, 0 as PlayerId, "Rift Valley");
     const err = playSite(g, 0 as PlayerId, card, 1, 1, { force: true });
     expect(err, `expected the forced placement to succeed, got: ${err}`).toBeFalsy();
-    // (1,1) can be pulled apart along the row or out of its own column, so the engine asks
-    // which way the land parts before anything moves.
-    const prompt = g.prompts[0];
-    expect(prompt?.title).toContain("Pull the land apart");
-    applyAction(g, 0 as PlayerId, { t: "prompt", promptId: prompt.id, choice: "push the row east" });
+    // FAQ (upstream 0.6.0): two adjacent sites are pulled apart, one stays and the other slides with
+    // everything beyond it; a lone site can't be. Here the only way is Dark Tower staying and the row
+    // pushed east, so the engine asks nothing.
+    expect(g.prompts).toHaveLength(0);
     expect(siteAt(g, 1, 1)?.name).toBe("Rift Valley");
     // the sites that were there are still on the board — pushed, not destroyed
-    expect(Object.values(g.sites).some((s) => s.name === "Lone Tower" && !s.isRubble)).toBe(true);
+    expect(siteAt(g, 0, 1)?.name).toBe("Dark Tower");
+    expect(siteAt(g, 2, 1)?.name).toBe("Lone Tower");
+    expect(siteAt(g, 3, 1)?.name).toBe("Imperial Road");
   });
 
   it("still refuses an ordinary site forced onto an occupied square", () => {

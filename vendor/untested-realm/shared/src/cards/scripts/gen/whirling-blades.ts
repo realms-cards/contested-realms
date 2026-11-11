@@ -46,8 +46,9 @@ registerScript('Whirling Blades', {
           if (u.controller !== ally.controller) seen.add(u.id)
         }
       }
-      // the strikes resolve one at a time and the ORDER can matter (a kill may cut off a
-      // trigger), so the controller chooses it — shared with every other multi-strike effect.
+      // FAQ: the movement resolves first, then it strikes each enemy SIMULTANEOUSLY — all the damage,
+      // then the deaths together. The enemies are judged now, by its controller: an Infiltrated ally is
+      // still yours (steps aren't an interaction), and only after the strikes does it lose Stealth.
       strikeAllSimultaneous(ctx.state, ally.id, [...seen], ctx.controller)
       settleEntering(ctx.state, ally.id)
     },

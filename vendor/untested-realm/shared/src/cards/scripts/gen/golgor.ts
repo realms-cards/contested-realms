@@ -17,9 +17,10 @@ registerScript('Golgor', {
       if (!self || !t || !('square' in t)) return
       if (!adjacentSquaresW(ctx.state, self.x, self.y).some((s) => s.x === t.square.x && s.y === t.square.y)) return ctx.log('Not adjacent.')
       const region = t.square.region ?? self.region
-      for (const u of unitsAt(ctx.state, t.square.x, t.square.y, region)) {
-        if (!u.isAvatar && avgPow(ctx.state, u) <= 2) ctx.banish(u.id)
-      }
+      // pick every qualifying minion FIRST, then banish them together — a power bonus that only appears
+      // once another is gone (Pendragon Banner) can't save one
+      const doomed = unitsAt(ctx.state, t.square.x, t.square.y, region).filter((u) => !u.isAvatar && avgPow(ctx.state, u) <= 2)
+      for (const u of doomed) ctx.banish(u.id)
     },
   }],
 })

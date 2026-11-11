@@ -2,6 +2,7 @@ import { registerScript } from '../registry'
 import { pushLog } from '../../../engine/effects'
 import { siteAt } from '../../../engine/grid'
 import type { PlayerId } from '../../../engine/types'
+import { takeControl } from '../multi-card-utils/take-control'
 
 // "Whenever this enters another player's site, you may give them the Peace
 //  Offering. If you do, their units can't attack you on their next turn."
@@ -19,7 +20,7 @@ registerScript('Peace Offering', {
       if (!self) return
       const to = c.to as PlayerId
       const from = ctx.controller
-      self.controller = to
+      if (!takeControl(ctx.state, self, to)) return // King Arthur: no gift, so no truce
       ctx.state.flow = ctx.state.flow ?? {}
       ctx.state.flow.peaceTruce = [...(ctx.state.flow.peaceTruce ?? []), { bound: to, protectedPlayer: from, turn: ctx.state.turn }]
       pushLog(ctx.state, from, `The Peace Offering changes hands — ${ctx.state.players[to].name} is honor-bound not to attack next turn.`)

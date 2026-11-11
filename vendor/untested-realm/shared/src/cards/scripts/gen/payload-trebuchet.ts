@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
-import { toCemetery, discardableHandIds } from '../../../engine/effects'
+import { toCemetery, discardableHandIds, tapUnit } from '../../../engine/effects'
 import { GRID_H, GRID_W, unitsAt } from '../../../engine/grid'
 import { stepDistanceW } from '../../../engine/movement'
 import { canTapForCost } from '../../../engine/statics'
@@ -32,8 +32,8 @@ registerScript('Payload Trebuchet', {
       const bearer = art?.carriedBy ? ctx.state.units[art.carriedBy] : null
       const helper = typeof id === 'string' ? ctx.state.units[id] : null
       if (!bearer || !helper || !canTapForCost(ctx.state, bearer) || !canTapForCost(ctx.state, helper)) return
-      bearer.tapped = true
-      helper.tapped = true
+      tapUnit(ctx.state, bearer)
+      tapUnit(ctx.state, helper)
       const ids = discardableHandIds(ctx.state, ctx.controller) // exclude caster-locked cards; resolve by id
       ctx.ask({ kind: 'chooseCards', title: 'Launch which card as the payload?', data: { cards: ids.map((i) => ctx.state.cards[i].name), pick: 1, upTo: false } }, 'payload', { ids })
     },

@@ -2,6 +2,7 @@ import { registerScript } from '../registry'
 import { getCard } from '../../db'
 import { orthAdjacentWrapped, siteAt, unitsAt } from '../../../engine/grid'
 import type { GameState } from '../../../engine/types'
+import { regionPresentAt } from '../../../engine/statics'
 
 // 'Once on your turn, you may push a minion on connected Rivers one step.'
 registerScript('River Rapids', {
@@ -25,13 +26,15 @@ registerScript('River Rapids', {
       const id = Array.isArray(choice) ? choice[0] : choice
       const u = typeof id === 'string' ? ctx.state.units[id] : null
       if (!u) return
-      const steps = orthAdjacentWrapped(ctx.state, u.x, u.y).filter((s) => siteAt(ctx.state, s.x, s.y))
+      // a push is forced movement: it never changes the minion's region (Codex), so an underwater minion
+      // can only be swept to another water site's underwater, never onto land
+      const steps = orthAdjacentWrapped(ctx.state, u.x, u.y).filter((s) => siteAt(ctx.state, s.x, s.y) && regionPresentAt(ctx.state, u.region, s.x, s.y))
       if (!steps.length) return
       ctx.ask({ kind: 'chooseSquare', title: `${u.name} is swept where?`, data: { squares: steps } }, 'sweep', { unitId: u.id })
     },
     sweep: (ctx, c, sq) => {
       const u = ctx.state.units[c.unitId as string]
-      if (u && sq) ctx.teleport(u.id, sq.x, sq.y, u.region, { push: true }) // a current/push, not a Teleport (Cage of Sidrak)
+      if (u && sq && regionPresentAt(ctx.state, u.region, sq.x, sq.y)) ctx.teleport(u.id, sq.x, sq.y, u.region, { push: true }) // a current/push, not a Teleport (Cage of Sidrak)
     },
   },
 })
