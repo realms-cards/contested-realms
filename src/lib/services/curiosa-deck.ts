@@ -127,6 +127,7 @@ interface SorceryDeckResponse {
 const SET_PREFIX_OVERRIDES: Record<string, string> = {
   promo: "pro",
   promotional: "pro",
+  "frost mage vs. lavamancer": "fvl",
 };
 
 /** Fallback for printings that arrive without a set name, keyed by set code */
@@ -136,6 +137,7 @@ const SET_CODE_PREFIXES: Record<string, string> = {
   "004": "art",
   "005": "dra",
   "006": "got",
+  "008": "fvl",
   "999": "pro",
 };
 

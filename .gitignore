@@ -67,6 +67,7 @@ dev.db
 /logs/training
 /cardart/original/
 /data/gothic
+/data/fvl
 harbinger-proxies.pdf
 deck-harbinger.txt
 harbinger_voidwalk.json

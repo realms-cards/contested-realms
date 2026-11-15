@@ -45,6 +45,7 @@ function buildCrossSetRoots(
     "arthurian_legends",
     "dragonlord",
     "gothic",
+    "fvl",
     "promo",
   ];
   const searchSets = preferredOrder.filter((set) => set !== primarySetDir);

@@ -99,6 +99,7 @@ const SETS = [
   "Arthurian Legends",
   "Dragonlord",
   "Gothic",
+  "Frost Mage Vs. Lavamancer",
   "Promotional",
 ] as const;
 

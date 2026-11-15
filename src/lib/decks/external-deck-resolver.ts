@@ -400,6 +400,7 @@ export function buildFallbackSlug(
   else if (lower.startsWith("arthurian")) prefix = "art";
   else if (lower.startsWith("dragon")) prefix = "dra";
   else if (lower.startsWith("gothic")) prefix = "got";
+  else if (lower.startsWith("frost mage")) prefix = "fvl";
   else if (lower.startsWith("promo") || lower.includes("organized"))
     prefix = "pro";
   const cardPart = cardName

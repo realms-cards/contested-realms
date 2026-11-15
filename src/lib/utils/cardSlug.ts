@@ -15,6 +15,7 @@ export function getSetPrefix(setName: string | null | undefined): string {
   if (lower.startsWith("arthurian")) return "art";
   if (lower.startsWith("dragon")) return "dra";
   if (lower.startsWith("gothic")) return "got";
+  if (lower.startsWith("frost mage")) return "fvl";
   if (lower.startsWith("promo") || lower.includes("organized")) return "pro";
   // Default to beta if unknown
   return "bet";

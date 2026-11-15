@@ -1347,6 +1347,35 @@
             "typeText": "Ordinary Mortals storm the gates"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Minion",
+          "rulesText": "Charge",
+          "cost": 7,
+          "attack": 5,
+          "defence": 5,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-highland_clansmen-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Truitt Parrish",
+            "flavorText": "",
+            "typeText": "Ordinary Mortals storm the gates"
+          }
+        ]
       }
     ]
   },
@@ -2880,6 +2909,35 @@
             "product": "Booster",
             "artist": "Melissa A. Benson",
             "flavorText": "\"Thereupon I could not breathe, but sighs were pardoned unto me. To see the pegasus fly is to feel the spirit soar.\"",
+            "typeText": "An Ordinary Beast of extraordinary extravagance"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Minion",
+          "rulesText": "Airborne",
+          "cost": 3,
+          "attack": 3,
+          "defence": 3,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-plumed_pegasus-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Melissa A. Benson",
+            "flavorText": "",
             "typeText": "An Ordinary Beast of extraordinary extravagance"
           }
         ]
@@ -4832,6 +4890,35 @@
             "typeText": "Ordinary Magic of fractured fascination"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Magic",
+          "rulesText": "Destroy all auras and artifacts at target location up to two steps away.",
+          "cost": 2,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-disenchant-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Elwira Pawlikowska",
+            "flavorText": "",
+            "typeText": "Ordinary Magic of fractured fascination"
+          }
+        ]
       }
     ]
   },
@@ -5339,6 +5426,35 @@
             "artist": "Brian Smith",
             "flavorText": "",
             "typeText": "Ordinary Magic strikes in the night!"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Magic",
+          "rulesText": "Deal 3 damage to a random unit at target location.",
+          "cost": 2,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-lightning_bolt-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Ossi Hiekkala",
+            "flavorText": "",
+            "typeText": "Ordinary Magic of shocking uncertainty"
           }
         ]
       }
@@ -7249,6 +7365,35 @@
             "product": "Alpha_Investments",
             "artist": "Boris Vallejo",
             "flavorText": "“Chorus of old men: If we give them the least hold over us, ‘tis\r\nall up! Just think of all those squadrons of Amazons Micon has\r\npainted for us engaged in hand-to-hand combat with men.”\r\n— Aristophanes, Lysistrata",
+            "typeText": "Ordinary Mortals of magnificent stature"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Minion",
+          "rulesText": "",
+          "cost": 5,
+          "attack": 5,
+          "defence": 5,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-amazon_warriors-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Elvira Shakirova",
+            "flavorText": "",
             "typeText": "Ordinary Mortals of magnificent stature"
           }
         ]
@@ -10686,6 +10831,35 @@
             "typeText": "An Exceptional Giant dozes peacefully"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Genesis → Fall asleep. Slumbering Giantess is disabled until hurt.",
+          "cost": 3,
+          "attack": 5,
+          "defence": 5,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-slumbering_giantess-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Liz Danforth",
+            "flavorText": "",
+            "typeText": "An Exceptional Giant dozes peacefully"
+          }
+        ]
       }
     ]
   },
@@ -11742,6 +11916,35 @@
             "typeText": "Ordinary Magic of terranean internment"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Magic",
+          "rulesText": "Burrow target minion or artifact, if able.",
+          "cost": 3,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-bury-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Dan Seagrave",
+            "flavorText": "",
+            "typeText": "Ordinary Magic of terranean internment"
+          }
+        ]
       }
     ]
   },
@@ -12259,6 +12462,35 @@
             "typeText": "Ordinary Magic to corner the competition"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Magic",
+          "rulesText": "Destroy all auras and artifacts at target location up to two steps away.",
+          "cost": 2,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-dispel-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Elwira Pawlikowska",
+            "flavorText": "",
+            "typeText": "Ordinary Magic of shattered vanity"
+          }
+        ]
       }
     ]
   },
@@ -12446,6 +12678,35 @@
             "slug": "bet-earthquake-b-f",
             "finish": "Foil",
             "product": "Booster",
+            "artist": "Alan Pollack",
+            "flavorText": "",
+            "typeText": "Elite Magic of violent upheaval"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Magic",
+          "rulesText": "You may rearrange sites within a two-by-two area, carrying along everything of normal size. Then burrow all minions and artifacts on those sites.",
+          "cost": 5,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 2,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-earthquake-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
             "artist": "Alan Pollack",
             "flavorText": "",
             "typeText": "Elite Magic of violent upheaval"
@@ -17539,6 +17800,35 @@
             "typeText": "Exceptional Magic of blistering speed"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Magic",
+          "rulesText": "This turn, give an ally Movement +2, it can't be intercepted, and it leaves a trail of fire at departed locations. When it stops, each unit along the trail takes 2 damage.",
+          "cost": 3,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-blaze-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Elvira Shakirova",
+            "flavorText": "",
+            "typeText": "Exceptional Magic of blistering speed"
+          }
+        ]
       }
     ]
   },
@@ -17630,6 +17920,35 @@
             "slug": "bet-boil-b-f",
             "finish": "Foil",
             "product": "Booster",
+            "artist": "Brian Smith",
+            "flavorText": "",
+            "typeText": "Ordinary Magic of sudden scalding"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Magic",
+          "rulesText": "Destroy all minions occupying target water site up to two steps away.",
+          "cost": 3,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 2,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-boil-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
             "artist": "Brian Smith",
             "flavorText": "",
             "typeText": "Ordinary Magic of sudden scalding"
@@ -18027,6 +18346,35 @@
             "typeText": "Exceptional Magic of deflagrant destruction"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Magic",
+          "rulesText": "Shoot a projectile. It explodes on impact, dealing damage to each unit at affected locations.",
+          "cost": 4,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 2,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-fireball-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Doug Kovacs",
+            "flavorText": "",
+            "typeText": "Exceptional Magic of deflagrant destruction"
+          }
+        ]
       }
     ]
   },
@@ -18219,6 +18567,35 @@
             "typeText": "Elite Magic ravages the realm"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Magic",
+          "rulesText": "Flame Wave flows horizontally, from one edge of the realm to the other. Deal damage to each unit atop sites in the area of effect:",
+          "cost": 6,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 2,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-flame_wave-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Alan Pollack",
+            "flavorText": "",
+            "typeText": "Elite Magic ravages the realm"
+          }
+        ]
       }
     ]
   },
@@ -18310,6 +18687,35 @@
             "slug": "bet-heat_ray-b-f",
             "finish": "Foil",
             "product": "Booster",
+            "artist": "Jeff Easley",
+            "flavorText": "",
+            "typeText": "Ordinary Magic of focused fire"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Magic",
+          "rulesText": "Shoot a piercing projectile. Deal 2 damage to each hit unit.",
+          "cost": 3,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-heat_ray-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
             "artist": "Jeff Easley",
             "flavorText": "",
             "typeText": "Ordinary Magic of focused fire"
@@ -21291,6 +21697,35 @@
             "typeText": "An Exceptional Faerie and unwelcome guest"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "May be summoned to any site.\n\nGenesis → You may return a minion here to its owner’s hand.",
+          "cost": 3,
+          "attack": 1,
+          "defence": 1,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-fey_changeling-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Drew Tucker",
+            "flavorText": "",
+            "typeText": "An Exceptional Faerie and unwelcome guest"
+          }
+        ]
       }
     ]
   },
@@ -22467,6 +22902,35 @@
             "slug": "bet-polar_bears-b-f",
             "finish": "Foil",
             "product": "Booster",
+            "artist": "Melissa A. Benson",
+            "flavorText": "",
+            "typeText": "Ordinary Beasts of extreme latitudes"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Minion",
+          "rulesText": "Can move as if the top and bottom edges of the realm were connected.",
+          "cost": 3,
+          "attack": 3,
+          "defence": 3,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-polar_bears-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
             "artist": "Melissa A. Benson",
             "flavorText": "",
             "typeText": "Ordinary Beasts of extreme latitudes"
@@ -23816,6 +24280,35 @@
             "typeText": "Ordinary Beasts with plated pelt"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Minion",
+          "rulesText": "The first time Tuft Turtles would take damage each turn, prevent that damage.",
+          "cost": 3,
+          "attack": 2,
+          "defence": 2,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-tufted_turtles-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Matt Tames",
+            "flavorText": "",
+            "typeText": "Ordinary Beasts with plated pelt"
+          }
+        ]
       }
     ]
   },
@@ -24291,6 +24784,35 @@
             "slug": "bet-drown-b-f",
             "finish": "Foil",
             "product": "Booster",
+            "artist": "Alan Pollack",
+            "flavorText": "",
+            "typeText": "Ordinary Magic of downward descent"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Magic",
+          "rulesText": "Submerge target minion or artifact, if able.",
+          "cost": 3,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-drown-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
             "artist": "Alan Pollack",
             "flavorText": "",
             "typeText": "Ordinary Magic of downward descent"
@@ -26211,6 +26733,35 @@
             "slug": "bet-blizzard-b-f",
             "finish": "Foil",
             "product": "Booster",
+            "artist": "Jeff A. Menges",
+            "flavorText": "",
+            "typeText": "An Ordinary Aura of forestalling frost"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Aura",
+          "rulesText": "Affected sites and units atop them can't be attacked or intercepted.\n\nAt the start of your turn, dispel Blizzard.",
+          "cost": 1,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-blizzard-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
             "artist": "Jeff A. Menges",
             "flavorText": "",
             "typeText": "An Ordinary Aura of forestalling frost"
@@ -30307,6 +30858,35 @@
             "typeText": "An Exceptional Relic that gathers no moss"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Artifact",
+          "rulesText": "Units here have “Tap → Give Rolling Boulder a push. It rolls as far as possible and deals 4 damage to each other unit along its path.”",
+          "cost": 4,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-rolling_boulder-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Jussi Pylkäs",
+            "flavorText": "",
+            "typeText": "An Exceptional Relic that gathers no moss"
+          }
+        ]
       }
     ]
   },
@@ -32146,6 +32726,35 @@
             "slug": "bet-mountain_pass-b-f",
             "finish": "Foil",
             "product": "Booster",
+            "artist": "Marta Molina",
+            "flavorText": "",
+            "typeText": "An Exceptional Site of narrow passage"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Site",
+          "rulesText": "Minions can't enter this site on the ground if there's already a minion atop.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-mountain_pass-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
             "artist": "Marta Molina",
             "flavorText": "",
             "typeText": "An Exceptional Site of narrow passage"
@@ -35511,6 +36120,35 @@
             "typeText": "An Exceptional Site of Water and Air"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Site",
+          "rulesText": "",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-lighthouse-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Marta Molina",
+            "flavorText": "",
+            "typeText": "An Exceptional Site of Water and Air"
+          }
+        ]
       }
     ]
   },
@@ -35892,6 +36530,35 @@
             "product": "Booster",
             "artist": "Andrea Modesti",
             "flavorText": "There's beauty in the simplicity of empty horizons.",
+            "typeText": "An Exceptional Site of Earth and Fire"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Site",
+          "rulesText": "",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-steppe-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Andrea Modesti",
+            "flavorText": "",
             "typeText": "An Exceptional Site of Earth and Fire"
           }
         ]
@@ -37844,6 +38511,35 @@
             "typeText": "An Elite Site of impending collapse"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Sacrifice Sinkhole → Destroy a nearby site.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-sinkhole-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Michal Nagypál",
+            "flavorText": "",
+            "typeText": "An Elite Site of impending collapse"
+          }
+        ]
       }
     ]
   },
@@ -39501,6 +40197,35 @@
             "typeText": "An Ordinary Site of cold crisp recovery"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Site",
+          "rulesText": "Genesis → Look at your next spell. You may put it on the bottom of your spellbook.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-winter_river-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Matt Tames",
+            "flavorText": "",
+            "typeText": "An Ordinary Site of cold crisp recovery"
+          }
+        ]
       }
     ]
   },
@@ -40711,6 +41436,35 @@
             "product": "Booster",
             "artist": "Vincent Pompetti",
             "flavorText": "Lightning obeyed olde Merlin’s command,\r\nJustice conveyed unto noggin from hand.",
+            "typeText": "Ordinary Magic of focused fulmination"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Magic",
+          "rulesText": "Deal 4 damage to target nearby unit.",
+          "cost": 4,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 2,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-arc_lightning-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Vincent Pompetti",
+            "flavorText": "",
             "typeText": "Ordinary Magic of focused fulmination"
           }
         ]
@@ -42655,6 +43409,35 @@
             "slug": "art-coy_nixie-b-f",
             "finish": "Foil",
             "product": "Booster",
+            "artist": "Lindsey Crummett",
+            "flavorText": "",
+            "typeText": "An Exceptional Merfolk of comely appearance"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Submerge\n\nOnce on your turn, Coy Nixie may force target nearby enemy to take a step towards her. Tap that enemy if it is untapped.",
+          "cost": 3,
+          "attack": 2,
+          "defence": 2,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 2
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-coy_nixie-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
             "artist": "Lindsey Crummett",
             "flavorText": "",
             "typeText": "An Exceptional Merfolk of comely appearance"
@@ -44636,6 +45419,35 @@
             "typeText": "An Aura of Ordinary arson"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Aura",
+          "rulesText": "Conjure atop an Ordinary or Exceptional site.\n\nAt the start of your turn, destroy this site, and minions atop it, and Hamlet's Ablaze.",
+          "cost": 3,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 2,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-hamlets_ablaze-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Jussi Pylkäs",
+            "flavorText": "",
+            "typeText": "An Aura of Ordinary arson"
+          }
+        ]
       }
     ]
   },
@@ -45164,6 +45976,35 @@
             "product": "Booster",
             "artist": "Jussi Pylkäs",
             "flavorText": "“His name was Talus, made of yron mould,\r\nImmoueable, resistlesse, without end.”\r\n—Edmund Spenser, The Faerie Queene",
+            "typeText": "An Exceptional Automaton with a will of iron"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Artifact",
+          "rulesText": "Can't be disabled or moved by force.",
+          "cost": 4,
+          "attack": 3,
+          "defence": 3,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-iron_man_talus-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Jussi Pylkäs",
+            "flavorText": "",
             "typeText": "An Exceptional Automaton with a will of iron"
           }
         ]
@@ -45958,6 +46799,35 @@
             "slug": "art-lava_flow-b-f",
             "finish": "Foil",
             "product": "Booster",
+            "artist": "Caio Calazans",
+            "flavorText": "",
+            "typeText": "Exceptional Magic of molten animosity"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Magic",
+          "rulesText": "Lava flows from the caster's site in a cardinal direction. Deal damage to each other unit occupying a site in the area of effect:",
+          "cost": 5,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 2,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-lava_flow-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
             "artist": "Caio Calazans",
             "flavorText": "",
             "typeText": "Exceptional Magic of molten animosity"
@@ -50476,6 +51346,35 @@
             "typeText": "Exceptional Magic picks up speed"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Magic",
+          "rulesText": "Shoot a piercing projectile. It picks up all other units along its path and carries them with it. When it stops, units there take damage equal to the number of units in the snowball.",
+          "cost": 5,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 2
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-snowball-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Drew Tucker",
+            "flavorText": "",
+            "typeText": "Exceptional Magic picks up speed"
+          }
+        ]
       }
     ]
   },
@@ -54929,6 +55828,35 @@
             "typeText": "A forsaken Site, hollowed and defiled."
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Site",
+          "rulesText": "Provides no mana.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-rubble-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Alan Pollack",
+            "flavorText": "",
+            "typeText": "A scorched Site, riven and scarred"
+          }
+        ]
       }
     ]
   },
@@ -56313,6 +57241,35 @@
             "product": "Booster",
             "artist": "Brian Smith",
             "flavorText": "What power, what purpose, what people dared forge a face in living fire?",
+            "typeText": "An Exceptional Site of molten mystery"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Site",
+          "rulesText": "",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": 20,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 2,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-active_volcano-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Brian Smith",
+            "flavorText": "",
             "typeText": "An Exceptional Site of molten mystery"
           }
         ]
@@ -59974,6 +60931,35 @@
             "typeText": "The sea's Elite Magic beckons us home"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Magic",
+          "rulesText": "Minions adjacent to target Water site step towards it. Then submerge all minions there.",
+          "cost": 6,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 3
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-call_of_the_sea-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "AronjaArt",
+            "flavorText": "",
+            "typeText": "The sea's Elite Magic beckons us home"
+          }
+        ]
       }
     ]
   },
@@ -61891,6 +62877,35 @@
             "typeText": "An Exceptional Site of abyssal brine"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Site",
+          "rulesText": "",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 2
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-deep_sea-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Brian Smith",
+            "flavorText": "",
+            "typeText": "An Exceptional Site of abyssal brine"
+          }
+        ]
       }
     ]
   },
@@ -62653,6 +63668,35 @@
             "slug": "got-displace-b-f",
             "finish": "Foil",
             "product": "Booster",
+            "artist": "David O'Connor",
+            "flavorText": "",
+            "typeText": "Ordinary Magic where you least expect it"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Magic",
+          "rulesText": "Teleport target minion, artifact, or aura one diagonal step.",
+          "cost": 2,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 2,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-displace-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
             "artist": "David O'Connor",
             "flavorText": "",
             "typeText": "Ordinary Magic where you least expect it"
@@ -64251,6 +65295,35 @@
             "typeText": "An Exceptional Monster and arcane accident"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Can't be targeted or damaged by magic.",
+          "cost": 4,
+          "attack": 4,
+          "defence": 4,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 2
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-failed_mutation-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Alan Pollack",
+            "flavorText": "",
+            "typeText": "An Exceptional Monster and arcane accident"
+          }
+        ]
       }
     ]
   },
@@ -64723,6 +65796,35 @@
             "typeText": "An Exceptional Site of plenteous manna"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Site",
+          "rulesText": "",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 2,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-fertile_earth-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Brian Smith",
+            "flavorText": "",
+            "typeText": "An Exceptional Site of plenteous manna"
+          }
+        ]
       }
     ]
   },
@@ -65013,6 +66115,35 @@
             "slug": "got-flayer-b-f",
             "finish": "Foil",
             "product": "Booster",
+            "artist": "Drew Tucker",
+            "flavorText": "",
+            "typeText": "An Ordinary Demon revels in rending"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Minion",
+          "rulesText": "Genesis → Deal 1 damage to each other nearby unit.",
+          "cost": 4,
+          "attack": 3,
+          "defence": 3,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 2,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-flayer-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
             "artist": "Drew Tucker",
             "flavorText": "",
             "typeText": "An Ordinary Demon revels in rending"
@@ -65485,6 +66616,35 @@
             "slug": "got-frozen_horror-b-f",
             "finish": "Foil",
             "product": "Booster",
+            "artist": "Melissa A. Benson",
+            "flavorText": "",
+            "typeText": "An Exceptional Undead chills thought and thew"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Stealth\n\nBreak Stealth → Disable other nearby minions until your next turn.",
+          "cost": 5,
+          "attack": 3,
+          "defence": 3,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 2
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-frozen_horror-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
             "artist": "Melissa A. Benson",
             "flavorText": "",
             "typeText": "An Exceptional Undead chills thought and thew"
@@ -66016,6 +67176,35 @@
             "slug": "got-gift_of_the_serpent-b-f",
             "finish": "Foil",
             "product": "Booster",
+            "artist": "Elwira Pawlikowska",
+            "flavorText": "",
+            "typeText": "Ordinary Magic of poisonous provision"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Magic",
+          "rulesText": "Give an allied minion Lethal this turn. Draw a spell.",
+          "cost": 2,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 2,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-gift_of_the_serpent-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
             "artist": "Elwira Pawlikowska",
             "flavorText": "",
             "typeText": "Ordinary Magic of poisonous provision"
@@ -67445,6 +68634,35 @@
             "typeText": "Ordinary Demons come hot from hell"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Minion",
+          "rulesText": "",
+          "cost": 3,
+          "attack": 3,
+          "defence": 3,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-hellhounds-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Mattias Frisk",
+            "flavorText": "",
+            "typeText": "Ordinary Demons come hot from hell"
+          }
+        ]
       }
     ]
   },
@@ -68563,6 +69781,35 @@
             "product": "Booster",
             "artist": "Brian Smith",
             "flavorText": "Flesh, frost, and folly all meet the same end.",
+            "typeText": "A frozen fusillade of Ordinary Magic"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Magic",
+          "rulesText": "Shoot three projectiles, one at a time. Each deals 1 damage but melts before the third step.",
+          "cost": 3,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-ice_shards-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Brian Smith",
+            "flavorText": "",
             "typeText": "A frozen fusillade of Ordinary Magic"
           }
         ]
@@ -69802,6 +71049,35 @@
             "product": "Booster",
             "artist": "Brian Smith",
             "flavorText": "“Let the dry land appear,” and it was so. — Genesis 1:9",
+            "typeText": "Ordinary Magic breaks new ground"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Magic",
+          "rulesText": "Draw a site. You may play a land site.",
+          "cost": 3,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 2,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-landmass-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Brian Smith",
+            "flavorText": "",
             "typeText": "Ordinary Magic breaks new ground"
           }
         ]
@@ -71516,6 +72792,35 @@
             "typeText": "An Exceptional Site opens its ruby lips"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Site",
+          "rulesText": "(F)(F) — Genesis → You may cast a Hellhounds from your collection to this site.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-molten_maar-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Pedro Ferreira",
+            "flavorText": "",
+            "typeText": "An Exceptional Site opens its ruby lips"
+          }
+        ]
       }
     ]
   },
@@ -71808,6 +73113,35 @@
             "product": "Booster",
             "artist": "Brian Smith",
             "flavorText": "Capricious winds had sculpted the crag, arched and spired like a grand cathedral.",
+            "typeText": "An Exceptional Site of rugged grandeur"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Site",
+          "rulesText": "",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 2,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-mountain_peaks-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Brian Smith",
+            "flavorText": "",
             "typeText": "An Exceptional Site of rugged grandeur"
           }
         ]
@@ -75426,6 +76760,35 @@
             "typeText": "An Elite Site of crashing currents"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Once on your turn, you may push a minion on connected Rivers one step.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-river_rapids-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Vasiliy Ermolaev",
+            "flavorText": "",
+            "typeText": "An Elite Site of crashing currents"
+          }
+        ]
       }
     ]
   },
@@ -77140,6 +78503,35 @@
             "slug": "got-sinterfee-b-f",
             "finish": "Foil",
             "product": "Booster",
+            "artist": "Brom",
+            "flavorText": "",
+            "typeText": "An Exceptional Faerie, ash in her wake"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Genesis -> Target adjacent site is silenced and provides no threshold while Sinterfee is in the realm.",
+          "cost": 2,
+          "attack": 2,
+          "defence": 2,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-sinterfee-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
             "artist": "Brom",
             "flavorText": "",
             "typeText": "An Exceptional Faerie, ash in her wake"
@@ -79387,6 +80779,35 @@
             "typeText": "Tread carefully at this Exceptional Site"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Site",
+          "rulesText": "At the end of your turn, if minions atop this site total 5 or more power, submerge them.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-thin_ice-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Truitt Parrish",
+            "flavorText": "",
+            "typeText": "Tread carefully at this Exceptional Site"
+          }
+        ]
       }
     ]
   },
@@ -79618,6 +81039,35 @@
             "slug": "got-toolbox-b-f",
             "finish": "Foil",
             "product": "Booster",
+            "artist": "Drew Tucker",
+            "flavorText": "",
+            "typeText": "A Relic offers Exceptionally simple solutions"
+          }
+        ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Artifact",
+          "rulesText": "Sacrifice → Bearer may cast an Ordinary spell from your collection.",
+          "cost": 2,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-toolbox-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
             "artist": "Drew Tucker",
             "flavorText": "",
             "typeText": "A Relic offers Exceptionally simple solutions"
@@ -81216,6 +82666,35 @@
             "typeText": "An Elite Site and tempest in a teacup"
           }
         ]
+      },
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Once on your turn, you may fly a minion atop here onto a nearby site.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-wuthering_heights-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Drew Tucker",
+            "flavorText": "",
+            "typeText": "An Elite Site and tempest in a teacup"
+          }
+        ]
       }
     ]
   },
@@ -82096,6 +83575,3525 @@
             "artist": "Franck Pawlowski",
             "flavorText": "",
             "typeText": "An Elite Site sides with privilege"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Ancient Thaw",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Site",
+      "rulesText": "Genesis → Cast an @ Beast from your collection here, disabled until your next turn.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "None",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Genesis → Cast an @ Beast from your collection here, disabled until your next turn.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-ancient_thaw-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Michal Nagypál",
+            "flavorText": "",
+            "typeText": "An Elite Site where the first age stirs"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Arctic Fox",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Minion",
+      "rulesText": "Stealth, Can't be disabled\n\n(1), Banish this from your cemetery → An ally gains \"Stealth, Can't be disabled.\"",
+      "cost": 1,
+      "attack": 1,
+      "defence": 1,
+      "life": null,
+      "thresholds": {
+        "air": 1,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "Beast",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Stealth, Can't be disabled\n\n(1), Banish this from your cemetery → An ally gains \"Stealth, Can't be disabled.\"",
+          "cost": 1,
+          "attack": 1,
+          "defence": 1,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-arctic_fox-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Liz Danforth",
+            "flavorText": "",
+            "typeText": "An Exceptional Beast of cozy cover"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Aria Wraith",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Minion",
+      "rulesText": "Stealth\n\nBreak Stealth → Destroy all artifacts and disabled minions nearby.",
+      "cost": 3,
+      "attack": 2,
+      "defence": 2,
+      "life": null,
+      "thresholds": {
+        "air": 1,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "Spirit",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Minion",
+          "rulesText": "Stealth\n\nBreak Stealth → Destroy all artifacts and disabled minions nearby.",
+          "cost": 3,
+          "attack": 2,
+          "defence": 2,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-aria_wraith-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Melissa A. Benson",
+            "flavorText": "",
+            "typeText": "An Elite Spirit of fracturing chorus"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Ash of Effort",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Magic",
+      "rulesText": "Sacrifice a site to draw three sites.",
+      "cost": 2,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 2,
+        "water": 0
+      }
+    },
+    "elements": "Fire",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Magic",
+          "rulesText": "Sacrifice a site to draw three sites.",
+          "cost": 2,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 2,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-ash_of_effort-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Scott Kirschner",
+            "flavorText": "",
+            "typeText": "Elite Magic of obscene incentive"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Avalanche",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Site",
+      "rulesText": "Trap (2) → Snow flows forward, carrying and disabling surface units until your next turn.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 1,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Trap (2) → Snow flows forward, carrying and disabling surface units until your next turn.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-avalanche-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Michal Nagypál",
+            "flavorText": "",
+            "typeText": "An Elite Site and the fastest way down"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "A Yeti So Shy",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Minion",
+      "rulesText": "Stealth, Outerbound",
+      "cost": 3,
+      "attack": 4,
+      "defence": 4,
+      "life": null,
+      "thresholds": {
+        "air": 2,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "Giant",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Minion",
+          "rulesText": "Stealth, Outerbound",
+          "cost": 3,
+          "attack": 4,
+          "defence": 4,
+          "life": null,
+          "thresholds": {
+            "air": 2,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-a_yeti_so_shy-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Vincent Pompetti",
+            "flavorText": "",
+            "typeText": "An Elite Giant too scared to say hi"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Bearserker",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Minion",
+      "rulesText": "(W)(W) -- You may pay the difference in cost to transform a Mortal or Bear into Bearserker from hand, untapped.",
+      "cost": 5,
+      "attack": 4,
+      "defence": 4,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 1
+      }
+    },
+    "elements": "Water",
+    "subTypes": "Beast, Mortal",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "(W)(W) -- You may pay the difference in cost to transform a Mortal or Bear into Bearserker from hand, untapped.",
+          "cost": 5,
+          "attack": 4,
+          "defence": 4,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-bearserker-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Alan Pollack",
+            "flavorText": "",
+            "typeText": "An Exceptional Mortal with the heart of a Beast"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Bouldermaw",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Site",
+      "rulesText": "Trap (6) → Roll a Rolling Boulder in your collection from here.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 1,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Trap (6) → Roll a Rolling Boulder in your collection from here.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-bouldermaw-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Dan Seagrave",
+            "flavorText": "",
+            "typeText": "An Elite Site, this ride flattens pride!"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Chart",
+    "guardian": {
+      "rarity": "Ordinary",
+      "type": "Magic",
+      "rulesText": "Draw two sites.",
+      "cost": 2,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 2,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Magic",
+          "rulesText": "Draw two sites.",
+          "cost": 2,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 2,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-chart-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Francesca Baerald",
+            "flavorText": "",
+            "typeText": "Ordinary Magic to plan an expedition"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Combusting Busts",
+    "guardian": {
+      "rarity": "Ordinary",
+      "type": "Site",
+      "rulesText": "Trap (4) → Deal 3 damage to each unit at another target adjacent location.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 1,
+        "water": 0
+      }
+    },
+    "elements": "Fire",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Site",
+          "rulesText": "Trap (4) → Deal 3 damage to each unit at another target adjacent location.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-combusting_busts-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Drew Tucker",
+            "flavorText": "",
+            "typeText": "An Ordinary Site, misstep and you're dust!"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Deep Snow",
+    "guardian": {
+      "rarity": "Ordinary",
+      "type": "Site",
+      "rulesText": "Trap (1) → Tap minions at one adjacent site. They don't untap the next time they would.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 1,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Site",
+          "rulesText": "Trap (1) → Tap minions at one adjacent site. They don't untap the next time they would.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-deep_snow-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Jussi Pylkäs",
+            "flavorText": "",
+            "typeText": "An Ordinary Site of impeding powder"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Dust Devil",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Minion",
+      "rulesText": "Movement +1\n\nTakes no damage while attacking.",
+      "cost": 3,
+      "attack": 2,
+      "defence": 2,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 2,
+        "water": 0
+      }
+    },
+    "elements": "Fire",
+    "subTypes": "Demon",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Movement +1\n\nTakes no damage while attacking.",
+          "cost": 3,
+          "attack": 2,
+          "defence": 2,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 2,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-dust_devil-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Lindsey Crummett",
+            "flavorText": "",
+            "typeText": "An Exceptional Demon of blinding fury"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Emberleaf Dryad",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Minion",
+      "rulesText": "Genesis → Play a site from the top of your atlas to an adjacent Rubble.",
+      "cost": 2,
+      "attack": 2,
+      "defence": 2,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 1,
+        "fire": 1,
+        "water": 0
+      }
+    },
+    "elements": "Earth, Fire",
+    "subTypes": "Spirit",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Minion",
+          "rulesText": "Genesis → Play a site from the top of your atlas to an adjacent Rubble.",
+          "cost": 2,
+          "attack": 2,
+          "defence": 2,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-emberleaf_dryad-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Elwira Pawlikowska",
+            "flavorText": "",
+            "typeText": "An Elite Spirit of ash and bloom"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Flametongue Newt",
+    "guardian": {
+      "rarity": "Ordinary",
+      "type": "Minion",
+      "rulesText": "Once on your turn, may just for fun, shoot a projectile that deals damage 1.",
+      "cost": 2,
+      "attack": 1,
+      "defence": 1,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 2,
+        "water": 0
+      }
+    },
+    "elements": "Fire",
+    "subTypes": "Beast",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Minion",
+          "rulesText": "Once on your turn, may just for fun, shoot a projectile that deals damage 1.",
+          "cost": 2,
+          "attack": 1,
+          "defence": 1,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 2,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-flametongue_newt-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Séverine Pineaux",
+            "flavorText": "",
+            "typeText": "An Ordinary Beast is fiery but cute"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Flat Realm Society",
+    "guardian": {
+      "rarity": "Unique",
+      "type": "Minion",
+      "rulesText": "Stealth\n\nEdges of the realm can't be connected, crossed, or shifted.",
+      "cost": 3,
+      "attack": 3,
+      "defence": 3,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 2,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "Mortal",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Unique",
+          "type": "Minion",
+          "rulesText": "Stealth\n\nEdges of the realm can't be connected, crossed, or shifted.",
+          "cost": 3,
+          "attack": 3,
+          "defence": 3,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 2,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-flat_realm_society-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Séverine Pineaux",
+            "flavorText": "",
+            "typeText": "Unique Mortals were right all along"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Frostbolt",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Magic",
+      "rulesText": "Shoot a 3-damage projectile. On impact, all adjacent units are disabled until your next turn.",
+      "cost": 3,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 1,
+        "earth": 0,
+        "fire": 0,
+        "water": 1
+      }
+    },
+    "elements": "Water, Air",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Magic",
+          "rulesText": "Shoot a 3-damage projectile. On impact, all adjacent units are disabled until your next turn.",
+          "cost": 3,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-frostbolt-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Elwira Pawlikowska",
+            "flavorText": "",
+            "typeText": "Flash-frozen by Exceptional Magic!"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Frost Breath",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Magic",
+      "rulesText": "May be cast by a Beast or Spirit. Each unit at affected locations takes damage and is disabled until your next turn.",
+      "cost": 4,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 2
+      }
+    },
+    "elements": "Water",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Magic",
+          "rulesText": "May be cast by a Beast or Spirit. Each unit at affected locations takes damage and is disabled until your next turn.",
+          "cost": 4,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 2
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-frost_breath-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Truitt Parrish",
+            "flavorText": "",
+            "typeText": "Exceptional Magic of winter's kiss"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Frost Elemental",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Minion",
+      "rulesText": "Air and Water Spellcaster\n\nGenesis → Disable target adjacent unit until your next turn.",
+      "cost": 4,
+      "attack": 4,
+      "defence": 4,
+      "life": null,
+      "thresholds": {
+        "air": 2,
+        "earth": 0,
+        "fire": 0,
+        "water": 2
+      }
+    },
+    "elements": "Water, Air",
+    "subTypes": "Spirit",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Air and Water Spellcaster\n\nGenesis → Disable target adjacent unit until your next turn.",
+          "cost": 4,
+          "attack": 4,
+          "defence": 4,
+          "life": null,
+          "thresholds": {
+            "air": 2,
+            "earth": 0,
+            "fire": 0,
+            "water": 2
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-frost_elemental-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Brian Smith",
+            "flavorText": "",
+            "typeText": "An Exceptional Spirit of bitter hatred"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Frost Mage",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Avatar",
+      "rulesText": "Tap → Play or draw a site.\n\n(A)(A)(W)(W), (2), Once on your turn → Encase target nearby minion in ice. It is disabled and takes no damage until your next turn.",
+      "cost": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "None",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Avatar",
+          "rulesText": "Tap → Play or draw a site.\n\n(A)(A)(W)(W), (2), Once on your turn → Encase target nearby minion in ice. It is disabled and takes no damage until your next turn.",
+          "cost": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-frost_mage-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Melissa A. Benson",
+            "flavorText": "",
+            "typeText": "Your Avatar knocks them out cold"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Full-tilt Goliaths",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Minion",
+      "rulesText": "Charge\n\nGenesis → Cover nearby sites with silencing snow until your next turn.",
+      "cost": 7,
+      "attack": 5,
+      "defence": 5,
+      "life": null,
+      "thresholds": {
+        "air": 2,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "Giant",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Minion",
+          "rulesText": "Charge\n\nGenesis → Cover nearby sites with silencing snow until your next turn.",
+          "cost": 7,
+          "attack": 5,
+          "defence": 5,
+          "life": null,
+          "thresholds": {
+            "air": 2,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-full_tilt_goliaths-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Rodney Matthews",
+            "flavorText": "",
+            "typeText": "Elite Giants enjoy the thrill of the hill"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Gnarled Laborers",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Minion",
+      "rulesText": "Untaps the first time they take damage each turn.",
+      "cost": 3,
+      "attack": 3,
+      "defence": 3,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 1,
+        "water": 0
+      }
+    },
+    "elements": "Fire",
+    "subTypes": "Mortal",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Untaps the first time they take damage each turn.",
+          "cost": 3,
+          "attack": 3,
+          "defence": 3,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-gnarled_laborers-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Paul Carrick",
+            "flavorText": "",
+            "typeText": "Exceptional Mortals under the lash"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Ground Slam",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Magic",
+      "rulesText": "An ally strikes its site. Deal 2 damage to other units at nearby sites.",
+      "cost": 4,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 1,
+        "fire": 1,
+        "water": 0
+      }
+    },
+    "elements": "Earth, Fire",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Magic",
+          "rulesText": "An ally strikes its site. Deal 2 damage to other units at nearby sites.",
+          "cost": 4,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-ground_slam-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Alan Pollack",
+            "flavorText": "",
+            "typeText": "Exceptional Magic drops the hammer"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Hailstriker",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Minion",
+      "rulesText": "Ranged\n\nGenesis → Target an adjacent location. Each minion there takes 1 damage and is disabled until your next turn.",
+      "cost": 4,
+      "attack": 3,
+      "defence": 3,
+      "life": null,
+      "thresholds": {
+        "air": 1,
+        "earth": 0,
+        "fire": 0,
+        "water": 1
+      }
+    },
+    "elements": "Water, Air",
+    "subTypes": "Demon",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Minion",
+          "rulesText": "Ranged\n\nGenesis → Target an adjacent location. Each minion there takes 1 damage and is disabled until your next turn.",
+          "cost": 4,
+          "attack": 3,
+          "defence": 3,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-hailstriker-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Zohn Dee",
+            "flavorText": "",
+            "typeText": "An Elite Demon brings a boreal barrage"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Hibernal Legion",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Minion",
+      "rulesText": "At the end of your turn, freeze this site and other minions here. They're disabled until the Legion leaves the realm.",
+      "cost": 6,
+      "attack": 5,
+      "defence": 5,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 3
+      }
+    },
+    "elements": "Water",
+    "subTypes": "Spirit",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Minion",
+          "rulesText": "At the end of your turn, freeze this site and other minions here. They're disabled until the Legion leaves the realm.",
+          "cost": 6,
+          "attack": 5,
+          "defence": 5,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 3
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-hibernal_legion-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Dan Seagrave",
+            "flavorText": "",
+            "typeText": "Elite Spirits bring a boundless brume"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Highgate Guide",
+    "guardian": {
+      "rarity": "Ordinary",
+      "type": "Minion",
+      "rulesText": "Nearby allies are Protected from sites.",
+      "cost": 2,
+      "attack": 2,
+      "defence": 2,
+      "life": null,
+      "thresholds": {
+        "air": 1,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "Mortal",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Minion",
+          "rulesText": "Nearby allies are Protected from sites.",
+          "cost": 2,
+          "attack": 2,
+          "defence": 2,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-highgate_guide-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Mattias Frisk",
+            "flavorText": "",
+            "typeText": "An Ordinary Mortal leads the way"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Humming Hummocks",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Site",
+      "rulesText": "Genesis → Until your next turn, nearby allies are Protected from all but units.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 1,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Genesis → Until your next turn, nearby allies are Protected from all but units.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-humming_hummocks-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Jeff A. Menges",
+            "flavorText": "",
+            "typeText": "An Elite Site where stones sing of safety"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Icicle Dome",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Site",
+      "rulesText": "Trap (1) → Destroy target adjacent disabled or immobile minion.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 1,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Trap (1) → Destroy target adjacent disabled or immobile minion.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-icicle_dome-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Brian Smith",
+            "flavorText": "",
+            "typeText": "An Elite Site puts them out of their misery"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Jormungand",
+    "guardian": {
+      "rarity": "Unique",
+      "type": "Minion",
+      "rulesText": "Occupies all outer locations safely, and can't be modified.",
+      "cost": 7,
+      "attack": 10,
+      "defence": 10,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 3
+      }
+    },
+    "elements": "Water",
+    "subTypes": "Monster",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Unique",
+          "type": "Minion",
+          "rulesText": "Occupies all outer locations safely, and can't be modified.",
+          "cost": 7,
+          "attack": 10,
+          "defence": 10,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 3
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-jormungand-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Truitt Parrish",
+            "flavorText": "",
+            "typeText": "A Unique Monster girds the realm"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Jussi Puffins",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Minion",
+      "rulesText": "Airborne, Submerge\n\nCan move as if the opposite edges of the realm were connected.",
+      "cost": 2,
+      "attack": 2,
+      "defence": 2,
+      "life": null,
+      "thresholds": {
+        "air": 1,
+        "earth": 0,
+        "fire": 0,
+        "water": 1
+      }
+    },
+    "elements": "Water, Air",
+    "subTypes": "Beast",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Airborne, Submerge\n\nCan move as if the opposite edges of the realm were connected.",
+          "cost": 2,
+          "attack": 2,
+          "defence": 2,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-jussi_puffins-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Jussi Pylkäs",
+            "flavorText": "",
+            "typeText": "Exceptional Beasts of curious migration"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "King Krakalak",
+    "guardian": {
+      "rarity": "Unique",
+      "type": "Minion",
+      "rulesText": "Genesis → Sacrifice this site to deal damage to each other unit at affected sites:",
+      "cost": 8,
+      "attack": 8,
+      "defence": 8,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 3,
+        "water": 0
+      }
+    },
+    "elements": "Fire",
+    "subTypes": "Demon",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Unique",
+          "type": "Minion",
+          "rulesText": "Genesis → Sacrifice this site to deal damage to each other unit at affected sites:",
+          "cost": 8,
+          "attack": 8,
+          "defence": 8,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 3,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-king_krakalak-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Francesca Baerald",
+            "flavorText": "",
+            "typeText": "A Unique Demon of ruinous reign"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Landslide",
+    "guardian": {
+      "rarity": "Ordinary",
+      "type": "Site",
+      "rulesText": "Trap (2) → Swap this site with another adjacent site.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 1,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Site",
+          "rulesText": "Trap (2) → Swap this site with another adjacent site.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-landslide-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Drew Tucker",
+            "flavorText": "",
+            "typeText": "An Ordinary Site shifts underfoot"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Lava Elemental",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Minion",
+      "rulesText": "Earth and Fire Spellcaster\n\nGenesis → Deal 2 damage to target adjacent unit.",
+      "cost": 4,
+      "attack": 4,
+      "defence": 4,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 2,
+        "fire": 2,
+        "water": 0
+      }
+    },
+    "elements": "Earth, Fire",
+    "subTypes": "Spirit",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Earth and Fire Spellcaster\n\nGenesis → Deal 2 damage to target adjacent unit.",
+          "cost": 4,
+          "attack": 4,
+          "defence": 4,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 2,
+            "fire": 2,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-lava_elemental-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Brian Smith",
+            "flavorText": "",
+            "typeText": "An Exceptional Spirit of seething desire"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Lavamancer",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Avatar",
+      "rulesText": "Tap → Play or draw a site.\n\n(E)(E)(F)(F), (3) → Pull apart a partial row or column, filling the resulting void with Rubble that deals 1 damage to minions near it.",
+      "cost": null,
+      "attack": 1,
+      "defence": 1,
+      "life": 20,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "None",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Avatar",
+          "rulesText": "Tap → Play or draw a site.\n\n(E)(E)(F)(F), (3) → Pull apart a partial row or column, filling the resulting void with Rubble that deals 1 damage to minions near it.",
+          "cost": null,
+          "attack": 1,
+          "defence": 1,
+          "life": 20,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-lavamancer-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Melissa A. Benson",
+            "flavorText": "",
+            "typeText": "Your Avatar turns up the heat"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Lone Wolf",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Minion",
+      "rulesText": "Stealth\n\nCan and must be cast to any location without allies nearby.",
+      "cost": 3,
+      "attack": 3,
+      "defence": 3,
+      "life": null,
+      "thresholds": {
+        "air": 1,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "Beast",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Stealth\n\nCan and must be cast to any location without allies nearby.",
+          "cost": 3,
+          "attack": 3,
+          "defence": 3,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-lone_wolf-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Truitt Parrish",
+            "flavorText": "",
+            "typeText": "An Exceptional Beast howls to none"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Man-made Ice Age",
+    "guardian": {
+      "rarity": "Unique",
+      "type": "Aura",
+      "rulesText": "Minions and artifacts atop affected sites are disabled.",
+      "cost": 6,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 3
+      }
+    },
+    "elements": "Water",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Unique",
+          "type": "Aura",
+          "rulesText": "Minions and artifacts atop affected sites are disabled.",
+          "cost": 6,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 3
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-man_made_ice_age-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Jussi Pylkäs",
+            "flavorText": "",
+            "typeText": "All is frozen solid in this Unique Aura"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Myrmidons",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Minion",
+      "rulesText": "Burrowing\n\nHas +1 power for each site in their span of land.",
+      "cost": 6,
+      "attack": 0,
+      "defence": 0,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 3,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "Beast",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Minion",
+          "rulesText": "Burrowing\n\nHas +1 power for each site in their span of land.",
+          "cost": 6,
+          "attack": 0,
+          "defence": 0,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 3,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-myrmidons-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Francesca Baerald",
+            "flavorText": "",
+            "typeText": "Elite Beasts go marching one by one"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Namira Cheetah",
+    "guardian": {
+      "rarity": "Ordinary",
+      "type": "Minion",
+      "rulesText": "Movement +3",
+      "cost": 2,
+      "attack": 2,
+      "defence": 2,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 1,
+        "water": 0
+      }
+    },
+    "elements": "Fire",
+    "subTypes": "Beast",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Minion",
+          "rulesText": "Movement +3",
+          "cost": 2,
+          "attack": 2,
+          "defence": 2,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-namira_cheetah-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Elvira Shakirova",
+            "flavorText": "",
+            "typeText": "An Ordinary Beast, fleet of foot"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Nanurluk",
+    "guardian": {
+      "rarity": "Unique",
+      "type": "Minion",
+      "rulesText": "Has Charge if there are Bears or sites in your cemetery.",
+      "cost": 6,
+      "attack": 6,
+      "defence": 6,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 3
+      }
+    },
+    "elements": "Water",
+    "subTypes": "Spirit",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Unique",
+          "type": "Minion",
+          "rulesText": "Has Charge if there are Bears or sites in your cemetery.",
+          "cost": 6,
+          "attack": 6,
+          "defence": 6,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 3
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-nanurluk-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Brian Smith",
+            "flavorText": "",
+            "typeText": "A Unique Spirit Beast, blizzard given flesh"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "None Survive the Sun",
+    "guardian": {
+      "rarity": "Unique",
+      "type": "Aura",
+      "rulesText": "At the end of each turn, minions on the surface burn. Those here take 20 damage, those elsewhere take 1. Then the sun moves one step westward, or it is dispelled.",
+      "cost": 6,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 3,
+        "water": 0
+      }
+    },
+    "elements": "Fire",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Unique",
+          "type": "Aura",
+          "rulesText": "At the end of each turn, minions on the surface burn. Those here take 20 damage, those elsewhere take 1. Then the sun moves one step westward, or it is dispelled.",
+          "cost": 6,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 3,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-none_survive_the_sun-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Jussi Pylkäs",
+            "flavorText": "",
+            "typeText": "You'd better run from this Unique Aura"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Pass-plug Serpent",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Minion",
+      "rulesText": "Burrowing\n\nWhenever an enemy enters the surface of a nearby allied site, if the Serpent is underground, it may unburrow there.",
+      "cost": 4,
+      "attack": 4,
+      "defence": 4,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 2,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "Beast",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Minion",
+          "rulesText": "Burrowing\n\nWhenever an enemy enters the surface of a nearby allied site, if the Serpent is underground, it may unburrow there.",
+          "cost": 4,
+          "attack": 4,
+          "defence": 4,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 2,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-pass_plug_serpent-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Rodney Matthews",
+            "flavorText": "",
+            "typeText": "Suddenly, an Elite Beast blocks the path!"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Permafrost",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Site",
+      "rulesText": "Disable effects on minions here are permanent, but are removed if they leave.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 1
+      }
+    },
+    "elements": "Water",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Disable effects on minions here are permanent, but are removed if they leave.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-permafrost-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Zohn Dee",
+            "flavorText": "",
+            "typeText": "An Elite Site and final resting place"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Polar Shift",
+    "guardian": {
+      "rarity": "Unique",
+      "type": "Magic",
+      "rulesText": "Shift the realm north or south, moving all sites one step as if the top and bottom edges were connected. Draw a spell.",
+      "cost": 3,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 2,
+        "earth": 0,
+        "fire": 0,
+        "water": 2
+      }
+    },
+    "elements": "Water, Air",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Unique",
+          "type": "Magic",
+          "rulesText": "Shift the realm north or south, moving all sites one step as if the top and bottom edges were connected. Draw a spell.",
+          "cost": 3,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 2,
+            "earth": 0,
+            "fire": 0,
+            "water": 2
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-polar_shift-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Emil Idzikowski",
+            "flavorText": "",
+            "typeText": "Unique Magic confounds the compass"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Reed Cord Measurer",
+    "guardian": {
+      "rarity": "Ordinary",
+      "type": "Minion",
+      "rulesText": "Genesis → Play or draw a site.",
+      "cost": 3,
+      "attack": 1,
+      "defence": 1,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 1,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "Mortal",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Minion",
+          "rulesText": "Genesis → Play or draw a site.",
+          "cost": 3,
+          "attack": 1,
+          "defence": 1,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-reed_cord_measurer-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Pedro Ferreira",
+            "flavorText": "",
+            "typeText": "An Exceptional Mortal sets the bounds"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Research",
+    "guardian": {
+      "rarity": "Ordinary",
+      "type": "Magic",
+      "rulesText": "Draw two spells.",
+      "cost": 3,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 2,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Magic",
+          "rulesText": "Draw two spells.",
+          "cost": 3,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 2,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-research-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Pedro Ferreira",
+            "flavorText": "",
+            "typeText": "The Ordinary Magic behind every spell"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Rite of Eruption",
+    "guardian": {
+      "rarity": "Unique",
+      "type": "Aura",
+      "rulesText": "Conjure to a single site. At the start of your turn, deal damage to each unit at affected sites, then destroy everything in this square.",
+      "cost": 5,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 2,
+        "fire": 2,
+        "water": 0
+      }
+    },
+    "elements": "Earth, Fire",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Unique",
+          "type": "Aura",
+          "rulesText": "Conjure to a single site. At the start of your turn, deal damage to each unit at affected sites, then destroy everything in this square.",
+          "cost": 5,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 2,
+            "fire": 2,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-rite_of_eruption-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Mattias Frisk",
+            "flavorText": "",
+            "typeText": "A Unique Aura of pressurized trauma"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Runeling",
+    "guardian": {
+      "rarity": "Ordinary",
+      "type": "Minion",
+      "rulesText": "Spellcaster\n\nGenesis → Draws his own spell, which only he can cast.",
+      "cost": 2,
+      "attack": 1,
+      "defence": 1,
+      "life": null,
+      "thresholds": {
+        "air": 1,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "Mortal",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Minion",
+          "rulesText": "Spellcaster\n\nGenesis → Draws his own spell, which only he can cast.",
+          "cost": 2,
+          "attack": 1,
+          "defence": 1,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-runeling-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Pedro Ferreira",
+            "flavorText": "",
+            "typeText": "An Exceptional Mortal, newly etched"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Scoria",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Site",
+      "rulesText": "Your (E) and (F) are equal to the higher of the two.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "None",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Your (E) and (F) are equal to the higher of the two.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-scoria-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Mark Poole",
+            "flavorText": "",
+            "typeText": "An Elite Site where ember becomes ore"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Shatter",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Magic",
+      "rulesText": "Destroy a nearby target artifact or disabled minion.",
+      "cost": 1,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 1,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Magic",
+          "rulesText": "Destroy a nearby target artifact or disabled minion.",
+          "cost": 1,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-shatter-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Jussi Pylkäs",
+            "flavorText": "",
+            "typeText": "Exceptional Magic breaks the ice"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Sissi Marksmen",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Minion",
+      "rulesText": "Ranged\n\nMay shoot across the top and bottom edges of the realm.",
+      "cost": 2,
+      "attack": 2,
+      "defence": 2,
+      "life": null,
+      "thresholds": {
+        "air": 2,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "Mortal",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Ranged\n\nMay shoot across the top and bottom edges of the realm.",
+          "cost": 2,
+          "attack": 2,
+          "defence": 2,
+          "life": null,
+          "thresholds": {
+            "air": 2,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-sissi_marksmen-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Truitt Parrish",
+            "flavorText": "",
+            "typeText": "Exceptional Mortals harry from on high"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Slag Slug",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Minion",
+      "rulesText": "Whenever the Slug leaves a site, it deals 2 damage to units there.",
+      "cost": 4,
+      "attack": 4,
+      "defence": 4,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 1,
+        "fire": 1,
+        "water": 0
+      }
+    },
+    "elements": "Earth, Fire",
+    "subTypes": "Beast",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Whenever the Slug leaves a site, it deals 2 damage to units there.",
+          "cost": 4,
+          "attack": 4,
+          "defence": 4,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-slag_slug-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Lindsey Crummett",
+            "flavorText": "",
+            "typeText": "An Exceptional Beast is very, very sorry"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Slide",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Magic",
+      "rulesText": "Slide an ally or disabled enemy as far as possible in a cardinal direction. Draw a spell.",
+      "cost": 2,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 2,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Magic",
+          "rulesText": "Slide an ally or disabled enemy as far as possible in a cardinal direction. Draw a spell.",
+          "cost": 2,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 2,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-slide-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Paul Carrick",
+            "flavorText": "",
+            "typeText": "Exceptional Magic of glacial gliding"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Smoldering Hollow",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Site",
+      "rulesText": "Genesis → Damage dealt to nearby units is increased by 1 this turn.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 1,
+        "water": 0
+      }
+    },
+    "elements": "Fire",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Genesis → Damage dealt to nearby units is increased by 1 this turn.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-smoldering_hollow-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Brian Smith",
+            "flavorText": "",
+            "typeText": "An Elite Site adds insult to injury"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Snapjaw Raptor",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Minion",
+      "rulesText": "Charge, Stealth",
+      "cost": 2,
+      "attack": 2,
+      "defence": 2,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 2,
+        "water": 0
+      }
+    },
+    "elements": "Fire",
+    "subTypes": "Beast",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Charge, Stealth",
+          "cost": 2,
+          "attack": 2,
+          "defence": 2,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 2,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-snapjaw_raptor-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Alan Pollack",
+            "flavorText": "",
+            "typeText": "An Exceptional Beast, ever so clever"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Southpaw Dyrodor",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Minion",
+      "rulesText": "Tap → Dyrodor swings its tail left to right, dealing damage to each unit at affected locations.",
+      "cost": 4,
+      "attack": 4,
+      "defence": 4,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 2,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "Beast",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Tap → Dyrodor swings its tail left to right, dealing damage to each unit at affected locations.",
+          "cost": 4,
+          "attack": 4,
+          "defence": 4,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 2,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-southpaw_dyrodor-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Melissa A. Benson",
+            "flavorText": "",
+            "typeText": "An Exceptional Beast with a sinister side"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Spike Trap",
+    "guardian": {
+      "rarity": "Ordinary",
+      "type": "Site",
+      "rulesText": "Trap (1) → Deal 3 damage to a unit here.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 1,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Site",
+          "rulesText": "Trap (1) → Deal 3 damage to a unit here.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-spike_trap-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Bryon Wackwitz",
+            "flavorText": "",
+            "typeText": "An Ordinary Site of barbed betrayal"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Springstem Meadow",
+    "guardian": {
+      "rarity": "Ordinary",
+      "type": "Site",
+      "rulesText": "Trap (1) → Fling a unit atop this site onto a nearby site.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 1,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Site",
+          "rulesText": "Trap (1) → Fling a unit atop this site onto a nearby site.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 1,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-springstem_meadow-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Scott Kirschner",
+            "flavorText": "",
+            "typeText": "An Ordinary Site of buoyant jounce"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Stiff-pitch Witch",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Minion",
+      "rulesText": "Tap, Banish a dead minion → Target a location up to three steps away. Each unit there takes 2 damage.",
+      "cost": 4,
+      "attack": 4,
+      "defence": 4,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 1,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "Spirit",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Minion",
+          "rulesText": "Tap, Banish a dead minion → Target a location up to three steps away. Each unit there takes 2 damage.",
+          "cost": 4,
+          "attack": 4,
+          "defence": 4,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-stiff_pitch_witch-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Scott Kirschner",
+            "flavorText": "",
+            "typeText": "Elite Spirits return to sender"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Stomping Mammoth",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Minion",
+      "rulesText": "While attacking, the Mammoth's excess damage is dealt to its site.",
+      "cost": 4,
+      "attack": 4,
+      "defence": 4,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 1
+      }
+    },
+    "elements": "Water",
+    "subTypes": "Beast",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "While attacking, the Mammoth's excess damage is dealt to its site.",
+          "cost": 4,
+          "attack": 4,
+          "defence": 4,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 1
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-stomping_mammoth-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Juan Machuca",
+            "flavorText": "",
+            "typeText": "Trampled by an Exceptional Beast!"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Sulfur Vents",
+    "guardian": {
+      "rarity": "Ordinary",
+      "type": "Site",
+      "rulesText": "Trap (1) → Deal 1 damage to each adjacent minion.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 1,
+        "water": 0
+      }
+    },
+    "elements": "Fire",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Site",
+          "rulesText": "Trap (1) → Deal 1 damage to each adjacent minion.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-sulfur_vents-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Dan Seagrave",
+            "flavorText": "",
+            "typeText": "An Ordinary Site chokes the air"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Sunspear Tribe",
+    "guardian": {
+      "rarity": "Ordinary",
+      "type": "Minion",
+      "rulesText": "Once per game → Throw a projectile that deals 1 damage.",
+      "cost": 3,
+      "attack": 3,
+      "defence": 3,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 2,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "Mortal",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Ordinary",
+          "type": "Minion",
+          "rulesText": "Once per game → Throw a projectile that deals 1 damage.",
+          "cost": 3,
+          "attack": 3,
+          "defence": 3,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 2,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-sunspear_tribe-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Scott Kirschner",
+            "flavorText": "",
+            "typeText": "Ordinary Mortals as inevitable as dawn"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Supervolcano",
+    "guardian": {
+      "rarity": "Unique",
+      "type": "Site",
+      "rulesText": "(F)(F)(F) -- Trap (7) → All minions on the surface take 20 damage.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 1,
+        "water": 0
+      }
+    },
+    "elements": "Fire",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Unique",
+          "type": "Site",
+          "rulesText": "(F)(F)(F) -- Trap (7) → All minions on the surface take 20 damage.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-supervolcano-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Emil Idzikowski",
+            "flavorText": "",
+            "typeText": "A Unique Site at the heart of extinction"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Swealand Longship",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Minion",
+      "rulesText": "Once on your turn, may move to an adjacent water site.",
+      "cost": 4,
+      "attack": 4,
+      "defence": 4,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 2
+      }
+    },
+    "elements": "Water",
+    "subTypes": "Mortal",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Minion",
+          "rulesText": "Once on your turn, may move to an adjacent water site.",
+          "cost": 4,
+          "attack": 4,
+          "defence": 4,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 2
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-swealand_longship-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Melissa A. Benson",
+            "flavorText": "",
+            "typeText": "Exceptional Mortals claim the shallows"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Terraform",
+    "guardian": {
+      "rarity": "Unique",
+      "type": "Magic",
+      "rulesText": "Replace sites in this column with ones from the top of their controller's atlas, starting at your back row going forwards.",
+      "cost": 1,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 3,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Unique",
+          "type": "Magic",
+          "rulesText": "Replace sites in this column with ones from the top of their controller's atlas, starting at your back row going forwards.",
+          "cost": 1,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 3,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-terraform-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Elvira Shakirova",
+            "flavorText": "",
+            "typeText": "A realm reborn by Unique Magic"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "The White Death",
+    "guardian": {
+      "rarity": "Unique",
+      "type": "Minion",
+      "rulesText": "Ranged 3, Stealth\n\nLethal while Stealthed.",
+      "cost": 2,
+      "attack": 2,
+      "defence": 2,
+      "life": null,
+      "thresholds": {
+        "air": 2,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "Mortal",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Unique",
+          "type": "Minion",
+          "rulesText": "Ranged 3, Stealth\n\nLethal while Stealthed.",
+          "cost": 2,
+          "attack": 2,
+          "defence": 2,
+          "life": null,
+          "thresholds": {
+            "air": 2,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-the_white_death-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Paul Carrick",
+            "flavorText": "",
+            "typeText": "A Unique Mortal with an iron-blue sight"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Trapper's Rest",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Site",
+      "rulesText": "Genesis → You may reactivate an adjacent Trap for (1) less.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 1,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Site",
+          "rulesText": "Genesis → You may reactivate an adjacent Trap for (1) less.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 1,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-trappers_rest-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Caio Calazans",
+            "flavorText": "",
+            "typeText": "An Exceptional Site where patience pays off"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Tundra",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Site",
+      "rulesText": "Your (A) and (W) are equal to the higher of the two.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "None",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Site",
+          "rulesText": "Your (A) and (W) are equal to the higher of the two.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-tundra-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Mark Poole",
+            "flavorText": "",
+            "typeText": "An Elite Site where breath becomes mist"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Tusslin' Trolls",
+    "guardian": {
+      "rarity": "Elite",
+      "type": "Minion",
+      "rulesText": "At the end of your turn, strike target adjacent minion for D6 damage.",
+      "cost": 5,
+      "attack": 4,
+      "defence": 4,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 2,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Earth",
+    "subTypes": "Giant",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Elite",
+          "type": "Minion",
+          "rulesText": "At the end of your turn, strike target adjacent minion for D6 damage.",
+          "cost": 5,
+          "attack": 4,
+          "defence": 4,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 2,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-tusslin_trolls-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Emil Idzikowski",
+            "flavorText": "",
+            "typeText": "Elite Giants form a fit of flailing fists"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Volcanic Eruption",
+    "guardian": {
+      "rarity": "Exceptional",
+      "type": "Site",
+      "rulesText": "Trap (2) → Shoot three 1-damage projectiles in different cardinal directions.",
+      "cost": null,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 0,
+        "earth": 0,
+        "fire": 1,
+        "water": 0
+      }
+    },
+    "elements": "Fire",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Exceptional",
+          "type": "Site",
+          "rulesText": "Trap (2) → Shoot three 1-damage projectiles in different cardinal directions.",
+          "cost": null,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 0,
+            "earth": 0,
+            "fire": 1,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-volcanic_eruption-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Ralph Horsley",
+            "flavorText": "",
+            "typeText": "An Exceptional Site of tectonic release"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "When the Peaks Fell",
+    "guardian": {
+      "rarity": "Unique",
+      "type": "Magic",
+      "rulesText": "Choose any number of allied sites. Snow rolls forward from them, picking up surface units in its path and carrying them as far as possible. When it stops, they take 3 damage and are disabled until your next turn.",
+      "cost": 5,
+      "attack": null,
+      "defence": null,
+      "life": null,
+      "thresholds": {
+        "air": 3,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "elements": "Air",
+    "subTypes": "",
+    "sets": [
+      {
+        "name": "Frost Mage Vs. Lavamancer",
+        "releasedAt": "2026-11-12T11:00:00.000Z",
+        "metadata": {
+          "rarity": "Unique",
+          "type": "Magic",
+          "rulesText": "Choose any number of allied sites. Snow rolls forward from them, picking up surface units in its path and carrying them as far as possible. When it stops, they take 3 damage and are disabled until your next turn.",
+          "cost": 5,
+          "attack": null,
+          "defence": null,
+          "life": null,
+          "thresholds": {
+            "air": 3,
+            "earth": 0,
+            "fire": 0,
+            "water": 0
+          }
+        },
+        "variants": [
+          {
+            "slug": "fvl-when_the_peaks_fell-pd-s",
+            "finish": "Standard",
+            "product": "Preconstructed_Deck",
+            "artist": "Jussi Pylkäs",
+            "flavorText": "",
+            "typeText": "Unique Magic thunders down the mountain"
           }
         ]
       }

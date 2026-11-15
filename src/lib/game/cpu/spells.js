@@ -272,9 +272,10 @@ function computeStealth(state,unit) {
 }
 
 /** Minions printing Stealth on their keyword line in data/cards_raw.json; covers hand cards that carry no rules text. */
-const PRINTED_STEALTH = new Set(['Asmodeus','Band of Thieves','Dead of Night Demon','Draco Corvus','Far East Assassin',
-  'Frozen Horror','Gossamer Ghost','Jack the Ripper','Kingswood Poachers','Midnight Rogue','Morgana le Fay','Moss Troll',
-  'Questing Beast','Sir Agravaine','Sneak Thief','Winter Nymph']);
+const PRINTED_STEALTH = new Set(['A Yeti So Shy','Arctic Fox','Aria Wraith','Asmodeus','Band of Thieves','Dead of Night Demon',
+  'Draco Corvus','Far East Assassin','Flat Realm Society','Frozen Horror','Gossamer Ghost','Jack the Ripper','Kingswood Poachers',
+  'Lone Wolf','Midnight Rogue','Morgana le Fay','Moss Troll','Questing Beast','Sir Agravaine','Snapjaw Raptor','Sneak Thief',
+  'The White Death','Winter Nymph']);
 
 /** Stealth as a keyword, not a card that only names it (Scent Hounds, Phase Assassin, Sly Fox).
  * @param {CardRef | null | undefined} card @returns {boolean} */
@@ -586,7 +587,8 @@ function getAttackTargets(state, attacker, at = attacker.at) {
  * keyword (Ribble Boggart's random mutations) is not a keyword line. @param {string} text @param {string} keyword */
 function keywordValue(text, keyword) {
   const tokens = text.split(/\r?\n/)[0].split(',').map(token => token.trim());
-  if (!tokens.every(token => /^[A-Z][\w+-]*(?: [\w+-]+)*$/.test(token))) return 0;
+  // Apostrophes too: Arctic Fox's keyword line is "Stealth, Can't be disabled"
+  if (!tokens.every(token => /^[A-Z][\w'+-]*(?: [\w'+-]+)*$/.test(token))) return 0;
   const match = tokens.map(token => new RegExp(`^${keyword}(?: (\\d+))?$`).exec(token)).find(Boolean);
   return match ? Number(match[1] || 1) : 0;
 }

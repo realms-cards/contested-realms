@@ -56,6 +56,19 @@ const SET_PREFIXES = {
   got: "gothic",
   gth: "gothic",
   pro: "promo", // Organized Play / Promo cards
+  fvl: "fvl", // Frost Mage Vs. Lavamancer precon set
+};
+
+// The upstream API (and its art exports) prefix slugs with the numeric set code
+// (008-frost_mage-pd-s); our slugs and asset dirs key off the 3-letter prefix.
+const SET_CODE_PREFIXES = {
+  "001": "alp",
+  "002": "bet",
+  "004": "art",
+  "005": "dra",
+  "006": "got",
+  "008": "fvl",
+  "999": "pro",
 };
 
 /**
@@ -64,8 +77,12 @@ const SET_PREFIXES = {
  * Output: alp_abundance_b_f
  */
 function filenameToSlug(filename) {
-  // Remove extension
-  const base = filename.replace(/\.[^.]+$/, "");
+  // Remove extension; rewrite a numeric set code to our 3-letter prefix
+  const base = filename
+    .replace(/\.[^.]+$/, "")
+    .replace(/^(\d{3})-/, (m, code) =>
+      SET_CODE_PREFIXES[code] ? `${SET_CODE_PREFIXES[code]}-` : m,
+    );
 
   // Extract set prefix (first 3 chars)
   const prefix = base.slice(0, 3).toLowerCase();

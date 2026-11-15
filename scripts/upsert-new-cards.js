@@ -15,6 +15,12 @@
     node scripts/upsert-new-cards.js            # upsert the default NEW_CARD_NAMES
     node scripts/upsert-new-cards.js --dry-run  # report what would change, write nothing
     node scripts/upsert-new-cards.js --names "Mock Court,Court of Equity"
+    node scripts/upsert-new-cards.js --set "Frost Mage Vs. Lavamancer"
+                    # every card printed in that set; only that set's metadata
+                    # and variants are written, so reprints keep their old sets
+
+  Registry ids (Card.codexId / Variant.printingId) are stamped from
+  data/registry/printing-index.json when it knows the printing.
 */
 // Load .env for local development
 try {
@@ -42,12 +48,30 @@ function argValue(flag) {
   return i !== -1 && argv[i + 1] ? argv[i + 1] : null;
 }
 const namesArg = argValue("--names");
+const SET_FILTER = argValue("--set");
 const NEW_CARD_NAMES = namesArg
   ? namesArg
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean)
   : DEFAULT_NEW_CARD_NAMES;
+
+/** printing-index lookups keyed by our (legacy) slug; null when not vendored */
+function loadRegistryIndex() {
+  const file = path.join(process.cwd(), "data", "registry", "printing-index.json");
+  if (!fs.existsSync(file)) return null;
+  return JSON.parse(fs.readFileSync(file, "utf8"));
+}
+
+function registryIds(index, slug) {
+  if (!index) return { printingId: null, codexId: null };
+  const key = String(slug).trim().toLowerCase();
+  const printingId = index.byLegacySlug[key] || index.bySlug[key] || null;
+  return {
+    printingId,
+    codexId: printingId ? index.codexByPrinting[printingId] || null : null,
+  };
+}
 
 // --- Enum mapping (mirrors scripts/ingest-cards.js) ---
 function mapRarity(r) {
@@ -88,7 +112,9 @@ function computeImageBasename(slug) {
 async function main() {
   console.log("=== Upsert New Cards ===");
   console.log(`Mode:  ${DRY_RUN ? "DRY RUN (no writes)" : "WRITE"}`);
-  console.log(`Cards: ${NEW_CARD_NAMES.join(", ")}`);
+  console.log(
+    SET_FILTER ? `Set:   ${SET_FILTER}` : `Cards: ${NEW_CARD_NAMES.join(", ")}`,
+  );
   try {
     const u = new URL(process.env.DATABASE_URL || "");
     console.log(`DB:    ${u.hostname}${u.pathname}`);
@@ -99,12 +125,24 @@ async function main() {
 
   const rawPath = path.join(process.cwd(), "data", "cards_raw.json");
   const cards = JSON.parse(fs.readFileSync(rawPath, "utf-8"));
+  const registry = loadRegistryIndex();
+  if (!registry) {
+    console.warn("data/registry/printing-index.json missing - no registry ids");
+  }
   const wanted = new Set(NEW_CARD_NAMES);
-  const selected = cards.filter((c) => wanted.has(c.name));
+  const selected = SET_FILTER
+    ? cards.filter((c) => (c.sets || []).some((s) => s.name === SET_FILTER))
+    : cards.filter((c) => wanted.has(c.name));
 
-  const missing = [...wanted].filter(
-    (n) => !selected.some((c) => c.name === n),
-  );
+  if (SET_FILTER && !selected.length) {
+    console.error(`ERROR: no cards in data/cards_raw.json carry set "${SET_FILTER}"`);
+    console.error("Merge it first: node scripts/ingest-cards.js --merge-set <code>");
+    process.exitCode = 1;
+    return;
+  }
+  const missing = SET_FILTER
+    ? []
+    : [...wanted].filter((n) => !selected.some((c) => c.name === n));
   if (missing.length) {
     console.error(
       `ERROR: not found in data/cards_raw.json: ${missing.join(", ")}`,
@@ -119,6 +157,7 @@ async function main() {
     sets: 0,
     meta: 0,
     variants: 0,
+    stamped: 0,
   };
 
   for (const card of selected) {
@@ -144,7 +183,18 @@ async function main() {
       ? { id: -1 }
       : await prisma.card.findFirst({ where: { name } });
 
+    // Registry codex id: shared by every printing of the card
+    const codexId =
+      (sets || [])
+        .flatMap((s) => s.variants || [])
+        .map((v) => registryIds(registry, v.slug).codexId)
+        .find(Boolean) || null;
+    if (!DRY_RUN && codexId && dbCard.codexId !== codexId) {
+      await prisma.card.update({ where: { id: dbCard.id }, data: { codexId } });
+    }
+
     for (const s of sets || []) {
+      if (SET_FILTER && s.name !== SET_FILTER) continue;
       const setName = s.name;
       const releasedAt = s.releasedAt ? new Date(s.releasedAt) : null;
       console.log(`    set: ${setName}`);
@@ -194,8 +244,10 @@ async function main() {
         const slug = v.slug;
         if (!slug) continue;
         const imageBasename = computeImageBasename(slug);
+        const { printingId } = registryIds(registry, slug);
+        if (printingId) stats.stamped++;
         console.log(
-          `      variant: ${slug}  (imageBasename: ${imageBasename})`,
+          `      variant: ${slug}  (imageBasename: ${imageBasename}, printingId: ${printingId || "-"})`,
         );
         if (!DRY_RUN) {
           await prisma.variant.upsert({
@@ -210,6 +262,7 @@ async function main() {
               flavorText: v.flavorText || null,
               typeText: v.typeText || null,
               imageBasename,
+              printingId,
             },
             update: {
               finish: mapFinish(v.finish),
@@ -218,6 +271,7 @@ async function main() {
               flavorText: v.flavorText || null,
               typeText: v.typeText || null,
               imageBasename,
+              ...(printingId ? { printingId } : {}),
             },
           });
         }
@@ -228,7 +282,7 @@ async function main() {
 
   console.log("");
   console.log(
-    `Done${DRY_RUN ? " (dry run)" : ""}. Cards: ${stats.cards}, Sets created: ${stats.sets}, Metadata: ${stats.meta}, Variants: ${stats.variants}`,
+    `Done${DRY_RUN ? " (dry run)" : ""}. Cards: ${stats.cards}, Sets created: ${stats.sets}, Metadata: ${stats.meta}, Variants: ${stats.variants} (${stats.stamped} with registry printingId)`,
   );
 }
 

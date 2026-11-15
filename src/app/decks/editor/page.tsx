@@ -826,6 +826,10 @@ export default function DeckEditorPage() {
                 { value: "Beta", label: "Beta" },
                 { value: "Arthurian Legends", label: "Arthurian Legends" },
                 { value: "Dragonlord", label: "Dragonlord" },
+                {
+                  value: "Frost Mage Vs. Lavamancer",
+                  label: "Frost Mage vs Lavamancer",
+                },
                 { value: "Promotional", label: "Promotional" },
               ]}
             />

@@ -9,10 +9,19 @@
   our form via sorcery-registry, and the registry's permanent ids are stamped
   onto Card.codexId / Variant.printingId so future renames cost nothing.
 
+  The API changed shape (2026-11): cards now carry a card-level `engine` block
+  and a flat `printings` list instead of `guardian` / `sets[].variants[]`.
+  `normalizeApiCard` maps the new shape back onto the legacy one, because
+  data/cards_raw.json is a RUNTIME source (server rules, bots) that expects it.
+
   Usage:
     node scripts/ingest-cards.js                  # fetch from the live API
     node scripts/ingest-cards.js --from-file data/cards_raw.json
                                                   # re-ingest a snapshot offline
+    node scripts/ingest-cards.js --merge-set 008  # add ONE set's printings to
+                                                  # data/cards_raw.json, no DB
+                                                  # writes (then run
+                                                  # upsert-new-cards.js --set)
 */
 // Load .env for local development
 try {
@@ -47,6 +56,168 @@ function mapFinish(f) {
 function normalizeProduct(p) {
   if (!p) return null;
   return String(p).trim();
+}
+
+// --- New API shape -> legacy cards_raw.json shape ---
+
+/** Numeric set code -> our 3-letter slug prefix (mirrors registry/sync-registry.js) */
+const SET_CODE_PREFIXES = {
+  "001": "alp",
+  "002": "bet",
+  "004": "art",
+  "005": "dra",
+  "006": "got",
+  "008": "fvl",
+  "999": "pro",
+};
+
+/** The API renamed "Promotional" to "Promo"; the DB Set rows keep the old name */
+const SET_NAME_OVERRIDES = { Promo: "Promotional" };
+
+/** Legacy element strings list elements in this order: "Earth, Fire, Water, Air" */
+const ELEMENT_ORDER = ["Earth", "Fire", "Water", "Air"];
+
+function legacyElements(elements) {
+  const list = Array.isArray(elements) ? elements : [];
+  const real = ELEMENT_ORDER.filter((e) => list.includes(e));
+  return real.length ? real.join(", ") : "None";
+}
+
+/** "PreconstructedDeck" -> "Preconstructed_Deck" (the stored product strings) */
+function legacyProduct(product) {
+  if (!product) return null;
+  return String(product).replace(/([a-z])([A-Z])/g, "$1_$2");
+}
+
+/** `008-frost_mage-pd-s` -> `fvl-frost_mage-pd-s`; unknown codes pass through */
+function legacySlug(slug) {
+  const m = String(slug).match(/^(\d{3})-(.+)$/);
+  if (!m || !SET_CODE_PREFIXES[m[1]]) return slug;
+  return `${SET_CODE_PREFIXES[m[1]]}-${m[2]}`;
+}
+
+function legacyMetadata(engine) {
+  return {
+    rarity: engine.rarity ?? null,
+    type: engine.type || "",
+    rulesText: engine.rules || "",
+    cost: engine.cost ?? null,
+    attack: engine.attack ?? null,
+    // FvL cards arrive with `defense: null`; units with one printed power
+    // stat store it as both attack and defence (split-stat units carry both)
+    defence:
+      engine.defense ??
+      (["Minion", "Avatar"].includes(engine.type) ? engine.attack ?? null : null),
+    life: engine.life ?? null,
+    thresholds: {
+      air: engine.air || 0,
+      earth: engine.earth || 0,
+      fire: engine.fire || 0,
+      water: engine.water || 0,
+    },
+  };
+}
+
+/** Is this card in the new `engine` + `printings` API shape? */
+function isApiShape(card) {
+  return Boolean(card && card.engine && Array.isArray(card.printings));
+}
+
+/**
+ * Map a new-shape API card onto the legacy shape. Per-set metadata is the
+ * card-level engine block (the new API no longer carries per-set rules text).
+ * Sets are ordered by their first printing date, oldest first, like before.
+ */
+function normalizeApiCard(card) {
+  if (!isApiShape(card)) return card;
+  const engine = card.engine;
+  const meta = legacyMetadata(engine);
+  const sets = new Map();
+  for (const p of card.printings) {
+    const apiSet = p.set || {};
+    const setName = SET_NAME_OVERRIDES[apiSet.name] || apiSet.name;
+    if (!setName) continue;
+    if (!sets.has(setName)) {
+      sets.set(setName, {
+        name: setName,
+        code: apiSet.code || null,
+        releasedAt: p.printedAt || apiSet.releasedAt || null,
+        metadata: meta,
+        variants: [],
+      });
+    }
+    const entry = sets.get(setName);
+    if (p.printedAt && (!entry.releasedAt || p.printedAt < entry.releasedAt)) {
+      entry.releasedAt = p.printedAt;
+    }
+    const m = p.meta || {};
+    entry.variants.push({
+      slug: legacySlug(p.slug),
+      finish: m.finish || null,
+      product: legacyProduct(m.product),
+      artist: (m.artist && m.artist.name) || "",
+      flavorText: m.flavor || "",
+      typeText: m.typeline || "",
+    });
+  }
+  const orderedSets = [...sets.values()]
+    .sort((a, b) => String(a.releasedAt).localeCompare(String(b.releasedAt)))
+    .map(({ code: _code, ...rest }) => rest);
+  return {
+    name: card.name,
+    guardian: meta,
+    elements: legacyElements(engine.elements),
+    subTypes: [...(engine.subtypes || [])].sort().join(", "),
+    sets: orderedSets,
+  };
+}
+
+/**
+ * Merge one set's printings from the API into the local snapshot without
+ * touching anything else: reprints gain a set entry (their existing `guardian`
+ * text is kept, since rules code parses it), new cards are appended whole.
+ */
+function mergeSetIntoSnapshot(apiCards, setKey) {
+  const rawPath = path.join(process.cwd(), "data", "cards_raw.json");
+  const snapshot = JSON.parse(fs.readFileSync(rawPath, "utf8"));
+  const byName = new Map(snapshot.map((c) => [c.name, c]));
+  const key = String(setKey).trim().toLowerCase();
+  const inSet = (p) =>
+    String(p.set?.code || "").toLowerCase() === key ||
+    String(p.set?.name || "").toLowerCase() === key;
+
+  const added = [];
+  const reprinted = [];
+  let setName = null;
+  for (const apiCard of apiCards) {
+    if (!isApiShape(apiCard)) {
+      throw new Error("--merge-set needs the new API shape (engine + printings)");
+    }
+    const printings = apiCard.printings.filter(inSet);
+    if (!printings.length) continue;
+    const normalized = normalizeApiCard({ ...apiCard, printings });
+    const setEntry = normalized.sets[0];
+    setName = setEntry.name;
+    const existing = byName.get(apiCard.name);
+    if (existing) {
+      existing.sets = (existing.sets || []).filter((s) => s.name !== setName);
+      existing.sets.push(setEntry);
+      reprinted.push(apiCard.name);
+    } else {
+      snapshot.push(normalized);
+      byName.set(apiCard.name, normalized);
+      added.push(apiCard.name);
+    }
+  }
+  if (!setName) throw new Error(`No printings found for set "${setKey}"`);
+
+  fs.writeFileSync(rawPath, JSON.stringify(snapshot, null, 2));
+  console.log(`Merged set "${setName}" into data/cards_raw.json`);
+  console.log(`  New cards (${added.length}): ${added.join(", ")}`);
+  console.log(`  Reprints  (${reprinted.length}): ${reprinted.join(", ")}`);
+  console.log("");
+  console.log("Next: upsert just this set into the DB (on the prod server):");
+  console.log(`  node scripts/upsert-new-cards.js --set "${setName}" --dry-run`);
 }
 
 /** Registry lookups: canonical slug + permanent ids for an incoming API slug */
@@ -98,6 +269,11 @@ function computeImageBasename(slug) {
 async function main() {
   const fileArg = process.argv.indexOf("--from-file");
   const fromFile = fileArg !== -1 ? process.argv[fileArg + 1] : null;
+  const mergeArg = process.argv.indexOf("--merge-set");
+  const mergeSet = mergeArg !== -1 ? process.argv[mergeArg + 1] : null;
+  if (mergeArg !== -1 && !mergeSet) {
+    throw new Error("--merge-set needs a set code or name, e.g. --merge-set 008");
+  }
 
   let cards;
   if (fromFile) {
@@ -118,6 +294,14 @@ async function main() {
     cards = res.data;
     console.log(`Received ${cards.length} cards.`);
   }
+
+  if (mergeSet) {
+    mergeSetIntoSnapshot(cards, mergeSet);
+    return;
+  }
+
+  // Everything below (snapshot + DB) works on the legacy shape
+  cards = cards.map(normalizeApiCard);
 
   const registry = loadRegistry();
   let stampedVariants = 0;

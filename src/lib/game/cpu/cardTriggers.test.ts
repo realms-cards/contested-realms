@@ -626,7 +626,7 @@ describe("Stealth tokens", () => {
     const byText = raw.filter(entry => hasPrintedStealth({cardId:1,name:"",type:"Minion",text:entry.guardian?.rulesText ?? ""})).map(entry => entry.name).sort();
     const byName = raw.filter(entry => hasPrintedStealth({cardId:1,name:entry.name,type:"Minion"})).map(entry => entry.name).sort();
     expect(byName).toEqual(byText);
-    expect(byText).toHaveLength(16);
+    expect(byText).toHaveLength(23);
     // Cards that only name Stealth never have it.
     const store = setup();
     store.setState({permanents:{

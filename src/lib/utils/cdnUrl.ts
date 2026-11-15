@@ -21,6 +21,7 @@ const SET_DIR_MAP: Record<string, string> = {
   got: "gothic",
   gth: "gothic",
   pro: "promo",
+  fvl: "fvl",
 };
 
 // Sets that use suffix subdirectories (e.g., alpha/b_s/cardname.webp)

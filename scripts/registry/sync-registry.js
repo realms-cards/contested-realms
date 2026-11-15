@@ -27,7 +27,11 @@ const ART_FALLBACK = path.join(DIR, "art-fallback.json");
  * (`alp-detonate-b-s`); the registry and the live API use the set number
  * (`001-detonate-b-s`). Only the leading segment differs.
  */
-const SET_PREFIX_OVERRIDES = { promotional: "pro", promo: "pro" };
+const SET_PREFIX_OVERRIDES = {
+  promotional: "pro",
+  promo: "pro",
+  "frost mage vs. lavamancer": "fvl",
+};
 
 function legacyPrefix(setName) {
   const key = String(setName || "").trim().toLowerCase();
@@ -51,13 +55,19 @@ const SET_DIRS = {
   "004": "arthurian_legends",
   "005": "dragonlord",
   "006": "gothic",
+  "008": "fvl",
   "999": "promo",
 };
 const ASSET_ROOT = path.join(__dirname, "..", "..", "data-webp");
 
+/** Registry schema v12 renamed `set_number` to `set_code`; accept both */
+function setCodeOf(entry) {
+  return entry.set_code ?? entry.set_number;
+}
+
 /** `004-foot_soldier-bt-s` -> { dir: "arthurian_legends", base: "foot_soldier_bt_s" } */
 function assetLocation(printing) {
-  const dir = SET_DIRS[printing.set_number];
+  const dir = SET_DIRS[setCodeOf(printing)];
   if (!dir) return null;
   const dash = printing.slug.indexOf("-");
   if (dash <= 0) return null;
@@ -115,8 +125,8 @@ function buildArtFallbacks(registry, assets) {
       // Prefer the same set, then the plainest printing (Standard Booster)
       .sort(
         (a, b) =>
-          Number(a.set_number !== p.set_number) -
-            Number(b.set_number !== p.set_number) ||
+          Number(setCodeOf(a) !== setCodeOf(p)) -
+            Number(setCodeOf(b) !== setCodeOf(p)) ||
           Number(a.finish !== "Standard") - Number(b.finish !== "Standard") ||
           Number(a.product !== "Booster") - Number(b.product !== "Booster") ||
           a.slug.localeCompare(b.slug)
@@ -179,7 +189,7 @@ function buildIndex() {
   }
 
   const setName = new Map(
-    registry.sets.map((s) => [s.set_number, s.set_name])
+    registry.sets.map((s) => [setCodeOf(s), s.set_name])
   );
 
   const bySlug = {};
@@ -188,7 +198,7 @@ function buildIndex() {
 
   for (const p of registry.printings) {
     bySlug[p.slug] = p.printing_id;
-    const legacy = toLegacySlug(p.slug, p.set_name || setName.get(p.set_number));
+    const legacy = toLegacySlug(p.slug, p.set_name || setName.get(setCodeOf(p)));
     if (legacy) {
       if (byLegacySlug[legacy] && byLegacySlug[legacy] !== p.printing_id) {
         legacyCollisions++;
