@@ -11,10 +11,12 @@
   It is idempotent: Cards/Sets/CardSetMetadata/Variants are all upserted, so
   re-running corrects data rather than duplicating it.
 
-  Usage (run on the PROD server, where DATABASE_URL points at prod):
-    node scripts/upsert-new-cards.js            # upsert the default NEW_CARD_NAMES
-    node scripts/upsert-new-cards.js --dry-run  # report what would change, write nothing
+  Usage: prod runs Postgres in Docker, so run it in the server container, which has
+  the right DATABASE_URL (the host's .env may point at a retired database):
+    docker exec sorcery-server-1 node scripts/upsert-new-cards.js --set "<Set Name>" --dry-run
+
     node scripts/upsert-new-cards.js --names "Mock Court,Court of Equity"
+    node scripts/upsert-new-cards.js --names "Mock Court" --dry-run  # write nothing
     node scripts/upsert-new-cards.js --set "Frost Mage Vs. Lavamancer"
                     # every card printed in that set; only that set's variants
                     # are written, but every set's metadata is (the reprint's
@@ -33,29 +35,36 @@ const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
 
-// --- The cards this run is allowed to touch ---
-const DEFAULT_NEW_CARD_NAMES = [
-  "Overflowing Court",
-  "Court of Equity",
-  "Mobbed Court",
-  "Mock Court",
-];
-
 // --- CLI args ---
+// Strict on purpose: an older copy of this script ignored `--set` and silently
+// fell back to a hardcoded card list, so every run must name what it touches.
 const argv = process.argv.slice(2);
 const DRY_RUN = argv.includes("--dry-run");
 function argValue(flag) {
   const i = argv.indexOf(flag);
-  return i !== -1 && argv[i + 1] ? argv[i + 1] : null;
+  return i !== -1 && argv[i + 1] && !argv[i + 1].startsWith("--")
+    ? argv[i + 1]
+    : null;
 }
 const namesArg = argValue("--names");
 const SET_FILTER = argValue("--set");
+const known = new Set(["--dry-run", "--names", "--set"]);
+const unknownFlags = argv.filter((a) => a.startsWith("--") && !known.has(a));
+if (unknownFlags.length || (!namesArg && !SET_FILTER) || (namesArg && SET_FILTER)) {
+  console.error(
+    unknownFlags.length
+      ? `Unknown option(s): ${unknownFlags.join(", ")}`
+      : "Pass exactly one of --names \"A,B\" or --set \"<Set Name>\".",
+  );
+  console.error('Usage: node scripts/upsert-new-cards.js (--set "<Set Name>" | --names "A,B") [--dry-run]');
+  process.exit(1);
+}
 const NEW_CARD_NAMES = namesArg
   ? namesArg
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean)
-  : DEFAULT_NEW_CARD_NAMES;
+  : [];
 
 /** printing-index lookups keyed by our (legacy) slug; null when not vendored */
 function loadRegistryIndex() {

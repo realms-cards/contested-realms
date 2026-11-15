@@ -21,6 +21,8 @@ COPY bots ./bots
 COPY src/lib/game/cpu/*.js src/lib/game/cpu/cards.json ./src/lib/game/cpu/
 # Only copy data files needed by the server (not card art/textures)
 COPY data/cards_raw.json ./data/cards_raw.json
+# Registry ids for scripts/upsert-new-cards.js (the 7MB registry.json stays out)
+COPY data/registry/printing-index.json ./data/registry/printing-index.json
 COPY data/mana-providers.json ./data/mana-providers.json
 COPY data/precons ./data/precons
 COPY data/bots ./data/bots
