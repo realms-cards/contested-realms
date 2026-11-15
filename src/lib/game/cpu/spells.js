@@ -682,12 +682,15 @@ function projectilePlan(state, seat, name, origin, direction, requested) {
       const element = name === 'Ice Lance' ? {} : { element: 'fire' };
       const damaged = [{ unit: target, amount }];
       const targets = [target.target];
+      let splashFrom = 1;
       if (name === 'Fireball') {
-        const others = units.filter(u => u.region === origin.region && occupies(u,at) && u !== target);
-        targets.push(...others.map(u => u.target));
-        damaged.push(...others.map(unit => ({ unit, amount: 2 })));
+        const blast = fireballBlast(units, at, origin.region, state.board.size);
+        const others = blast.center.filter(u => u !== target);
+        targets.push(...others.map(u => u.target), ...blast.around.map(u => u.target));
+        damaged.push(...others.map(unit => ({ unit, amount })), ...blast.around.map(unit => ({ unit, amount: FIREBALL_SPLASH })));
+        splashFrom = 1+others.length;
       }
-      operations.push({ kind: 'damage', targets, amount, ...element, ...(name === 'Fireball' ? { splash: 2 } : {}) });
+      operations.push({ kind: 'damage', targets, amount, ...element, ...(name === 'Fireball' ? { splash: FIREBALL_SPLASH, splashFrom } : {}) });
       for (const hit of damaged) {
         const key = targetKey(hit.unit.target);
         const item = hit.unit.target.kind === 'permanent' ? state.permanents[hit.unit.at][hit.unit.target.index] : null;
@@ -795,6 +798,25 @@ function projectileImpactChoices(state, op) {
   try { return impactChoices(state, op); } finally { leaveScope(); }
 }
 
+const FIREBALL_SPLASH = 2;
+
+/**
+ * Fireball as reprinted in Frost Mage Vs. Lavamancer (supersedes Alpha/Beta): it explodes on impact, 4 damage to each unit
+ * at the location it hits and 2 to each unit at the orthogonally adjacent locations, all in the projectile's region.
+ * @template {{region: string}} U @param {U[]} units @param {string} at @param {string} region
+ * @param {{w: number, h: number}} size @returns {{center: U[], around: U[]}}
+ */
+function fireballBlast(units, at, region, size) {
+  const [x,y] = at.split(',').map(Number);
+  const cells = [[0,-1],[1,0],[0,1],[-1,0]].map(([dx,dy]) => [x+dx,y+dy])
+    .filter(([cx,cy]) => cx >= 0 && cy >= 0 && cx < size.w && cy < size.h).map(([cx,cy]) => `${cx},${cy}`);
+  const inRegion = units.filter(unit => unit.region === region);
+  const center = inRegion.filter(unit => occupies(unit,at));
+  // An oversized unit spanning the impact and a neighbour takes the 4 only
+  const around = inRegion.filter(unit => !center.includes(unit) && cells.some(cell => occupies(unit,cell)));
+  return { center, around };
+}
+
 /** @param {SpellState} state @param {import('./spellTypes').ProjectileOperation} op @returns {SpellChoice[]} */
 function impactChoices(state, op) {
   const [ox,oy] = op.origin.split(',').map(Number);
@@ -811,14 +833,22 @@ function impactChoices(state, op) {
     const eligible = units.filter(unit => occupies(unit,at) && unit.region === op.region && !(step === 0 && unit.owner === op.seat) && !stealthOf(state,unit));
     if (!eligible.length) continue;
     const amount = op.name === 'Fireball' ? 4 : op.name === 'Firebolts' || op.name === 'Colicky Dragonettes' ? 1 : op.name === 'Heat Ray' ? 2 : 3-step;
+    const blast = op.name === 'Fireball' ? fireballBlast(units, at, op.region, state.board.size) : null;
     return eligible.map(unit => {
       const targets = [unit.target];
-      if (op.name === 'Fireball') targets.push(...units.filter(other => other !== unit && occupies(other,at) && other.region === op.region).map(other => other.target));
+      let splashFrom = 1;
+      if (blast) {
+        const others = blast.center.filter(other => other !== unit);
+        targets.push(...others.map(other => other.target), ...blast.around.map(other => other.target));
+        splashFrom = 1+others.length;
+      }
       /** @type {import('./spellTypes').SpellOperation[]} */
-      const operations = [{kind:'damage',targets,amount,...(op.name === 'Ice Lance' || op.name === 'Colicky Dragonettes' ? {} : {element:'fire'}),...(op.name === 'Fireball' ? {splash:2} : {})}];
+      const operations = [{kind:'damage',targets,amount,...(op.name === 'Ice Lance' || op.name === 'Colicky Dragonettes' ? {} : {element:'fire'}),...(blast ? {splash:FIREBALL_SPLASH,splashFrom} : {})}];
       if (op.name === 'Heat Ray' || op.name === 'Ice Lance') operations.push({...op,step:step+1,preferred:op.preferred?.slice(1)});
       else operations.push(...nextBolt);
-      return {key:targetKey(unit.target),label:`${op.name === 'Firebolts' ? `Bolt ${op.shot+1}` : 'Impact'}: ${unit.card.name} at ${at} takes ${amount}`,
+      const label = blast ? `Impact at ${at}: ${amount} to each unit there, ${FIREBALL_SPLASH} to each unit orthogonally adjacent`
+        : `${op.name === 'Firebolts' ? `Bolt ${op.shot+1}` : 'Impact'}: ${unit.card.name} at ${at} takes ${amount}`;
+      return {key:targetKey(unit.target),label,
         caster:{kind:'avatar',seat:op.seat},target:unit.target,operations,score:scoreOps(state,op.seat,[operations[0]]),picks:[unitToken(unit.target)]};
     });
   }
@@ -1005,7 +1035,7 @@ function scoreOps(state, seat, operations) {
       if (!unit) continue;
       const card = cards[unit.card.name] || unit.card;
       const sign = unit.owner === seat ? -1 : 1;
-      const amount = op.kind === 'damage' && targetIndex > 0 && op.splash !== undefined ? op.splash : op.amount;
+      const amount = op.kind === 'damage' && targetIndex >= (op.splashFrom ?? 1) && op.splash !== undefined ? op.splash : op.amount;
       if (op.kind === 'damage' && op.element === 'fire' && unit.card.name === 'Askelon Phoenix') { value -= sign*2; continue; }
       if (op.kind === 'subsurface') {
         const survives = new RegExp(op.state === 'burrowed' ? '\\bBurrowing\\b' : '\\bSubmerge\\b').test(cardText(unit.card));

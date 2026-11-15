@@ -96,11 +96,21 @@ function legacySlug(slug) {
   return `${SET_CODE_PREFIXES[m[1]]}-${m[2]}`;
 }
 
+/**
+ * Rules text the API can't express: Fireball (FvL) prints its damage pattern as
+ * a diagram, so the API text ends at "affected locations." with no numbers.
+ */
+const PRINTED_DIAGRAM_TEXT = {
+  "Shoot a projectile. It explodes on impact, dealing damage to each unit at affected locations.":
+    "Shoot a projectile. It explodes on impact, dealing damage to each unit at affected locations: 4 at the location it hits, and 2 at each location orthogonally adjacent to it.",
+};
+
 function legacyMetadata(engine) {
+  const rules = engine.rules || "";
   return {
     rarity: engine.rarity ?? null,
     type: engine.type || "",
-    rulesText: engine.rules || "",
+    rulesText: PRINTED_DIAGRAM_TEXT[rules.trim()] || rules,
     cost: engine.cost ?? null,
     attack: engine.attack ?? null,
     // FvL cards arrive with `defense: null`; units with one printed power
@@ -174,8 +184,10 @@ function normalizeApiCard(card) {
 
 /**
  * Merge one set's printings from the API into the local snapshot without
- * touching anything else: reprints gain a set entry (their existing `guardian`
- * text is kept, since rules code parses it), new cards are appended whole.
+ * touching any other card. New cards are appended whole. A reprint supersedes
+ * the older printings: its card-level `guardian` and every older set's
+ * metadata take the reprint's data (FvL rebalanced Polar Bears to 3 cost 3
+ * power and rewrote Fireball), while each set keeps its own variants.
  */
 function mergeSetIntoSnapshot(apiCards, setKey) {
   const rawPath = path.join(process.cwd(), "data", "cards_raw.json");
@@ -188,6 +200,7 @@ function mergeSetIntoSnapshot(apiCards, setKey) {
 
   const added = [];
   const reprinted = [];
+  const superseded = [];
   let setName = null;
   for (const apiCard of apiCards) {
     if (!isApiShape(apiCard)) {
@@ -200,9 +213,25 @@ function mergeSetIntoSnapshot(apiCards, setKey) {
     setName = setEntry.name;
     const existing = byName.get(apiCard.name);
     if (existing) {
-      existing.sets = (existing.sets || []).filter((s) => s.name !== setName);
+      const flat = (t) => String(t || "").replace(/\s+/g, " ").trim();
+      const before = existing.guardian || {};
+      const after = setEntry.metadata;
+      const changed = Object.keys(after).filter((k) =>
+        k === "rulesText"
+          ? flat(before[k]) !== flat(after[k])
+          : JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null),
+      );
+      existing.guardian = { ...after };
+      existing.elements = normalized.elements;
+      // The FvL Winter River arrived without its River subtype (the other
+      // seasonal Rivers keep it): an empty list never erases a known one
+      existing.subTypes = normalized.subTypes || existing.subTypes;
+      existing.sets = (existing.sets || [])
+        .filter((s) => s.name !== setName)
+        .map((s) => ({ ...s, metadata: { ...after } }));
       existing.sets.push(setEntry);
       reprinted.push(apiCard.name);
+      if (changed.length) superseded.push(`${apiCard.name} (${changed.join(", ")})`);
     } else {
       snapshot.push(normalized);
       byName.set(apiCard.name, normalized);
@@ -215,6 +244,9 @@ function mergeSetIntoSnapshot(apiCards, setKey) {
   console.log(`Merged set "${setName}" into data/cards_raw.json`);
   console.log(`  New cards (${added.length}): ${added.join(", ")}`);
   console.log(`  Reprints  (${reprinted.length}): ${reprinted.join(", ")}`);
+  console.log(
+    `  Superseded by the reprint (${superseded.length}): ${superseded.join("; ") || "-"}`,
+  );
   console.log("");
   console.log("Next: upsert just this set into the DB (on the prod server):");
   console.log(`  node scripts/upsert-new-cards.js --set "${setName}" --dry-run`);

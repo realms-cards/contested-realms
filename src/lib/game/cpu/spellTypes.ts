@@ -43,7 +43,8 @@ export type SpellOperation =
   | { kind: "spend"; seat: PlayerKey; amount: number }
   | { kind: "flood"; ats: string[]; expiresTurn: string }
   | { kind: "raise"; seat: PlayerKey; to?: string; region?: string; card?: CardRef; fromSeat?: PlayerKey; graveyardIndex?: number }
-  | { kind: "damage"; targets: UnitTarget[]; amount: number; random?: boolean; element?: "fire"; splash?: number }
+  /** `splash` replaces `amount` for targets from index `splashFrom` (default 1) on. */
+  | { kind: "damage"; targets: UnitTarget[]; amount: number; random?: boolean; element?: "fire"; splash?: number; splashFrom?: number }
   | { kind: "heal"; seat: PlayerKey; amount: number }
   | { kind: "draw"; seat: PlayerKey; count: number; pile?: "atlas" | "spellbook"; bottom?: boolean }
   | { kind: "gainMana"; seat: PlayerKey; amount: number }

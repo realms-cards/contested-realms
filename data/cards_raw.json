@@ -12616,7 +12616,7 @@
         "metadata": {
           "rarity": "Elite",
           "type": "Magic",
-          "rulesText": "Rearrange sites within a two-by-two region, carrying along everything of normal size. Then burrow all minions and artifacts on those sites.",
+          "rulesText": "You may rearrange sites within a two-by-two area, carrying along everything of normal size. Then burrow all minions and artifacts on those sites.",
           "cost": 5,
           "attack": null,
           "defence": null,
@@ -18258,7 +18258,7 @@
     "guardian": {
       "rarity": "Exceptional",
       "type": "Magic",
-      "rulesText": "Shoot a projectile. It deals 4 damage on impact, and 2 damage to each other unit at that location.",
+      "rulesText": "Shoot a projectile. It explodes on impact, dealing damage to each unit at affected locations: 4 at the location it hits, and 2 at each location orthogonally adjacent to it.",
       "cost": 4,
       "attack": null,
       "defence": null,
@@ -18279,7 +18279,7 @@
         "metadata": {
           "rarity": "Exceptional",
           "type": "Magic",
-          "rulesText": "Shoot a projectile. It deals 4 damage on impact, and 2 damage to each other unit at that location.",
+          "rulesText": "Shoot a projectile. It explodes on impact, dealing damage to each unit at affected locations: 4 at the location it hits, and 2 at each location orthogonally adjacent to it.",
           "cost": 4,
           "attack": null,
           "defence": null,
@@ -18316,7 +18316,7 @@
         "metadata": {
           "rarity": "Exceptional",
           "type": "Magic",
-          "rulesText": "Shoot a projectile. It deals 4 damage on impact, and 2 damage to each other unit at that location.",
+          "rulesText": "Shoot a projectile. It explodes on impact, dealing damage to each unit at affected locations: 4 at the location it hits, and 2 at each location orthogonally adjacent to it.",
           "cost": 4,
           "attack": null,
           "defence": null,
@@ -18353,7 +18353,7 @@
         "metadata": {
           "rarity": "Exceptional",
           "type": "Magic",
-          "rulesText": "Shoot a projectile. It explodes on impact, dealing damage to each unit at affected locations.",
+          "rulesText": "Shoot a projectile. It explodes on impact, dealing damage to each unit at affected locations: 4 at the location it hits, and 2 at each location orthogonally adjacent to it.",
           "cost": 4,
           "attack": null,
           "defence": null,
@@ -18604,7 +18604,7 @@
     "guardian": {
       "rarity": "Ordinary",
       "type": "Magic",
-      "rulesText": "UPDATED: Shoot a piercing projectile. Deal 2 damage to each hit unit.",
+      "rulesText": "Shoot a piercing projectile. Deal 2 damage to each hit unit.",
       "cost": 3,
       "attack": null,
       "defence": null,
@@ -18625,7 +18625,7 @@
         "metadata": {
           "rarity": "Ordinary",
           "type": "Magic",
-          "rulesText": "UPDATED: Shoot a piercing projectile. Deal 2 damage to each hit unit.",
+          "rulesText": "Shoot a piercing projectile. Deal 2 damage to each hit unit.",
           "cost": 3,
           "attack": null,
           "defence": null,
@@ -18662,7 +18662,7 @@
         "metadata": {
           "rarity": "Ordinary",
           "type": "Magic",
-          "rulesText": "UPDATED: Shoot a piercing projectile. Deal 2 damage to each hit unit.",
+          "rulesText": "Shoot a piercing projectile. Deal 2 damage to each hit unit.",
           "cost": 3,
           "attack": null,
           "defence": null,
@@ -21609,7 +21609,7 @@
     "guardian": {
       "rarity": "Exceptional",
       "type": "Minion",
-      "rulesText": "May be summoned to any site.\r\n\r\nGenesis → You may return a minion here to its owner’s hand.",
+      "rulesText": "May be summoned to any site.\n\nGenesis → You may return a minion here to its owner’s hand.",
       "cost": 3,
       "attack": 1,
       "defence": 1,
@@ -21667,7 +21667,7 @@
         "metadata": {
           "rarity": "Exceptional",
           "type": "Minion",
-          "rulesText": "May be summoned to any site.\r\n\r\nGenesis → You may return a minion here to its owner’s hand.",
+          "rulesText": "May be summoned to any site.\n\nGenesis → You may return a minion here to its owner’s hand.",
           "cost": 3,
           "attack": 1,
           "defence": 1,
@@ -22820,9 +22820,9 @@
       "rarity": "Ordinary",
       "type": "Minion",
       "rulesText": "Can move as if the top and bottom edges of the realm were connected.",
-      "cost": 2,
-      "attack": 2,
-      "defence": 2,
+      "cost": 3,
+      "attack": 3,
+      "defence": 3,
       "life": null,
       "thresholds": {
         "air": 0,
@@ -22841,9 +22841,9 @@
           "rarity": "Ordinary",
           "type": "Minion",
           "rulesText": "Can move as if the top and bottom edges of the realm were connected.",
-          "cost": 2,
-          "attack": 2,
-          "defence": 2,
+          "cost": 3,
+          "attack": 3,
+          "defence": 3,
           "life": null,
           "thresholds": {
             "air": 0,
@@ -22878,9 +22878,9 @@
           "rarity": "Ordinary",
           "type": "Minion",
           "rulesText": "Can move as if the top and bottom edges of the realm were connected.",
-          "cost": 2,
-          "attack": 2,
-          "defence": 2,
+          "cost": 3,
+          "attack": 3,
+          "defence": 3,
           "life": null,
           "thresholds": {
             "air": 0,
@@ -26650,7 +26650,7 @@
     "guardian": {
       "rarity": "Ordinary",
       "type": "Aura",
-      "rulesText": "Affected sites and units atop them can't be attacked or intercepted.\r\n\r\nAt the start of your turn, dispel Blizzard.",
+      "rulesText": "Affected sites and units atop them can't be attacked or intercepted.\n\nAt the start of your turn, dispel Blizzard.",
       "cost": 1,
       "attack": null,
       "defence": null,
@@ -26708,7 +26708,7 @@
         "metadata": {
           "rarity": "Ordinary",
           "type": "Aura",
-          "rulesText": "Affected sites and units atop them can't be attacked or intercepted.\r\n\r\nAt the start of your turn, dispel Blizzard.",
+          "rulesText": "Affected sites and units atop them can't be attacked or intercepted.\n\nAt the start of your turn, dispel Blizzard.",
           "cost": 1,
           "attack": null,
           "defence": null,
@@ -43363,7 +43363,7 @@
     "guardian": {
       "rarity": "Exceptional",
       "type": "Minion",
-      "rulesText": "Submerge\r\n\r\nOnce on your turn, Coy Nixie may force target nearby enemy to take a step towards her. Tap that enemy.",
+      "rulesText": "Submerge\n\nOnce on your turn, Coy Nixie may force target nearby enemy to take a step towards her. Tap that enemy if it is untapped.",
       "cost": 3,
       "attack": 2,
       "defence": 2,
@@ -43384,7 +43384,7 @@
         "metadata": {
           "rarity": "Exceptional",
           "type": "Minion",
-          "rulesText": "Submerge\r\n\r\nOnce on your turn, Coy Nixie may force target nearby enemy to take a step towards her. Tap that enemy.",
+          "rulesText": "Submerge\n\nOnce on your turn, Coy Nixie may force target nearby enemy to take a step towards her. Tap that enemy if it is untapped.",
           "cost": 3,
           "attack": 2,
           "defence": 2,
@@ -45368,7 +45368,7 @@
     "guardian": {
       "rarity": "Ordinary",
       "type": "Aura",
-      "rulesText": "Conjure atop an Ordinary or Exceptional site.\r\n\r\nAt the start of your turn, destroy this site, minions atop it, and Hamlet's Ablaze.",
+      "rulesText": "Conjure atop an Ordinary or Exceptional site.\n\nAt the start of your turn, destroy this site, and minions atop it, and Hamlet's Ablaze.",
       "cost": 3,
       "attack": null,
       "defence": null,
@@ -45389,7 +45389,7 @@
         "metadata": {
           "rarity": "Ordinary",
           "type": "Aura",
-          "rulesText": "Conjure atop an Ordinary or Exceptional site.\r\n\r\nAt the start of your turn, destroy this site, minions atop it, and Hamlet's Ablaze.",
+          "rulesText": "Conjure atop an Ordinary or Exceptional site.\n\nAt the start of your turn, destroy this site, and minions atop it, and Hamlet's Ablaze.",
           "cost": 3,
           "attack": null,
           "defence": null,
@@ -55746,7 +55746,7 @@
         "name": "Arthurian Legends",
         "releasedAt": "2024-10-04T00:00:00.000Z",
         "metadata": {
-          "rarity": null,
+          "rarity": "Ordinary",
           "type": "Site",
           "rulesText": "Provides no mana.",
           "cost": null,
@@ -66570,7 +66570,7 @@
     "guardian": {
       "rarity": "Exceptional",
       "type": "Minion",
-      "rulesText": "Stealth\r\n\r\nBreak Stealth → Disable other nearby minions until your next turn.",
+      "rulesText": "Stealth\n\nBreak Stealth → Disable other nearby minions until your next turn.",
       "cost": 5,
       "attack": 3,
       "defence": 3,
@@ -66591,7 +66591,7 @@
         "metadata": {
           "rarity": "Exceptional",
           "type": "Minion",
-          "rulesText": "Stealth\r\n\r\nBreak Stealth → Disable other nearby minions until your next turn.",
+          "rulesText": "Stealth\n\nBreak Stealth → Disable other nearby minions until your next turn.",
           "cost": 5,
           "attack": 3,
           "defence": 3,

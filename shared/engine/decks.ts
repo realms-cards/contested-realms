@@ -22,13 +22,33 @@ export interface NamedCountDeck {
   atlas: { name: string; count: number }[];
 }
 
+/**
+ * Reprints whose new text supersedes the original. Upstream keeps both versions as separate
+ * cards ("Fireball 2" is the Frost Mage Vs. Lavamancer Fireball), while our catalogue has one
+ * card per name whose newest printing is the rules text, so every copy plays as the reprint.
+ * Explicit on purpose: upstream's "Foot Soldier 2" is a different token, not a reprint.
+ */
+export const SUPERSEDING_REPRINTS: Readonly<Record<string, string>> = {
+  Fireball: "Fireball 2",
+  "Polar Bears": "Polar Bears 2",
+};
+
+/** The engine card one of our card names plays as. */
+export function engineCardName(name: string): string {
+  const reprint = SUPERSEDING_REPRINTS[name];
+  return reprint && findCard(reprint) ? reprint : name;
+}
+
 function toCounts(entries: { name: string; count: number }[]): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const { name, count } of entries) out[name] = (out[name] ?? 0) + count;
+  for (const { name: ours, count } of entries) {
+    const name = engineCardName(ours);
+    out[name] = (out[name] ?? 0) + count;
+  }
   return out;
 }
 
-/** Card names are identical in both card databases, so decks map one-to-one. */
+/** Card names are identical in both card databases apart from superseding reprints. */
 export function toEngineDeck(deck: NamedCountDeck): DeckList {
   return {
     id: deck.id,
@@ -65,14 +85,15 @@ export function submittedDeckToEngine(cards: readonly SubmittedCard[], deckName:
   const atlas: Record<string, number> = {};
   for (const card of cards) {
     if (card === avatarCard) continue;
-    if (!findCard(card.name)) {
+    const name = engineCardName(card.name);
+    if (!findCard(name)) {
       if (!unknown.includes(card.name)) unknown.push(card.name);
       continue;
     }
     // The engine splits a deck the same way we do: sites in the atlas, everything else in the
     // spellbook. `zone` is what the submitting client already decided.
     const pile = /atlas|site/i.test(card.zone) || /site/i.test(card.type) ? atlas : spellbook;
-    pile[card.name] = (pile[card.name] ?? 0) + 1;
+    pile[name] = (pile[name] ?? 0) + 1;
   }
   if (unknown.length) {
     return { ok: false, error: `The rules engine does not know: ${unknown.slice(0, 5).join(", ")}` };

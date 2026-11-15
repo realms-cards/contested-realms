@@ -625,17 +625,21 @@ describe("live sequential projectile resolution", () => {
     expect(store.getState().permanents["2,3"][0].damage || 0).toBe(0);
     expect(store.getState().pendingMagic).toBeNull();
   });
-  it("revalidates a pending impact and applies Fireball splash simultaneously", async () => {
+  it("revalidates a pending impact and applies the Fireball blast simultaneously", async () => {
     const store = position();
     store.setState({permanents:{"1,3":[unit("Mountain Giant",2,"a"),unit("Mountain Giant",2,"b")]}});
     online(store);
     cast(store,"Fireball");
     await settle();
     expect(store.getState().pendingMagic?.cpuEvent?.kind).toBe("projectileImpact");
-    store.setState({permanents:{"1,3":[unit("Mountain Giant",2,"b"),unit("Mountain Giant",2,"c")]}});
+    store.setState({permanents:{"1,3":[unit("Mountain Giant",2,"b"),unit("Mountain Giant",2,"c")],"2,3":[unit("Ogre Goons",2,"d")]}});
     expect(getSpellChoices(store.getState(),"p1","Fireball").map(c => c.key)).toEqual(["b","c"]);
+    const lifeBefore = store.getState().players.p1.life;
     await resolve(store,"c");
-    expect(store.getState().permanents["1,3"].map(item => item.damage)).toEqual([2,4]);
+    // FvL Fireball: 4 to each unit where it hits, 2 to each unit orthogonally adjacent (the caster's avatar at 0,3 too)
+    expect(store.getState().permanents["1,3"].map(item => item.damage)).toEqual([4,4]);
+    expect(store.getState().permanents["2,3"][0].damage).toBe(2);
+    expect(store.getState().players.p1.life).toBe(lifeBefore-2);
     expect(store.getState().pendingMagic).toBeNull();
   });
   it("lets the CPU choose live impacts without requiring human confirmation", async () => {

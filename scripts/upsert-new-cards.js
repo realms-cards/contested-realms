@@ -16,8 +16,9 @@
     node scripts/upsert-new-cards.js --dry-run  # report what would change, write nothing
     node scripts/upsert-new-cards.js --names "Mock Court,Court of Equity"
     node scripts/upsert-new-cards.js --set "Frost Mage Vs. Lavamancer"
-                    # every card printed in that set; only that set's metadata
-                    # and variants are written, so reprints keep their old sets
+                    # every card printed in that set; only that set's variants
+                    # are written, but every set's metadata is (the reprint's
+                    # stats/text supersede the older printings')
 
   Registry ids (Card.codexId / Variant.printingId) are stamped from
   data/registry/printing-index.json when it knows the printing.
@@ -194,7 +195,10 @@ async function main() {
     }
 
     for (const s of sets || []) {
-      if (SET_FILTER && s.name !== SET_FILTER) continue;
+      // A reprint supersedes its older printings: with --set, every set's
+      // metadata is rewritten from the snapshot, but only the named set's
+      // variants are written
+      const variantsToo = !SET_FILTER || s.name === SET_FILTER;
       const setName = s.name;
       const releasedAt = s.releasedAt ? new Date(s.releasedAt) : null;
       console.log(`    set: ${setName}`);
@@ -240,7 +244,7 @@ async function main() {
       }
       stats.meta++;
 
-      for (const v of s.variants || []) {
+      for (const v of variantsToo ? s.variants || [] : []) {
         const slug = v.slug;
         if (!slug) continue;
         const imageBasename = computeImageBasename(slug);

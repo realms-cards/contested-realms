@@ -671,7 +671,7 @@ function applyOperations(set: StoreSet, get: StoreGet, choice: SpellChoice, rng:
       : [...op.targets].sort((a, b) => a.kind === "permanent" && b.kind === "permanent" && a.at === b.at ? b.index - a.index : 0);
     if (op.kind === "damage") {
       const selected = op.splash === undefined ? targets : op.targets;
-      applyDamageEvent(set,get,selected.map((target,index) => ({ target, amount: index > 0 ? op.splash ?? op.amount : op.amount, element: op.element })));
+      applyDamageEvent(set,get,selected.map((target,index) => ({ target, amount: index >= (op.splashFrom ?? 1) ? op.splash ?? op.amount : op.amount, element: op.element })));
       continue;
     }
     for (const target of targets) {
