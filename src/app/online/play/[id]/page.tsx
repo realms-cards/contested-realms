@@ -3446,7 +3446,7 @@ export default function OnlineMatchPage() {
                         rules errors, especially regarding card-specific rules
                       </li>
                       <li>
-                        {match?.matchType === "precon" ? "Choose a Beta precon for guided tactical practice. Full rules automation is still in development." : "Test any deck against a CPU sparring partner. Unsupported interactions can be resolved manually."}
+                        {match?.matchType === "precon" ? "Choose a precon for guided tactical practice. Full rules automation is still in development." : "Test any deck against a CPU sparring partner. Unsupported interactions can be resolved manually."}
                       </li>
                     </ul>
                   </div>

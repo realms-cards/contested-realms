@@ -8,6 +8,14 @@ const {
   planLobbyListEmits,
 } = require("../../modules/lobby/listing");
 
+/** Versioned precons the CPU can play: data/precons/beta.json + fvl.json (avatar included). */
+function loadBundledPrecons() {
+  const path = require("path");
+  return ["beta.json", "fvl.json"].flatMap((file) =>
+    require(path.resolve(process.cwd(), "data/precons", file)),
+  );
+}
+
 /**
  * @param {object} deps
  * @param {import('socket.io').Server} deps.io
@@ -2196,7 +2204,7 @@ function createLobbyFeature(deps) {
           }
 
           // Versioned precons include their avatar and work without public deck rows.
-          const precons = require(require("path").resolve(process.cwd(), "data/precons/beta.json"));
+          const precons = loadBundledPrecons();
           const constructedDeck = precons[Math.floor(Math.random() * precons.length)];
 
           const bot = new BotClient({
@@ -2328,8 +2336,8 @@ function createLobbyFeature(deps) {
           } catch {}
         }
 
-        // 4. Select a fixed Beta precon, preserving its avatar identity.
-        const precons = require(require("path").resolve(process.cwd(), "data/precons/beta.json"));
+        // 4. Select a fixed precon (Beta or FvL), preserving its avatar identity.
+        const precons = loadBundledPrecons();
         const constructedDeck = precons.find(deck => deck.id === payload.preconId)
           || precons[Math.floor(Math.random() * precons.length)];
 

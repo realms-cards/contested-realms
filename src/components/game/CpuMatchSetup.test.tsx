@@ -39,7 +39,7 @@ describe("CPU mode entry points", () => {
     view.unmount();
     render(<CpuMatchSetup mode="precon" />);
     await act(async () => {await vi.advanceTimersByTimeAsync(1500);});
-    expect(checkedOpponent().textContent).toContain("Random element");
+    expect(checkedOpponent().textContent).toContain("Random precon");
   });
   it("does not create a match after leaving setup", async () => {
     const view = render(<CpuMatchSetup mode="goldfish" />);

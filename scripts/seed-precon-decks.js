@@ -3,7 +3,11 @@
 Seed 4 Beta Preconstructed decks (one per element) as public Constructed decks.
 
 Usage:
-  node scripts/seed-precon-decks.js
+  node scripts/seed-precon-decks.js            # the 4 Beta precons below
+  node scripts/seed-precon-decks.js --file data/precons/fvl.json --set "Frost Mage Vs. Lavamancer" [--dry-run]
+      # decks from a JSON list in the data/precons shape ({name, avatar,
+      # spellbook, atlas, collection?}), preferring printings of --set
+  On prod run it in the server container: docker exec sorcery-server-1 node scripts/seed-precon-decks.js ...
 
 What to paste:
   - Either fill BETA_PRECONS with arrays (spellbook/atlas/sideboard),
@@ -255,14 +259,41 @@ function parsePreconFromText(text) {
   return { spellbook, atlas, sideboard: [] };
 }
 
+// --- CLI args ---
+const argv = process.argv.slice(2);
+function argValue(flag) {
+  const i = argv.indexOf(flag);
+  return i !== -1 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : null;
+}
+const FILE = argValue("--file");
+const SET_NAME = argValue("--set") || "Beta";
+const DRY_RUN = argv.includes("--dry-run");
+
+/** Decks from a data/precons JSON file; the avatar is stored in the Spellbook zone */
+function loadPreconFile(file) {
+  const path = require("path");
+  const fs = require("fs");
+  const list = JSON.parse(fs.readFileSync(path.resolve(file), "utf8"));
+  if (!Array.isArray(list)) throw new Error(`${file}: expected an array of decks`);
+  return list.map((d) => ({
+    name: d.name,
+    spellbook: [...(d.avatar ? [{ name: d.avatar, count: 1 }] : []), ...(d.spellbook || [])],
+    atlas: d.atlas || [],
+    collection: d.collection || [],
+  }));
+}
+
 async function main() {
+  const precons = FILE ? loadPreconFile(FILE) : BETA_PRECONS;
   // Ensure a dedicated system user exists for public decks
   const SYSTEM_EMAIL = "public-decks@system.local";
   const SYSTEM_NAME = "Public Decks";
   let systemUser = await prisma.user.findFirst({
     where: { email: SYSTEM_EMAIL },
   });
-  if (!systemUser) {
+  if (!systemUser && DRY_RUN) {
+    systemUser = { id: "(dry-run)" };
+  } else if (!systemUser) {
     systemUser = await prisma.user.create({
       data: { email: SYSTEM_EMAIL, name: SYSTEM_NAME, isPro: false },
     });
@@ -272,17 +303,17 @@ async function main() {
   }
   const userId = systemUser.id;
   console.log(
-    `[Precons] Seeding 4 Beta preconstructed decks owned by system user '${SYSTEM_NAME}' (public).`
+    `[Precons] Seeding ${precons.length} preconstructed decks (${SET_NAME} printings) owned by system user '${SYSTEM_NAME}' (public)${DRY_RUN ? " - DRY RUN" : ""}.`
   );
 
-  const setBeta = await prisma.set.findUnique({ where: { name: "Beta" } });
+  const setBeta = await prisma.set.findUnique({ where: { name: SET_NAME } });
   if (!setBeta) {
     console.warn(
-      "[Precons] Warning: Set 'Beta' not found in DB. Will fall back to first available set/variant for each card."
+      `[Precons] Warning: Set '${SET_NAME}' not found in DB. Will fall back to first available set/variant for each card.`
     );
   }
 
-  for (const deckDef of BETA_PRECONS) {
+  for (const deckDef of precons) {
     await upsertDeck(userId, deckDef, setBeta?.id || null);
   }
 
@@ -297,6 +328,13 @@ async function upsertDeck(userId, deckDef, betaSetId) {
   const spellbookRows = await resolveList(deckDef.spellbook || [], betaSetId);
   const atlasRows = await resolveList(deckDef.atlas || [], betaSetId);
   const sideRows = await resolveList(deckDef.sideboard || [], betaSetId);
+  const collectionRows = await resolveList(deckDef.collection || [], betaSetId);
+  const wanted = [deckDef.spellbook, deckDef.atlas, deckDef.sideboard, deckDef.collection]
+    .flatMap((l) => l || []).length;
+  const resolved = spellbookRows.length + atlasRows.length + sideRows.length + collectionRows.length;
+  if (resolved !== wanted) {
+    throw new Error(`[Precons] ${name}: ${wanted - resolved} card(s) did not resolve - not writing a partial deck`);
+  }
 
   // Validate composition (Constructed rules)
   validateConstructedOrWarn(name, spellbookRows, atlasRows);
@@ -306,6 +344,15 @@ async function upsertDeck(userId, deckDef, betaSetId) {
   pushRows(toCreate, "Spellbook", spellbookRows);
   pushRows(toCreate, "Atlas", atlasRows);
   pushRows(toCreate, "Sideboard", sideRows);
+  pushRows(toCreate, "Collection", collectionRows);
+
+  if (DRY_RUN) {
+    const offSet = [...spellbookRows, ...atlasRows, ...collectionRows].filter((r) => betaSetId && r.variantSetId !== betaSetId).length;
+    console.log(
+      `[Precons] (dry run) ${name}: spellbook ${sumCounts(spellbookRows)}, atlas ${sumCounts(atlasRows)}, collection ${sumCounts(collectionRows)}; ${offSet} entries not printed in ${SET_NAME}`
+    );
+    return;
+  }
 
   // Upsert deck (update if exists by name for user)
   let deck = await prisma.deck.findFirst({ where: { userId, name } });
@@ -396,7 +443,8 @@ async function resolveCardByName(name, betaSetId) {
   if (setId == null && card.meta.length) setId = card.meta[0].setId;
   if (variantId == null && card.variants.length)
     variantId = card.variants[0].id;
-  return { cardId: card.id, setId, variantId };
+  const variantSetId = card.variants.find((v) => v.id === variantId)?.setId ?? null;
+  return { cardId: card.id, setId, variantId, variantSetId };
 }
 
 function validateConstructedOrWarn(deckName, spellbookRows, atlasRows) {

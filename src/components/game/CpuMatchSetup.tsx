@@ -9,7 +9,7 @@ import AppShell from "@/components/ui/AppShell";
 import { PageHeader } from "@/components/ui/page-header";
 import { RcButton } from "@/components/ui/rc-button";
 import { goldfishOpponentKey } from "@/lib/game/cpu/goldfishTesting";
-import { betaPrecons } from "@/lib/game/cpu/precons";
+import { cpuPrecons } from "@/lib/game/cpu/precons";
 import { fetchPatrons, isPatron } from "@/lib/patrons";
 
 type Status =
@@ -49,7 +49,7 @@ export default function CpuMatchSetup({ mode }: { mode: "precon" | "goldfish" })
     if (mode !== "goldfish" || !session?.user?.id) return;
     try {
       const previous = sessionStorage.getItem(goldfishOpponentKey(session.user.id));
-      if (betaPrecons.some(deck => deck.id === previous)) setPreconId(previous || "");
+      if (cpuPrecons.some(deck => deck.id === previous)) setPreconId(previous || "");
     } catch {}
   },[mode,session?.user?.id]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -154,7 +154,7 @@ export default function CpuMatchSetup({ mode }: { mode: "precon" | "goldfish" })
     creationTimer.current = window.setTimeout(() => {
       creationTimer.current = null;
       if (startCpuMatch) {
-        const opponent = preconId || (mode === "goldfish" ? betaPrecons[Math.floor(Math.random()*betaPrecons.length)].id : undefined);
+        const opponent = preconId || (mode === "goldfish" ? cpuPrecons[Math.floor(Math.random()*cpuPrecons.length)].id : undefined);
         if (mode === "goldfish" && session?.user?.id && opponent) {
           try { sessionStorage.setItem(goldfishOpponentKey(session.user.id),opponent); } catch {}
         }
@@ -203,7 +203,7 @@ export default function CpuMatchSetup({ mode }: { mode: "precon" | "goldfish" })
     mode === "precon" ? "VS CPU Precons" : "Goldfish — Test Any Deck";
   const description =
     mode === "precon"
-      ? "Choose your opponent. You will choose your own Beta precon next."
+      ? "Choose your opponent. You will choose your own precon next."
       : "Choose a CPU sparring partner, then load any of your decks or import a deck. Cards outside the supported precons may need manual resolution.";
 
   return (
@@ -271,11 +271,11 @@ export default function CpuMatchSetup({ mode }: { mode: "precon" | "goldfish" })
                 }`}
               >
                 <div className="font-rc-display text-[19px] leading-[1.1] text-rc-fg-strong">
-                  Random element
+                  Random precon
                 </div>
-                <div className="rc-hint mt-1">any beta precon</div>
+                <div className="rc-hint mt-1">any of the precons</div>
               </button>
-              {betaPrecons.map((deck) => (
+              {cpuPrecons.map((deck) => (
                 <button
                   key={deck.id}
                   type="button"

@@ -18,7 +18,7 @@ import {
   type SummitTopDecks,
 } from "@/lib/decks/deckCategories";
 import { readGoldfishDeck, saveGoldfishDeck, type GoldfishDeckSnapshot } from "@/lib/game/cpu/goldfishTesting";
-import { betaPrecons } from "@/lib/game/cpu/precons";
+import { cpuPrecons } from "@/lib/game/cpu/precons";
 import type { DeckLoadPayload } from "@/lib/game/deckLoader";
 import type { PlayerKey } from "@/lib/game/store";
 
@@ -97,7 +97,7 @@ export default function OnlineDeckSelector({
 
   // Filter decks for precon mode - only show public decks with "precon" in name
   const preconDecks = useMemo(() => {
-    if (cpuPreconsOnly) return betaPrecons;
+    if (cpuPreconsOnly) return cpuPrecons;
     return publicDecks.filter((d) => d.name.toLowerCase().includes("precon"));
   }, [publicDecks, cpuPreconsOnly]);
 
@@ -249,7 +249,9 @@ export default function OnlineDeckSelector({
   const isPreconSelected = useMemo(() => {
     const name = selectedDeckMeta?.name || "";
     const lower = name.toLowerCase();
-    return lower.includes("precon"); // seeded decks use "Beta Precon – <Element>"
+    // Seeded decks: "Beta Precon – <Element>" etc. are short learning lists; the
+    // "<Avatar> Precon [FvL]" decks are full 60/30 constructed decks, so no warning
+    return lower.includes("precon") && !lower.includes("[fvl]");
   }, [selectedDeckMeta]);
 
   const importFromCuriosa = async () => {

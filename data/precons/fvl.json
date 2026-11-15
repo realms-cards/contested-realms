@@ -1,0 +1,500 @@
+[
+  {
+    "id": "fvl-frost-mage",
+    "name": "Frost Mage Precon [FvL]",
+    "set": "Frost Mage Vs. Lavamancer",
+    "provisional": true,
+    "avatar": "Frost Mage",
+    "spellbook": [
+      {
+        "name": "Man-made Ice Age",
+        "count": 1
+      },
+      {
+        "name": "Toolbox",
+        "count": 2
+      },
+      {
+        "name": "Shatter",
+        "count": 3
+      },
+      {
+        "name": "Slide",
+        "count": 2
+      },
+      {
+        "name": "Frostbolt",
+        "count": 3
+      },
+      {
+        "name": "Polar Shift",
+        "count": 1
+      },
+      {
+        "name": "Research",
+        "count": 2
+      },
+      {
+        "name": "Frost Breath",
+        "count": 2
+      },
+      {
+        "name": "Snowball",
+        "count": 2
+      },
+      {
+        "name": "When the Peaks Fell",
+        "count": 1
+      },
+      {
+        "name": "Call of the Sea",
+        "count": 1
+      },
+      {
+        "name": "Arctic Fox",
+        "count": 1
+      },
+      {
+        "name": "Runeling",
+        "count": 3
+      },
+      {
+        "name": "Highgate Guide",
+        "count": 3
+      },
+      {
+        "name": "Jussi Puffins",
+        "count": 2
+      },
+      {
+        "name": "Sissi Marksmen",
+        "count": 2
+      },
+      {
+        "name": "The White Death",
+        "count": 1
+      },
+      {
+        "name": "Aria Wraith",
+        "count": 2
+      },
+      {
+        "name": "Coy Nixie",
+        "count": 2
+      },
+      {
+        "name": "Fey Changeling",
+        "count": 1
+      },
+      {
+        "name": "Lone Wolf",
+        "count": 1
+      },
+      {
+        "name": "Polar Bears",
+        "count": 4
+      },
+      {
+        "name": "Failed Mutation",
+        "count": 1
+      },
+      {
+        "name": "Frost Elemental",
+        "count": 3
+      },
+      {
+        "name": "Hailstriker",
+        "count": 2
+      },
+      {
+        "name": "Swealand Longship",
+        "count": 1
+      },
+      {
+        "name": "Stomping Mammoth",
+        "count": 2
+      },
+      {
+        "name": "A Yeti So Shy",
+        "count": 1
+      },
+      {
+        "name": "Bearserker",
+        "count": 2
+      },
+      {
+        "name": "Frozen Horror",
+        "count": 2
+      },
+      {
+        "name": "Hibernal Legion",
+        "count": 1
+      },
+      {
+        "name": "Nanurluk",
+        "count": 1
+      },
+      {
+        "name": "Full-tilt Goliaths",
+        "count": 1
+      },
+      {
+        "name": "Jormungand",
+        "count": 1
+      }
+    ],
+    "atlas": [
+      {
+        "name": "Ancient Thaw",
+        "count": 2
+      },
+      {
+        "name": "Avalanche",
+        "count": 1
+      },
+      {
+        "name": "Deep Sea",
+        "count": 2
+      },
+      {
+        "name": "Deep Snow",
+        "count": 2
+      },
+      {
+        "name": "Icicle Dome",
+        "count": 2
+      },
+      {
+        "name": "Lighthouse",
+        "count": 2
+      },
+      {
+        "name": "Mountain Pass",
+        "count": 2
+      },
+      {
+        "name": "Mountain Peaks",
+        "count": 2
+      },
+      {
+        "name": "Permafrost",
+        "count": 2
+      },
+      {
+        "name": "River Rapids",
+        "count": 1
+      },
+      {
+        "name": "Springstem Meadow",
+        "count": 2
+      },
+      {
+        "name": "Thin Ice",
+        "count": 3
+      },
+      {
+        "name": "Tundra",
+        "count": 2
+      },
+      {
+        "name": "Winter River",
+        "count": 4
+      },
+      {
+        "name": "Wuthering Heights",
+        "count": 1
+      }
+    ],
+    "collection": [
+      {
+        "name": "Blizzard",
+        "count": 1
+      },
+      {
+        "name": "Disenchant",
+        "count": 1
+      },
+      {
+        "name": "Displace",
+        "count": 1
+      },
+      {
+        "name": "Lightning Bolt",
+        "count": 1
+      },
+      {
+        "name": "Drown",
+        "count": 1
+      },
+      {
+        "name": "Ice Shards",
+        "count": 1
+      },
+      {
+        "name": "Plumed Pegasus",
+        "count": 1
+      },
+      {
+        "name": "Tufted Turtles",
+        "count": 1
+      },
+      {
+        "name": "Arc Lightning",
+        "count": 1
+      },
+      {
+        "name": "Highland Clansmen",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "id": "fvl-lavamancer",
+    "name": "Lavamancer Precon [FvL]",
+    "set": "Frost Mage Vs. Lavamancer",
+    "provisional": true,
+    "avatar": "Lavamancer",
+    "spellbook": [
+      {
+        "name": "Rite of Eruption",
+        "count": 1
+      },
+      {
+        "name": "None Survive the Sun",
+        "count": 1
+      },
+      {
+        "name": "Toolbox",
+        "count": 2
+      },
+      {
+        "name": "Iron Man Talus",
+        "count": 2
+      },
+      {
+        "name": "Terraform",
+        "count": 1
+      },
+      {
+        "name": "Ash of Effort",
+        "count": 2
+      },
+      {
+        "name": "Chart",
+        "count": 2
+      },
+      {
+        "name": "Blaze",
+        "count": 2
+      },
+      {
+        "name": "Landmass",
+        "count": 2
+      },
+      {
+        "name": "Fireball",
+        "count": 3
+      },
+      {
+        "name": "Ground Slam",
+        "count": 3
+      },
+      {
+        "name": "Earthquake",
+        "count": 1
+      },
+      {
+        "name": "Lava Flow",
+        "count": 1
+      },
+      {
+        "name": "Flame Wave",
+        "count": 1
+      },
+      {
+        "name": "Emberleaf Dryad",
+        "count": 2
+      },
+      {
+        "name": "Flametongue Newt",
+        "count": 2
+      },
+      {
+        "name": "Reed Cord Measurer",
+        "count": 3
+      },
+      {
+        "name": "Namira Cheetah",
+        "count": 2
+      },
+      {
+        "name": "Sinterfee",
+        "count": 2
+      },
+      {
+        "name": "Snapjaw Raptor",
+        "count": 1
+      },
+      {
+        "name": "Dust Devil",
+        "count": 1
+      },
+      {
+        "name": "Flat Realm Society",
+        "count": 1
+      },
+      {
+        "name": "Gnarled Laborers",
+        "count": 2
+      },
+      {
+        "name": "Slumbering Giantess",
+        "count": 2
+      },
+      {
+        "name": "Sunspear Tribe",
+        "count": 2
+      },
+      {
+        "name": "Flayer",
+        "count": 2
+      },
+      {
+        "name": "Lava Elemental",
+        "count": 3
+      },
+      {
+        "name": "Pass-plug Serpent",
+        "count": 1
+      },
+      {
+        "name": "Slag Slug",
+        "count": 2
+      },
+      {
+        "name": "Southpaw Dyrodor",
+        "count": 2
+      },
+      {
+        "name": "Stiff-pitch Witch",
+        "count": 2
+      },
+      {
+        "name": "Tusslin' Trolls",
+        "count": 2
+      },
+      {
+        "name": "Myrmidons",
+        "count": 1
+      },
+      {
+        "name": "King Krakalak",
+        "count": 1
+      }
+    ],
+    "atlas": [
+      {
+        "name": "Active Volcano",
+        "count": 2
+      },
+      {
+        "name": "Bouldermaw",
+        "count": 1
+      },
+      {
+        "name": "Combusting Busts",
+        "count": 2
+      },
+      {
+        "name": "Fertile Earth",
+        "count": 2
+      },
+      {
+        "name": "Humming Hummocks",
+        "count": 2
+      },
+      {
+        "name": "Landslide",
+        "count": 3
+      },
+      {
+        "name": "Molten Maar",
+        "count": 2
+      },
+      {
+        "name": "Scoria",
+        "count": 2
+      },
+      {
+        "name": "Sinkhole",
+        "count": 1
+      },
+      {
+        "name": "Smoldering Hollow",
+        "count": 2
+      },
+      {
+        "name": "Spike Trap",
+        "count": 2
+      },
+      {
+        "name": "Steppe",
+        "count": 2
+      },
+      {
+        "name": "Sulfur Vents",
+        "count": 2
+      },
+      {
+        "name": "Supervolcano",
+        "count": 1
+      },
+      {
+        "name": "Trapper's Rest",
+        "count": 2
+      },
+      {
+        "name": "Volcanic Eruption",
+        "count": 2
+      }
+    ],
+    "collection": [
+      {
+        "name": "Dispel",
+        "count": 1
+      },
+      {
+        "name": "Gift of the Serpent",
+        "count": 1
+      },
+      {
+        "name": "Boil",
+        "count": 1
+      },
+      {
+        "name": "Bury",
+        "count": 1
+      },
+      {
+        "name": "Hamlet's Ablaze!",
+        "count": 1
+      },
+      {
+        "name": "Heat Ray",
+        "count": 1
+      },
+      {
+        "name": "Hellhounds",
+        "count": 1
+      },
+      {
+        "name": "Rolling Boulder",
+        "count": 1
+      },
+      {
+        "name": "Amazon Warriors",
+        "count": 1
+      }
+    ]
+  }
+]
