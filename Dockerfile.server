@@ -9,6 +9,8 @@ RUN npm ci
 
 COPY tsconfig.json ./tsconfig.json
 COPY prisma ./prisma
+# Generate typed Prisma models before tsc; without it new models compile as untyped.
+RUN npm run prisma:generate
 COPY server ./server
 # The vendored rules engine: server/modules/engine imports it by relative path, and the server
 # tsconfig now compiles it to dist/vendor alongside dist/server.
