@@ -6,7 +6,10 @@
 const CACHE_VERSION = "v4";
 const CARD_CACHE_NAME = `realms-cards-${CACHE_VERSION}`;
 const STATIC_CACHE_NAME = `realms-static-${CACHE_VERSION}`;
-const API_CACHE_NAME = `realms-api-${CACHE_VERSION}`;
+// Card data is served cache-first for a week, so bump this whenever cards are added or
+// changed (a new set): the old copy is deleted on activate and the art cache is kept.
+// v5: Frost Mage Vs. Lavamancer
+const API_CACHE_NAME = "realms-api-v5";
 // Versioned separately so board changes don't flush the card art cache
 const BOARD_CACHE_NAME = "realms-board-v1";
 const BOARD_ASSET_TTL_MS = 604800000; // 1 week

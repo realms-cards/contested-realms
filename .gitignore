@@ -95,3 +95,7 @@ design_handoff/support.js
 
 # Working clone of our Untested Realm fork (scripts/untested-realm-fork.sh)
 .untested-realm-fork/
+
+# droplet env snapshots
+frontend.env
+*.env
