@@ -116,12 +116,19 @@ describe("layoutBoard2D: tile rows", () => {
     expect(byKey(placed, "avatar:p2").statuses.map((s) => s.status)).toEqual(["ward"]);
   });
 
-  it("turns Rubble and Flooded tokens into tile marks instead of cards", () => {
-    const permanents = { "4,3": [item("s1:rubble", 1)], "0,3": [item("s2:flooded", 2), item("u1", 1)] };
+  it("turns Rubble, Flooded and a site's Silenced / Disabled tokens into tile marks instead of cards", () => {
+    const permanents = {
+      "4,3": [item("s1:rubble", 1)],
+      "0,3": [item("s2:flooded", 2), item("u1", 1)],
+      "1,1": [item("s3:silenced", 1)],
+      "2,1": [item("s4:disabled", 2)],
+    };
     expect(layout(permanents).map((p) => p.key)).toEqual(["perm:u1"]);
     expect(tileMarks(permanents)).toEqual({
-      "4,3": { rubble: true, flooded: false },
-      "0,3": { rubble: false, flooded: true },
+      "4,3": { rubble: true, flooded: false, disabled: false, silenced: false },
+      "0,3": { rubble: false, flooded: true, disabled: false, silenced: false },
+      "1,1": { rubble: false, flooded: false, disabled: false, silenced: true },
+      "2,1": { rubble: false, flooded: false, disabled: true, silenced: false },
     });
   });
 

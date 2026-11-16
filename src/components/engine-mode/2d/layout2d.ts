@@ -58,7 +58,8 @@ export const Z_PICK = 60;
 
 export type StatusKind = "stealth" | "ward" | "disabled" | "silenced";
 const STATUS = /:(stealth|ward|disabled|silenced)$/;
-const TILE_MARK = /:(rubble|flooded)$/;
+// unattached only: a unit's Disabled / Silenced is always attached to it, a site's sits on the square
+const TILE_MARK = /:(rubble|flooded|disabled|silenced)$/;
 
 export type CardRef2D = { kind: "permanent"; at: CellKey; index: number } | { kind: "avatar"; who: PlayerKey };
 
@@ -179,16 +180,23 @@ function badgesOf(item: PermanentItem | null, positions: Layout2DInput["position
   };
 }
 
-/** Cells holding a Rubble or Flooded token: the 2D tile draws an icon instead of a card. */
-export function tileMarks(permanents: Permanents): Record<CellKey, { rubble: boolean; flooded: boolean }> {
-  const out: Record<CellKey, { rubble: boolean; flooded: boolean }> = {};
+export interface TileMarks {
+  rubble: boolean;
+  flooded: boolean;
+  /** the site's abilities are off */
+  disabled: boolean;
+  silenced: boolean;
+}
+
+/** Cells holding a Rubble, Flooded, or a site's Disabled / Silenced token: the 2D tile draws an icon instead of a card. */
+export function tileMarks(permanents: Permanents): Record<CellKey, TileMarks> {
+  const out: Record<CellKey, TileMarks> = {};
   for (const [at, items] of Object.entries(permanents)) {
     for (const item of items) {
-      const mark = item.attachedTo ? null : TILE_MARK.exec(item.instanceId ?? "")?.[1];
+      const mark = item.attachedTo ? null : (TILE_MARK.exec(item.instanceId ?? "")?.[1] as keyof TileMarks | undefined);
       if (!mark) continue;
-      const entry = (out[at] ??= { rubble: false, flooded: false });
-      if (mark === "rubble") entry.rubble = true;
-      else entry.flooded = true;
+      const entry = (out[at] ??= { rubble: false, flooded: false, disabled: false, silenced: false });
+      entry[mark] = true;
     }
   }
   return out;
@@ -355,7 +363,7 @@ export function layoutBoard2D({ permanents, avatars, spans, positions, tile, arr
         attached.set(key, list);
         return;
       }
-      if (TILE_MARK.test(id)) return; // Rubble / Flooded: a tile icon, not a card
+      if (TILE_MARK.test(id)) return; // Rubble / Flooded / a site's Disabled or Silenced: a tile icon, not a card
       const occupant: Occupant = {
         key: id ? `perm:${id}` : `slot:${at}:${index}`,
         token,

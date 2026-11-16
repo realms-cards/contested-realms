@@ -15,11 +15,13 @@ import {
   damageSince,
   damageSnapshot,
   disabledUnits,
+  faceDownTraps,
   harbingerTiles,
   hiddenLayerCounts,
   layerOf,
   projectView,
   pruneArrangement,
+  siteMarks,
   unitCell,
   unitPower,
 } from "./projection";
@@ -353,6 +355,32 @@ describe("token cards", () => {
 
     game.sites.sShrine.ward = false; // a minion leaving took it (wardUnit)
     expect(wardOn(game)).toBe(false);
+  });
+
+  it("marks the site Sinterfee silenced on its square, and lifts the mark when Sinterfee leaves", () => {
+    const deck = toEngineDeck(enginePrecons[0]);
+    const game = createGame([deck, deck], ["You", "Computer"], 11, 0 as PlayerId);
+    // Sinterfee keys its site by number: the site's id must be s<n>
+    game.cards.c90 = { id: "c90", name: "Sulfur Vents", owner: 1 } as (typeof game.cards)[string];
+    game.sites.s90 = {
+      id: "s90", cardId: "c90", name: "Sulfur Vents", x: 1, y: 1, owner: 1, controller: 1, isRubble: false, tapped: false,
+    } as (typeof game.sites)[string];
+    const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === 0)!;
+    game.cards.cFee = { id: "cFee", name: "Sinterfee", owner: 0 } as (typeof game.cards)[string];
+    game.units.uFee = { ...avatar, id: "uFee", cardId: "cFee", name: "Sinterfee", isAvatar: false, x: 1, y: 2, counters: {} };
+    getScript("Sinterfee")!.genesis!(makeCtx(game, "uFee", 0, [{ site: "s90" }]));
+
+    expect(siteMarks(game)).toEqual({ silenced: ["s90"], disabled: [] });
+    const cell = engineCellKey(1, 1, 0);
+    const marked = (g: typeof game) =>
+      (projectView(viewFor(g, 0), "surface", true, {}, new Set(), {}, 0, siteMarks(g)).permanents[cell] ?? []).filter((p) => p.instanceId === "s90:silenced");
+    const [token] = marked(game);
+    expect(token?.card.name).toBe("Silenced");
+    expect(token?.attachedTo ?? null).toBeNull(); // the square's own marker, not a unit's
+
+    delete game.units.uFee; // Sinterfee left the realm
+    expect(siteMarks(game).silenced).toEqual([]);
+    expect(marked(game)).toHaveLength(0);
   });
 });
 
@@ -843,5 +871,50 @@ describe("projecting for the seat-1 viewer", () => {
     const view = viewFor(game, 0);
     expect(projectView(view)).toEqual(projectView(view, "surface", true, {}, new Set(), {}, 0));
     expect(harbingerTiles(view)).toEqual(harbingerTiles(view, 0));
+  });
+});
+
+describe("face-down traps", () => {
+  /** A Lavamancer game with a face-down Spike Trap (disguised as Wasteland) under each seat's avatar. */
+  const withTraps = () => {
+    const lava = toEngineDeck(enginePrecons.find((d) => d.id === "fvl-lavamancer")!);
+    const game = createGame([lava, lava], ["You", "Computer"], 3, 0 as PlayerId);
+    game.phase = "main";
+    game.prompts = [];
+    game.activePlayer = 0 as PlayerId;
+    for (const seat of [0, 1] as PlayerId[]) {
+      const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === seat)!;
+      game.cards[`cTrap${seat}`] = { id: `cTrap${seat}`, name: "Spike Trap", owner: seat } as (typeof game.cards)[string];
+      game.sites[`sTrap${seat}`] = {
+        id: `sTrap${seat}`, cardId: `cTrap${seat}`, name: "Wasteland", x: avatar.x, y: avatar.y, owner: seat, controller: seat,
+        isRubble: false, tapped: false, trap: { element: "fire", realName: "Spike Trap", realCardId: `cTrap${seat}` },
+      } as (typeof game.sites)[string];
+    }
+    game.players[0].mana = 3;
+    return game;
+  };
+
+  it("offers springing your own trap, labelled with what it does and costs", () => {
+    const game = withTraps();
+    const legal = legalActionsWithCasters(game, 0 as PlayerId);
+    const spring = legal.find((a) => a.t === "activate" && a.sourceId === "sTrap0" && a.ability === "trap:spring");
+    expect(spring).toBeDefined();
+    const { paths, labels } = actionPaths(game, legal);
+    const option = paths.find((p) => p.action === spring)!.steps[1];
+    expect(option).toContain("ability-sTrap0-trap:spring");
+    expect(labels[option]).toBe("Spring the trap: 3 damage to a unit here (1 mana)");
+  });
+
+  it("tells only the owner what the trap really is, even though single player holds the full state", () => {
+    const game = withTraps();
+    const mine = Object.values(faceDownTraps(game, 0));
+    expect(mine.map((t) => [t.siteId, t.element, t.realName])).toEqual(
+      expect.arrayContaining([
+        ["sTrap0", "fire", "Spike Trap"],
+        ["sTrap1", "fire", null],
+      ]),
+    );
+    // the redacted view the opponent's seat gets: no real name to leak in the first place
+    expect(Object.values(faceDownTraps(viewFor(game, 1), 1)).find((t) => t.siteId === "sTrap0")?.realName).toBeNull();
   });
 });

@@ -7,13 +7,14 @@ import { cardImage } from "@/components/game/CpuPlayReveal";
 import { cardRefFor, loadCardIndex } from "@/lib/engine-mode/cardIndex";
 import { describeCardStatus, type BoardStatus, type StatusChip } from "@/lib/engine-mode/cardStatus";
 import { imposterMaskOf } from "@/lib/engine-mode/projection";
+import { THRESHOLD_ELEMENTS, type ThresholdElement } from "@/lib/engine-mode/resources";
 import { opponentName, useEngineSession } from "@/lib/engine-mode/session";
 import { PLAYER_COLORS } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import type { CardRef } from "@/lib/game/store/types";
 import { TOKEN_BY_NAME, tokenSlug } from "@/lib/game/tokens";
 import { getCardImageUrl } from "@/lib/utils/cdnUrl";
-import { getCard } from "@sorcery/shared";
+import { findCard, getCard, getScript } from "@sorcery/shared";
 import { useActionFeed } from "./ActionFeed2D";
 import { useChosenSource } from "./PickGuide2D";
 import { entrySummary, latestEntry } from "./actionFeed";
@@ -153,23 +154,176 @@ function useSize<T extends HTMLElement>() {
   return { ref: setEl, size };
 }
 
+const ELEMENT_BY_LETTER: Record<string, (typeof THRESHOLD_ELEMENTS)[number]> = Object.fromEntries(
+  THRESHOLD_ELEMENTS.map((el) => [el.key[0].toUpperCase(), el]),
+);
+
+/** One piece of rules text: words, an element symbol ("(F)") or a generic mana symbol ("(3)", "(X)"). */
+export type RulesPiece = { kind: "text"; text: string } | { kind: "element"; key: ThresholdElement } | { kind: "mana"; text: string };
+
+/** The engine's rules text as paragraphs of pieces, its "(E)(F)" and "(3)" symbols picked out. */
+export function rulesTextPieces(text: string): RulesPiece[][] {
+  return text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) =>
+      line
+        .split(/(\([AEFW]\)|\(\d+\)|\(X\))/)
+        .filter(Boolean)
+        .map((part): RulesPiece => {
+          const symbol = /^\(([AEFW0-9X]+)\)$/.exec(part)?.[1];
+          if (symbol && ELEMENT_BY_LETTER[symbol]) return { kind: "element", key: ELEMENT_BY_LETTER[symbol].key };
+          if (symbol) return { kind: "mana", text: symbol };
+          return { kind: "text", text: part };
+        }),
+    );
+}
+
+function ElementGlyph({ el, size }: { el: ThresholdElement; size: number }) {
+  return <Image src={ELEMENT_BY_LETTER[el[0].toUpperCase()].icon} alt={el} title={el} width={size} height={size} unoptimized className="inline-block align-[-2px]" />;
+}
+
+function ManaGlyph({ text, large }: { text: string; large?: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center justify-center rounded-full border border-rc-line/60 bg-[rgba(7,10,20,0.85)] font-rc-mono leading-none text-rc-fg ${
+        large ? "h-6 min-w-6 px-1 text-[13px]" : "h-4 min-w-4 px-0.5 align-[-2px] text-[10px]"
+      }`}
+    >
+      {text}
+    </span>
+  );
+}
+
+/**
+ * The card's printed information in plain type below the art, which at panel size is too small to
+ * read: name, cost and thresholds (what a site provides), type line, power or life, and its rules
+ * text. The engine's card data, so a reprint shows the text that plays.
+ */
+function CardDetails({ card }: { card: CardRef }) {
+  // findCard, not getCard: a name the engine does not know (a token) must not throw
+  const def = findCard(card.name);
+  const type = def?.type ?? card.type ?? null;
+  const rarity = def?.rarity ?? card.rarity ?? null;
+  const subtypes = def?.subtypes?.length ? def.subtypes.join(" ") : (card.subTypes ?? "");
+  const cost = def?.cost ?? card.cost ?? null;
+  const thresholds = def?.thresholds ?? card.thresholds ?? null;
+  const attack = def?.attack ?? card.attack ?? null;
+  const defence = def?.defence ?? card.defence ?? null;
+  const life = def?.life ?? null;
+  const text = def?.text ?? card.text ?? "";
+  if (!type && !text) return null;
+  const isSite = type === "Site";
+  const glyphs = THRESHOLD_ELEMENTS.flatMap((el) => Array.from({ length: thresholds?.[el.key] ?? 0 }, (_, i) => ({ el: el.key, i })));
+  const stats = [
+    attack !== null ? `Power ${attack}` : null,
+    defence !== null && defence !== attack ? `Defence ${defence}` : null,
+    life !== null ? `Life ${life}` : null,
+  ].filter((s): s is string => !!s);
+  const paragraphs = rulesTextPieces(text);
+  return (
+    <section aria-label={`${card.name}: card text`} className="mt-2 w-full max-w-full flex-none overflow-y-auto px-1 [max-height:45%]">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="m-0 min-w-0 truncate font-fantaisie text-[18px] leading-tight text-rc-fg">{card.name}</h3>
+        {(cost !== null || glyphs.length > 0) && (
+          <span className="flex flex-none items-center gap-0.5" aria-label={isSite ? "Provides" : "Cost"} title={isSite ? "Provides" : "Cost"}>
+            {cost !== null && <ManaGlyph text={String(cost)} large />}
+            {glyphs.map((g) => (
+              <ElementGlyph key={`${g.el}-${g.i}`} el={g.el} size={16} />
+            ))}
+          </span>
+        )}
+      </div>
+      <p className="m-0 mt-0.5 font-rc-sans text-[11px] uppercase tracking-wide text-rc-fg-muted">
+        {[rarity, type].filter(Boolean).join(" ")}
+        {subtypes ? ` · ${subtypes}` : ""}
+        {stats.length > 0 && <span className="text-rc-fg"> · {stats.join(" · ")}</span>}
+      </p>
+      {paragraphs.length > 0 && (
+        <div className="mt-1.5 space-y-1 font-rc-sans text-[13px] leading-snug text-rc-fg">
+          {paragraphs.map((pieces, p) => (
+            <p key={p} className="m-0">
+              {pieces.map((piece, i) =>
+                piece.kind === "element" ? (
+                  <ElementGlyph key={i} el={piece.key} size={14} />
+                ) : piece.kind === "mana" ? (
+                  <ManaGlyph key={i} text={piece.text} />
+                ) : (
+                  <span key={i}>{piece.text}</span>
+                ),
+              )}
+            </p>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 const BOARD_STATUSES: BoardStatus[] = ["disabled", "silenced", "ward", "stealth"];
+const SITE_STATUSES: BoardStatus[] = ["disabled", "silenced"];
 
 /**
  * What is going on with the previewed card, if it is a unit on the board: the statuses the board can
  * only show as small badges, as chips, and the effects behind them in words (describeCardStatus).
  * A board card's instanceId is its unit's CARD id; the board item and its status tokens use the unit id.
  */
+/**
+ * What a face-down trap says in the preview: a chip, and in words what it is. Its owner knows the
+ * real card (and how to spring it); the opponent only that it is a trap of that element.
+ */
+export function trapStatus(trap: { element: string; disguise: string; realName: string | null }): { chip: StatusChip; note: string } {
+  const element = trap.element.replace(/^./, (c) => c.toUpperCase());
+  if (trap.realName) {
+    const spring = getScript(trap.realName)?.siteTrapAbility;
+    const cost = spring ? ` for ${spring.cost?.mana ?? 0} mana` : "";
+    return {
+      chip: { key: "trap", icon: "game-icons:wolf-trap", label: "Your face-down trap", tone: "info" },
+      note: `Face down: your opponent sees ${trap.disguise}. Spring it from the site's options on your turn${cost}.`,
+    };
+  }
+  return {
+    chip: { key: "trap", icon: "game-icons:wolf-trap", label: "Face-down trap", tone: "bad" },
+    note: `A face-down ${element} trap: it looks like ${trap.disguise}, but it is a ${element} site with a Trap ability.`,
+  };
+}
+
+/** The site's face-down trap as the viewer may know it (the real name only for their own). */
+function useFaceDownTrap(card: CardRef | null): { element: string; disguise: string; realName: string | null } | null {
+  const game = useEngineSession((s) => s.game);
+  const seat = useEngineSession((s) => s.seat);
+  useEngineSession((s) => s.rev);
+  const site = card?.instanceId && game ? game.sites[card.instanceId] : undefined;
+  const live = !!site?.trap && !site.isRubble;
+  const element = live ? (site?.trap?.element ?? null) : null;
+  const disguise = live ? (site?.name ?? null) : null;
+  const realName = live && site?.owner === seat ? (site?.trap?.realName ?? null) : null;
+  return useMemo(() => (element && disguise ? { element, disguise, realName } : null), [element, disguise, realName]);
+}
+
 function useCardStatus(card: CardRef | null): { chips: StatusChip[]; notes: string[] } | null {
   const game = useEngineSession((s) => s.game);
   useEngineSession((s) => s.rev);
   const permanents = useGameStore((s) => s.permanents);
+  const trap = useFaceDownTrap(card);
   return useMemo(() => {
     const id = card?.instanceId;
     if (!game || !id) return null;
     const unit = Object.values(game.units).find((u) => u.cardId === id || u.id === id);
-    if (!unit) return null;
     const items = Object.values(permanents).flat();
+    if (!unit) {
+      // a site: its Disabled / Silenced token sits on its square, keyed by the site's id
+      if (!game.sites[id]) return null;
+      const statuses = SITE_STATUSES.filter((s) => items.some((i) => i.instanceId === `${id}:${s}`));
+      const status = describeCardStatus({ unit: null, statuses, stats: null, printed: null, carrying: [], carriedBy: null, site: true });
+      if (trap) {
+        const t = trapStatus(trap);
+        status.chips.unshift(t.chip);
+        status.notes.unshift(t.note);
+      }
+      return status.chips.length || status.notes.length ? status : null;
+    }
     const statuses = BOARD_STATUSES.filter((s) => items.some((i) => i.instanceId === `${unit.id}:${s}`));
     const item = items.find((i) => i.instanceId === unit.id);
     const printed = getCard(unit.name);
@@ -183,7 +337,7 @@ function useCardStatus(card: CardRef | null): { chips: StatusChip[]; notes: stri
       mask: imposterMaskOf(game, unit),
     });
     return status.chips.length || status.notes.length ? status : null;
-  }, [card?.instanceId, game, permanents]);
+  }, [card?.instanceId, game, permanents, trap]);
 }
 
 const CHIP_TONE: Record<StatusChip["tone"], string> = {
@@ -263,7 +417,10 @@ export default function PreviewPanel2D({ quiet = true, compact = false }: { quie
   const looking = !enabled ? null : chosenFirst ? chosen : (previewCard ?? chosen);
   const theirsFirst = quiet && !!lastRef && order.played > order.looked && !chosen;
   const live = theirsFirst ? null : looking;
-  const card = live ?? (quiet ? (lastRef ?? avatar) : null);
+  const looked = live ?? (quiet ? (lastRef ?? avatar) : null);
+  // your own face-down trap: you know what it is, so the preview shows the real card (art and text)
+  const trap = useFaceDownTrap(looked);
+  const card = looked && trap?.realName ? { ...(cardRefFor(trap.realName) as CardRef), instanceId: looked.instanceId, owner: looked.owner } : looked;
   // only a card you are looking at: the opponent's latest play is a card from their hand
   const status = useCardStatus(live ?? null);
   if (!card) return null;
@@ -345,6 +502,7 @@ function PreviewFigure({
           <CardFace key={`${card.name}:${card.slug ?? ""}`} card={card} w={box.w} h={box.h} landscape={landscape} dim={!live} />
         )}
       </div>
+      <CardDetails card={card} />
       {status && (
         <section aria-label={`${card.name}: status`} className="mt-2 flex w-full max-w-full flex-none flex-col gap-1.5 px-1">
           {status.chips.length > 0 && <StatusChips chips={status.chips} />}

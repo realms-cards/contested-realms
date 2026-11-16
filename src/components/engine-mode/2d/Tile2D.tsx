@@ -133,6 +133,11 @@ export interface Tile2DProps {
   saturation: number;
   rubble?: boolean;
   flooded?: boolean;
+  /** the site's abilities are off (Sinterfee, Blightstone, …) */
+  siteDisabled?: boolean;
+  siteSilenced?: boolean;
+  /** a face-down trap: your own (you know what it is) or the opponent's */
+  trap?: "mine" | "theirs" | null;
   /** seats with a Harbinger portal on this square */
   portals?: PlayerKey[];
   /** subsurface view only: the terrain under the site */
@@ -165,7 +170,8 @@ export function hiddenLabel(counts: HiddenCounts, layer: BoardLayer): { icon: st
  * One square of the 2D board: the site's art (or the void) full-bleed — the art band only, never
  * the printed title bar or rules text (siteArtCrop), turned to face its owner (the opponent's
  * upside down, with a faint inner glow in their colour: siteOwnerGlow) — the
- * tile number (no name strip: the card preview names the site), and the square's own marks — tapped, rubble, flooded, portal, subsurface
+ * tile number (no name strip: the card preview names the site), and the square's own marks — tapped, rubble, flooded, disabled or
+ * silenced (the icons a unit's badges use), portal, subsurface
  * tint. The badge counting units on the other layer is LayerBadge2D, drawn above the cards.
  */
 export default function Tile2D({
@@ -175,6 +181,9 @@ export default function Tile2D({
   saturation,
   rubble,
   flooded,
+  siteDisabled,
+  siteSilenced,
+  trap,
   portals = [],
   tint,
   layer = "surface",
@@ -207,7 +216,7 @@ export default function Tile2D({
           press.onPointerLeave(e);
           if (e.pointerType === "mouse") onHover?.(cell, false);
         }}
-        aria-label={`Tile ${number}${name ? `, ${name}` : ", empty"}${site?.tapped ? ", tapped" : ""}${tint ? `, ${tint} below` : ""}`}
+        aria-label={`Tile ${number}${name ? `, ${name}` : ", empty"}${site?.tapped ? ", tapped" : ""}${siteDisabled ? ", disabled" : siteSilenced ? ", silenced" : ""}${trap === "mine" ? ", your face-down trap" : trap ? ", face-down trap" : ""}${tint ? `, ${tint} below` : ""}`}
         className="absolute inset-[1px] isolate touch-manipulation select-none overflow-hidden rounded-[3px] [-webkit-touch-callout:none] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-rc-accent"
         style={{
           background: site ? "rgba(7,10,20,0.9)" : voidFill(layer),
@@ -258,6 +267,21 @@ export default function Tile2D({
           </span>
           {site?.tapped && <Icon icon="game-icons:clockwise-rotation" aria-label="tapped" width={numberSize} height={numberSize} className="text-rc-fg-strong drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]" />}
           {flooded && <Icon icon="game-icons:flood" aria-label="flooded" width={numberSize} height={numberSize} className="text-rc-info drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]" />}
+          {site?.card && siteDisabled && (
+            <Icon icon="game-icons:manacles" aria-label="disabled" width={numberSize} height={numberSize} className="text-rc-danger-ink drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]" />
+          )}
+          {site?.card && trap && (
+            <Icon
+              icon="game-icons:wolf-trap"
+              aria-label={trap === "mine" ? "your face-down trap" : "face-down trap"}
+              width={numberSize}
+              height={numberSize}
+              className={`drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)] ${trap === "mine" ? "text-rc-accent" : "text-rc-danger-ink"}`}
+            />
+          )}
+          {site?.card && siteSilenced && !siteDisabled && (
+            <Icon icon="game-icons:silenced" aria-label="silenced" width={numberSize} height={numberSize} className="text-rc-danger-ink drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]" />
+          )}
           {/* the terrain by shape as well as hue, so it survives monochrome and colour blindness */}
           {tint && (
             <Icon

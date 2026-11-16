@@ -15,7 +15,7 @@ import type {
 import { MAX_EVENTS } from "@/lib/game/store/types";
 import { computeAvailableMana } from "@/lib/game/store/utils/resourceHelpers";
 import { TOKEN_BY_NAME, tokenCardId, tokenSlug } from "@/lib/game/tokens";
-import { effAttack, effDefence, getCard, isDisabled, occupiedSquares } from "@sorcery/shared";
+import { effAttack, effDefence, getCard, isDisabled, occupiedSquares, siteDisabled, siteSilenced } from "@sorcery/shared";
 import type { GameState as EngineState, PlayerId, PlayerView, Region, UnitState } from "@sorcery/shared";
 import { cardRefFor } from "./cardIndex";
 import { type ViewerSeat, engineCellKey, engineToBoard, localizeEngineText } from "./coords";
@@ -684,6 +684,57 @@ export function disabledUnits(game: EngineState): Set<string> {
   return out;
 }
 
+/** Sites whose abilities are off right now, by id. A disabled site counts as disabled only. */
+export interface SiteMarks {
+  silenced: string[];
+  disabled: string[];
+}
+
+export const NO_SITE_MARKS: SiteMarks = { silenced: [], disabled: [] };
+
+/**
+ * Sites the engine considers disabled (Blightstone, a Hibernal Legion's freeze, Courts under
+ * Overflowing Court) or silenced (Sinterfee, Full-tilt Goliaths' snow, …). Both are DERIVED from
+ * the full state, like `disabledUnits`, so the session works them out and the server sends them.
+ */
+export function siteMarks(game: EngineState): SiteMarks {
+  const out: SiteMarks = { silenced: [], disabled: [] };
+  for (const site of Object.values(game.sites)) {
+    if (site.isRubble) continue;
+    if (siteDisabled(game, site)) out.disabled.push(site.id);
+    else if (siteSilenced(game, site)) out.silenced.push(site.id);
+  }
+  return out;
+}
+
+/** A face-down site trap on the board, as the viewer may know it. */
+export interface FaceDownTrap {
+  siteId: string;
+  /** the element it is disguised as (both players see this) */
+  element: string;
+  /** the real card: only for the viewer's OWN traps */
+  realName: string | null;
+}
+
+/**
+ * Face-down traps by board cell, from the viewer's side. Both players see that a site is a face-down
+ * trap and its element; only its owner learns the real card. Single player holds the FULL state
+ * (the computer's real trap names included), so ownership is checked here rather than trusting the
+ * view's redaction.
+ */
+export function faceDownTraps(game: Pick<EngineState, "sites">, viewer: ViewerSeat = 0): Record<string, FaceDownTrap> {
+  const out: Record<string, FaceDownTrap> = {};
+  for (const site of Object.values(game.sites)) {
+    if (!site.trap || site.isRubble) continue;
+    out[engineCellKey(site.x, site.y, viewer)] = {
+      siteId: site.id,
+      element: site.trap.element,
+      realName: site.owner === viewer ? (site.trap.realName ?? null) : null,
+    };
+  }
+  return out;
+}
+
 /**
  * Project the engine's view onto our store's board model, as seen from `viewer`'s side of the
  * table: that seat becomes our P1 and sits at the bottom, whichever engine seat it is.
@@ -699,6 +750,7 @@ export function projectView(
   disabled: ReadonlySet<string> = new Set(),
   arrangement: Arrangement = {},
   viewer: ViewerSeat = 0,
+  marks: SiteMarks = NO_SITE_MARKS,
 ): ProjectedState {
   const players = view.players as ViewPlayer[];
 
@@ -842,6 +894,18 @@ export function projectView(
     for (const site of warded) {
       const controller = site.controller ?? site.owner;
       const card = tokenCard("Ward", `${site.id}:ward`, seatKey(controller, viewer));
+      if (card) pushTo(permanents, engineCellKey(site.x, site.y, viewer), { card, owner: seatOwner(controller, viewer), instanceId: card.instanceId, tapped: false, offset: null });
+    }
+    // a site whose abilities are off carries the same marker a unit does, on its own square
+    const marked = new Map<string, "disabled" | "silenced">([
+      ...marks.silenced.map((id) => [id, "silenced"] as const),
+      ...marks.disabled.map((id) => [id, "disabled"] as const),
+    ]);
+    for (const [id, flag] of marked) {
+      const site = view.sites[id];
+      if (!site || site.isRubble) continue;
+      const controller = site.controller ?? site.owner;
+      const card = tokenCard(flag === "disabled" ? "Disabled" : "Silenced", `${site.id}:${flag}`, seatKey(controller, viewer));
       if (card) pushTo(permanents, engineCellKey(site.x, site.y, viewer), { card, owner: seatOwner(controller, viewer), instanceId: card.instanceId, tapped: false, offset: null });
     }
   }

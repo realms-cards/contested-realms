@@ -53,6 +53,7 @@ export default function EngineOnlineMatch({
         view: envelope.view as PlayerView,
         power: envelope.power,
         disabled: envelope.disabled ?? [],
+        siteMarks: envelope.siteMarks,
         legal: (envelope.legal ?? []) as Action[],
         over: envelope.over,
         build: envelope.build,

@@ -33,6 +33,8 @@ export interface CardStatusInput {
   carriedBy: string | null;
   /** the Avatar a masked Imposter wears (the board shows that face), if it is one */
   mask?: string | null;
+  /** the card is a site: its Disabled / Silenced read as a site's */
+  site?: boolean;
 }
 
 const STATUS_CHIPS: Record<BoardStatus, Omit<StatusChip, "key">> = {
@@ -45,6 +47,11 @@ const STATUS_CHIPS: Record<BoardStatus, Omit<StatusChip, "key">> = {
 const STATUS_NOTES: Partial<Record<BoardStatus, string>> = {
   disabled: "Disabled: no abilities, can't strike, take steps or be tapped to pay for costs.",
   silenced: "Silenced: loses its printed abilities.",
+};
+
+const SITE_STATUS_NOTES: Partial<Record<BoardStatus, string>> = {
+  disabled: "Disabled: the site has no abilities.",
+  silenced: "Silenced: the site loses its printed abilities.",
 };
 
 const DURATION: Record<string, string> = {
@@ -69,7 +76,7 @@ export function describeCardStatus(input: CardStatusInput): { chips: StatusChip[
   for (const status of ["disabled", "silenced", "ward", "stealth"] as BoardStatus[]) {
     if (!statuses.includes(status)) continue;
     chips.push({ key: status, ...STATUS_CHIPS[status] });
-    const note = STATUS_NOTES[status];
+    const note = (input.site ? SITE_STATUS_NOTES : STATUS_NOTES)[status];
     if (note) notes.push(note);
   }
 

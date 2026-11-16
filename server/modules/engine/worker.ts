@@ -24,6 +24,8 @@ import {
   effDefence,
   getCard,
   isDisabled,
+  siteDisabled,
+  siteSilenced,
 } from "../../../vendor/untested-realm/shared/src/index";
 import { legalActionsWithCasters } from "../../../shared/engine/casterActions";
 // Our fixes to vendored card scripts, applied on import. The authority MUST play by the same
@@ -57,6 +59,7 @@ export type EngineReply =
       view: unknown;
       power: Record<string, { atk: number; def: number }>;
       disabled: string[];
+      siteMarks: { silenced: string[]; disabled: string[] };
       legal: unknown[];
     }
   | { id: number; ok: true; kind: "drop" }
@@ -94,6 +97,30 @@ function disabledUnits(state: EngineState): string[] {
   const out: string[] = [];
   for (const unit of Object.values(state.units) as any[]) {
     if (!unit.isAvatar && isDisabled(state, unit)) out.push(unit.id);
+  }
+  return out;
+}
+
+/**
+ * Sites whose abilities are off: disabled (Blightstone, a Hibernal Legion's freeze, Courts under
+ * Overflowing Court) or silenced (Sinterfee, …). Derived from the full state like `disabledUnits`;
+ * mirrors `siteMarks` in src/lib/engine-mode/projection.ts, which the server cannot import.
+ */
+interface MarkableSite {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  isRubble?: boolean;
+}
+
+function siteMarks(state: EngineState): { silenced: string[]; disabled: string[] } {
+  const out = { silenced: [] as string[], disabled: [] as string[] };
+  const sites: Record<string, MarkableSite> = state.sites;
+  for (const site of Object.values(sites)) {
+    if (site.isRubble) continue;
+    if (siteDisabled(state, site)) out.disabled.push(site.id);
+    else if (siteSilenced(state, site)) out.silenced.push(site.id);
   }
   return out;
 }
@@ -141,6 +168,7 @@ export function handle(request: EngineRequest): EngineReply {
           view: viewFor(game, request.seat as never),
           power: unitPower(game),
           disabled: disabledUnits(game),
+          siteMarks: siteMarks(game),
           legal,
         };
       }

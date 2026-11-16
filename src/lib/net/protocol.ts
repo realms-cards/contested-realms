@@ -316,6 +316,8 @@ export const EngineViewSchema = z.object({
    * than stored on the unit, so like `power` it cannot be worked out from a view.
    */
   disabled: z.array(z.string()),
+  /** Sites whose abilities are off: derived from the full state, like `disabled`. Optional for older servers. */
+  siteMarks: z.object({ silenced: z.array(z.string()), disabled: z.array(z.string()) }).optional(),
   /**
    * The actions this seat may take. Generated server-side because the generator trial-applies
    * candidates against the full state, which no client holds.

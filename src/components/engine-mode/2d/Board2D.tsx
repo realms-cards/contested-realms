@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useGraphicsSettings, useVisualAid } from "@/hooks/useGraphicsSettings";
 import { auraAreas, disableAreas, layerTints, multiSquareBodies, spanEntities } from "@/lib/engine-mode/boardOverlays";
+import { faceDownTraps } from "@/lib/engine-mode/projection";
 import { useEngineSession } from "@/lib/engine-mode/session";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import { toneColors } from "@/lib/game/cpu/fieldTargets";
@@ -121,6 +122,8 @@ export default function Board2D({ tileW, tileH, docked = false, children }: Boar
     [tile],
   );
   const marks = useMemo(() => tileMarks(permanents), [permanents]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the engine mutates `game` in place; `rev` is what changes
+  const traps = useMemo(() => (game ? faceDownTraps(game, viewer) : {}), [game, rev, viewer]);
   const toneOf = useCallback((token: string) => cardTone(picker, token), [picker]);
 
   // Engine card ids behind every board id seen this match: once a unit leaves the board its
@@ -274,6 +277,9 @@ export default function Board2D({ tileW, tileH, docked = false, children }: Boar
             saturation={settings.siteSaturation}
             rubble={marks[cell]?.rubble}
             flooded={marks[cell]?.flooded}
+            siteDisabled={marks[cell]?.disabled}
+            siteSilenced={marks[cell]?.silenced}
+            trap={traps[cell] ? (traps[cell].realName ? "mine" : "theirs") : null}
             portals={portalsAt(cell)}
             tint={tint === undefined ? null : tint ? "water" : "land"}
             layer={layer}

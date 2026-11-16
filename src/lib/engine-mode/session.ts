@@ -38,10 +38,11 @@ import {
   hiddenLayerCounts,
   projectView,
   pruneArrangement,
+  siteMarks,
   unitPower,
   sitesLostSince,
 } from "./projection";
-import type { Arrangement, BoardLayer, BoardReveal, DamageSnapshot, HiddenCounts, ProjectedState } from "./projection";
+import type { Arrangement, BoardLayer, BoardReveal, DamageSnapshot, HiddenCounts, ProjectedState, SiteMarks } from "./projection";
 import "@shared/engine/scriptPatches";
 
 export const HUMAN_SEAT: PlayerId = 0;
@@ -278,6 +279,8 @@ interface EngineSession {
     view: PlayerView;
     power: Record<string, { atk: number; def: number }>;
     disabled: string[];
+    /** Sites whose abilities are off (derived from the full state, so sent like `disabled`) */
+    siteMarks?: SiteMarks;
     legal: Action[];
     over?: boolean;
     /** The server's ENGINE_BUILD */
@@ -413,7 +416,12 @@ let matchCounter = 0;
 /** How a remote match posts actions back. Null in single player. */
 let remoteSend: ((message: unknown) => void) | null = null;
 /** The last view the server sent, kept so the board can be repainted once card art resolves. */
-let lastRemoteView: { view: PlayerView; power: Record<string, { atk: number; def: number }>; disabled: Set<string> } | null = null;
+let lastRemoteView: {
+  view: PlayerView;
+  power: Record<string, { atk: number; def: number }>;
+  disabled: Set<string>;
+  marks: SiteMarks | undefined;
+} | null = null;
 /** Wait before retrying a failed card index load (a cold or restarting server). */
 const CARD_INDEX_RETRY_MS = 2000;
 
@@ -431,6 +439,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     view: PlayerView,
     power: Record<string, { atk: number; def: number }>,
     disabled: ReadonlySet<string>,
+    marks: SiteMarks | undefined,
     source: SfxSource,
   ) {
     const { layer, seat } = get();
@@ -464,7 +473,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         source,
       );
     }
-    const projection = projectView(view, layer, get().portalsRevealed, power, disabled, get().arrangement, seat);
+    const projection = projectView(view, layer, get().portalsRevealed, power, disabled, get().arrangement, seat, marks);
     lastProjection = projection;
     // the sound director diffs store updates; tag who caused this one (cosmetic ones stay silent)
     withSfxSource(source, () => useGameStore.setState(projection));
@@ -474,9 +483,9 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     const seat = get().seat;
     // While piloting, the engine intends the pilot to see the hand they are playing.
     const view = viewFor(game, seat, isPiloting(game, seat) ? { revealAll: true } : undefined);
-    // `unitPower` and `disabledUnits` need the full engine state, which only this side has —
-    // see their docblocks. In a player-vs-player match the server computes both instead.
-    paint(view, unitPower(game), disabledUnits(game), source);
+    // `unitPower`, `disabledUnits` and `siteMarks` need the full engine state, which only this side
+    // has — see their docblocks. In a player-vs-player match the server computes them instead.
+    paint(view, unitPower(game), disabledUnits(game), siteMarks(game), source);
   }
 
 
@@ -1148,7 +1157,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       const repaint = () => {
         const last = lastRemoteView;
         if (get().mode !== "remote" || get().matchId !== matchId || !last) return;
-        paint(last.view, last.power, last.disabled, "silent");
+        paint(last.view, last.power, last.disabled, last.marks, "silent");
       };
       void loadCardIndex()
         .catch(
@@ -1182,8 +1191,8 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         lastError: null,
         decisionSeat: envelope.over ? null : envelope.seat,
       });
-      lastRemoteView = { view: envelope.view, power: envelope.power, disabled: new Set(envelope.disabled) };
-      paint(lastRemoteView.view, lastRemoteView.power, lastRemoteView.disabled, "remote");
+      lastRemoteView = { view: envelope.view, power: envelope.power, disabled: new Set(envelope.disabled), marks: envelope.siteMarks };
+      paint(lastRemoteView.view, lastRemoteView.power, lastRemoteView.disabled, lastRemoteView.marks, "remote");
     },
 
     applyRemoteReject: (reason) => {

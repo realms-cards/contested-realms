@@ -145,6 +145,12 @@ function activateLabel(game: EngineState, sourceId: string, key: string): string
 }
 
 function abilityLabel(game: EngineState, sourceId: string, key: string): string {
+  // a face-down trap is named as its disguise; its spring lives on the real card (owner-only knowledge)
+  if (key === "trap:spring") {
+    const real = game.sites[sourceId]?.trap?.realName;
+    const trap = real ? getScript(real)?.siteTrapAbility : undefined;
+    if (trap) return `${trap.label} (${trap.cost?.mana ?? 0} mana)`;
+  }
   const name = game.units[sourceId]?.name ?? game.sites[sourceId]?.name ?? game.artifacts[sourceId]?.name;
   const own = name ? getScript(name)?.abilities?.find((a) => a.key === key) : undefined;
   if (own) return own.label;
