@@ -2,8 +2,8 @@ import { getCard, cardSupport, getKeywords, spiritCastName } from '../cards/db'
 import { getScript, type CardScript, type TargetRef, type TargetSpec } from '../cards/scripts/registry'
 import type { GameState, PlayerId, Region, Thresholds, UnitState } from './types'
 import { occupiedLocations, adjacentSquares, adjacentSquaresW, avatarOf, chebyshev, chebyshevW, orthAdjacentWrapped, nearbySquares, nearbySquaresW, siteAt, siteFlooded, sitesOf, inBounds, unitsAt, occupies, occupiedSquares, GRID_W, GRID_H, edgesConnected, aura2x2Squares } from './grid'
-import { newId, pushLog, makeCtx, checkStateBased, killUnit, opponent, emitUnitEnters, giveEntryLances, directionReach, emitEvent, isMagicProtected, loseLife, checkWard, pushPrompt, registerCont, runCont, toCemetery, bumpManaSpent, beginAreaReveal, recordAffectedSites, snapshotRealm, recordTouchedSites, sealSpellReveal, setActionCredit, restoreActionCredit, firesGenesisOnEntry, recordManaGain, deferTurnStep, settleEntering, runDamageEvent, notifySilencerEntered, notifySiteInterference, applyFlood } from './effects'
-import { abilitiesOff, sanctuaryShields, affinity, effKeywords, isDisabled, disabledByEffect, canExistIn, siteSilenced, siteDisabledByArtifact, artifactSilenced, artScript, zoneAccessToll, isArtifactUnit, isEvilUnit, isEvilUnitIntrinsic, isEvilCardName, isEvilCardNameFor, cardSubtypesFor, collectionBanned, payZoneToll, takeFromCollection, carriedInside, isBlanked, isCarriableArtifact, terrainAt, artifactController, grantedAbilities, strandedSites } from './statics'
+import { protectedFromSource, sourceKindOfName, newId, pushLog, makeCtx, checkStateBased, killUnit, opponent, emitUnitEnters, giveEntryLances, directionReach, emitEvent, isMagicProtected, loseLife, checkWard, pushPrompt, registerCont, runCont, toCemetery, bumpManaSpent, beginAreaReveal, recordAffectedSites, snapshotRealm, recordTouchedSites, sealSpellReveal, setActionCredit, restoreActionCredit, firesGenesisOnEntry, recordManaGain, deferTurnStep, settleEntering, runDamageEvent, notifySilencerEntered, notifySiteInterference, applyFlood } from './effects'
+import { abilitiesOff, sanctuaryShields, affinity, effKeywords, isDisabled, disabledByEffect, canExistIn, siteSilenced, siteDisabledByArtifact, artifactSilenced, artScript, zoneAccessToll, isArtifactUnit, isEvilUnit, isEvilUnitIntrinsic, isEvilCardName, isEvilCardNameFor, cardSubtypesFor, collectionBanned, payZoneToll, takeFromCollection, carriedInside, isBlanked, isCarriableArtifact, terrainAt, isVoidAt, artifactController, grantedAbilities, strandedSites } from './statics'
 import { siteEntryAllowed } from './movement'
 import { applyGrant } from './keywords'
 import { TRAP_DISGUISE, trapElementOf } from './traps'
@@ -353,6 +353,8 @@ function normalCasterCheck(caster: UnitState, kw: ReturnType<typeof effKeywords>
     const el = kw.spellcasterExclude as keyof Thresholds
     if ((def.thresholds[el] ?? 0) > 0) return `${caster.name} cannot cast ${kw.spellcasterExclude} spells.`
   }
+  if (kw.spellcasterExcludeRarity && def.rarity === kw.spellcasterExcludeRarity)
+    return `${caster.name} cannot cast ${kw.spellcasterExcludeRarity} spells.`
   return null
 }
 
@@ -445,6 +447,8 @@ export function canCast(state: GameState, player: PlayerId, cardId: string, cast
         return { ok: false, reason: `Only ${lockedUnit.name} may cast that.` }
       if (lockedUnit.controller !== player || isDisabled(state, lockedUnit))
         return { ok: false, reason: `Only ${lockedUnit.name} may cast that.` }
+      // a silenced card can't cast spells (Silence, Oct 2026), even one it was granted
+      if (lockedUnit.silenced) return { ok: false, reason: `${lockedUnit.name} is silenced and can't cast spells.` }
       if (!lock.grantsCasting && !lockedUnit.isAvatar && !effKeywords(state, lockedUnit).spellcaster)
         return { ok: false, reason: `${lockedUnit.name} has no way to cast that right now.` }
     }
@@ -472,6 +476,7 @@ export function canCast(state: GameState, player: PlayerId, cardId: string, cast
   if (!lock) {
     if (!caster || caster.controller !== player) return { ok: false, reason: 'Invalid spellcaster.' }
     if (state.units[caster.id] && isDisabled(state, caster)) return { ok: false, reason: `${caster.name} is disabled.` }
+    if (state.units[caster.id]?.silenced) return { ok: false, reason: `${caster.name} is silenced and can't cast spells.` }
     const kw = effKeywords(state, caster)
     // A caster is legal iff the NORMAL Spellcaster path passes, OR the spell's
     // casterFilter EXPANDS the caster set to include it ("May be cast by an allied
@@ -932,6 +937,8 @@ function validateTargetCore(
       if (refuses && !abilitiesOff(state, unit) && refuses(state, unit.id, source!)) return `${unit.name} can't be targeted by ${source}.`
       // targeting sanctuaries (Varmint Warrens: Beasts here can't be targeted by enemies)
       if (sanctuaryShields(state, unit, player)) return `${unit.name} is protected there.`
+      // Protected from this source (Humming Hummocks; Protected from sites: Key to the City, Highgate Guide)
+      if (source && protectedFromSource(state, unit, sourceKindOfName(source))) return `${unit.name} is protected from ${source}.`
     }
     if (spec.where && spec.where !== 'anywhere') {
       if (!inReach(state, spec.where, anchors, unit.x, unit.y)) return `Target must be ${spec.where}.`
@@ -951,6 +958,11 @@ function validateTargetCore(
     if (spec.owner === 'enemy' && (site.controller === player || site.controller === null)) return 'Must choose an enemy site.'
     if (spec.where && spec.where !== 'anywhere') {
       if (!inReach(state, spec.where, anchors, site.x, site.y)) return `Target must be ${spec.where}.`
+    }
+    // "target site" shares the caster's region: a surface caster reaches every site, a subsurface one only
+    // sites of its own kind (underground → land, underwater → water), a void caster none (only the void)
+    if (spec.targeted && !casterRegions(state, caster).some((r) => r === 'surface' || locationExists(state, site.x, site.y, r))) {
+      return 'Targets must be in the same region as the caster.'
     }
     if (spec.filter && !spec.filter(state, site, caster)) return 'Not a legal target.'
     return null
@@ -988,6 +1000,15 @@ function validateTargetCore(
     if (spec.targeted && ref.square.region && ref.square.region !== caster.region && !state.sites[caster.id]) {
       return 'Targets must be in the same region as the caster.'
     }
+    // …and that location must EXIST in the caster's region: a surface caster can't throw Lightning Bolt into
+    // the void or a subsurface; a void caster hits only the void; a subsurface one only under its own kind
+    // of site. A square sent without a region resolves in the caster's; a site caster picks one of its two
+    // regions afterwards (castRegion), so the location must exist in either.
+    if (spec.targeted) {
+      const sq = ref.square
+      const regions = state.sites[caster.id] ? casterRegions(state, caster) : [sq.region ?? caster.region]
+      if (!regions.some((r) => locationExists(state, sq.x, sq.y, r))) return 'Targets must be in the same region as the caster.'
+    }
     // enforce the spatial bound (Draconian Bonekite's "target nearby location") — the unit/site
     // branches already do this; without it a `where:'nearby'` SQUARE spec validated the whole board.
     if (spec.where && spec.where !== 'anywhere') {
@@ -1006,6 +1027,20 @@ function validateTargetCore(
 
 const REGIONS: readonly Region[] = ['surface', 'underground', 'underwater', 'void']
 export const isRegion = (r: unknown): r is Region => REGIONS.includes(r as Region)
+
+/** Does location (x, y, region) exist? Surface and subsurface need a site (rubble too), the subsurface of
+ *  the site's kind (underground under land, underwater under water); the void is a siteless square (or a
+ *  site that is also void, The Void). */
+function locationExists(state: GameState, x: number, y: number, region: Region): boolean {
+  if (region === 'void') return isVoidAt(state, x, y)
+  if (!siteAt(state, x, y)) return false
+  return region === 'surface' || region === (terrainAt(state, x, y) === 'water' ? 'underwater' : 'underground')
+}
+
+/** the regions a caster targets from: a unit's own; a SITE caster spans its surface and its subsurface */
+function casterRegions(state: GameState, caster: UnitState): Region[] {
+  return state.sites[caster.id] ? siteCastRegions(state, caster.id) : [caster.region]
+}
 
 /** The regions a SITE caster may cast from: its surface and the subsurface under it (cast:region). */
 function siteCastRegions(state: GameState, siteId: string): Region[] {
@@ -1297,7 +1332,8 @@ function resolveAuraCast(state: GameState, cardId: string, castName: string, pla
 export function resolvePendingCast(state: GameState): void {
   if (state.prompts.length > 0) return
   const p = state.flow?.pendingCast as
-    | { type: 'minion' | 'magic' | 'artifact' | 'aura'; cardId: string; castName: string; player: PlayerId; casterId: string; at: any; targets: ReturnType<typeof parseTargetRefs>; extra: any; fromCemetery: boolean; fromHand?: boolean }
+    | { type: 'minion' | 'magic' | 'artifact' | 'aura'; cardId: string; castName: string; player: PlayerId; casterId: string; at: any; targets: ReturnType<typeof parseTargetRefs>; extra: any; fromCemetery: boolean; fromHand?: boolean
+        effectDone?: { removeToken: boolean; afterKey?: string; afterCtx?: unknown } }
     | undefined
   if (!p) return
   state.flow.pendingCast = undefined
@@ -1305,6 +1341,10 @@ export function resolvePendingCast(state: GameState): void {
   else if (p.type === 'magic') resolveMagicCast(state, p.cardId, p.castName, p.player, p.casterId, p.targets, p.at, p.extra, p.fromCemetery)
   else if (p.type === 'artifact') resolveArtifactCast(state, p.cardId, p.castName, p.player, p.at, p.targets, p.extra)
   else if (p.type === 'aura') resolveAuraCast(state, p.cardId, p.castName, p.player, p.at, p.targets, p.extra)
+  // an effect cast (Archimago's echo…) parked behind a prompt: finish it as finishEffectCast would have
+  const done = p.effectDone
+  if (done?.removeToken) removeCastToken(state, p.cardId)
+  if (done?.afterKey) runCont(state, done.afterKey, done.afterCtx, null)
 }
 
 // A site caster picked the region to blast from → stamp it onto the parked cast; the applyAction
@@ -2046,6 +2086,14 @@ function finishEffectCast(state: GameState, cardId: string, at?: { x: number; y:
   const name = state.cards[cardId]?.name ?? 'the spell'
   const wasMagic = getCard(state.cards[cardId]?.name ?? '').type === 'Magic'
   const err = castSpell(state, pc.player, cardId, pc.casterId, at, targets, extra as any)
+  const parked = state.flow?.pendingCast as { cardId?: string; effectDone?: unknown } | undefined
+  if (!err && parked?.cardId === cardId) {
+    // the cast is PARKED behind a prompt (Ring of Morrigan / Enchantress cast trigger, a site caster's
+    // region…): the copy must outlive it, so resolvePendingCast removes the token and runs the follow-up
+    // once the spell has actually resolved (removing it now made the parked spell resolve as nothing)
+    parked.effectDone = { removeToken: wasMagic && pc.isCopy, afterKey: pc.afterKey, afterCtx: pc.afterCtx }
+    return
+  }
   if (err) {
     // a REAL hand card that fails to cast stays in hand (only drop the one-shot free credit); a token copy vanishes
     if (pc.realCard) { dropCastCredit(state, cardId); pushLog(state, pc.player, `${name} can't be cast — ${err}`) }

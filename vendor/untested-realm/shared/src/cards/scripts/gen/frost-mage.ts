@@ -20,7 +20,7 @@ registerScript('Frost Mage', {
       if (!u) return
       // a minion that "can't be modified" can't be encased at all — neither half sticks
       if (isUnmodifiable(ctx.state, u)) return ctx.log(`${u.name} can't be encased.`)
-      disableUntilYourNextTurn(ctx.state, u.id, ctx.controller)
+      disableUntilYourNextTurn(ctx, u.id, ctx.controller)
       ctx.state.flow = ctx.state.flow ?? {}
       ctx.state.flow.encased = [...(ctx.state.flow.encased ?? []), { unitId: u.id, player: ctx.controller, turn: ctx.state.turn }]
       ctx.log(`${u.name} is encased in ice.`)

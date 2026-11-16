@@ -7,7 +7,7 @@ registerScript('Peasant Revolt', {
   onCast: (ctx) => {
     const posh = (n: string) => ['Unique', 'Elite'].includes(getCard(n).rarity ?? '')
     for (const u of Object.values(ctx.state.units)) {
-      if (!u.isAvatar && posh(u.name)) killUnit(ctx.state, u.id)
+      if (!u.isAvatar && posh(u.name) && !ctx.shields(u.id)) killUnit(ctx.state, u.id)
     }
     for (const a of Object.values(ctx.state.artifacts)) {
       if (posh(a.name)) ctx.breakArtifact(a.id)

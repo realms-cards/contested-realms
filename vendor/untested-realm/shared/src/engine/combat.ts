@@ -4,10 +4,10 @@ import { getScript, type DamageSource } from '../cards/scripts/registry'
 import { findCard } from '../cards/db'
 import { pickUpUnits, dropUnits, syncCarried, detachFromCarrier } from './carrying'
 import type { GameState, PlayerId, Region, Step, UnitState, AttackTarget } from './types'
-import { pushLog, pushPrompt, registerCont, resumeWhenSettled, dealDamageToUnit, dealDamage, checkStateBased, opponent, makeCtx, emitUnitMoved, gainLife, tapUnit, untapUnit, emitEvent, emitEventWithFallen, beginDamageEvent, endDamageEvent, deathPending, drawCards, askDrawCard, recordAreaReveal, markRevealShoots, beginAreaReveal, sealAbilityReveal, beginBattleCapture, finishBattleCapture, avatarTrappedAt, isMagicProtected, isDyingUnit, killUnit } from './effects'
-import { abilitiesOff, effAttack, effKeywords, isDisabled, canTap, projectileCanHit, attackBlockedAt, attackForbidden, interceptBlockedAt, siteSilenced as siteSilencedC, artScript, regionPresentAt, carriedInside, isBlanked, isCarriableArtifact } from './statics'
+import { pushLog, pushPrompt, registerCont, resumeWhenSettled, dealDamageToUnit, dealDamage, checkStateBased, opponent, makeCtx, emitUnitMoved, gainLife, tapUnit, untapUnit, emitEvent, emitEventWithFallen, beginDamageEvent, endDamageEvent, deathPending, drawCards, askDrawCard, recordAreaReveal, asAreaDamage, markRevealShoots, beginAreaReveal, sealAbilityReveal, beginBattleCapture, finishBattleCapture, avatarTrappedAt, isMagicProtected, isDyingUnit, killUnit } from './effects'
+import { protectedFromNonUnits, abilitiesOff, effAttack, effDefence, effKeywords, isDisabled, canTap, projectileCanHit, attackBlockedAt, attackForbidden, interceptBlockedAt, siteSilenced as siteSilencedC, artScript, regionPresentAt, carriedInside, isBlanked, isCarriableArtifact } from './statics'
 import { findPath, isFreeStep, isLegalStep, maxSteps, reachableLocations, reachableWithPaths, resolveMovement, type Walk } from './movement'
-import { unitsAt, occupies, occupiedSquares, sharedLocation, inBounds, edgesConnected, GRID_W, GRID_H, squareLabel } from './grid'
+import { unitsAt, occupies, occupiedSquares, sharedLocation, inBounds, edgesConnected, realmIsFlat, GRID_W, GRID_H, squareLabel } from './grid'
 
 // ---------- entry: the Move and Attack basic ability ----------
 
@@ -165,7 +165,7 @@ function coLocatedAttackTargets(state: GameState, unit: UnitState): string[] {
       if (t.stealth && !truesight) return false
       if (attackForbidden(state, unit, t)) return false
       if (effKeywords(state, t).airborne && !kw.airborne && t.region === 'surface') return false
-      if (t.region === 'surface' && attackBlockedAt(state, t.x, t.y, t)) return false
+      if (t.region === 'surface' && attackBlockedAt(state, t.x, t.y, t, unit)) return false
       return true
     })
     .map((t) => t.id)
@@ -299,10 +299,11 @@ export function beginAttack(
     const truesight = attacker.carrying.some((id) => { const a = state.artifacts[id]; return !!a && !!artScript(state, a)?.bearerTruesight })
     if (target.stealth && !truesight) return 'that minion has Stealth'
     if (attackForbidden(state, attacker, target)) return `${target.name} can't be attacked by ${attacker.name}`
-    if (where.region === 'surface' && attackBlockedAt(state, where.x, where.y, target)) return 'that location is protected from attacks'
+    if (where.region === 'surface' && attackBlockedAt(state, where.x, where.y, target, attacker)) return 'that location is protected from attacks'
     // start the two-sided battle reveal BEFORE the declaration log so it's captured. The snapshot
     // survives the defend / allocate prompts in flow.pendingBattle.
     beginBattleCapture(state, attacker, { x: where.x, y: where.y }, target.id)
+    markAttacking(state, attacker)
     pushLog(state, player, `${attacker.name} attacks ${target.name}!`)
     // Stealth is NOT broken yet: a Stealth minion's attack can't be defended and the
     // attacker can't be targeted by the opponent's "when attacked" abilities. Stealth
@@ -327,9 +328,10 @@ export function beginAttack(
   if (!site) return 'no such site'
   if (site.controller === player || site.controller === null) return 'you can only attack enemy sites'
   if (getScript(attacker.name)?.cantAttackSites && !attacker.silenced) return `${attacker.name} cannot attack sites`
-  if (attackBlockedAt(state, site.x, site.y)) return 'that site is protected from attacks'
+  if (attackBlockedAt(state, site.x, site.y, undefined, attacker)) return 'that site is protected from attacks'
   if (!occupies(attacker, site.x, site.y, 'surface')) return 'you must be on the surface of that site'
   beginBattleCapture(state, attacker, { x: site.x, y: site.y })
+  markAttacking(state, attacker)
   pushLog(state, player, `${attacker.name} attacks ${site.name}!`)
   // Stealth is dropped inside openDefendWindow (after the undefendable window is
   // decided) so the Stealth minion's attack correctly can't be defended.
@@ -377,7 +379,7 @@ function compelledAttackPath(state: GameState, attacker: UnitState, target: Unit
   if (tkw.airborne && !kw.airborne && target.region === 'surface') return null // only Airborne attacks Airborne
   const truesight = attacker.carrying.some((id) => { const a = state.artifacts[id]; return !!a && !!artScript(state, a)?.bearerTruesight })
   if (target.stealth && !truesight) return null
-  if (target.region === 'surface' && attackBlockedAt(state, target.x, target.y, target)) return null
+  if (target.region === 'surface' && attackBlockedAt(state, target.x, target.y, target, attacker)) return null
   for (const t of (state.flow?.peaceTruce ?? []) as { bound: PlayerId; protectedPlayer: PlayerId; turn: number }[]) {
     if (t.bound === attacker.controller && target.controller === t.protectedPlayer && state.turn > t.turn) return null
   }
@@ -467,9 +469,9 @@ function endStealthGrace(unit: UnitState | undefined): void {
 
 export function breakStealth(state: GameState, unit: UnitState): void {
   // breakStealth is called at the unit's realm-interaction moments (declaring an attack,
-  // firing a Ranged shot, or a triggered projectile like Colicky Dragonettes' end-of-turn
-  // hiccup) — record the interaction so the Drop basic ability is disallowed this turn, then
-  // spend the Stealth token if present.
+  // or a shot of its own — Ranged or a triggered projectile like Colicky Dragonettes'
+  // end-of-turn hiccup — that HITS a unit) — record the interaction so the Drop basic ability
+  // is disallowed this turn, then spend the Stealth token if present.
   unit.interactedTurn = state.turn
   if (unit.stealth) {
     unit.stealth = false
@@ -976,12 +978,21 @@ function hasUnbrokenLance(state: GameState, unit: UnitState): boolean {
   return unbrokenLances(state, unit).length > 0
 }
 
+/** An attack is declared: until its battle ends (endBattle) the attacker is "attacking" — read by
+ *  "while attacking" statics outside the fight's own context (Dust Devil takes no damage meanwhile). */
+function markAttacking(state: GameState, attacker: UnitState): void {
+  state.flow = state.flow ?? {}
+  state.flow.attackingUnitId = attacker.id
+}
+
 /** The fight is over and damage allocated: combatants come to rest (an at-rest disabler may bite now), and
  *  a site's temporary garrison (Free City's 3/3, `counters.garrison`) leaves the board — it is no card. If it
  *  fought (tapped to defend or attack), the city's once-per-turn is spent. */
 function endBattle(state: GameState): void {
   if (!state.flow) return
   state.flow.battleUnits = undefined
+  state.flow.attackingUnitId = undefined
+  state.flow.battleScratch = undefined // per-battle notes card scripts keep between strike hooks (Stomping Mammoth)
   for (const u of Object.values(state.units)) endStealthGrace(u)
   for (const u of Object.values(state.units)) {
     if (!u.counters?.garrison) continue
@@ -1177,6 +1188,7 @@ function runFightPass(state: GameState, ctx: FightCtx): void {
           attackerId: blow.striker.id,
           name: blow.striker.name,
           undefended: ctx.isAttack === true && ctx.defenderIds.length === 0,
+          attacking: ctx.isAttack === true && attackers.includes(blow.striker),
         },
       })
       if (blow.target.isAvatar) emitEvent(state, 'onAllyStrikesAvatar', blow.striker, blow.target)
@@ -1289,6 +1301,32 @@ function strikePower(state: GameState, striker: UnitState): number {
   return n
 }
 
+/** Stomping Mammoth (FAQ): "assign the Mammoth's damage to each defending minion until they would die. Then,
+ *  any remaining damage is dealt to the Mammoth's site." Damage put on a unit beyond what it has left is moved
+ *  to the struck units still short of lethal (in fight order); whatever is left over stays as excess. */
+function lethalFirst(state: GameState, alloc: Record<string, number>, enemies: string[], unspent: number, lethal: boolean): void {
+  const room = (id: string) => {
+    const u = state.units[id]
+    if (!u) return 0
+    if (u.isAvatar) return Math.max(0, u.life ?? 0)
+    const left = Math.max(0, effDefence(state, u) - u.damage)
+    return lethal ? Math.min(1, left) : left // with Lethal, 1 damage kills any minion
+  }
+  // power left unassigned is excess too — under-allocating can't dodge it
+  let surplus = Math.max(0, unspent)
+  for (const id of Object.keys(alloc)) {
+    const over = alloc[id] - room(id)
+    if (over > 0) { alloc[id] -= over; surplus += over }
+  }
+  for (const id of enemies) {
+    if (surplus === 0) break
+    const add = Math.min(surplus, room(id) - (alloc[id] ?? 0))
+    if (add > 0) { alloc[id] = (alloc[id] ?? 0) + add; surplus -= add }
+  }
+  if (surplus > 0 && enemies.length) alloc[enemies[0]] = (alloc[enemies[0]] ?? 0) + surplus
+  for (const id of Object.keys(alloc)) if (alloc[id] === 0) delete alloc[id]
+}
+
 registerCont('combat:allocate', (state, ctx: FightCtx, choice: { strikerId: string; allocation: Record<string, number> }) => {
   const striker = choice?.strikerId ? state.units[choice.strikerId] : null
   if (striker && choice.allocation && typeof choice.allocation === 'object') {
@@ -1312,6 +1350,11 @@ registerCont('combat:allocate', (state, ctx: FightCtx, choice: { strikerId: stri
         if (excess === 0) break
       }
     }
+    if (getScript(striker.name)?.lethalFirstWhileAttacking && !abilitiesOff(state, striker) && ctx.isAttack === true) {
+      const { attackers, defenders } = fightSides(state, ctx)
+      const assigned = Object.values(clean).reduce((a, b) => a + b, 0)
+      if (attackers.some((a) => a.id === striker.id)) lethalFirst(state, clean, defenders.map((d) => d.id), power - assigned, !!effKeywords(state, striker).lethal)
+    }
     ctx.allocations[choice.strikerId] = clean
   }
   runFightPass(state, ctx)
@@ -1323,11 +1366,13 @@ function offerIntercept(state: GameState, mover: UnitState): void {
   const enemyP = opponent(mover.controller)
   const mkw = effKeywords(state, mover)
   if (mover.stealth) return // can't be intercepted
-  if (mover.region === 'surface' && interceptBlockedAt(state, mover.x, mover.y)) return // Blizzard etc.
+  // Blizzard etc. — an interceptor Protected from all but units (Humming Hummocks) isn't impeded by the aura
+  const interceptBlocked = mover.region === 'surface' && interceptBlockedAt(state, mover.x, mover.y)
   // Blaze: the burning runner can't be intercepted this turn
   if ((state.flow?.noIntercept ?? []).some((e: any) => e.unitId === mover.id && e.turn === state.turn)) return
   const candidates = unitsAt(state, mover.x, mover.y, mover.region).filter((u) => {
     if (u.controller !== enemyP) return false
+    if (interceptBlocked && !protectedFromNonUnits(state, u)) return false
     if (!canTap(state, u) || isDisabled(state, u)) return false
     if (getScript(u.name)?.cantIntercept && !u.silenced) return false
     if (mkw.airborne) {
@@ -1396,6 +1441,8 @@ function resolveProjectileHit(state: GameState, shooterId: string, targetId: str
   const target = state.units[targetId]
   if (!shooter || !target) return
   pushLog(state, shooter.controller, `${shooter.name} shoots ${target.name}.`)
+  // the shot struck a unit: that reveals the shooter (a miss keeps its Stealth, so an Infiltrated minion stays put)
+  breakStealth(state, shooter)
   const snapshot = { ...target }
   const kw = effKeywords(state, shooter)
   // a ranged strike IS a strike: it uses strike power (a carried Lance's +1, a Grim Guisarme ×2 — the
@@ -1441,11 +1488,88 @@ registerCont('projectile:hit', (state, ctx: { shooterId: string }, choice) => {
   else endStealthGrace(state.units[ctx.shooterId]) // no hit: the stealthed shot is over all the same
 })
 
+// Sissi Marksmen chose whether her shot flies across the top/bottom edge (shootProjectile): across → the
+// units it reaches there are hit (the shooter picks among several), else the shot hits nothing
+registerCont('ranged:across', (state, ctx: { shooterId: string; player: PlayerId; candidates: string[] }, choice) => {
+  const shooter = state.units[ctx.shooterId]
+  const here = choice === true ? ctx.candidates.filter((id) => state.units[id]) : []
+  if (!shooter || here.length === 0) {
+    if (shooter) pushLog(state, ctx.player, `${shooter.name}'s shot hits nothing.`)
+    return endStealthGrace(shooter)
+  }
+  if (here.length === 1) return resolveProjectileHit(state, ctx.shooterId, here[0])
+  pushPrompt(state, {
+    player: ctx.player,
+    kind: 'chooseTargets',
+    title: `${shooter.name}'s shot — which unit does it hit?`,
+    data: { candidates: here, count: 1, upTo: false, kind: 'unit' },
+    cont: 'projectile:hit',
+    ctx: { shooterId: ctx.shooterId },
+  })
+})
+
 // an oversized/stretched shooter picked which of its squares the Ranged shot flies from → fire it there
 registerCont('ranged:origin', (state, ctx: { unitId: string; player: PlayerId; dir: Direction }, choice) => {
   const sq = choice as any
   if (sq && typeof sq.x === 'number' && typeof sq.y === 'number') shootProjectile(state, ctx.player, ctx.unitId, ctx.dir, { x: sq.x, y: sq.y })
 })
+
+/** what a Ranged shooter's shot can hit: projectileCanHit, plus Stealthed units for a Truesight Crossbow bearer */
+function rangedHittable(state: GameState, unit: UnitState): (u: UnitState) => boolean {
+  const truesight = unit.carrying.some((id) => { const a = state.artifacts[id]; return !!a && !!artScript(state, a)?.bearerTruesight })
+  return (u: UnitState) => projectileCanHit(state, u) || (truesight && !!u.stealth)
+}
+
+/** A Ranged shot's flight from (ox,oy) past its own square, out to its range: the squares it enters and the
+ *  units at the first square holding something it can hit (null: a miss). Magellan Globe: the shot flies
+ *  around the joined edge (same region), like a spell projectile's raySquares, and a `visited` guard stops it
+ *  if it circles back; `acrossTopBottom` also lets a north/south shot cross the top/bottom edge (Sissi
+ *  Marksmen). Pure — the client draws the lane from it too. */
+export function rangedTrace(state: GameState, unit: UnitState, player: PlayerId, direction: Direction, ox: number, oy: number, acrossTopBottom: boolean): { here: UnitState[] | null; path: { x: number; y: number }[] } {
+  const dx = direction === 'e' ? 1 : direction === 'w' ? -1 : 0
+  const dy = direction === 'n' ? 1 : direction === 's' ? -1 : 0
+  const hittable = rangedHittable(state, unit)
+  const wrap = edgesConnected(state)
+  const range = effKeywords(state, unit).ranged ?? 1
+  const visited = new Set<string>([`${ox},${oy}`])
+  const path: { x: number; y: number }[] = []
+  let x = ox
+  let y = oy
+  for (let step = 1; step <= range; step++) {
+    x += dx
+    y += dy
+    if (!inBounds(x, y)) {
+      if (!wrap && !(acrossTopBottom && dx === 0)) break
+      x = ((x % GRID_W) + GRID_W) % GRID_W
+      y = ((y % GRID_H) + GRID_H) % GRID_H
+    }
+    if (visited.has(`${x},${y}`)) break // wrapped all the way around the realm → stop
+    if (!regionPresentAt(state, unit.region, x, y)) break // a void square is the edge of the shot's region
+    // Impenetrable Copse: projectiles can't enter from outside
+    const cover = Object.values(state.sites).find((s) => s.x === x && s.y === y && !s.isRubble)
+    if (cover && getScript(cover.name)?.blocksProjectiles && !siteSilencedC(state, cover)) break
+    // Sir Morien: enemy projectiles can't enter his square — but only in the projectile's own region
+    // ("here" = his location), so a surface blocker doesn't stop a subsurface shot and vice-versa
+    if (unitsAt(state, x, y, unit.region).some((u) => u.controller !== player && getScript(u.name)?.unitBlocksProjectiles && !abilitiesOff(state, u))) break
+    visited.add(`${x},${y}`)
+    path.push({ x, y })
+    const here = unitsAt(state, x, y, unit.region).filter(hittable)
+    if (here.length > 0) return { here, path }
+  }
+  return { here: null, path }
+}
+
+/** Is Sissi Marksmen's "may shoot across the top and bottom edges" offered for this shot? Only for a
+ *  north/south shot that misses on this side but would hit something across the edge — and not while the
+ *  Globe already joins the edges, the realm is flat, or the shooter has lost its abilities. */
+export function rangedAcrossOffered(state: GameState, unit: UnitState, player: PlayerId, direction: Direction, ox = unit.x, oy = unit.y): boolean {
+  if (direction !== 'n' && direction !== 's') return false
+  if (edgesConnected(state) || realmIsFlat(state) || !getScript(unit.name)?.rangedWrapsTopBottom || abilitiesOff(state, unit)) return false
+  // an enemy on the shooter's own square is struck first, whichever way it shoots
+  if (unitsAt(state, ox, oy, unit.region).some((u) => u.id !== unit.id && u.controller !== player && rangedHittable(state, unit)(u))) return false
+  if (rangedTrace(state, unit, player, direction, ox, oy, false).here) return false
+  return !!rangedTrace(state, unit, player, direction, ox, oy, true).here
+}
 
 export function shootProjectile(state: GameState, player: PlayerId, unitId: string, direction: Direction, origin?: { x: number; y: number }, opts?: { skipTapCheck?: boolean }): string | null {
   const unit = state.units[unitId]
@@ -1460,7 +1584,9 @@ export function shootProjectile(state: GameState, player: PlayerId, unitId: stri
     if (!canTap(state, unit)) return unit.tapped ? `${unit.name} is already tapped.` : `${unit.name} has summoning sickness.`
     tapUnit(state, unit)
   }
-  breakStealth(state, unit)
+  // firing interacts with the realm (no Drop this turn); the Stealth token is only spent if the
+  // shot hits a unit (resolveProjectileHit) — a shot that hits nothing deals no damage and stays hidden.
+  unit.interactedTurn = state.turn
   // both-player reveal: golden shooter + "<card> shoots!" over its (glowing) site (like a cast).
   beginAreaReveal(state, undefined, unit.name, unitId, false)
   markRevealShoots(state)
@@ -1469,11 +1595,7 @@ export function shootProjectile(state: GameState, player: PlayerId, unitId: stri
   // an oversized/stretched shooter fires from a CHOSEN occupied square (origin); the unit itself stays put
   const ox = origin?.x ?? unit.x
   const oy = origin?.y ?? unit.y
-  const dx = direction === 'e' ? 1 : direction === 'w' ? -1 : 0
-  const dy = direction === 'n' ? 1 : direction === 's' ? -1 : 0
-  // Truesight Crossbow: the bearer sees through Stealth
-  const truesight = unit.carrying.some((id) => { const a = state.artifacts[id]; return !!a && !!artScript(state, a)?.bearerTruesight })
-  const hittable = (u: UnitState) => projectileCanHit(state, u) || (truesight && u.stealth)
+  const hittable = rangedHittable(state, unit)
   // resolve the impact: one hittable unit → resolve now; 2+ → the SHOOTER chooses
   // which is hit (rulebook Projectiles), never an engine auto-pick.
   const impact = (here: UnitState[]) => {
@@ -1493,32 +1615,21 @@ export function shootProjectile(state: GameState, player: PlayerId, unitId: stri
     const atOrigin = unitsAt(state, ox, oy, unit.region).filter((u) => u.id !== unitId && u.controller !== player && hittable(u))
     if (atOrigin.length > 0) { impact(atOrigin); return null }
   }
-  // Magellan Globe: a Ranged shot flies around the joined edge (same region), exactly like a spell
-  // projectile's raySquares — wrap the coords on leaving the board, and a `visited` guard stops the
-  // ray if it circles all the way back. Without a Globe it breaks at the edge as before.
-  const wrap = edgesConnected(state)
-  const visited = new Set<string>([`${ox},${oy}`])
-  let x = ox
-  let y = oy
-  for (let step = 1; step <= (kw.ranged ?? 1); step++) {
-    x += dx
-    y += dy
-    if (!inBounds(x, y)) {
-      if (!wrap) break
-      x = ((x % GRID_W) + GRID_W) % GRID_W
-      y = ((y % GRID_H) + GRID_H) % GRID_H
-    }
-    if (visited.has(`${x},${y}`)) break // wrapped all the way around the realm → stop
-    if (!regionPresentAt(state, unit.region, x, y)) break // a void square is the edge of the shot's region
-    // Impenetrable Copse: projectiles can't enter from outside
-    const cover = Object.values(state.sites).find((s) => s.x === x && s.y === y && !s.isRubble)
-    if (cover && getScript(cover.name)?.blocksProjectiles && !siteSilencedC(state, cover)) break
-    // Sir Morien: enemy projectiles can't enter his square — but only in the projectile's own region
-    // ("here" = his location), so a surface blocker doesn't stop a subsurface shot and vice-versa
-    if (unitsAt(state, x, y, unit.region).some((u) => u.controller !== player && getScript(u.name)?.unitBlocksProjectiles && !abilitiesOff(state, u))) break
-    visited.add(`${x},${y}`)
-    const here = unitsAt(state, x, y, unit.region).filter(hittable)
-    if (here.length > 0) { impact(here); return null }
+  const hit = rangedTrace(state, unit, player, direction, ox, oy, false).here
+  if (hit) { impact(hit); return null }
+  // Sissi Marksmen "MAY shoot across the top and bottom edges": only asked when crossing would hit
+  // something (a shot that hits nothing either way is the same miss); the shot hits allies too, so it's a choice
+  const across = rangedAcrossOffered(state, unit, player, direction, ox, oy) ? rangedTrace(state, unit, player, direction, ox, oy, true).here : null
+  if (across) {
+    pushPrompt(state, {
+      player,
+      kind: 'yesNo',
+      title: `${unit.name}: shoot across the edge of the realm at ${across.map((u) => u.name).join(' / ')}?`,
+      data: {},
+      cont: 'ranged:across',
+      ctx: { shooterId: unitId, player, candidates: across.map((u) => u.id) },
+    })
+    return null
   }
   pushLog(state, player, `${unit.name}'s shot hits nothing.`)
   endStealthGrace(state.units[unitId])
@@ -1647,6 +1758,10 @@ export interface VolleyProjectileSpec {
   /** the caster / bearer, never hit by its own shot */
   excludeId?: string
   srcName: string
+  /** a unit shooting its own projectile (Colicky Dragonettes): it loses Stealth only when a shot hits a unit */
+  shooterId?: string
+  /** set on the first call: 2+ projectiles are an AREA (site numbers); a lone one is a single hit */
+  multi?: boolean
 }
 
 /** Fire `volleys` damage projectiles from (ox,oy), one at a time. Each strikes the
@@ -1654,6 +1769,7 @@ export interface VolleyProjectileSpec {
  *  Deals `damage` to the chosen unit. Public entry: call from a card's onCast/cont. */
 export function fireVolleyProjectiles(state: GameState, spec: VolleyProjectileSpec): void {
   if (spec.volleys <= 0) return
+  if (spec.multi === undefined) spec = { ...spec, multi: spec.volleys > 1 }
   markRevealShoots(state) // an ability firing this reads "<card> shoots!" (ignored for spells)
   const range = spec.maxRange ?? Infinity
   const filter = spec.filter ?? 'canHit'
@@ -1683,15 +1799,36 @@ export function fireVolleyProjectiles(state: GameState, spec: VolleyProjectileSp
   if (spec.volleys > 1) fireVolleyProjectiles(state, { ...spec, volleys: spec.volleys - 1 })
 }
 
+/** Does the shooter's choice of direction change what a volley projectile hits? Not when every
+ *  direction ends the same way: an enemy on the shooter's own square is struck first whichever way
+ *  it flies, and a board with nothing in reach is missed in every direction. Reads only, no reveal. */
+export function volleyDirectionMatters(state: GameState, spec: Omit<VolleyProjectileSpec, 'dir'>): boolean {
+  const range = spec.maxRange ?? Infinity
+  const filter = spec.filter ?? 'canHit'
+  const srcMagic = projSrcIsMagic(spec.srcName)
+  const outcome = (dir: string): string => {
+    for (const sq of projectilePath(state, spec.region, spec.ox, spec.oy, dir, range, spec.player)) {
+      if (srcMagic && magicBlockedAt(state, sq, spec.region, spec.player, spec.excludeId)) return `blocked@${sq.x},${sq.y}`
+      const here = projCandidates(state, sq, spec.region, spec.player, filter, spec.excludeId)
+      if (here.length) return [...here].sort().join(',')
+    }
+    return 'miss'
+  }
+  return new Set(['n', 's', 'e', 'w'].map(outcome)).size > 1
+}
+
 function applyVolleyHit(state: GameState, spec: VolleyProjectileSpec, targetId: string): void {
   const u = state.units[targetId]
   // a magic-protected body (Failed Mutation) absorbs it: no damage, this projectile is spent
   if (u && !absorbsMagicShot(state, spec.srcName, u)) {
-    recordAreaReveal(state, [{ x: u.x, y: u.y, dmg: spec.damage }]) // both-player grid reveal
-    dealDamageToUnit(state, u, spec.damage, spec.player, {
+    const shooter = spec.shooterId ? state.units[spec.shooterId] : undefined
+    if (shooter) breakStealth(state, shooter)
+    const hit = () => dealDamageToUnit(state, u, spec.damage, spec.player, {
       lethal: projectileShotIsLethal(state, spec.excludeId, spec.srcName, u),
       source: projectileSource(spec.player, spec.srcName),
     })
+    // a volley of several is an area (big number on the site); a lone projectile's number shows on the minion
+    if (spec.multi) { recordAreaReveal(state, [{ x: u.x, y: u.y, dmg: spec.damage }]); asAreaDamage(state, hit) } else hit()
     checkStateBased(state)
   }
   if (spec.volleys > 1) fireVolleyProjectiles(state, { ...spec, volleys: spec.volleys - 1 })
@@ -1781,10 +1918,10 @@ function applyPerSquareHit(state: GameState, spec: PerSquareProjectileSpec, i: n
   if (u && absorbsMagicShot(state, spec.srcName, u)) return false
   if (u) {
     recordAreaReveal(state, [{ x: u.x, y: u.y, dmg: spec.damages[i] }]) // both-player grid reveal
-    dealDamageToUnit(state, u, spec.damages[i], spec.player, {
+    asAreaDamage(state, () => dealDamageToUnit(state, u, spec.damages[i], spec.player, {
       lethal: projectileShotIsLethal(state, spec.excludeId, spec.srcName, u),
       source: projectileSource(spec.player, spec.srcName),
-    })
+    }))
     checkStateBased(state)
   }
   return true
@@ -1811,17 +1948,25 @@ export interface EvilEyeGazeSpec {
   maxRange?: number
   excludeId?: string
   srcName: string
+  /** the gazer's own region: the OTHER location(s) of its own square are gazed too (owner ruling) */
+  oRegion?: Region
   /** computed once from the board, then carried across per-location choice prompts */
   locations?: { x: number; y: number; region: Region }[]
   idx?: number
 }
 
-/** the ordered list of (square, region) locations a gaze touches: every square from the origin
- *  outward in `dir`, and at each the regions actually present there (surface + subsurface, or void). */
+/** the ordered list of (square, region) locations a gaze touches: first the OTHER location of the
+ *  gazer's own square (beneath its site — or above it, when the gazer is subsurface; owner ruling:
+ *  "each other location" counts it), then every square outward in `dir`, and at each the regions
+ *  actually present there (surface + subsurface, or void). */
 function gazeLocations(state: GameState, spec: EvilEyeGazeSpec): { x: number; y: number; region: Region }[] {
   const out: { x: number; y: number; region: Region }[] = []
-  for (const sq of gazeSquares(state, spec.ox, spec.oy, spec.dir, spec.maxRange ?? Infinity)) {
+  const squares = gazeSquares(state, spec.ox, spec.oy, spec.dir, spec.maxRange ?? Infinity)
+  if (spec.oRegion) squares.unshift({ x: spec.ox, y: spec.oy })
+  for (const sq of squares) {
+    const own = sq.x === spec.ox && sq.y === spec.oy
     for (const region of ['surface', 'underground', 'underwater', 'void'] as Region[]) {
+      if (own && region === spec.oRegion) continue // the gazer's own location isn't an "other" one
       if (regionPresentAt(state, region, sq.x, sq.y)) out.push({ x: sq.x, y: sq.y, region })
     }
   }
@@ -1887,11 +2032,11 @@ function applyGazeHit(state: GameState, spec: EvilEyeGazeSpec, loc: { x: number;
   const u = state.units[targetId]
   if (!u) return
   if (projSrcIsMagic(spec.srcName) && isMagicProtected(state, u)) return // a magic gaze can't damage a protected unit
-  recordAreaReveal(state, [{ x: loc.x, y: loc.y, dmg: spec.damage }])
-  dealDamageToUnit(state, u, spec.damage, spec.player, {
+  recordAreaReveal(state, [{ x: loc.x, y: loc.y, dmg: spec.damage }]) // an area effect: the big number goes on the site
+  asAreaDamage(state, () => dealDamageToUnit(state, u, spec.damage, spec.player, {
     lethal: projectileShotIsLethal(state, spec.excludeId, spec.srcName, u),
     source: projectileSource(spec.player, spec.srcName),
-  })
+  }))
   checkStateBased(state)
 }
 
@@ -1959,10 +2104,10 @@ function applyPiercingHit(state: GameState, spec: PiercingProjectileSpec, target
   if (u && absorbsMagicShot(state, spec.srcName, u)) return false
   if (u) {
     recordAreaReveal(state, [{ x: u.x, y: u.y, dmg: spec.damage }]) // both-player grid reveal
-    dealDamageToUnit(state, u, spec.damage, spec.player, {
+    asAreaDamage(state, () => dealDamageToUnit(state, u, spec.damage, spec.player, {
       lethal: projectileShotIsLethal(state, spec.excludeId, spec.srcName, u),
       source: projectileSource(spec.player, spec.srcName),
-    })
+    }))
     checkStateBased(state)
   }
   return true

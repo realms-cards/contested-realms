@@ -16,7 +16,7 @@ registerScript('Scorched Earth', {
         const site = ctx.state.sites[id]
         if (!site || site.controller !== ctx.controller) continue
         for (const u of unitsAt(ctx.state, site.x, site.y)) {
-          if (!u.isAvatar) killUnit(ctx.state, u.id)
+          if (!u.isAvatar && !ctx.shields(u.id)) killUnit(ctx.state, u.id)
         }
         // everything there: loose artifacts (incl. those the dead dropped) AND what a surviving Avatar
         // carries — only the Avatar itself is protected (a carried artifact is at its bearer's location)

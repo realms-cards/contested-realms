@@ -39,7 +39,7 @@ registerScript('Gilman House', {
       if (old && !old.isToken) ctx.state.players[old.owner].banished.push(old.id)
       u.name = 'Horrible Hybrids'
       u.cardId = cardId
-      u.damage = 0
+      // codex Transform: the same game object — its damage carries over
       pushLog(ctx.state, ctx.controller, 'The change is complete — another Horrible Hybrid shambles out.')
     },
   },

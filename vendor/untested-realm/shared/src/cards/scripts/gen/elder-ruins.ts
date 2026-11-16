@@ -22,7 +22,7 @@ registerScript('Elder Ruins', {
         .filter((u) => !u.isAvatar && u.controller === ctx.controller)
         .map((u) => u.id)
       if (!offerings.length) return ctx.log('No minion here to offer.')
-      ctx.ask({ kind: 'chooseTargets', title: 'Offer whom to the deep?', data: { candidates: offerings, count: 1, upTo: false, kind: 'unit' } }, 'offer')
+      ctx.ask({ kind: 'chooseTargets', title: 'Offer whom to the deep?', data: { candidates: offerings, count: 1, upTo: false, kind: 'unit', notTargeted: true } }, 'offer') // a sacrifice, not targeting
     },
   }],
   conts: {

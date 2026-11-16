@@ -1,6 +1,6 @@
 import { registerScript } from '../registry'
 import { getCard } from '../../db'
-import { pushLog, trySubmerge } from '../../../engine/effects'
+import { pushLog, trySubmerge, siteCantBeModified } from '../../../engine/effects'
 
 // 'Permanently flood the entire realm, including voids. Submerge everything
 //  except one minion of each type.' — for each minion type, its controller
@@ -12,13 +12,13 @@ registerScript('The Flood', {
   onSitePlayed: (ctx, _by, site) => {
     if (!ctx.state.flow?.realmFlooded) return
     const s = ctx.state.sites[site.id]
-    if (s) s.flooded = true
+    if (s && (s.isRubble || !siteCantBeModified(ctx.state, s))) s.flooded = true
   },
   onCast: (ctx) => {
     ctx.state.flow = ctx.state.flow ?? {}
     ctx.state.flow.realmFlooded = true
-    // the whole realm drowns — rubble included (rubble can hold water)
-    for (const s of Object.values(ctx.state.sites)) s.flooded = true
+    // the whole realm drowns — rubble included (rubble can hold water), but not a site that can't be modified
+    for (const s of Object.values(ctx.state.sites)) if (s.isRubble || !siteCantBeModified(ctx.state, s)) s.flooded = true
     pushLog(ctx.state, null, 'The rains come — and do not stop. The realm drowns.')
     // group surviving-candidate minions by subtype
     const types = new Set<string>()

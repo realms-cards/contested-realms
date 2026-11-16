@@ -21,11 +21,12 @@ registerScript('Balor of the Evil Eye', {
       const self = ctx.state.units[ctx.sourceId]
       if (!self || !dir) return
       // 2 damage to one unit at EACH OTHER location in the direction — every square along the line,
-      // and at each the surface AND subsurface of sites AS WELL AS the void (FAQ). Balor's controller
+      // and at each the surface AND subsurface of sites AS WELL AS the void (FAQ) — plus the other
+      // location of Balor's own square, beneath its site (or above it) (owner ruling). Balor's controller
       // picks when several units share a location. The gaze is not a projectile: it ignores region
       // edges, voids, projectile-blocking sites and Stealth.
       fireEvilEyeGaze(ctx.state, {
-        player: ctx.controller, ox: self.x, oy: self.y,
+        player: ctx.controller, ox: self.x, oy: self.y, oRegion: self.region,
         dir: String(dir), damage: 2, excludeId: self.id, srcName: 'Balor of the Evil Eye',
       })
     },

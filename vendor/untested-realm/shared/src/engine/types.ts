@@ -46,6 +46,9 @@ export interface CardInstance {
   /** chosen alternative art (printing slug) from the owner's deck. Cosmetic; travels to the opponent only
    *  for cards they can see (viewFor sends visible instances only), so it never leaks unrevealed cards. */
   art?: string
+  /** this copy is an ALPHA printing (its art is a 001-… slug) — Ancient Thaw's "@" Beast. Decided once at
+   *  createGame: never for a deck matching an official precon (its copies are that set's printings). */
+  alpha?: boolean
 }
 
 export type Duration = 'endOfTurn' | 'untilYourNextTurn' | 'permanent'
@@ -191,6 +194,8 @@ export interface PlayerState {
   /** the deck's collection pool (card name → remaining copies) that "from your
    *  collection" effects fetch from; empty when the deck defines none */
   collection: Record<string, number>
+  /** the collection cards whose copies are Alpha printings (see CardInstance.alpha) — hidden like the collection */
+  collectionAlpha?: string[]
   mana: number
   /** true once the player has kept their opening hand */
   keptHand: boolean
@@ -201,6 +206,9 @@ export interface PlayerState {
    *  site). Distinct from firstSiteDone (which tests force): gates the "avatar stranded in the void
    *  → mandatory site play" rule, so a never-established avatar (a bare fixture) doesn't trigger it. */
   established?: boolean
+  /** token name → the art slug (printing or `custom:<id>`) this player's tokens of that name carry. Cosmetic;
+   *  baked from deck.art at setup. Not in viewFor — the opponent sees it only on a token in play. */
+  tokenArt?: Record<string, string>
 }
 
 export type PromptKind =

@@ -10,7 +10,7 @@ import { getCard } from '../cards/db'
 
 export interface PlayerView extends Omit<GameState, 'players' | 'cards' | 'seed'> {
   players: any[]
-  cards: Record<string, { id: string; name: string; owner: PlayerId; isToken?: boolean; art?: string }>
+  cards: Record<string, { id: string; name: string; owner: PlayerId; isToken?: boolean; art?: string; alpha?: boolean }>
   /** the id of the viewing player, or null for spectators */
   you: PlayerId | null
 }
@@ -101,6 +101,7 @@ export function viewFor(state: GameState, player: PlayerId | null, opts?: { reve
       spellbookTop: spellbookTops[p.id], // revealed top card id (Doomsday Cult) — undefined otherwise
 
       collection: mine ? p.collection : {}, // your fetch pool is your own to see
+      collectionAlpha: mine ? p.collectionAlpha : undefined, // ...and so are its Alpha printings
       collectionCount: Object.values(p.collection).reduce((a, b) => a + b, 0),
     }
   })
@@ -134,7 +135,7 @@ export function viewFor(state: GameState, player: PlayerId | null, opts?: { reve
     artifacts: state.artifacts,
     auras: state.auras,
     prompts: prompts as any,
-    log: state.log.slice(-200),
+    log: state.log.slice(-500), // enough of the match for the client's log search to reach back
     winner: state.winner,
     draw: state.draw,
     nextId: 0,

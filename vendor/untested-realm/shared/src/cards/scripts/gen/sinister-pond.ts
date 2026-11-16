@@ -52,7 +52,7 @@ registerScript('Sinister Pond', {
       p.hand.splice(p.hand.indexOf(cardId), 1)
       mortal.name = newName
       mortal.cardId = cardId
-      mortal.damage = 0
+      // codex Transform: the same game object — its damage carries over
       pushLog(ctx.state, ctx.controller, `The pond's waters close — and something else climbs out: ${newName}.`)
     },
   },

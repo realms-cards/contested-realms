@@ -1,7 +1,6 @@
 // Shared helpers for magic spell card scripts (no registerScript — skipped by gen:card-index).
 
 import { type EffectAPI, type CardScript } from '../registry'
-import { unitsAt } from '../../../engine/grid'
 import { firstProjectileImpact } from '../../../engine/combat'
 import { effectSummonUnit } from '../../../engine/effects'
 
@@ -9,17 +8,6 @@ import { effectSummonUnit } from '../../../engine/effects'
 export function raiseAsk(ctx: EffectAPI, pick: string): void {
   ctx.log(`Fate chooses ${ctx.state.cards[pick].name}...`)
   ctx.ask({ kind: 'chooseSquare', title: `Summon ${ctx.state.cards[pick].name} where?`, data: {} }, 'rise', { pick })
-}
-
-// the chosen unit takes 4; every OTHER unit at that same location (the square hit) takes 2
-export function fireballHit(ctx: EffectAPI, id: string, at?: { x: number; y: number }) {
-  const impact = ctx.state.units[id]
-  if (!impact) return
-  const { x, y } = at ?? impact
-  const region = impact.region
-  const others = unitsAt(ctx.state, x, y, region).filter((u) => u.id !== impact.id).map((u) => u.id)
-  ctx.dealDamage({ unit: impact.id }, 4)
-  for (const oid of others) if (ctx.state.units[oid]) ctx.dealDamage({ unit: oid }, 2)
 }
 
 /** "Shoot a projectile" magics whose shot hits ONE unit (Fireball, Frostbolt): the direction is chosen

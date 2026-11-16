@@ -28,6 +28,11 @@ export function printingsFor(name: string): Printing[] {
   return PRINTINGS[name] ?? []
 }
 
+/** an Alpha printing (set number 001): the copy carries the Alpha set symbol (Ancient Thaw's "@" Beast) */
+export function isAlphaPrinting(slug: string | null | undefined): boolean {
+  return !!slug && slug.startsWith('001-')
+}
+
 /** the art-code of a slug — `<num>-<name>-<ARTCODE>-<finish>`. Identifies the ARTWORK (Alpha/Beta share
  *  `b`; a foil and its standard share an art-code). Null if the slug isn't the expected shape. */
 export function artCodeOf(slug: string): string | null {
@@ -42,7 +47,11 @@ export function canonicalArtSlug(name: string, rawSlug: string): string | null {
   const code = artCodeOf(rawSlug)
   if (!code) return null
   const arts = printingsFor(findCard(name)?.name ?? name)
-  const match = arts.find((a) => artCodeOf(a.slug) === code)
+  // the same art-code in the same SET first: a Beast's Alpha printing is its own entry (Ancient Thaw), so an
+  // Alpha copy must not collapse into the Beta one (or vice versa); otherwise any printing of that art
+  const num = rawSlug.split('-')[0]
+  const match = arts.find((a) => artCodeOf(a.slug) === code && a.slug.split('-')[0] === num)
+    ?? arts.find((a) => artCodeOf(a.slug) === code)
   if (!match || match.default) return null // default art → no override
   return match.slug
 }

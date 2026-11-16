@@ -2,12 +2,13 @@
 // prompt/continuation machinery that lets effects pause for player decisions.
 
 import { getCard, getKeywords, findCard } from '../cards/db'
+import { tokenArtFor } from '../cards/tokenArt'
 import { getScript, type DamageSource, type EffectAPI, type TargetRef, type TargetSpec, type TeleportOpts } from '../cards/scripts/registry'
 import { cloneState } from './clone'
 import type { GameState, PlayerId, Region, UnitState, SiteState, AuraState, Prompt, DeckName } from './types'
 import { isLocation } from './action-shape'
 import { avatarOf, siteAt, unitsAt, edgesConnected, aura2x2Squares, occupiedSquares, inBounds, GRID_W, GRID_H, squareLabel, nearbySquaresW, orthAdjacentWrapped } from './grid'
-import { abilitiesOff, affinity, effAttack, effDefence, effKeywords, canExistIn, hasRegionKeyword, siteSilenced, siteDisabled, artifactSilenced, artScript, isEvilUnit, isEvilUnitIntrinsic, isDisabled, isUnmodifiable, silenceImmune, footprintAllTerrain, terrainAt, buildStaticGrantIndex, isVoidAt, protectedFromSites, artifactController, artifactActor } from './statics'
+import { abilitiesOff, affinity, effAttack, effDefence, effKeywords, canExistIn, hasRegionKeyword, siteSilenced, siteDisabled, artifactSilenced, artScript, isEvilUnit, isEvilUnitIntrinsic, isDisabled, isUnmodifiable, cantHaveMark, silenceImmune, footprintAllTerrain, terrainAt, buildStaticGrantIndex, isVoidAt, protectedFromSites, artifactController, artifactActor, protectedFromNonUnits, notePermafrostHolds, notePermafrostHold, pruneHibernalFreezes } from './statics'
 import { siteEntryAllowed, multiSquareDestSquares, oversizedTeleportPlacements } from './movement' // runtime-only use (teleport closure); import cycle is safe
 import { awardAchievement } from './achievements.catalog' // types-only module → no cycle
 import { noteAddedToEnd, noteSeenAtEnd, carryKnownTopIntoHand } from './knowledge'
@@ -35,7 +36,18 @@ export function beginAreaReveal(state: GameState, element?: string, name?: strin
   state.flow.areaReveal = {
     cells: [], redSites: [], element: element ?? 'none',
     name: name ?? '', casterId: casterId ?? '', spell: !!spell, ability: false, shoots: false, seq: prev?.seq ?? 0, open: true,
+    // for the client's cast panel: the card behind the reveal (`name` may later become a caption such
+    // as "<card> shoots!") and the log lines written while it resolved ("what happened")
+    card: name ?? '', logStart: state.log.length, lines: [],
+    // which capture this is (settleUnitDamage only writes into one opened by the action it settles); a flow
+    // counter, never derived from `prev`, so an idle trigger restoring an older reveal can't move it backwards
+    opened: (state.flow.revOpenedSeq = (state.flow.revOpenedSeq ?? 0) + 1),
   }
+}
+/** copy the log lines written since the reveal opened into it (called whenever its seq is bumped) */
+function syncRevealLines(state: GameState, rev: any): void {
+  if (typeof rev.logStart !== 'number') return
+  rev.lines = state.log.slice(rev.logStart, rev.logStart + 8).map((e) => e.msg)
 }
 /** Mark the open reveal as a projectile "shot" (fired by fireVolley/firePerSquare/firstProjectileImpact
  *  or the built-in Ranged). Only changes the ABILITY caption ("<card> shoots!"); ignored for spells. */
@@ -48,8 +60,10 @@ export function markRevealShoots(state: GameState): void {
 export function recordAreaReveal(state: GameState, cells: { x: number; y: number; dmg: number }[], element?: string): void {
   const rev = state.flow?.areaReveal
   if (!rev || !rev.open || !cells.length) return
+  dropPlaceholderSite(rev)
   for (const c of cells) rev.cells.push({ x: c.x, y: c.y, dmg: c.dmg })
   if (element && rev.element === 'none') rev.element = element
+  syncRevealLines(state, rev)
   rev.seq++
 }
 /** Record the sites a single-target spell AFFECTS (a targeted unit's/artifact's site, or a
@@ -59,7 +73,9 @@ export function recordAreaReveal(state: GameState, cells: { x: number; y: number
 export function recordAffectedSites(state: GameState, sites: { x: number; y: number }[]): void {
   const rev = state.flow?.areaReveal
   if (!rev || !rev.open || !sites.length) return
+  dropPlaceholderSite(rev)
   for (const s of sites) if (!rev.redSites.some((r: { x: number; y: number }) => r.x === s.x && r.y === s.y)) rev.redSites.push({ x: s.x, y: s.y })
+  syncRevealLines(state, rev)
   rev.seq++
 }
 /** A unit's/artifact's mutable "was I affected?" signature: position, region, tapped, damage,
@@ -115,7 +131,7 @@ export function turnFingerprint(state: GameState): string {
  *  name show even when the spell touched no unit/site/artifact (a card draw, a mana spell…). */
 export function sealSpellReveal(state: GameState): void {
   const rev = state.flow?.areaReveal
-  if (rev && rev.open && rev.spell) rev.seq++
+  if (rev && rev.open && rev.spell) { syncRevealLines(state, rev); rev.seq++ }
 }
 /** Seal the already-open reveal for an ACTIVATED ability so it animates like a spell cast: golden
  *  caster + the given writing + a site glow. Preserves any damage grid / affected sites the effect
@@ -127,9 +143,17 @@ export function sealAbilityReveal(state: GameState, name?: string): void {
   if (name) rev.name = name
   if (!rev.cells.length && !rev.redSites.length) {
     const src = state.units[rev.casterId] ?? state.artifacts[rev.casterId] ?? state.sites[rev.casterId]
-    if (src && typeof src.x === 'number') rev.redSites.push({ x: src.x, y: src.y })
+    if (src && typeof src.x === 'number') { rev.redSites.push({ x: src.x, y: src.y }); rev.placeholder = true }
   }
+  syncRevealLines(state, rev)
   rev.seq++
+}
+/** An ability sealed before it touched anything (Balor's gaze waits on a direction prompt) lit its own
+ *  site as a stand-in; once its effect really lands, that stand-in glow goes — it wasn't hit. */
+function dropPlaceholderSite(rev: any): void {
+  if (!rev.placeholder) return
+  rev.redSites = []
+  rev.placeholder = false
 }
 /** Open + seal a one-shot ability reveal in a single call (for actions with no pre-opened capture,
  *  e.g. the avatar playing/drawing a site). Lights `site` (or the caster's own square) and writes `text`. */
@@ -141,7 +165,7 @@ export function revealAbility(state: GameState, casterId: string, text: string, 
   const src = state.units[casterId] ?? state.artifacts[casterId] ?? state.sites[casterId]
   const at = site ?? (src && typeof src.x === 'number' ? { x: src.x, y: src.y } : null)
   if (at) recordAffectedSites(state, [at])
-  else rev.seq++
+  else { syncRevealLines(state, rev); rev.seq++ }
 }
 
 // ---- battle reveal (a two-sided panel shown to BOTH players after a battle resolves, then
@@ -239,6 +263,89 @@ export function recordManaGain(state: GameState, x: number, y: number, region: R
   state.flow.manaGains = [...(state.flow.manaGains ?? []), { x, y, region, amount, seq }].slice(-24)
 }
 
+/** Record that an Avatar just gained `amount` life (what it actually gained, after the cap), so the client
+ *  can float a green "+N" above it. Same seq-stamped, both-seats-synced pattern as recordManaGain (life is
+ *  public). */
+export function recordLifeGain(state: GameState, unitId: string, amount: number): void {
+  if (amount <= 0) return
+  state.flow = state.flow ?? {}
+  const seq = (state.flow.lifeGainSeq ?? 0) + 1
+  state.flow.lifeGainSeq = seq
+  state.flow.lifeGains = [...(state.flow.lifeGains ?? []), { unitId, amount, seq }].slice(-24)
+}
+
+/** Record that a minion just took `amount` damage from a NON-AREA hit (a ranged strike, a single
+ *  projectile, a targeted spell or ability), so the client can float the number over that minion's card.
+ *  Same seq-stamped, both-seats-synced pattern as recordManaGain. Melee strikes (the battle panel shows
+ *  them) and area damage (the big numbers on its sites show it) aren't recorded — see asAreaDamage and
+ *  areaFromSpread. */
+export function recordUnitDamage(state: GameState, unit: UnitState, amount: number, src: string): void {
+  if (amount <= 0) return
+  state.flow = state.flow ?? {}
+  // provisional until settleUnitDamage decides single hit vs area — so a hit paused on a prompt is never
+  // shown over the minion first and then again on its site
+  state.flow.dmgPending = [...(state.flow.dmgPending ?? []), { unitId: unit.id, x: unit.x, y: unit.y, amount, src }]
+}
+
+/** Note units an effect explicitly TARGETED (a cast/ability's targets, a chooseTargets pick): hits on
+ *  them stay per-minion even when the effect hits several ("2 damage to each of two target minions"). */
+export function noteDamageTargets(state: GameState, unitIds: string[]): void {
+  if (!unitIds.length) return
+  state.flow = state.flow ?? {}
+  const cur: string[] = state.flow.dmgTargets ?? []
+  state.flow.dmgTargets = [...cur, ...unitIds.filter((id) => !cur.includes(id))]
+}
+
+/** Run once an action has FULLY resolved (no prompt left — applyAction's boundary). A source whose hits
+ *  spread over 2+ units it didn't target (Rain of Arrows, a Genesis "1 damage to each nearby unit", an
+ *  end-of-turn "each unit here"…) was an AREA effect: its hits become big numbers on their sites — in the
+ *  reveal this action opened; with none (a start-of-turn trigger), they simply don't show. Every other hit
+ *  is published to flow.unitDamage, for the client to float over its minion. Hits are grouped by source,
+ *  so a deathrite set off by a targeted spell stays apart. Given `from`, it's a PARTIAL settle of the pending
+ *  hits from that index on (an end-of-turn trigger settling its own hits inside the end-turn action): the
+ *  earlier hits, the noted targets and the reveal base are kept for the action's full settle. */
+export function settleUnitDamage(state: GameState, from?: number): void {
+  const flow = state.flow
+  if (!flow) return
+  const all = (flow.dmgPending ?? []) as { unitId: string; x: number; y: number; amount: number; src: string }[]
+  const pending = all.slice(from ?? 0)
+  const targeted = new Set<string>(flow.dmgTargets ?? [])
+  const rev = flow.areaReveal
+  const revBase = flow.dmgRevBase ?? 0
+  if (from !== undefined) flow.dmgPending = all.slice(0, from)
+  else {
+    // the whole action is settled: start the next one afresh
+    delete flow.dmgPending
+    delete flow.dmgTargets
+    flow.dmgRevBase = flow.revOpenedSeq ?? 0
+  }
+  if (!pending.length) return
+  const bySrc = new Map<string, typeof pending>()
+  for (const h of pending) bySrc.set(h.src, [...(bySrc.get(h.src) ?? []), h])
+  const cells: { x: number; y: number; dmg: number }[] = []
+  for (const hits of bySrc.values()) {
+    const units = new Set(hits.map((h) => h.unitId))
+    const area = units.size >= 2 && ![...units].every((id) => targeted.has(id))
+    if (area) { for (const h of hits) cells.push({ x: h.x, y: h.y, dmg: h.amount }); continue }
+    for (const h of hits) {
+      const seq = (flow.unitDamageSeq ?? 0) + 1
+      flow.unitDamageSeq = seq
+      flow.unitDamage = [...(flow.unitDamage ?? []), { unitId: h.unitId, amount: h.amount, seq }].slice(-24)
+    }
+  }
+  // only into a reveal THIS action opened — never append to an older action's lingering capture
+  if (cells.length && rev?.open && (rev.opened ?? 0) > revBase) recordAreaReveal(state, cells)
+}
+
+/** Run `fn` as AREA damage (a printed area, Balor's gaze, a line or volley of projectiles): its hits show
+ *  as big numbers on their sites, not over the minions. */
+export function asAreaDamage(state: GameState, fn: () => void): void {
+  state.flow = state.flow ?? {}
+  const prev = state.flow.areaDamaging
+  state.flow.areaDamaging = true
+  try { fn() } finally { state.flow.areaDamaging = prev }
+}
+
 /** Record that a source at (x,y) just reached `level`, so the client can float a green
  *  "level N" over it for ~3s. Same seq-stamped, both-seats-synced pattern as recordManaGain
  *  (levels are public). The client animates every entry whose seq it hasn't shown yet. */
@@ -313,6 +420,7 @@ export function gainMana(state: GameState, player: PlayerId, amount: number, at?
 
 /** is this unit protected from Magic damage/targeting? (own script or carried artifact) */
 export function isMagicProtected(state: GameState, unit: UnitState): boolean {
+  if (protectedFromNonUnits(state, unit)) return true // Humming Hummocks: Magic is among "all but units"
   const check = (name: string, id: string): boolean => {
     const p = getScript(name)?.magicProtected
     if (p === true) return true
@@ -331,6 +439,41 @@ export function isMagicProtected(state: GameState, unit: UnitState): boolean {
     if (!artifactSilenced(state, art) && check(art.name, art.id)) return true
   }
   return false
+}
+
+/** did a UNIT deal this damage — a strike, or a minion's/Avatar's own ability? Magic never; a carried
+ *  artifact's ability is the artifact's (its name is on the source, its bearer only the actor). */
+function damageSourceKind(state: GameState, source: DamageSource): EffectSourceKind {
+  if (source.kind === 'magic') return 'magic'
+  if (source.kind === 'strike' || source.attackerId) return 'unit'
+  if (!source.name) return source.sourceUnitId ? 'unit' : 'other'
+  const actor = source.sourceUnitId ? state.units[source.sourceUnitId] : undefined
+  return actor && actor.name === source.name ? 'unit' : sourceKindOfName(source.name)
+}
+
+/** what kind of card an effect comes from, by the card's name ('other': unknown — an engine effect) */
+export type EffectSourceKind = 'unit' | 'magic' | 'site' | 'artifact' | 'aura' | 'other'
+export function sourceKindOfName(name?: string): EffectSourceKind {
+  const def = name ? findCard(name) : undefined
+  switch (def?.type) {
+    case 'Minion': case 'Avatar': return 'unit' // automatons are loaded as Minions (db.ts)
+    case 'Magic': return 'magic'
+    case 'Site': return 'site'
+    case 'Artifact': return 'artifact'
+    case 'Aura': return 'aura'
+    default: return 'other'
+  }
+}
+
+/** THE protection predicate: is `unit` Protected from an effect of this kind of source (codex: Protected
+ *  from X — X can't target, damage, destroy, banish, modify, move or impede it)? Any non-unit source:
+ *  Humming Hummocks' "Protected from all but units". A site source: also "Protected from sites" (Key to
+ *  the City's bearer, Yog-Sothoth, a Highgate Guide's allies) — protectedFromSites covers both.
+ *  Failed Mutation / Amulet of Niniane / Arcade of Bones are narrower — "can't be targeted or damaged by
+ *  magic", not Protected — so the targeting and damage checks consult isMagicProtected for them. */
+export function protectedFromSource(state: GameState, unit: UnitState, kind: EffectSourceKind): boolean {
+  if (kind === 'unit') return false
+  return kind === 'site' ? protectedFromSites(state, unit) : protectedFromNonUnits(state, unit)
 }
 
 /** seeded random pick that advances the game seed (deterministic replays) */
@@ -564,12 +707,12 @@ registerCont('site:redirectTo', (state, ctx: { n: number; sourcePlayer: PlayerId
 // (possibly simultaneous) event has been made — so a guard shielding both a King AND the Avatar soaks
 // the whole total at once (it dies once, having protected both), instead of dying after the first.
 // `noRedirect` stops it re-offering.
-registerCont('guard:redirect', (state, ctx: { guardId: string; victimId: string; n: number; sourcePlayer: PlayerId; source: DamageSource; batch: boolean; lethal: boolean }, choice) => {
+registerCont('guard:redirect', (state, ctx: { guardId: string; victimId: string; n: number; sourcePlayer: PlayerId; source: DamageSource; batch: boolean; lethal: boolean; area?: boolean }, choice) => {
   const guard = state.units[ctx.guardId]
   const victim = state.units[ctx.victimId]
   if (!choice || !guard) {
     if (victim) {
-      dealDamageToUnit(state, victim, ctx.n, ctx.sourcePlayer, { source: ctx.source, batch: ctx.batch, lethal: ctx.lethal, noRedirect: true })
+      dealDamageToUnit(state, victim, ctx.n, ctx.sourcePlayer, { source: ctx.source, batch: ctx.batch, lethal: ctx.lethal, noRedirect: true, area: ctx.area })
       if (!ctx.batch) checkStateBased(state)
     }
     return
@@ -867,6 +1010,7 @@ export function resolvePrompt(state: GameState, promptId: string, player: Player
   const answerErr = promptAnswerProblem(prompt, choice)
   if (answerErr) return answerErr
   state.prompts.shift()
+  if (prompt.kind === 'chooseTargets' && Array.isArray(choice)) noteDamageTargets(state, choice.filter((c: unknown): c is string => typeof c === 'string' && !!state.units[c]))
   // STORYLINE (Codex "New Events Interrupt The Storyline"): whatever this answer sets off is inserted
   // BEFORE the events still waiting, so it resolves first. Set the older prompts aside while it
   // resolves and put them back behind anything it asked (a follow-up question, a trigger's choice).
@@ -1137,6 +1281,10 @@ export function wardUnit(state: GameState, unit: UnitState): boolean {
     return false
   }
   if (unit.ward) return false // single-Ward clause: no stacking
+  if (cantHaveMark(state, unit, 'ward')) { // Codex, Can't be Modified: no Ward mark
+    pushLog(state, unit.controller, `${unit.name} cannot be modified.`)
+    return false
+  }
   unit.ward = true
   return true
 }
@@ -1145,6 +1293,7 @@ export function wardUnit(state: GameState, unit: UnitState): boolean {
  *  (Monks of Kobalsa "can't be modified, except by Wards"), so Vindictive Nation hears it. */
 export function wardSite(state: GameState, site: SiteState, by: PlayerId | null): boolean {
   if (site.ward) return false // single-Ward clause: no stacking
+  if (siteCantBeModified(state, site)) return false // Bedrock can't have a Ward mark (Codex, Can't be Modified)
   site.ward = true
   notifySiteInterference(state, 'modify', site, by)
   return true
@@ -1203,9 +1352,10 @@ function collectPreventers(
   // mask has no reduction (its hook forwards the mask's and returns 0), or an Ironclad that only
   // shields ITSELF when some OTHER unit is the victim.
   for (const o of Object.values(state.units)) {
-    if (o.silenced || isDisabled(state, o)) continue // a disabled reducer has no abilities to lend
+    // the hook first: isDisabled scans the board's disablers, so pay it only for a real reducer
     const red = getScript(o.name)?.damageReduction
     if (!red) continue
+    if (o.silenced || isDisabled(state, o)) continue // a disabled reducer has no abilities to lend
     const r = red(state, o, unit)
     if (r > 0) list.push({ kind: 'reduce', cardName: o.name, label: 'reduces damage', owner: o.controller, apply: (n) => ({ amount: n - r }) })
   }
@@ -1238,9 +1388,10 @@ function collectPreventers(
     } })
   }
   for (const o of Object.values(state.units)) {
+    const sc = getScript(o.name) // the hook first, then the (board-scanning) disabled check
+    if (!sc?.damageModifier || !sc.damagePreventer) continue
     if (o.silenced || isDisabled(state, o)) continue // a disabled/silenced preventer (Tufted Turtles) can't shell up
-    const sc = getScript(o.name)
-    if (sc?.damageModifier && sc.damagePreventer) addMod(o.name, o.id, o.controller)
+    addMod(o.name, o.id, o.controller)
   }
   for (const a of Object.values(state.artifacts)) {
     const sc = artScript(state, a) // a silenced artifact (Acid Rain) prevents nothing
@@ -1320,7 +1471,7 @@ type PreventOutcome = { paused: true } | { done: true } | { amount: number }
  *  finishes the hit). See [[damage-modify-prevent-pipeline]]. */
 function drivePrevention(
   state: GameState, unit: UnitState, n: number, sourcePlayer: PlayerId, source: DamageSource,
-  opts: { lethal?: boolean; batch?: boolean; noRedirect?: boolean } | undefined,
+  opts: { lethal?: boolean; batch?: boolean; noRedirect?: boolean; area?: boolean } | undefined,
   queue: PlayerId[],
 ): PreventOutcome {
   // a ward that already absorbed this simultaneous pass prevents every later blow too (serializable
@@ -1408,7 +1559,22 @@ export function dealDamageToUnit(
   unit: UnitState,
   n: number,
   sourcePlayer: PlayerId,
-  opts?: { lethal?: boolean; source?: DamageSource; batch?: boolean; noRedirect?: boolean },
+  opts?: { lethal?: boolean; source?: DamageSource; batch?: boolean; noRedirect?: boolean; area?: boolean },
+): void {
+  // AREA damage (asAreaDamage) is decided by the call dealing it and then rides on the hit (opts.area), so a
+  // hit paused on a prompt (prevention order, Bodyguard) keeps it, while damage this hit SETS OFF (a reaction,
+  // a deathrite) doesn't inherit it.
+  if (!state.flow?.areaDamaging) return dealUnitDamage(state, unit, n, sourcePlayer, opts)
+  state.flow.areaDamaging = false
+  try { dealUnitDamage(state, unit, n, sourcePlayer, { ...opts, area: opts?.area ?? true }) } finally { if (state.flow) state.flow.areaDamaging = true }
+}
+
+function dealUnitDamage(
+  state: GameState,
+  unit: UnitState,
+  n: number,
+  sourcePlayer: PlayerId,
+  opts?: { lethal?: boolean; source?: DamageSource; batch?: boolean; noRedirect?: boolean; area?: boolean },
 ): void {
   const source: DamageSource = opts?.source ?? { player: sourcePlayer, kind: 'effect' }
   // Royal Bodyguard: a nearby guard MAY take damage aimed at an Avatar / royalty instead — offered as a
@@ -1423,7 +1589,7 @@ export function dealDamageToUnit(
         title: `Royal Bodyguard: take the ${n} damage aimed at ${unit.name} instead?`,
         data: {},
         cont: 'guard:redirect',
-        ctx: { guardId: guard.id, victimId: unit.id, n, sourcePlayer, source, batch: !!opts?.batch, lethal: !!opts?.lethal },
+        ctx: { guardId: guard.id, victimId: unit.id, n, sourcePlayer, source, batch: !!opts?.batch, lethal: !!opts?.lethal, area: !!opts?.area },
       })
       return
     }
@@ -1470,6 +1636,11 @@ export function dealDamageToUnit(
       pushLog(state, sourcePlayer, `${unit.name} is untouched by magic.`)
       return
     }
+    // Protected from the source (Humming Hummocks, Protected from sites): its damage doesn't land
+    if (protectedFromSource(state, unit, damageSourceKind(state, source))) {
+      pushLog(state, sourcePlayer, `${unit.name} is protected from ${source.name ?? 'that'}.`)
+      return
+    }
     // Enduring Faith: the warded champion takes damage for nearby allies instead
     for (const e of (state.flow?.enduringFaith ?? []) as { unitId: string; player: PlayerId; turn: number }[]) {
       const champ = state.units[e.unitId]
@@ -1478,7 +1649,7 @@ export function dealDamageToUnit(
       const near = nearbySquaresW(state, champ.x, champ.y).some((s) => s.x === unit.x && s.y === unit.y)
       if (near) {
         pushLog(state, unit.controller, `${champ.name} takes the blow meant for ${unit.name}.`)
-        dealDamageToUnit(state, champ, n, sourcePlayer, opts)
+        dealDamageToUnit(state, champ, n, sourcePlayer, { ...opts, area: false }) // a redirected single blow: its number shows on the champion
         return
       }
     }
@@ -1520,9 +1691,14 @@ export function dealDamageToUnit(
     let stop = false // a redirect / replacement that fully prevents the original (Bruin, Sir Gawain, Goat)
     for (const m of mods) {
       if (stop) break
+      const before = state.flow?.dmgPending?.length ?? 0
       const res = getScript(m.name)!.damageModifier!(state, m.id, unit, n, source)
       if (typeof res === 'number') n = res
       else { n = res.amount; if (res.lethal) forceLethal = true; if (res.prevented) stop = true }
+      // a redirect re-dealt the hit elsewhere (Bruin, Sir Gawain, Goat for Azazel): if this victim was
+      // targeted, so is whoever took it instead — a targeted spell doesn't turn into an "area"
+      if ((state.flow?.dmgPending?.length ?? 0) > before && (state.flow?.dmgTargets ?? []).includes(unit.id))
+        noteDamageTargets(state, ((state.flow?.dmgPending ?? []) as { unitId: string }[]).slice(before).map((h) => h.unitId))
     }
   }
   if (forceLethal) opts = opts ? { ...opts, lethal: true } : { lethal: true }
@@ -1546,7 +1722,7 @@ export function dealDamageToUnit(
  *  prevention-ordering prompt's continuation (Phase 4) can finish a paused hit. */
 function applyResolvedDamage(
   state: GameState, unit: UnitState, n: number, sourcePlayer: PlayerId,
-  source: DamageSource, opts?: { lethal?: boolean; batch?: boolean; noRedirect?: boolean },
+  source: DamageSource, opts?: { lethal?: boolean; batch?: boolean; noRedirect?: boolean; area?: boolean },
 ): void {
   // spell-cast reveal: a MAGIC that damages a unit glows that unit's site red — even when the
   // spell picks no explicit target (Rain of Arrows hits every surface minion). Gated on the
@@ -1596,6 +1772,13 @@ function applyResolvedDamage(
     emitEvent(state, 'onLifeLost', unit.controller, n, source ?? { player: sourcePlayer, kind: 'effect' })
     return
   }
+  // the damage number over the minion (ranged shots, Balor, single-target spells & abilities…)
+  if (source.kind !== 'strike' && !opts?.area) {
+    const src = source.name || source.sourceUnitId || source.attackerId
+      ? `${source.sourceUnitId ?? source.attackerId ?? ''}|${source.name ?? ''}`
+      : `anon:${state.flow?.dmgPending?.length ?? 0}` // no source given: never grouped with another hit
+    recordUnitDamage(state, unit, n, src)
+  }
   // Stitched Abomination: damage lands on a chosen part, not the whole
   if (getScript(unit.name)?.takesDamageInParts && !abilitiesOff(state, unit)) {
     const parts = (state.flow?.abomParts?.[unit.id] ?? []) as { name: string; damage: number }[]
@@ -1624,6 +1807,12 @@ function applyResolvedDamage(
     delete unit.counters.asleep
     unit.disabled = undefined
     pushLog(state, null, `${unit.name} jolts awake!`)
+  }
+  // the turn's FIRST damage to this minion — a fact of the game, recorded whatever its abilities — and
+  // whether it then had no abilities (silenced/disabled) to react with ("the first time they take
+  // damage each turn": Gnarled Laborers)
+  if (unit.counters?.firstDamagedTurn !== state.turn) {
+    unit.counters = { ...unit.counters, firstDamagedTurn: state.turn, firstDamageMuted: abilitiesOff(state, unit) ? 1 : 0 }
   }
   unit.damage += n
   pushLog(state, sourcePlayer, `${unit.name} takes ${n} damage.`)
@@ -1951,6 +2140,20 @@ function strikerInteracted(state: GameState, striker: UnitState): void {
   }
 }
 
+/** The unbroken Lances a unit carries: each adds +1 to its next strike against units, then breaks. */
+function heldLances(state: GameState, unit: UnitState): string[] {
+  return unit.carrying.filter((id) => state.artifacts[id]?.name === 'Lance' && !state.artifacts[id].counters?.broken)
+}
+
+function breakLances(state: GameState, unit: UnitState, lances: string[]): void {
+  if (!lances.length) return
+  for (const lanceId of lances) {
+    unit.carrying = unit.carrying.filter((id) => id !== lanceId)
+    delete state.artifacts[lanceId]
+  }
+  pushLog(state, unit.controller, `${unit.name}'s lance${lances.length > 1 ? 's' : ''} shatter${lances.length > 1 ? '' : 's'} after the blow.`)
+}
+
 /** Strike each of `targetIds` with the striker SIMULTANEOUSLY (rulebook/FAQ: a "strike
  *  each enemy" effect deals all its strikes at once — Whirling Blades, Falling Star, …).
  *  So: fire each "when this strikes" hook, apply ALL the damage, THEN resolve deaths
@@ -1963,7 +2166,9 @@ export function strikeAllSimultaneous(state: GameState, strikerId: string, targe
   const targets = [...new Set(targetIds)].filter((id) => id !== strikerId && state.units[id]).map((id) => state.units[id]!)
   if (!targets.length) return
   const kw = effKeywords(state, striker)
-  const power = effAttack(state, striker)
+  // a Lance adds +1 to each of these strikes against units, then breaks
+  const lances = heldLances(state, striker)
+  const power = effAttack(state, striker) + lances.length
   const lethalVs = !striker.silenced ? getScript(striker.name)?.lethalVs : undefined
   const strikeHook = !striker.silenced ? getScript(striker.name)?.onStrike : undefined
   // 1. "whenever this strikes" fires for each target (a strike is an action, even at 0 power)
@@ -1980,6 +2185,7 @@ export function strikeAllSimultaneous(state: GameState, strikerId: string, targe
       })
     }
   }
+  breakLances(state, striker, lances)
   checkStateBased(state) // simultaneous deaths
   // 3. per target: "when struck" (survivors) or kill triggers (the fallen)
   for (const snap of snaps) {
@@ -2053,7 +2259,9 @@ export function gainLife(state: GameState, player: PlayerId, n: number): void {
   if (avatar.deathsDoor || n <= 0) return
   // maximum life can be overridden by effects (e.g. Deathwish halves it)
   const max = avatar.counters?.maxLife ?? getCard(avatar.name).life ?? 20
-  avatar.life = Math.min(max, (avatar.life ?? 0) + n)
+  const before = avatar.life ?? 0
+  avatar.life = Math.min(max, before + n)
+  recordLifeGain(state, avatar.id, avatar.life - before)
   pushLog(state, player, `${state.players[player].name} gains ${n} life (now ${avatar.life}).`)
 }
 
@@ -2333,7 +2541,7 @@ export function emitEventWhere(
   for (const u of Object.values(state.units)) {
     // a silenced OR disabled unit has no triggered abilities (Codex). isDisabled already exempts a unit
     // that is itself entering/acting/in a battle, so its own on-entry/strike triggers still fire.
-    if (handles(u.name) && !u.silenced && !isDisabled(state, u)) listeners.push({ id: u.id, name: u.name, controller: u.controller })
+    if (handles(u.name) && !u.silenced && (!isDisabled(state, u) || getScript(u.name)?.hearsWhileDisabled?.includes(hook))) listeners.push({ id: u.id, name: u.name, controller: u.controller })
   }
   for (const u of fallenListeners) {
     if (handles(u.name) && !u.silenced && !u.disabled) listeners.push({ id: u.id, name: u.name, controller: u.controller, fallen: true })
@@ -2687,7 +2895,9 @@ export function silencerSources(state: GameState): { sites: SiteState[]; units: 
 
 export function hushedByStatic(state: GameState, u: UnitState, src = silencerSources(state), unitSources = true): boolean {
   if (u.isAvatar) return false
-  for (const s of src.sites) {
+  // Protected from all but units (Humming Hummocks): no site, aura or artifact silences it
+  const shielded = protectedFromNonUnits(state, u)
+  if (!shielded) for (const s of src.sites) {
     const f = getScript(s.name)!.silencesUnit!
     if (s.controller !== null && !s.isRubble && !siteSilenced(state, s) && f(state, s.id, u)) return true
   }
@@ -2698,6 +2908,7 @@ export function hushedByStatic(state: GameState, u: UnitState, src = silencerSou
     if (!silenceImmune(state, o) && hushedByStatic(state, o, src, false)) continue
     if (getScript(o.name)!.silencesUnit!(state, o.id, u)) return true
   }
+  if (shielded) return false
   for (const r of src.auras) {
     if (getScript(r.name)!.silencesUnit!(state, r.id, u)) return true
   }
@@ -2791,9 +3002,26 @@ export function summonBlockedAt(state: GameState, at: { x: number; y: number; re
   return false
 }
 
+/** A minion entering already silenced (by its own state or a silencing static: Bower of Bliss, Sisters
+ *  of Silence) gets no Stealth, Ward or Lance: since Oct 2026 those are entry triggers like Genesis. */
+export function entersSilenced(state: GameState, unit: UnitState): boolean {
+  if (unit.isAvatar) return false
+  return !!unit.silenced || (hushedByStatic(state, unit) && !silenceImmune(state, unit))
+}
+
+/** Clears the Stealth and Ward marks a minion entering silenced would otherwise get. */
+export function dropSilencedEntryMarks(state: GameState, unit: UnitState): boolean {
+  if (!entersSilenced(state, unit)) return false
+  unit.ward = undefined
+  unit.stealth = undefined
+  return true
+}
+
 /** Lance: a minion enters play carrying a Lance artifact token — one per printed Lance (Thankless
- *  Squire's "Lance, Lance, Lance" brings three). Every way of entering gets them, cast or effect-summoned. */
+ *  Squire's "Lance, Lance, Lance" brings three). Every way of entering gets them, cast or effect-summoned.
+ *  A minion entering silenced gets no Lance, and loses the Stealth and Ward marks it would enter with. */
 export function giveEntryLances(state: GameState, unit: UnitState): void {
+  if (dropSilencedEntryMarks(state, unit)) return
   const kw = getKeywords(unit.name)
   for (let n = kw.lance ? kw.lanceCount ?? 1 : 0; n > 0; n--) {
     const lanceCardId = newId(state, 'c')
@@ -3339,7 +3567,8 @@ export function destroySite(state: GameState, siteId: string, sourcePlayer?: Pla
       }
     }
   }
-  if (checkWard(state, site, sourcePlayer, site.controller, 'destroy')) {
+  // codex Sacrifice: "the prevention fails and the card is actually sacrificed" — a Ward doesn't save it either
+  if (!sacrifice && checkWard(state, site, sourcePlayer, site.controller, 'destroy')) {
     pushLog(state, sourcePlayer ?? null, `${site.name}'s ward breaks.`)
     return
   }
@@ -3430,9 +3659,14 @@ function settleRealmFootprints(state: GameState): void {
       if (marked) { u.extraSquares = []; delete u.counters!.occupiesAll }
       continue
     }
-    if (!marked || (u.extraSquares?.length ?? 0) !== GRID_W * GRID_H - 1) {
-      u.extraSquares = []
-      for (let x = 0; x < GRID_W; x++) for (let y = 0; y < GRID_H; y++) if (x !== u.x || y !== u.y) u.extraSquares.push({ x, y })
+    // `outer` (Jormungand): only the squares on the realm's edge — fewer than four adjacent squares (Codex, Outerbound)
+    const outer = !!script.occupiesAllLocations.outer
+    const wanted: { x: number; y: number }[] = []
+    for (let x = 0; x < GRID_W; x++) for (let y = 0; y < GRID_H; y++) {
+      if ((x !== u.x || y !== u.y) && (!outer || x === 0 || y === 0 || x === GRID_W - 1 || y === GRID_H - 1)) wanted.push({ x, y })
+    }
+    if (!marked || (u.extraSquares?.length ?? 0) !== wanted.length || (outer && !wanted.every((w) => u.extraSquares!.some((s) => s.x === w.x && s.y === w.y)))) {
+      u.extraSquares = wanted
       u.counters = { ...(u.counters ?? {}), occupiesAll: 1 }
     }
     const min = script.occupiesAllLocations.minVoids
@@ -3467,6 +3701,8 @@ export function checkStateBased(state: GameState): void {
     if (u.carryingUnits?.length) u.carryingUnits = u.carryingUnits.filter((id) => state.units[id])
   }
   settleRealmFootprints(state)
+  notePermafrostHolds(state) // minions disabled at a Permafrost stay so until they leave
+  pruneHibernalFreezes(state) // a Legion that left the realm thawed what it froze
   // Magellan Globe edge-wrap is dynamic: re-derive each standard 2x2 aura's coverage
   // from its stored anchor so it extends across / retracts from the far edge as the
   // Globe enters or leaves play. Only reconcile auras whose squares still match their
@@ -3590,14 +3826,15 @@ export function checkStateBased(state: GameState): void {
     // "Evil minions can't be warded" (rulebook): a minion that BECOMES Evil immediately loses its ward —
     // whether printed-Evil, a Corruptor's subtype rewrite, a transform, or a control change that puts it
     // under a Corruptor. Uses INTRINSIC Evil, so a Persecutor BRAND (not real Evil) does NOT strip it.
-    if (isDisabled(state, u) || (!u.isAvatar && isEvilUnitIntrinsic(state, u))) {
+    // "Can't be modified" also means it can't have a Ward mark (Codex) — whatever wrote one.
+    if (isDisabled(state, u) || (!u.isAvatar && isEvilUnitIntrinsic(state, u)) || cantHaveMark(state, u, 'ward')) {
       u.ward = false
       pushLog(state, u.controller, `${u.name} loses its ward.`)
     }
   }
   for (const s of Object.values(state.sites)) {
     if (!s.ward) continue
-    if (s.isRubble || siteDisabled(state, s)) {
+    if (s.isRubble || siteDisabled(state, s) || siteCantBeModified(state, s)) {
       s.ward = false
       if (s.controller !== null) pushLog(state, s.controller, `${s.name} loses its ward.`)
     }
@@ -3608,7 +3845,7 @@ export function checkStateBased(state: GameState): void {
   // later"). A SILENCED minion keeps the mark (Codex, Silenced: "it will retain the mark!").
   for (const u of Object.values(state.units)) {
     if (!u.stealth) continue
-    if (isDisabled(state, u)) {
+    if (isDisabled(state, u) || cantHaveMark(state, u, 'stealth')) { // unmodifiable: no Stealth mark (Codex)
       u.stealth = false
       pushLog(state, u.controller, `${u.name} is revealed — its Stealth is broken.`)
     }
@@ -4024,7 +4261,7 @@ export function summonToken(state: GameState, name: string, owner: PlayerId, x: 
     usedThisTurn: {},
   }
   if (summonBlockedAt(state, { x, y, region }, unit)) return null // No Man's Land, Crucifix… — the token can't be summoned here
-  state.cards[cardId] = { id: cardId, name, owner, isToken: true }
+  state.cards[cardId] = { id: cardId, name, owner, isToken: true, art: tokenArtFor(state, owner, name) }
   state.units[unitId] = unit
   giveEntryLances(state, unit)
   pushLog(state, owner, `A ${def.name} token appears.`)
@@ -4046,7 +4283,7 @@ export function transformIntoToken(state: GameState, unit: UnitState, name: stri
   const { x, y, region, controller, enteredTurn } = unit
   if (removeUnitFromRealm(state, unit.id)) delete state.units[unit.id]
   const cardId = newId(state, 'c')
-  state.cards[cardId] = { id: cardId, name, owner: controller, isToken: true }
+  state.cards[cardId] = { id: cardId, name, owner: controller, isToken: true, art: tokenArtFor(state, controller, name) }
   const token: UnitState = {
     id: newId(state, 'u'), cardId, name, owner: controller, controller, isAvatar: false, x, y, region,
     tapped: false, damage: 0, enteredTurn, modifiers: [], carrying: [], carryingUnits: [], usedThisTurn: {},
@@ -4130,6 +4367,9 @@ function pushWalk(state: GameState, unitId: string, sx: number, sy: number, step
   if (!u) return
   const canEnter = (a: { x: number; y: number; region: Region }, b: { x: number; y: number; region: Region }) =>
     !!siteAt(state, b.x, b.y) && siteEntryAllowed(state, u, a, b, true, push)
+  // under Magellan Globe a step off one edge lands on the opposite one (no Globe: off the board, so it stops)
+  const wrap = edgesConnected(state)
+  const wrapStep = (x: number, y: number) => (wrap ? { x: (x + GRID_W) % GRID_W, y: (y + GRID_H) % GRID_H } : { x, y })
   state.flow = state.flow ?? {}
   // while it is being dragged the unit is NOT "at rest", so an at-rest disabler (Hillock Basilisk /
   // Stone-Gaze Gorgons) can't freeze it in a square it is merely passing through. It settles — and
@@ -4141,13 +4381,13 @@ function pushWalk(state: GameState, unitId: string, sx: number, sy: number, step
   try {
     for (let i = 1; i <= steps; i++) {
       const stepFrom = { x: u.x, y: u.y, region: u.region }
-      const next = { x: u.x + sx, y: u.y + sy, region: u.region }
+      const next = { ...wrapStep(u.x + sx, u.y + sy), region: u.region }
       if (!canEnter(stepFrom, next)) break // blocked — it comes to rest on the last square it entered
       u.x = next.x; u.y = next.y
       // final=true on the square it actually STOPS on (the destination, or where a ban halts it) so
       // "stops here" triggers (Vaults of Zul, Flame of the First Ones) fire once, at rest — while
       // pass-through squares emit final=false and only fire "enters/leaves" triggers.
-      const after = { x: u.x + sx, y: u.y + sy, region: u.region }
+      const after = { ...wrapStep(u.x + sx, u.y + sy), region: u.region }
       const isFinal = i === steps || !canEnter({ x: u.x, y: u.y, region: u.region }, after)
       const asked = state.prompts.length
       emitUnitMoved(state, u, stepFrom, 'forced', isFinal)
@@ -4192,6 +4432,7 @@ export function makeCtx(
   // Resolved NOW, while the source is (usually) still in play: an effect that removes its own card and
   // THEN asks something (Ferryman's Coin banishes itself, then asks which cemetery) must still route that
   // prompt to its script — a lookup at ask-time finds nothing and the answer hit "No continuation script::…".
+  noteDamageTargets(state, targets.flatMap((t) => (t && 'unit' in t ? [t.unit] : [])))
   const routeCardName = state.units[sourceId]?.name ?? state.artifacts[sourceId]?.name ?? state.sites[sourceId]?.name
     ?? state.auras[sourceId]?.name ?? state.cards[sourceId]?.name ?? routeName ?? ''
   // A spellcaster ARTIFACT (Dank Omphalos & other Omphaloi, Vivien-as-artifact) casts as a
@@ -4220,6 +4461,20 @@ export function makeCtx(
     // damage does NOT credit the caster-as-damager here (magic is priority 2, via actionCredit).
     sourceUnitId: meta?.kind !== 'magic' ? actorUnit?.id : undefined,
     elements: meta?.elements,
+  }
+  // Protection from this source (protectedFromSource: Humming Hummocks, Protected from sites): it can't
+  // destroy, banish, modify or move the unit. A unit's own ability (not a spell it casts) is a unit source.
+  const sourceKind: EffectSourceKind = damageSource.kind === 'magic' ? 'magic'
+    : state.units[sourceId] ? 'unit'
+    : state.sites[sourceId] ? 'site'
+    : state.artifacts[sourceId] ? 'artifact'
+    : state.auras[sourceId] ? 'aura'
+    : sourceKindOfName(sourceName)
+  const shielded = (unitId: string): boolean => {
+    const u = state.units[unitId]
+    if (!u || !protectedFromSource(state, u, sourceKind)) return false
+    pushLog(state, controller, `${u.name} is protected from ${sourceName ?? 'that'}.`)
+    return true
   }
   // ctx.teleport's move itself (teleport, below, adds its `then`): 'paused' when a multi-step drag stopped
   // at a step whose trigger asked something — pushWalk resumes it once that is settled.
@@ -4306,6 +4561,11 @@ export function makeCtx(
     const walk =
       push && destRegion === u.region && (dx === 0) !== (dy === 0) &&
       Math.abs(dx) + Math.abs(dy) > 1 && u.size !== '2x2' && !(u.extraSquares?.length)
+    // an explicit stepping push (Slide): N steps one way, crossing the joined edges under Magellan Globe
+    const w = opts?.walk
+    if (push && w && destRegion === u.region && u.size !== '2x2' && !(u.extraSquares?.length) && Math.abs(w.dx) + Math.abs(w.dy) === 1 && w.steps > 0) {
+      return pushWalk(state, u.id, w.dx, w.dy, w.steps, push)
+    }
     if (walk) return pushWalk(state, u.id, Math.sign(dx), Math.sign(dy), Math.abs(dx) + Math.abs(dy), push)
     const dest = { x, y, region: destRegion }
     if (!siteEntryAllowed(state, u, from, dest, true, push)) {
@@ -4327,8 +4587,9 @@ export function makeCtx(
     u.x = x
     u.y = y
     if (region) u.region = region
-    // apply a chosen rotation to a rigid body — re-lay its extra parts around the new anchor
-    if (shape && footprint && (u.extraSquares?.length ?? 0) > 0) {
+    // a rigid body's extra parts move with it — re-laid around the new anchor in its current shape, or in a
+    // chosen rotation (`shape`). Every teleport/push of a wall, Rack-stretched unit or blob comes through here.
+    if (footprint && (u.extraSquares?.length ?? 0) > 0) {
       u.extraSquares = footprint
         .filter((s) => !(s.x === x && s.y === y))
         .map((s) => ({ x: s.x, y: s.y, region: 'surface' as Region }))
@@ -4392,7 +4653,7 @@ export function makeCtx(
     // early. Only for genuine "did this die?" follow-ups (Fire Harpoons' pull-if-it-survived, a
     // kill-counter); ordinary area damage must NOT call it, or it forfeits the simultaneity.
     settleDeaths: () => checkStateBased(state),
-    strike: (attacker, target) => {
+    strike: (attacker, target, amount) => {
       // A strike is a real action — not just its damage (rulebook). So an effect
       // strike (Hotwheel's roll, Wraetannis Titan's genesis, …) fires the SAME
       // consequences a melee blow does: "whenever this strikes", the enemy-Avatar
@@ -4401,7 +4662,7 @@ export function makeCtx(
       // grants it — so no effect (Shatter Strike's ally, Smite…) makes it strike, not even for 0.
       if (isDisabled(state, attacker)) return
       const kw = effKeywords(state, attacker)
-      const power = effAttack(state, attacker)
+      const power = amount ?? effAttack(state, attacker) // a strike "for N damage" deals N, not its power
       if (!('unit' in target)) {
         // striking a site: no unit hooks, just the damage
         dealDamage(state, target, power, controller)
@@ -4410,6 +4671,8 @@ export function makeCtx(
       }
       const tu = state.units[target.unit]
       if (!tu) return
+      // a Lance: the bearer's next strike against a unit deals +1, then the Lance breaks
+      const lances = heldLances(state, attacker)
       // "whenever this unit strikes" — fires even at 0 power (a strike still happened)
       // the striker's OWN triggers run for its controller, whoever's effect made it strike (Backstab on an
       // enemy minion: "kill an enemy" is judged from that minion's side)
@@ -4424,13 +4687,14 @@ export function makeCtx(
       }
       const snapshot = { ...tu } // pre-death snapshot for kill hooks (position intact)
       const wasAvatar = tu.isAvatar
-      if (power > 0 && state.units[tu.id]) {
+      if (power + lances.length > 0 && state.units[tu.id]) {
         const lethalVs = !attacker.silenced ? getScript(attacker.name)?.lethalVs : undefined
-        dealDamageToUnit(state, tu, power, controller, {
+        dealDamageToUnit(state, tu, power + lances.length, controller, {
           lethal: (kw.lethal || !!lethalVs?.(state, attacker, tu)) && !tu.isAvatar,
           source: { player: controller, kind: 'strike', attackerId: attacker.id, name: attacker.name },
         })
       }
+      breakLances(state, attacker, lances)
       // "whenever an ally strikes an enemy Avatar" (Interrogator) — a strike, damage or not
       if (wasAvatar) emitEvent(state, 'onAllyStrikesAvatar', attacker, snapshot)
       checkStateBased(state)
@@ -4450,6 +4714,7 @@ export function makeCtx(
       checkStateBased(state)
     },
     kill: (unitId) => {
+      if (shielded(unitId)) return
       const u = state.units[unitId]
       // destruction effects break wards instead (Detonate FAQ)
       if (u && checkWard(state, u, controller, u.controller, 'destroy')) {
@@ -4458,8 +4723,8 @@ export function makeCtx(
       }
       killUnit(state, unitId)
     },
-    banish: (unitId) => banishUnit(state, unitId),
-    bounce: (unitId) => bounceUnit(state, unitId),
+    banish: (unitId) => { if (!shielded(unitId)) banishUnit(state, unitId) },
+    bounce: (unitId) => { if (!shielded(unitId)) bounceUnit(state, unitId) },
     heal: (unitId, n) => healUnit(state, unitId, n),
     gainLife: (p, n) => gainLife(state, p, n),
     loseLife: (p, n) => loseLife(state, p, n),
@@ -4472,6 +4737,7 @@ export function makeCtx(
     // opponent's mana — that's a genuine loss of their total, so it must NOT bump manaSpent.)
     spendMana: (p, n) => { state.players[p].mana -= n; bumpManaSpent(state, p, n) },
     addPower: (unitId, amount, duration) => {
+      if (shielded(unitId)) return
       const u = state.units[unitId]
       if (u && ((getScript(u.name)?.unmodifiable && !u.silenced) || carriedUnmodifiable(state, u))) {
         pushLog(state, u.controller, `${u.name} cannot be modified.`)
@@ -4481,8 +4747,10 @@ export function makeCtx(
       checkStateBased(state)
     },
     grantKeyword: (unitId, keyword, duration) => {
+      if (shielded(unitId)) return
       const u = state.units[unitId]
-      if (u && ((getScript(u.name)?.unmodifiable && !u.silenced && keyword !== 'ward') || carriedUnmodifiable(state, u))) {
+      // Wards only get through Monks' "except by Wards" (Codex: otherwise no Ward mark)
+      if (u && ((getScript(u.name)?.unmodifiable && !u.silenced && !(keyword === 'ward' && getScript(u.name)?.unmodifiableExceptWards)) || carriedUnmodifiable(state, u))) {
         pushLog(state, u.controller, `${u.name} cannot be modified.`)
         return
       }
@@ -4495,6 +4763,7 @@ export function makeCtx(
       const then: ThenRef | undefined = opts?.then
         ? { card: meta?.name ?? routeCardName, key: opts.then.key, ctx: opts.then.ctx ?? {}, sourceId, controller, targets, at, extra, meta }
         : undefined
+      if (shielded(unitId)) { runThen(state, then); return false }
       const before = state.units[unitId]
       const from = before ? { x: before.x, y: before.y, region: before.region } : null
       const paused = teleportBody(unitId, x, y, region, opts) === 'paused'
@@ -4514,9 +4783,14 @@ export function makeCtx(
     },
     destroySite: (siteId, by, sacrifice) => destroySite(state, siteId, by ?? controller, sacrifice),
     disable: (unitId) => {
+      if (shielded(unitId)) return
       const u = state.units[unitId]
-      if (u && !u.isAvatar) u.disabled = true
+      if (u && !u.isAvatar) {
+        u.disabled = true
+        notePermafrostHold(state, u)
+      }
     },
+    shields: shielded,
     floodSite: (siteId, duration) => {
       const site = state.sites[siteId]
       if (!site || site.isRubble) return
@@ -4617,6 +4891,17 @@ export function makeCtx(
           const element = meta?.elements ?? (cardName ? getCard(cardName)?.elements : undefined)
           data = { ...data, from: origin, dirs: directionReach(state, origin.x, origin.y), element }
         }
+      }
+      // Protected from this source (protectedFromSource): it can't be targeted — also through a pick list
+      // the script builds itself. A unit chooseTargets prompt is targeting unless
+      // flagged notTargeted (the same convention breakWardOnChosen uses), so a protected unit is left out;
+      // emptied, the pick becomes skippable so the effect simply finds nothing.
+      if (sourceKind !== 'unit' && prompt.kind === 'chooseTargets' && data.kind === 'unit' && !data.notTargeted && Array.isArray(data.candidates)) {
+        const kept = data.candidates.filter((c: unknown) => {
+          const u = typeof c === 'string' ? state.units[c] : undefined
+          return !u || !protectedFromSource(state, u, sourceKind)
+        })
+        if (kept.length !== data.candidates.length) data = { ...data, candidates: kept, ...(kept.length ? {} : { upTo: true }) }
       }
       pushPrompt(state, {
         player: prompt.player ?? controller,

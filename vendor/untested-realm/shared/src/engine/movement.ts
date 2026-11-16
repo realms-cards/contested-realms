@@ -4,7 +4,7 @@ import { GRID_H, GRID_W, inBounds, isOrthAdjacent, isDiagAdjacent, siteAt, isWat
 import { emitUnitMoved, makeCtx, pushLog, recordMoveAnim } from './effects'
 import { detachFromCarrier, syncCarried } from './carrying'
 import { getScript } from '../cards/scripts/registry'
-import { abilitiesOff, effKeywords, isDisabled, isUnmodifiable, immobilizeImmune, terrainAt, siteSilenced, artifactSilenced, protectedFromSites } from './statics'
+import { abilitiesOff, effKeywords, isDisabled, isUnmodifiable, immobilizeImmune, terrainAt, siteSilenced, artifactSilenced, protectedFromSites, protectedFromNonUnits } from './statics'
 
 
 /** Do the SITE / artifact entry restrictions (Gnome Hollows' power cap, Great Wall, walls…) permit
@@ -25,7 +25,8 @@ export function siteEntryAllowed(state: GameState, unit: UnitState, from: Step, 
       if (!siteSilenced(state, s) && !script.entryFilter(state, s.id, unit, from, to)) return false
     }
   }
-  for (const a of Object.values(state.artifacts)) {
+  // an artifact's entry ban can't impede a unit Protected from all but units (Humming Hummocks)
+  if (!protectedFromNonUnits(state, unit)) for (const a of Object.values(state.artifacts)) {
     const script = getScript(a.name)
     if (!script?.entryFilter || artifactSilenced(state, a) || (forced && !forcedActivates(script))) continue
     if (!script.entryFilter(state, a.id, unit, from, to)) return false
@@ -200,22 +201,24 @@ export function buildStepCtx(state: GameState, unit: UnitState): StepCtx {
   if (!protectedFromSites(state, unit)) {
     for (const s of Object.values(state.sites)) if (getScript(s.name)?.entryFilter && !siteSilenced(state, s)) siteEntry.push(s)
   }
+  // Protected from all but units (Humming Hummocks): no artifact, aura or Bog/Quagmire impedes its movement
+  const shielded = protectedFromNonUnits(state, unit)
   const artEntry: ArtifactState[] = []
-  for (const a of Object.values(state.artifacts)) if (getScript(a.name)?.entryFilter && !artifactSilenced(state, a)) artEntry.push(a)
+  if (!shielded) for (const a of Object.values(state.artifacts)) if (getScript(a.name)?.entryFilter && !artifactSilenced(state, a)) artEntry.push(a)
   // first site per square in Object.values order: exactly what siteAt returns
   const siteGrid: (SiteState | null)[] = new Array(GRID_W * GRID_H).fill(null)
   for (const st of Object.values(state.sites)) {
     if (inBounds(st.x, st.y) && !siteGrid[st.y * GRID_W + st.x]) siteGrid[st.y * GRID_W + st.x] = st
   }
   const bogSquares: { x: number; y: number }[] = []
-  if (!immobilizeImmune(state, unit)) {
+  if (!immobilizeImmune(state, unit) && !shielded) {
     for (const im of (state.flow?.immobileSites ?? []) as { siteId: string }[]) {
       const st = state.sites[im.siteId]
       if (st) bogSquares.push({ x: st.x, y: st.y })
     }
   }
-  const walls = Object.values(state.auras).filter((r) => r.edge && getScript(r.name)?.wallBlocks)
-  const traps = unit.isAvatar
+  const walls = shielded ? [] : Object.values(state.auras).filter((r) => r.edge && getScript(r.name)?.wallBlocks)
+  const traps = unit.isAvatar && !shielded
     ? Object.values(state.auras).filter((r) => getScript(r.name)?.auraTrapsAvatars && r.squares.some((q) => q.x === unit.x && q.y === unit.y))
     : []
   // a disabled mover has no abilities: its own step filter / free steps are off too

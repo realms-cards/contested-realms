@@ -6,15 +6,16 @@ import type { GameState, Region, Step, UnitState } from '../../../engine/types'
 import { waterBody } from '../multi-card-utils/water-body'
 
 /** "move one step" is the unit's own step (Codex, Step): Immobile stays, Airborne may go diagonally,
- *  Submerge may cross between surface and underwater — but only to another square of this body. */
+ *  Submerge may cross between surface and underwater as its step — including diving/surfacing in place —
+ *  but only within this body. Every legal (square, level) pair. */
 function stepsWithin(state: GameState, u: UnitState, body: { x: number; y: number }[]): Step[] {
   const from: Step = { x: u.x, y: u.y, region: u.region }
-  const regions: Region[] = [u.region, ...(['surface', 'underwater'] as Region[]).filter((r) => r !== u.region)]
   const out: Step[] = []
   for (const b of body) {
-    if (b.x === u.x && b.y === u.y) continue
-    const region = regions.find((r) => isLegalStep(state, u, from, { x: b.x, y: b.y, region: r }))
-    if (region) out.push({ x: b.x, y: b.y, region })
+    for (const region of ['surface', 'underwater'] as Region[]) {
+      if (b.x === u.x && b.y === u.y && region === u.region) continue // staying put isn't a step
+      if (isLegalStep(state, u, from, { x: b.x, y: b.y, region })) out.push({ x: b.x, y: b.y, region })
+    }
   }
   return out
 }
@@ -41,12 +42,24 @@ registerScript('Undertow', {
       const body = c.body as { x: number; y: number }[]
       const steps = stepsWithin(ctx.state, u, body)
       if (!steps.length) return
-      ctx.ask({ kind: 'chooseSquare', title: `${u.name} is pulled where?`, data: { squares: steps.map((s) => ({ x: s.x, y: s.y })) } }, 'pullTo', { unitId: u.id, body })
+      const squares = steps.filter((s, i) => steps.findIndex((t) => t.x === s.x && t.y === s.y) === i).map((s) => ({ x: s.x, y: s.y }))
+      ctx.ask({ kind: 'chooseSquare', title: `${u.name} is pulled where?`, data: { squares } }, 'pullTo', { unitId: u.id, body })
     },
     pullTo: (ctx, c, sq) => {
       const u = ctx.state.units[c.unitId as string]
       if (!u || !sq) return
-      const to = stepsWithin(ctx.state, u, c.body as { x: number; y: number }[]).find((s) => s.x === sq.x && s.y === sq.y)
+      const here = stepsWithin(ctx.state, u, c.body as { x: number; y: number }[]).filter((s) => s.x === sq.x && s.y === sq.y)
+      if (here.length > 1) {
+        // a Submerge minion may end its step on the surface or underwater there: its mover picks
+        ctx.ask({ kind: 'chooseOption', title: `${u.name}: surface or underwater?`, data: { options: here.map((s) => s.region) } }, 'pullRegion', { unitId: u.id, body: c.body, x: sq.x, y: sq.y })
+        return
+      }
+      if (here[0] && takeOwnStep(ctx.state, u, here[0])) checkStateBased(ctx.state)
+    },
+    pullRegion: (ctx, c, region) => {
+      const u = ctx.state.units[c.unitId as string]
+      if (!u) return
+      const to = stepsWithin(ctx.state, u, c.body as { x: number; y: number }[]).find((s) => s.x === c.x && s.y === c.y && s.region === region)
       if (to && takeOwnStep(ctx.state, u, to)) checkStateBased(ctx.state)
     },
   },

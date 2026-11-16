@@ -19,7 +19,7 @@ function seaOfAshCheck(ctx: EffectAPI, u: UnitState): void {
   const self = ctx.state.sites[ctx.sourceId]
   if (!self || u.isAvatar || (u.region !== 'underground' && u.region !== 'underwater')) return
   if (!ctx.state.units[u.id]) return
-  if (nearbySquaresW(ctx.state, self.x, self.y).some((s) => s.x === u.x && s.y === u.y) && siteAt(ctx.state, u.x, u.y)) {
+  if (nearbySquaresW(ctx.state, self.x, self.y).some((s) => s.x === u.x && s.y === u.y) && siteAt(ctx.state, u.x, u.y) && !ctx.shields(u.id)) {
     pushLog(ctx.state, ctx.controller, `${u.name} chokes in the ash below.`)
     killUnit(ctx.state, u.id)
     checkStateBased(ctx.state)

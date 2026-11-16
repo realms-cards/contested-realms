@@ -43,11 +43,12 @@ function triggerDesertGenesis(ctx: EffectAPI, siteId: string) {
   const site = ctx.state.sites[siteId]
   if (!site) return
   const script = requireScript(site.name)
-  if (script?.genesis && site.controller !== null) {
+  if (script?.genesis) {
     // Run the Desert's genesis under ITS OWN effect context (makeCtx bound to the site), NOT a spread of
     // the Mummy's ctx. ctx.ask files continuations under the CLOSURED sourceId, so a spread just overrides
     // the property while ask still closes over the Mummy's id — any follow-up prompt the genesis raises
     // (Vast Desert's "scour") then crashes as "No continuation script:Khamaseen Mummy:scour".
-    script.genesis(makeCtx(ctx.state, site.id, site.controller, []))
+    // FAQ (Nov 2026): "You control the ability, even if it's your opponent's site."
+    script.genesis(makeCtx(ctx.state, site.id, ctx.controller, []))
   }
 }

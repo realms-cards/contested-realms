@@ -6,7 +6,7 @@ registerScript('Roots of Yggdrasil', {
   onSelfDestroyed: (ctx) => {
     pushLog(ctx.state, null, '🌳 THE WORLD-TREE FALLS. EVERYTHING FOLLOWS.')
     for (const u of Object.values(ctx.state.units)) {
-      if (u.isAvatar) continue
+      if (u.isAvatar || ctx.shields(u.id)) continue // Humming Hummocks: Protected from all but units
       // Ward breaks instead of dying when its bearer would be destroyed, from ANY source (codex) —
       // so a warded minion (Paladins of Bazia) survives the world-tree's collapse, ward spent.
       if (checkWard(ctx.state, u, ctx.controller, u.controller, 'destroy')) {

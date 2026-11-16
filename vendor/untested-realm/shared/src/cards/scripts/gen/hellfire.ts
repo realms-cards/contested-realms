@@ -5,7 +5,7 @@ import { pushLog, killUnit } from '../../../engine/effects'
 registerScript('Hellfire', {
   onCast: (ctx) => {
     for (const u of Object.values(ctx.state.units)) {
-      if (!u.isAvatar && (u.region === 'underground' || u.region === 'underwater')) killUnit(ctx.state, u.id)
+      if (!u.isAvatar && (u.region === 'underground' || u.region === 'underwater') && !ctx.shields(u.id)) killUnit(ctx.state, u.id)
     }
     for (const a of Object.values(ctx.state.artifacts)) {
       if (a.region === 'underground' || a.region === 'underwater') ctx.breakArtifact(a.id)

@@ -3,6 +3,9 @@ import { getScript } from '../cards/scripts/registry'
 import type { DeckList } from './decks'
 import type { ClockConfig, GameState, PlayerId, PlayerState, UnitState } from './types'
 import { shuffleWithSeed } from './rng'
+import { tokenArtOf } from '../cards/tokenArt'
+import { matchPrecon } from '../cards/precons'
+import { isAlphaPrinting } from '../cards/printings'
 import { newId, pushLog, drawCards, runSecondSeerPeek, deferTurnStep, registerCont } from './effects'
 import { GRID_W } from './grid'
 import { noteAddedToEnd } from './knowledge'
@@ -43,9 +46,14 @@ export function createGame(
     // bake each card's chosen alternative art (owner's deck.art) onto its instance — cosmetic, and only
     // reaches the opponent for cards they can see (viewFor sends visible instances only).
     const artOf = (n: string) => deck.art?.[n]
+    // an Alpha printing (Ancient Thaw's "an @ Beast"): the copy's chosen art is a 001-… slug. A deck matching
+    // an official precon holds that set's printings, so its art choice is cosmetic there — never Alpha.
+    const precon = !!matchPrecon(deck)
+    const alphaOf = (n: string) => !precon && isAlphaPrinting(artOf(n))
+    const instance = (id: string, name: string) => ({ id, name, owner: pid, art: artOf(name), ...(alphaOf(name) ? { alpha: true } : {}) })
     const avatarDef = getCard(deck.avatar)
     const avatarCardId = newId(state, 'c')
-    state.cards[avatarCardId] = { id: avatarCardId, name: avatarDef.name, owner: pid, art: artOf(avatarDef.name) }
+    state.cards[avatarCardId] = instance(avatarCardId, avatarDef.name)
     const avatarUnitId = newId(state, 'u')
     // avatars start on the middle square of their bottom row (5 wide → x=2)
     const y = pid === 0 ? 0 : 3
@@ -75,7 +83,7 @@ export function createGame(
       const def = getCard(name)
       for (let i = 0; i < copies; i++) {
         const id = newId(state, 'c')
-        state.cards[id] = { id, name: def.name, owner: pid, art: artOf(def.name) }
+        state.cards[id] = instance(id, def.name)
         spellbook.push(id)
       }
     }
@@ -84,7 +92,7 @@ export function createGame(
       const def = getCard(name)
       for (let i = 0; i < copies; i++) {
         const id = newId(state, 'c')
-        state.cards[id] = { id, name: def.name, owner: pid, art: artOf(def.name) }
+        state.cards[id] = instance(id, def.name)
         atlas.push(id)
       }
     }
@@ -101,6 +109,9 @@ export function createGame(
       cemetery: [],
       banished: [],
       collection: { ...(deck.collection ?? {}) },
+      ...(Object.keys(deck.collection ?? {}).some(alphaOf) ? { collectionAlpha: Object.keys(deck.collection ?? {}).filter(alphaOf) } : {}),
+      // the deck's art for the tokens this player will create (Skeleton, Foot Soldier, Frog — incl. an admin-granted custom art)
+      ...(tokenArtOf(deck) ? { tokenArt: tokenArtOf(deck) } : {}),
       mana: 0,
       keptHand: false,
       usedAvatarSiteAbility: false,

@@ -3,7 +3,7 @@ import { getScript, type AbilityDef, type EffectAPI, type TargetRef } from '../c
 import type { Action, ActionResult, GameState, PlayerId, UnitState } from './types'
 import { doMulligan, keepHand } from './setup'
 import { endTurn, reconcileControlledMana } from './turn'
-import { activePrompt, resolvePrompt, pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkStateBased, killUnit, tapUnit, checkWard, luckyCandidates, bumpManaSpent, beginAreaReveal, sealAbilityReveal, revealAbility, setActionCredit, restoreActionCredit, reconcileSummonTax, completeDeferredDeaths, finishBattleCapture, runDamageEvent, loseLife } from './effects'
+import { settleUnitDamage, activePrompt, resolvePrompt, pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkStateBased, killUnit, tapUnit, checkWard, luckyCandidates, bumpManaSpent, beginAreaReveal, sealAbilityReveal, revealAbility, setActionCredit, restoreActionCredit, reconcileSummonTax, completeDeferredDeaths, finishBattleCapture, runDamageEvent, loseLife } from './effects'
 import { castSpell, playSite, affinity, targetPickProblem, type TargetPick, resolvePendingCast, resolveQueuedCopyCasts, castExtrasProblem, isRegion, settleResolvedMagics } from './casting'
 import { moveAttack, shootProjectile, pickUp, drop, enforceForcedAttacks, resolvePendingMoveAttack } from './combat'
 import { applyJudge } from './judge'
@@ -55,6 +55,9 @@ export function applyAction(state: GameState, player: PlayerId, action: Action):
   }
   // a prepaid Bureau toll covers one effect only — it's over once nothing is left to resolve
   if (state.prompts.length === 0 && state.flow?.zoneTollPaid !== undefined) delete state.flow.zoneTollPaid
+  // minion damage numbers: an effect whose hits spread over several units it didn't target was an AREA —
+  // its numbers move from the minions onto the sites (decided only now, once every prompt has resolved)
+  if (state.prompts.length === 0) settleUnitDamage(state)
   state.version++
   return { ok: true }
 }
@@ -252,7 +255,7 @@ function mustAttackViolation(state: GameState, player: PlayerId): string | null 
     const spots = [{ x: u.x, y: u.y, region: u.region }, ...reachableLocations(state, u)]
     for (const s of spots) {
       const prey = unitsAt(state, s.x, s.y, s.region).some(
-        (o) => o.controller !== player && !o.stealth && !attackBlockedAt(state, o.x, o.y),
+        (o) => o.controller !== player && !o.stealth && !attackBlockedAt(state, o.x, o.y, undefined, u),
       )
       if (prey) return `${u.name} is compelled to attack before the turn can end.`
     }

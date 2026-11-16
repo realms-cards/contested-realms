@@ -8,6 +8,6 @@ registerScript('Freeze', {
     const t = ctx.targets[0]
     if (!('unit' in t)) return
     const u = ctx.state.units[t.unit]
-    if (u) disableUntilYourNextTurn(ctx.state, u.id, ctx.controller)
+    if (u) disableUntilYourNextTurn(ctx, u.id, ctx.controller)
   },
 })

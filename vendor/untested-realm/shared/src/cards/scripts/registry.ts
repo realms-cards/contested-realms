@@ -56,6 +56,9 @@ export interface TeleportOpts {
   intoVoid?: boolean
   shape?: { dx: number; dy: number }[]
   then?: { key: string; ctx?: Record<string, unknown> }
+  /** a stepping push of exactly `steps` squares in the unit direction (dx,dy), crossing the joined edges
+   *  under Magellan Globe (Slide) — for a slide whose destination isn't a straight in-board line away */
+  walk?: { dx: number; dy: number; steps: number }
 }
 
 export interface EffectAPI {
@@ -79,7 +82,8 @@ export interface EffectAPI {
    *  it just dealt (Fire Harpoons' "pull it if it survived", a kill counter). Never for plain area
    *  damage, which relies on the deferral so an in-blast reducer keeps shielding the rest of the blast. */
   settleDeaths(): void
-  strike(attacker: UnitState, target: TargetRef): void
+  /** `amount` replaces the striker's power for a strike "for N damage" (Tusslin' Trolls' D6) */
+  strike(attacker: UnitState, target: TargetRef, amount?: number): void
   kill(unitId: string): void
   banish(unitId: string): void
   bounce(unitId: string): void
@@ -112,6 +116,10 @@ export interface EffectAPI {
    *  defaults to the source's controller. Pass the attacker/damager for reactive shatters. */
   destroySite(siteId: string, by?: PlayerId, sacrifice?: boolean): void
   disable(unitId: string): void
+  /** is this unit Protected from this effect's source (Humming Hummocks: "Protected from all but units"
+   *  — the source is a Magic, site, artifact or aura)? Logs it. Scripts that edit a unit directly (killUnit,
+   *  a pushed modifier, `silenced`) instead of through this API skip the unit when it returns true. */
+  shields(unitId: string): boolean
   /** flood a site (permanent unless duration given) */
   floodSite(siteId: string, duration?: 'endOfTurn'): void
   /** send an artifact in play to its owner's cemetery ("break") */
@@ -212,8 +220,9 @@ export interface CardScript {
   castRider?: (ctx: EffectAPI) => void
   /** a footprint CHARACTERISTIC: this minion occupies every location of the realm (Yog-Sothoth), applied by
    *  checkStateBased from the card's name — so transforms into/out of it and silence/disable are honoured.
-   *  `minVoids`: "is banished without N voids" (an ability: ignored while its abilities are off). */
-  occupiesAllLocations?: { minVoids?: number }
+   *  `minVoids`: "is banished without N voids" (an ability: ignored while its abilities are off).
+   *  `outer`: only the realm's outer squares (Jormungand: "occupies all outer locations"). */
+  occupiesAllLocations?: { minVoids?: number; outer?: boolean }
   /** minions the caster MAY sacrifice as part of the cost (Gnarled Wendigo: those at its summoning location).
    *  The player picks any subset in the cast's `extra.sacrifice` (ids); the engine checks it against this list,
    *  then kills them with the mana payment, before the minion enters — so the sacrifice is paid even if the
@@ -299,6 +308,9 @@ export interface CardScript {
   onSelfFights?: (ctx: EffectAPI) => void
   /** this unit's attacks on UNITS can't be defended (Harassing Ruffians); an attack on a site still can */
   cantBeDefended?: boolean
+  /** while attacking, this unit's strike must give each struck unit lethal damage before any goes beyond it
+   *  (Stomping Mammoth FAQ: excess damage) — engine-normalized in combat:allocate */
+  lethalFirstWhileAttacking?: boolean
   /** minion must be summoned at a position passing this check (e.g. Forsaken → outer column) */
   summonFilter?: (state: GameState, player: PlayerId, at: { x: number; y: number }) => string | null
   /** artifact static: keywords granted to units (e.g. Horn of Caerleon) */
@@ -435,6 +447,8 @@ export interface CardScript {
   providesForEveryone?: boolean
   /** on an artifact: the site it sits on is disabled — no mana/threshold/text (Blightstone) */
   disablesSite?: boolean
+  /** on a site: disable effects on minions here never run out while they stay (Permafrost) — see disablesHeld */
+  keepsDisables?: boolean
   /** on an aura: covered units are disabled (A Midsummer Night's Dream: Mortals) */
   auraDisablesUnit?: (state: GameState, aura: { id: string; squares: { x: number; y: number }[] }, unit: UnitState) => boolean
   /** a site was played; fires for all cards in play (Cursed Land, Boulevard of Bones) */
@@ -482,6 +496,9 @@ export interface CardScript {
   immovable?: boolean
   /** this unit can't receive power/keyword modifiers, except Wards (Monks of Kobalsa) */
   unmodifiable?: boolean
+  /** with unmodifiable: Wards are the printed exception ("Can't be modified, except by Wards" — Monks of
+   *  Kobalsa). Without it an unmodifiable unit can't have a Ward mark (Codex, Can't be Modified). */
+  unmodifiableExceptWards?: boolean
   /** this unit can't be banished (The Doom of Dilmun) */
   unbanishable?: boolean
   /** on a site: Knights/Sirs/Dames cast here need no threshold (Tournament Grounds) */
@@ -540,6 +557,8 @@ export interface CardScript {
   aurasPreventDrop?: boolean
   /** enemy projectiles can't enter this unit's square (Sir Morien) */
   unitBlocksProjectiles?: boolean
+  /** this unit's Ranged shots MAY fly across the top/bottom edge of the realm (Sissi Marksmen) */
+  rangedWrapsTopBottom?: boolean
   /** carried artifact: bearer sees through Stealth for attacks and shots (Truesight Crossbow) */
   bearerTruesight?: boolean
   /** this unit fires on EVERY strike it makes, kill or not (Rowdy Boys) */
@@ -578,8 +597,9 @@ export interface CardScript {
   /** aura: sites are silenced on covered squares. `true` silences EVERY covered site (Acid Rain); a
    *  predicate silences only the sites it returns true for (Atlantean Fate: only non-Ordinary sites). */
   auraSilencesSites?: boolean | ((state: GameState, site: SiteState) => boolean)
-  /** aura: artifacts on covered squares lose their text (Acid Rain) */
-  auraSilencesArtifacts?: boolean
+  /** aura: artifacts on covered squares lose their text. `true` hushes EVERY covered artifact (Acid Rain); a
+   *  predicate only the ones it accepts (Man-made Ice Age: artifacts atop an affected site) */
+  auraSilencesArtifacts?: boolean | ((state: GameState, art: { x: number; y: number; region?: Region; carriedBy?: string | null }) => boolean)
   /** aura: covered non-Ordinary sites only provide Water threshold (Atlantean Fate) */
   auraLimitsToWaterThreshold?: boolean
   /** aura: no site may be played on covered squares (Salt the Earth) */
@@ -667,6 +687,8 @@ export interface CardScript {
   /** replacement: banish a unit BEFORE it enters the realm — no genesis, no
    *  enter triggers (Order of the White Wing) */
   interceptsUnitEnter?: (state: GameState, selfId: string, entering: UnitState) => boolean
+  /** this unit makes matching ALLIES "Protected from Sites" (Highgate Guide) — read by protectedFromSites */
+  protectsAlliesFromSites?: (state: GameState, selfId: string, ally: UnitState) => boolean
   /** this unit shields matching ALLIES from enemy relocation (Old Salt Anchorman) */
   protectsAlliesFromMoves?: (state: GameState, selfId: string, ally: UnitState) => boolean
   /** modify (or prevent, return 0) damage dealt to a site (Mortal Soil; Panpipes
@@ -802,6 +824,10 @@ export interface CardScript {
   cantDrop?: boolean
   /** unit is disabled while this condition holds (e.g. Bound Spirit) */
   selfDisabled?: (state: GameState, self: UnitState) => boolean
+  /** event hooks that END this unit's own disable ("Disabled until a Mortal or Beast dies nearby" —
+   *  Hollow One). That end condition isn't a triggered ability, so the unit still hears these
+   *  events while disabled (every other trigger of a disabled unit stays silent). */
+  hearsWhileDisabled?: string[]
   /** this site can't be destroyed (e.g. Bedrock) */
   indestructibleSite?: boolean
   /** this site can't be moved/rearranged (e.g. Bedrock — Earthquake, Baba Yaga, etc.) */
@@ -951,6 +977,8 @@ export interface DamageSource {
   rangedStrike?: boolean
   /** strike from a fight nobody defended (Mordric Druids) */
   undefended?: boolean
+  /** a strike made by the ATTACKING side of an attack (Stomping Mammoth "while attacking") */
+  attacking?: boolean
   /** card name of the damage source, when known */
   name?: string
   /** striking unit, for strikes */

@@ -1,6 +1,6 @@
 import { type EffectAPI } from '../registry'
 import { GRID_H, GRID_W, inBounds, siteAt, unitsAt, edgesConnected } from '../../../engine/grid'
-import { recordAreaReveal } from '../../../engine/effects'
+import { recordAreaReveal, asAreaDamage } from '../../../engine/effects'
 import { effSubtypes } from '../../../engine/statics'
 import type { GameState, Region } from '../../../engine/types'
 
@@ -106,25 +106,28 @@ export function applyGrid(ctx: EffectAPI, origin: { x: number; y: number }, cell
   // Damage is simultaneous across the whole blast: the engine holds an open damage event around the
   // spell/ability resolving this, so no victim is removed until every hit's reduction/prevention has
   // resolved (a Shield Maidens caught in its own blast still shields the allies beside it).
-  for (const cell of resolved) {
-    const x = cell.x
-    const y = cell.y
-    for (const u of unitsAt(ctx.state, x, y, region as Region | undefined)) {
-      if (opts.skipUnitId && u.id === opts.skipUnitId) continue
-      if (opts.enemiesOnly && u.controller === ctx.controller) continue
-      // (Evil minions, if any, were already banished in the pre-pass above.)
-      if (opts.lethal) {
-        if (!u.isAvatar) {
-          ctx.dealDamage({ unit: u.id }, 1)
-          if (ctx.state.units[u.id]) ctx.kill(u.id)
+  // Site-wide: the numbered site grid shows these hits, so no per-minion numbers on top.
+  asAreaDamage(ctx.state, () => {
+    for (const cell of resolved) {
+      const x = cell.x
+      const y = cell.y
+      for (const u of unitsAt(ctx.state, x, y, region as Region | undefined)) {
+        if (opts.skipUnitId && u.id === opts.skipUnitId) continue
+        if (opts.enemiesOnly && u.controller === ctx.controller) continue
+        // (Evil minions, if any, were already banished in the pre-pass above.)
+        if (opts.lethal) {
+          if (!u.isAvatar) {
+            ctx.dealDamage({ unit: u.id }, 1)
+            if (ctx.state.units[u.id]) ctx.kill(u.id)
+          } else {
+            ctx.dealDamage({ unit: u.id }, cell.dmg)
+          }
         } else {
           ctx.dealDamage({ unit: u.id }, cell.dmg)
         }
-      } else {
-        ctx.dealDamage({ unit: u.id }, cell.dmg)
       }
     }
-  }
+  })
 }
 
 export const CROSS_3X3: Cell[] = [

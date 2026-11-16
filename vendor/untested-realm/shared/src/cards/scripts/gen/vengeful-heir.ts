@@ -1,7 +1,7 @@
-import { registerScript } from '../registry'
-import { getCard } from '../../db'
-import { pushLog } from '../../../engine/effects'
-import { cemeteryProtected, payZoneToll } from '../../../engine/statics'
+import { registerScript, getScript } from '../registry'
+import { getCard, getKeywords } from '../../db'
+import { pushLog, giveEntryLances, firesGenesisOnEntry, makeCtx } from '../../../engine/effects'
+import { cemeteryProtected, payZoneToll, isEvilUnitIntrinsic } from '../../../engine/statics'
 import type { PlayerId } from '../../../engine/types'
 
 // 'As an additional cost to cast this, you may banish a dead Knight, Sir, or
@@ -40,6 +40,14 @@ registerScript('Vengeful Heir', {
       self.name = ctx.state.cards[cardId].name
       self.damage = 0
       pushLog(ctx.state, ctx.controller, `The Heir takes up the mantle of ${self.name}!`)
+      // "summoned as a copy": it ENTERS as that minion (it's still entering while this choice resolves), so
+      // it gets the copy's entry setup — its printed Ward/Stealth marks and Lances — and the copy's Genesis
+      const kw = getKeywords(self.name)
+      self.ward = kw.ward && !isEvilUnitIntrinsic(ctx.state, self) ? true : undefined
+      self.stealth = kw.stealth || undefined
+      giveEntryLances(ctx.state, self)
+      const genesis = getScript(self.name)?.genesis
+      if (genesis && firesGenesisOnEntry(ctx.state, self)) genesis(makeCtx(ctx.state, self.id, self.controller, []))
     },
   },
 })

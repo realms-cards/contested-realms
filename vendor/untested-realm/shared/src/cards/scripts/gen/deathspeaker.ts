@@ -3,6 +3,7 @@ import { getCard, findCard } from '../../db'
 import { GRID_W, GRID_H, avatarOf } from '../../../engine/grid'
 import { validateSummonAt, validateTarget, meetsThreshold, ignoresThreshold } from '../../../engine/casting'
 import type { GameState, PlayerId, Region, UnitState } from '../../../engine/types'
+import { tokenArtFor } from '../../tokenArt'
 import { pushLog, checkStateBased, banishUnit, effectSummonUnit, bumpManaSpent } from '../../../engine/effects'
 import { zoneAccessToll, affinity } from '../../../engine/statics'
 
@@ -111,7 +112,7 @@ registerScript('Deathspeaker', {
  *  realm through the shared effect-entry path so its Genesis fires (FAQ 745/752). */
 function copyMinion(state: GameState, name: string, controller: PlayerId, x: number, y: number, region: Region, tapped = false, genesisTargets: TargetRef[] = []): UnitState | null {
   const cardId = `c${state.nextId++}`
-  state.cards[cardId] = { id: cardId, name, owner: controller, isToken: true }
+  state.cards[cardId] = { id: cardId, name, owner: controller, isToken: true, art: tokenArtFor(state, controller, name) }
   const unitId = `u${state.nextId++}`
   const unit: UnitState = {
     id: unitId, cardId, name, owner: controller, controller, isAvatar: false, x, y, region,

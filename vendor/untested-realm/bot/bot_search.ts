@@ -328,7 +328,7 @@ function hash53(str: string): number {
  *  happened in, so leaving them in the key would make every transposition miss. */
 const COSMETIC_FLOW = [
   'areaReveal', 'battleReveal', 'manaGains', 'manaGainSeq', 'levelUps', 'levelUpSeq', 'ticks', 'tickSeq',
-  'moveAnim', 'moveSeq', 'teleportAnim', 'teleSeq', 'rip', 'ripSeq', 'reveals', 'revealN',
+  'moveAnim', 'moveSeq', 'teleportAnim', 'teleSeq', 'rip', 'ripSeq', 'reveals', 'revealN', 'unitDamage', 'unitDamageSeq', 'lifeGains', 'lifeGainSeq', 'dmgPending', 'dmgTargets', 'dmgRevBase', 'revOpenedSeq',
 ] as const
 
 /** The position key. Everything in the state can steer the rest of the turn EXCEPT the message log (only
@@ -889,6 +889,7 @@ function playSiteInFront(state: GameState, me: PlayerId): Action | null {
   for (const cardId of state.players[me].hand) {
     const def = getCard(state.cards[cardId].name)
     if (def.type !== 'Site') continue
+    if (def.name === 'Cornerstone') continue // played to a corner instead (see moves.ts)
     if (legalSiteSquares(state, me, def.name).some((s) => s.x === fx && s.y === fy)) {
       // the square can open up only AFTER this turn's site is down (adjacency) — by then the avatar's
       // site action is spent, so check the play is actually legal now, not just the square

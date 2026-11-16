@@ -276,6 +276,18 @@ function harmfulAuraCoverage(state: GameState, r: { squares: { x: number; y: num
   return net
 }
 
+/** net "mine − foe's" mana-providing sites under a mana aura's squares (the boost goes to each site's
+ *  controller, mirroring turn.ts: rubble, noMana and artifact-disabled sites provide nothing). */
+function auraManaCoverage(state: GameState, r: { squares: { x: number; y: number }[] }, me: PlayerId, foe: PlayerId): number {
+  let net = 0
+  for (const s of Object.values(state.sites)) {
+    if (s.isRubble || getScript(s.name)?.noMana || siteDisabledByArtifact(state, s)) continue
+    if (!r.squares.some((sq) => sq.x === s.x && sq.y === s.y)) continue
+    net += s.controller === me ? 1 : s.controller === foe ? -1 : 0
+  }
+  return net
+}
+
 /** The Avatar's conduct on MY turn `turn` (my latest turn — see lastOwnTurn): its one Tap each turn belongs on developing — a site played or drawn — while developing.
  *
  *  - `avatarIdle` (< 6 sites): the Tap went unused (still untapped), OR it was spent on Move & Attack
@@ -419,11 +431,16 @@ function explainEvalRaw(state: GameState, me: PlayerId, w: EvalWeights): EvalBre
 
   // ── auras in play, valued by mana cost (permanents, like units). A harmful AREA aura is valued by
   //    whose sites/units it covers (you want it on the opponent's terrain, never your own); every other
-  //    aura (buffs, mana, defensive walls) is the controller's asset. ──
+  //    aura (buffs, defensive walls) is the controller's asset. A MANA aura (Abundance, Sow the Earth)
+  //    boosts whoever controls each covered site, so it's valued by that extra income (mine − foe's),
+  //    not by who cast it — Abundance over the opponent's sites is a gift to them. ──
   let aura = 0
   for (const r of Object.values(state.auras)) {
     const cost = getCard(r.name).cost ?? 0
-    if (HARMFUL_AREA_AURAS.has(r.name)) {
+    const extraMana = getScript(r.name)?.auraSiteExtraMana
+    if (extraMana) {
+      aura += w.siteMana * extraMana * auraManaCoverage(state, r, me, foe)
+    } else if (HARMFUL_AREA_AURAS.has(r.name)) {
       aura += w.auraCost * cost * harmfulAuraCoverage(state, r, me, foe)
     } else {
       aura += (r.controller === me ? 1 : r.controller === foe ? -1 : 0) * w.auraCost * cost

@@ -16,7 +16,7 @@ registerScript('Avalanche', trapScript({
     const forward = ctx.controller === 0 ? 1 : -1
     const path = surfaceSweepPath(ctx.state, { x: site.x, y: site.y }, { dx: 0, dy: forward }, false)
     const swept = carryAlongPath(ctx, path)
-    for (const u of swept) disableUntilYourNextTurn(ctx.state, u.id, ctx.controller)
+    for (const u of swept) disableUntilYourNextTurn(ctx, u.id, ctx.controller)
     ctx.log(`❄ An avalanche sweeps ${swept.length} unit${swept.length === 1 ? '' : 's'} away!`)
   },
 }))

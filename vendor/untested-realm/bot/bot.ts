@@ -43,6 +43,7 @@ import {
   type Action,
   type GameState,
   type PlayerId,
+  type Region,
   type UnitState,
   type SiteState,
   type Step,
@@ -517,6 +518,20 @@ function answerPrompt(state: GameState, me: PlayerId, prompt: any): Action {
     }
     case 'chooseSquare': {
       const only: { x: number; y: number }[] | undefined = prompt.data?.squares
+      // an effect-cast magic's target location (Archimago's echoed Lightning Bolt…): aim it like a cast
+      // from hand (pickTargetFor) — at enemies, never at the bot's own empty site
+      if (only?.length && prompt.cont === 'effectcast:sqtarget') {
+        const regions: Record<string, Region> = prompt.ctx?.regions ?? {}
+        let best: { x: number; y: number } | undefined
+        let bestScore = 0
+        for (const c of only) {
+          const at = unitsAt(state, c.x, c.y, regions[`${c.x},${c.y}`] ?? 'surface')
+          const score = at.filter((u) => u.controller !== me).length - at.filter((u) => u.controller === me).length +
+            (at.some((u) => u.isAvatar && u.controller !== me) ? 5 : 0)
+          if (score > bestScore) { bestScore = score; best = c }
+        }
+        if (best) return answer(best)
+      }
       if (only?.length) {
         const own = only.find((c) => Object.values(state.sites).some((s) => s.controller === me && s.x === c.x && s.y === c.y))
         return answer(own ?? only[0])

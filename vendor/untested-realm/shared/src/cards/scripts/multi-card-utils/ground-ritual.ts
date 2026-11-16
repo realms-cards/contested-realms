@@ -1,5 +1,5 @@
 import { type CardScript } from '../registry'
-import { pushLog, wardSite, notifySiteInterference } from '../../../engine/effects'
+import { pushLog, wardSite, notifySiteInterference, siteCantBeModified } from '../../../engine/effects'
 import { siteAt } from '../../../engine/grid'
 import { isEvilU } from './is-evil-u'
 
@@ -25,12 +25,14 @@ export function groundRitualScript(ground: string, needsEvil: boolean, strikesFi
         pushLog(ctx.state, ctx.controller, `${site.name} is warded.`)
       }
       if (!ctx.state.sites[site.id]) return
+      // a site that can't be modified (Bedrock) can't be transformed
+      if (siteCantBeModified(ctx.state, site)) return ctx.log(`${site.name} can't be transformed.`)
       ctx.ask({ kind: 'yesNo', title: `Transform ${site.name} into ${ground}?` }, 'transform', { siteId: site.id })
     },
     conts: {
       transform: (ctx, c, yes) => {
         const site = ctx.state.sites[c.siteId as string]
-        if (!yes || !site) return
+        if (!yes || !site || siteCantBeModified(ctx.state, site)) return
         const cardId = `c${ctx.state.nextId++}`
         ctx.state.cards[cardId] = { id: cardId, name: ground, owner: ctx.controller }
         site.name = ground

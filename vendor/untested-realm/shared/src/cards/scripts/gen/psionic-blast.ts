@@ -8,7 +8,7 @@ registerScript('Psionic Blast', {
     const c = ctx.caster!
     for (const u of unitsAt(ctx.state, c.x, c.y, c.region)) {
       if (u.isAvatar) continue
-      disableUntilYourNextTurn(ctx.state, u.id, ctx.controller)
+      disableUntilYourNextTurn(ctx, u.id, ctx.controller)
       ctx.dealDamage({ unit: u.id }, 1)
     }
   },

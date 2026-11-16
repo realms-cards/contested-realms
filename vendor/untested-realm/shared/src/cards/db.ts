@@ -142,6 +142,8 @@ export interface ParsedKeywords {
   spellcasterElements?: string[]
   /** may cast anything EXCEPT this element (Wicker Manikin) */
   spellcasterExclude?: string
+  /** may cast anything EXCEPT spells of this rarity ("Non-Ordinary Spellcaster": Earl of the Ivory Towers) */
+  spellcasterExcludeRarity?: string
   movement?: number
   ranged?: number
   waterbound?: boolean
@@ -181,6 +183,9 @@ function applyKeywordToken(kw: ParsedKeywords, low: string): boolean {
   // multi-element spellcaster: "Air and Fire Spellcaster" (the Omphaloi)
   m = low.match(/^(air|earth|fire|water) and (air|earth|fire|water) spellcaster$/)
   if (m) { kw.spellcaster = true; kw.spellcasterElements = [m[1], m[2]]; return true }
+  // rarity-excluding spellcaster: "Non-Ordinary Spellcaster" (Earl of the Ivory Towers)
+  m = low.match(/^non-(ordinary|exceptional|elite|unique) spellcaster$/)
+  if (m) { kw.spellcaster = true; kw.spellcasterExcludeRarity = m[1][0].toUpperCase() + m[1].slice(1); return true }
   return false
 }
 

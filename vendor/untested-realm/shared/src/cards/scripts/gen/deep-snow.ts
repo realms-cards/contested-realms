@@ -4,10 +4,10 @@ import { tapUnit } from '../../../engine/effects'
 import type { TargetSpec } from '../registry'
 import { trapScript, trapTargets } from '../multi-card-utils/trap'
 
-// 'Trap (1) → Tap minions at target adjacent site. They don't untap the next time they would.'
-// (Like Sir Tristan: a skipUntap counter the next untap consumes.) Targeting the site breaks an enemy
-// site's Ward instead.
-const SPEC: TargetSpec = { what: 'site', count: 1, targeted: true, where: 'adjacent', label: 'target adjacent site' }
+// 'Trap (1) → Tap minions at one adjacent site. They don't untap the next time they would.'
+// (Like Sir Tristan: a skipUntap counter the next untap consumes.) The released text says "one adjacent
+// site", not "target": the site isn't targeted, so a Ward doesn't stop it.
+const SPEC: TargetSpec = { what: 'site', count: 1, targeted: false, where: 'adjacent', label: 'one adjacent site' }
 
 registerScript('Deep Snow', trapScript({
   label: 'tap the minions at an adjacent site; they stay tapped',

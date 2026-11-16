@@ -13,7 +13,7 @@ registerScript('Year of the Blaze', {
       // under an affected site isn't consumed by the blaze (it only deals with the site turning to
       // rubble via normal state-based rules).
       for (const u of unitsAt(ctx.state, sq.x, sq.y, 'surface')) {
-        if (!u.isAvatar) killUnit(ctx.state, u.id)
+        if (!u.isAvatar && !ctx.shields(u.id)) killUnit(ctx.state, u.id)
       }
       for (const a of Object.values(ctx.state.artifacts)) {
         if (!a.carriedBy && a.x === sq.x && a.y === sq.y) ctx.breakArtifact(a.id)

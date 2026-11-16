@@ -74,12 +74,14 @@ export function affinity(state: GameState, player: PlayerId): Thresholds {
     )
     if (suppressed) continue
     const th = getCard(site.name).thresholds
+    // a site that "can't be modified" (Bedrock) keeps its own threshold under Drought and Atlantean Fate
+    const unmodifiable = !!getScript(site.name)?.unmodifiableSite
     // Drought: covered sites provide no water threshold (and no flood bonus)
-    const dried = Object.values(state.auras).some(
+    const dried = !unmodifiable && Object.values(state.auras).some(
       (r) => getScript(r.name)?.driesSites && r.squares.some((s) => s.x === site.x && s.y === site.y),
     )
     // Atlantean Fate: covered non-Ordinary sites only provide water
-    const drowned = Object.values(state.auras).some(
+    const drowned = !unmodifiable && Object.values(state.auras).some(
       (r) => getScript(r.name)?.auraLimitsToWaterThreshold &&
         getCard(site.name).rarity !== 'Ordinary' &&
         r.squares.some((s) => s.x === site.x && s.y === site.y),
@@ -293,8 +295,13 @@ export function siteSilenced(state: GameState, site: { x: number; y: number }): 
   try {
   // a DISABLED site has no abilities (Codex) — the same as a silenced one for everything that asks
   if (here && siteDisabled(state, here)) return true
-  for (const ss of (state.flow?.siteSilences ?? []) as { siteId: string }[]) {
-    const src = state.sites[ss.siteId]
+  for (const ss of (state.flow?.siteSilences ?? []) as { siteId?: string; siteIds?: string[] }[]) {
+    // a fixed set of covered sites (Full-tilt Goliaths' silencing snow), not the sites near a source site
+    if (ss.siteIds) {
+      if (here && ss.siteIds.includes(here.id)) return true
+      continue
+    }
+    const src = state.sites[ss.siteId!]
     if (src && nearbySquaresW(state, src.x, src.y).some((q) => q.x === site.x && q.y === site.y)) return true
   }
   for (const src of Object.values(state.sites)) {
@@ -312,7 +319,10 @@ export function siteSilenced(state: GameState, site: { x: number; y: number }): 
       if (siteAge(here) < siteAge(src)) continue // this site is older: src is the one silenced
       return true
     }
-    if (siteSilenced(state, { x: src.x, y: src.y })) continue // a silencer that is itself silenced silences nothing (FAQ layering)
+    // a silencer that is itself silenced silences nothing (FAQ layering). Pass the SITE itself, not bare
+    // coordinates: id-keyed silencers (Sinterfee's chosen site) must recognise it. Bounded: only reached
+    // for an in-range silencer site, never for ordinary sites.
+    if (siteSilenced(state, src)) continue
     return true
   }
   // units that silence specific sites (Sinterfee)
@@ -320,7 +330,8 @@ export function siteSilenced(state: GameState, site: { x: number; y: number }): 
   for (const u of Object.values(state.units)) {
     const f = getScript(u.name)?.unitSilencesSiteAt
     if (!f || u.silenced || disabledByEffect(state, u)) continue // disabled → no abilities
-    if (f(state, u.id, site as { id: string; x: number; y: number })) return true
+    // the resolved site (with its id): callers may pass bare coordinates, but Sinterfee matches by id
+    if (here && f(state, u.id, here)) return true
   }
   // auras that silence covered sites: `true` silences every covered site (Acid Rain); a predicate
   // silences only the sites it accepts (Atlantean Fate silences its non-Ordinary sites only).
@@ -335,6 +346,56 @@ export function siteSilenced(state: GameState, site: { x: number; y: number }): 
   } finally { siteSilenceStack.delete(sKey) }
 }
 
+// Units / sites carrying a rarely-used hook, cached per state until the next entity is minted (the same
+// nextId generation stamp the static grant index trusts) — so hot statics don't scan the board for them.
+const hookHolders = new WeakMap<GameState, Map<string, { gen: number; ids: string[] }>>()
+function holdersOf<T extends { id: string; name: string }>(state: GameState, pool: Record<string, T>, key: string, has: (name: string) => boolean): T[] {
+  let byKey = hookHolders.get(state)
+  if (!byKey) hookHolders.set(state, (byKey = new Map()))
+  let hit = byKey.get(key)
+  if (!hit || hit.gen !== state.nextId) {
+    hit = { gen: state.nextId, ids: Object.values(pool).filter((e) => has(e.name)).map((e) => e.id) }
+    byKey.set(key, hit)
+  }
+  const out: T[] = []
+  for (const id of hit.ids) { const e = pool[id]; if (e && has(e.name)) out.push(e) }
+  return out
+}
+/** units with a protectsAlliesFromSites hook (Highgate Guide) */
+function allySiteShields(state: GameState): UnitState[] {
+  return holdersOf(state, state.units, 'u:protectsAlliesFromSites', (n) => !!getScript(n)?.protectsAlliesFromSites)
+}
+/** sites with keepsDisables (Permafrost) */
+function permafrostSites(state: GameState): SiteState[] {
+  return holdersOf(state, state.sites, 's:keepsDisables', (n) => !!getScript(n)?.keepsDisables)
+}
+
+/** "Protected from all but units" (Humming Hummocks' Genesis, until its controller's next turn): no Magic,
+ *  site, artifact or aura may target, damage, destroy, banish, modify or move this unit (codex: Protected
+ *  from X). FAQ: an ongoing effect centred on the Hummocks — whichever of its controller's allies is nearby
+ *  it at the time (a site's "nearby" reaches its sub-surface, not the void). An effect, not an ability of
+ *  the unit — it holds even while the unit is silenced or disabled; it ends if the Hummocks leave.
+ *  Owner ruling (2026-11-14): a unit protected from artifacts gets no artifact bonuses, its OWN carried
+ *  artifacts included — so the bearer-grant loops (effKeywords, hasRegionKeyword, powerModifiers, Iron
+ *  Shackles in directlyDisabled) skip them too. Hummocks is the only "Protected from artifacts" source. */
+export type NonUnitShield = { siteId: string; player: PlayerId; turn: number }
+export function protectedFromNonUnits(state: GameState, unit: UnitState): boolean {
+  const list = state.flow?.protectedFromNonUnits as NonUnitShield[] | undefined
+  if (!list?.length || unit.region === 'void') return false
+  return list.some((e) => {
+    const site = state.sites[e.siteId]
+    if (!site || unit.controller !== e.player) return false
+    const near = nearbySquaresW(state, site.x, site.y)
+    return occupiedSquares(unit).some((p) => near.some((q) => q.x === p.x && q.y === p.y)) // any part of an oversized ally
+  })
+}
+
+/** is `name` a unit card (a minion, automatons included, or an Avatar)? Unknown names count as not. */
+export function isUnitCardName(name: string): boolean {
+  const def = findCard(name)
+  return !!def && (def.type === 'Minion' || def.type === 'Avatar')
+}
+
 /** Is this unit "Protected from Sites" (codex: Protected from X) — so no site ability may target,
  *  damage, destroy, banish, modify, move or impede it? Key to the City ("Bearer ignores site
  *  abilities") grants this to its bearer; Yog-Sothoth ("ignores the abilities of sites") to itself.
@@ -344,6 +405,14 @@ export function protectedFromSites(state: GameState, unit: UnitState): boolean {
   // (a silenced bearer keeps it: silence only strips printed abilities)
   if (unit.carrying.some((id) => { const a = state.artifacts[id]; return !!a && !!artScript(state, a)?.bearerIgnoresSites }) && !(state.units[unit.id] && isDisabled(state, unit))) return true
   if (!!getScript(unit.name)?.ignoresSites && !abilitiesOff(state, unit)) return true
+  if (protectedFromNonUnits(state, unit)) return true // Humming Hummocks: sites are among "all but units"
+  // an ally's static grant (Highgate Guide: "Nearby allies are Protected from sites") — only the units that
+  // have the hook are scanned (a cached list: this runs inside effKeywords / effAttack)
+  for (const o of allySiteShields(state)) {
+    if (o.controller !== unit.controller) continue
+    const f = getScript(o.name)?.protectsAlliesFromSites
+    if (f && !abilitiesOff(state, o) && f(state, o.id, unit)) return true
+  }
   return false
 }
 
@@ -352,7 +421,8 @@ export function artifactSilenced(state: GameState, art: { x: number; y: number; 
   const x = art.carriedBy ? state.units[art.carriedBy]?.x ?? art.x : art.x
   const y = art.carriedBy ? state.units[art.carriedBy]?.y ?? art.y : art.y
   for (const r of Object.values(state.auras)) {
-    if (getScript(r.name)?.auraSilencesArtifacts && r.squares.some((q) => q.x === x && q.y === y)) return true
+    const f = getScript(r.name)?.auraSilencesArtifacts
+    if (f && r.squares.some((q) => q.x === x && q.y === y) && (f === true || f(state, art))) return true
   }
   return false
 }
@@ -369,7 +439,15 @@ export function artScript(state: GameState, art: { name: string; x: number; y: n
 
 /** an artifact sitting on this site turns it off entirely (Blightstone) — carried too: a carried
  *  artifact is at its bearer's location, so a bearer standing on (or under) a site disables it */
+/** the site at (x,y) "can't be modified" (Bedrock): it can't be disabled, silenced, flooded or otherwise
+ *  changed by anything (owner ruling 2026-11-14) */
+function unmodifiableSiteAt(state: GameState, x: number, y: number): boolean {
+  const here = Object.values(state.sites).find((s) => s.x === x && s.y === y && !s.isRubble)
+  return !!here && !!getScript(here.name)?.unmodifiableSite
+}
+
 export function siteDisabledByArtifact(state: GameState, site: { x: number; y: number }): boolean {
+  if (unmodifiableSiteAt(state, site.x, site.y)) return false
   return Object.values(state.artifacts).some((a) => {
     if (!getScript(a.name)?.disablesSite) return false
     const bearer = a.carriedBy ? state.units[a.carriedBy] : undefined
@@ -434,7 +512,8 @@ export function effKeywords(state: GameState, unit: UnitState, seen: Set<string>
   // carried artifacts granting keywords to the bearer — not to one that "can't be modified" (Monks of
   // Kobalsa can't gain abilities: no Burrowing/Submerge/Voidwalk from All-terrain Vestments)
   const unmodBearer = isUnmodifiable(state, unit)
-  for (const artId of unit.carrying) {
+  // Protected from all but units (Humming Hummocks): its artifacts can't modify it either
+  for (const artId of protectedFromNonUnits(state, unit) ? [] : unit.carrying) {
     const art = state.artifacts[artId]
     if (!art) continue
     const script = artScript(state, art) // a silenced artifact (Acid Rain) grants nothing
@@ -462,7 +541,9 @@ export function effKeywords(state: GameState, unit: UnitState, seen: Set<string>
   // "can't be immobilized" (Gossamer Ghost, an unmodifiable unit, or an Onslaught grant) strips the
   // Immobile keyword itself — printed OR granted — so the unit may move. Centralised here so every
   // reader of kw.immobile (movement legality, the bot, the UI) honours the immunity at once.
-  if (kw.immobile && immobilizeImmune(state, unit)) delete kw.immobile
+  // An unmodifiable unit can't GAIN Immobile at all (external grants are dropped above), so any Immobile it
+  // has is its own — printed or self-granted (Jormungand "occupies … safely") — and stays.
+  if (kw.immobile && immobilizeImmune(state, unit) && !unmodBearer) delete kw.immobile
   // rulebook: "Evil minions can't be warded" — a keyword-granted ward on an Evil
   // minion is void too (an Evil AVATAR is not a minion, so it keeps its ward).
   // isEvilUnit → effSubtypes only (no subtype hook calls effKeywords), so no
@@ -595,17 +676,18 @@ function collectStaticGrants(state: GameState, unit: UnitState): KeywordGrant[] 
     const ks = g(state, other, unit)
     if (ks.length && !disabledByEffect(state, other)) out.push(...ks)
   }
-  for (const aura of src.auras) {
+  const shielded = protectedFromNonUnits(state, unit) // Humming Hummocks: no aura/artifact modifies it
+  if (!shielded) for (const aura of src.auras) {
     const g = getScript(aura.name)?.auraGrantsKeywords
     if (g) for (const k of g(state, aura, unit)) out.push(k)
   }
-  if (!protectedFromSites(state, unit)) for (const site of src.sites) { // Key to the City: the bearer ignores site abilities
+  if (src.sites.length && !protectedFromSites(state, unit)) for (const site of src.sites) { // Key to the City: the bearer ignores site abilities
     const g = getScript(site.name)?.siteGrantsKeywords
     if (!g) continue
     const ks = g(state, site, unit)
     if (ks.length && !siteSilenced(state, site)) out.push(...ks)
   }
-  for (const art of src.arts) {
+  if (!shielded) for (const art of src.arts) {
     const g = getScript(art.name)?.artifactGrantsKeywords
     if (!g) continue
     const ks = g(state, art.id, unit)
@@ -648,7 +730,8 @@ function powerModifiers(state: GameState, unit: UnitState): number {
   const selfScript = getScript(unit.name)
   if (selfScript?.grantsPower && !unit.silenced && !disabledByEffect(state, unit)) n += selfScript.grantsPower(state, unit, unit)
   if (unmod) return n // no carried/other/aura/site power — external sources can't change its power
-  for (const artId of unit.carrying) {
+  const shielded = protectedFromNonUnits(state, unit) // Humming Hummocks: no aura/artifact modifies it
+  for (const artId of shielded ? [] : unit.carrying) {
     const art = state.artifacts[artId]
     if (!art) continue
     const script = artScript(state, art) // a silenced artifact (Acid Rain) grants nothing
@@ -662,15 +745,15 @@ function powerModifiers(state: GameState, unit: UnitState): number {
     const g = getScript(other.name)?.grantsPower
     if (g) n += g(state, other, unit)
   }
-  for (const aura of src.auras) {
+  if (!shielded) for (const aura of src.auras) {
     const g = getScript(aura.name)?.auraGrantsPower
     if (g) n += g(state, aura, unit)
   }
-  for (const art of src.arts) {
+  if (!shielded) for (const art of src.arts) {
     const g = getScript(art.name)?.artifactGrantsPower
     if (g && !artifactSilenced(state, art)) n += g(state, art.id, unit)
   }
-  if (!protectedFromSites(state, unit)) for (const site of src.sites) {
+  if (src.sites.length && !protectedFromSites(state, unit)) for (const site of src.sites) {
     const g = getScript(site.name)?.siteGrantsPower
     if (g && !siteSilenced(state, site)) n += g(state, site, unit)
   }
@@ -682,8 +765,8 @@ export type Terrain = 'water' | 'land' | 'void'
 export function terrainAt(state: GameState, x: number, y: number): Terrain {
   const site = siteAt(state, x, y)
   if (!site) return 'void'
-  // Drought: affected sites aren't water sites
-  for (const r of Object.values(state.auras)) {
+  // Drought: affected sites aren't water sites (a site that can't be modified is unaffected)
+  if (!getScript(site.name)?.unmodifiableSite) for (const r of Object.values(state.auras)) {
     if (getScript(r.name)?.driesSites && r.squares.some((s) => s.x === x && s.y === y)) return 'land'
   }
   return isWaterSite(state, site, getCard) ? 'water' : 'land'
@@ -725,6 +808,79 @@ export function regionPresentAt(state: GameState, region: Region, x: number, y: 
  * Disabled = explicit disable, or [X]bound off its terrain.
  * A disabled minion loses all abilities, doesn't strike, can't cast or act.
  */
+/** Permafrost: "Disable effects on minions here are permanent, but are removed if they leave." FAQ: it
+ *  "replaces the normal end condition for disable effects with 'until it leaves'" (a Slumbering Giantess
+ *  there doesn't wake when hurt). A minion found disabled by any effect while at an active `keepsDisables`
+ *  site is recorded in flow.permafrostHolds (notePermafrostHolds, run by checkStateBased) and stays disabled
+ *  while it remains at that site, whatever would have ended the original disable (it expired, the Legion
+ *  left, the Giantess was hurt). The site's script drops the hold, and every disable on the minion, as it
+ *  leaves. A hold lapses if the site loses its abilities.
+ *  Owner ruling (2026-11-14): only a disable that ACTUALLY took effect is held — whatever its source,
+ *  effects and characteristic ones alike (Outerbound, an at-rest Basilisk gaze, [X]bound) — but never one
+ *  that didn't land: a Yeti So Shy on an outer square, an Arctic Fox ("can't be disabled"), a disable a
+ *  protection prevented. So a hold is recorded only for a minion that isDisabled right then. */
+function reallyDisabled(state: GameState, unit: UnitState): boolean {
+  return !isBlanked(unit) && isDisabled(state, unit) // a blanked husk isn't a disabled minion, it's no minion
+}
+export type PermafrostHold = { unitId: string; siteId: string }
+function heldAt(state: GameState, unit: UnitState, siteId: string): boolean {
+  const site = state.sites[siteId]
+  if (protectedFromSites(state, unit)) return false // Hummocks / Key to the City / Highgate Guide: a site can't modify it
+  return !!site && site.x === unit.x && site.y === unit.y && unit.region !== 'void' && !!getScript(site.name)?.keepsDisables && !siteSilenced(state, site)
+}
+function permafrostHeld(state: GameState, unit: UnitState): boolean {
+  const holds = state.flow?.permafrostHolds as PermafrostHold[] | undefined
+  if (!holds?.length || unit.isAvatar) return false
+  return holds.some((h) => h.unitId === unit.id && heldAt(state, unit, h.siteId))
+}
+export function notePermafrostHolds(state: GameState): void {
+  const prev = state.flow?.permafrostHolds as PermafrostHold[] | undefined
+  const sites = permafrostSites(state)
+  if (!sites.length && !prev?.length) return
+  const holds = (prev ?? []).filter((h) => { const u = state.units[h.unitId]; return !!u && heldAt(state, u, h.siteId) })
+  for (const s of sites) {
+    if (siteSilenced(state, s)) continue
+    for (const u of Object.values(state.units)) {
+      if (u.isAvatar || u.x !== s.x || u.y !== s.y || u.region === 'void' || holds.some((h) => h.unitId === u.id)) continue
+      if (reallyDisabled(state, u)) holds.push({ unitId: u.id, siteId: s.id })
+    }
+  }
+  if (holds.length || prev) {
+    state.flow = state.flow ?? {}
+    if (holds.length) state.flow.permafrostHolds = holds
+    else delete state.flow.permafrostHolds
+  }
+}
+/** record the hold on ONE minion at once — the moment a disable lands on it, or it arrives at a Permafrost
+ *  disabled — so a disable that ends later in the same action (before checkStateBased) is still held */
+export function notePermafrostHold(state: GameState, unit: UnitState): void {
+  if (unit.isAvatar || unit.region === 'void') return
+  const site = siteAt(state, unit.x, unit.y)
+  if (!site || !getScript(site.name)?.keepsDisables || !heldAt(state, unit, site.id) || !reallyDisabled(state, unit)) return
+  const holds = (state.flow?.permafrostHolds ?? []) as PermafrostHold[]
+  if (holds.some((h) => h.unitId === unit.id && h.siteId === site.id)) return
+  state.flow = state.flow ?? {}
+  state.flow.permafrostHolds = [...holds, { unitId: unit.id, siteId: site.id }]
+}
+
+/** Hibernal Legion: "freeze this site and other minions here. They're disabled until the Legion leaves the
+ *  realm." Entries in flow.hibernalFreezes, written by the Legion's end-of-turn trigger. */
+export type HibernalFreeze = { legionId: string; siteId?: string; unitIds: string[] }
+/** drop the freezes of Legions that have left the realm (run by checkStateBased) */
+export function pruneHibernalFreezes(state: GameState): void {
+  const list = state.flow?.hibernalFreezes as HibernalFreeze[] | undefined
+  if (!list?.length) return
+  const live = list.filter((f) => !!state.units[f.legionId]) // (an entry with no minions still freezes its site)
+  if (live.length === list.length) return
+  if (live.length) state.flow!.hibernalFreezes = live
+  else delete state.flow!.hibernalFreezes
+}
+function hibernalFrozen(state: GameState, unit: UnitState): boolean {
+  const list = state.flow?.hibernalFreezes as HibernalFreeze[] | undefined
+  if (!list?.length) return false
+  return list.some((f) => f.unitIds.includes(unit.id) && !!state.units[f.legionId])
+}
+
 /** Cheap, NON-recursive "directly disabled": explicit disable flag/keyword, or
  *  disabled by a carrier / carried artifact. Does NOT scan area statics or parse
  *  keyword text — so it's safe to call in hot static loops (grantsPower/grantsKeywords
@@ -740,8 +896,9 @@ export function directlyDisabled(state: GameState, unit: UnitState): boolean {
   }
   if (unit.disabled) return true
   if (unit.modifiers.some((m) => m.kind === 'keyword' && m.keyword === 'disabled')) return !unit.isAvatar
-  // shackled by a carried artifact (Iron Shackles)
-  for (const artId of unit.carrying) {
+  if (hibernalFrozen(state, unit) || permafrostHeld(state, unit)) return true
+  // shackled by a carried artifact (Iron Shackles) — not one Protected from all but units (Humming Hummocks)
+  for (const artId of protectedFromNonUnits(state, unit) ? [] : unit.carrying) {
     const art = state.artifacts[artId]
     if (art && artScript(state, art)?.bearerDisabled) return true // a silenced shackle doesn't disable
   }
@@ -759,14 +916,25 @@ export function directlyDisabled(state: GameState, unit: UnitState): boolean {
 /** "Can't be modified" (Monks of Kobalsa, Bedrock, Druid's back face, Doom of Dilmun, or a unit
  *  carrying a bearerUnmodifiable artifact): the unit can't be disabled, silenced, immobilized, or
  *  transformed, and can't gain/lose abilities or have its characteristics changed. (Cost changes
- *  while still in hand DO apply — abilities only bite in the realm. Wards are the one allowed
- *  modification, permitted at grantKeyword.) */
+ *  while still in hand DO apply — abilities only bite in the realm. It can't have a Stealth or Ward
+ *  mark either — see cantHaveMark; Monks' printed "except by Wards" is the one exception.) */
 export function isUnmodifiable(state: GameState, unit: UnitState): boolean {
   if (getScript(unit.name)?.unmodifiable) return true
+  return carriesBearerUnmodifiable(state, unit)
+}
+function carriesBearerUnmodifiable(state: GameState, unit: UnitState): boolean {
   return unit.carrying.some((id) => {
     const a = state.artifacts[id]
     return !!a && !!artScript(state, a)?.bearerUnmodifiable // silenced → no longer makes bearer unmodifiable
   })
+}
+
+/** Codex, Can't be Modified (Nov 2026): such a unit "can't have a Stealth mark or Ward mark". Monks of
+ *  Kobalsa's own "except by Wards" lets it be warded — unless a Tabula Rasa pins it without exception. */
+export function cantHaveMark(state: GameState, unit: UnitState, mark: 'ward' | 'stealth'): boolean {
+  if (!isUnmodifiable(state, unit)) return false
+  if (mark === 'stealth') return true
+  return !getScript(unit.name)?.unmodifiableExceptWards || carriesBearerUnmodifiable(state, unit)
 }
 
 /** "Can't be immobilized." Sources: an unmodifiable unit (an immobilization IS a modification); a card
@@ -898,6 +1066,7 @@ function computeDisabledByEffect(state: GameState, unit: UnitState): boolean {
   // iterate ONLY the indexed disable-sources (checkStateBased maintains it) — O(1) on
   // a board with none. Trust the index only while its generation stamp matches the
   // current nextId (i.e. no new source entered since it was built); else full-scan.
+  const shielded = protectedFromNonUnits(state, unit) // Humming Hummocks: no aura/artifact disables it
   const ix = state.flow?.disablerIndex as { gen: number; u: string[]; a: string[]; r: string[]; area: boolean } | undefined
   if (ix && ix.gen === state.nextId) {
     for (const oid of ix.u) {
@@ -905,12 +1074,12 @@ function computeDisabledByEffect(state: GameState, unit: UnitState): boolean {
       if (!o || o.id === unit.id || o.silenced || disabledByEffect(state, o)) continue
       if (disablesNow(o.name, o.id)) return true
     }
-    for (const aid of ix.a) {
+    for (const aid of shielded ? [] : ix.a) {
       const art = state.artifacts[aid]
       if (!art) continue // a carried disabler acts at its bearer's location (Cold Iron Rod on a Faerie)
       if (disablesNow(art.name, art.id)) return true
     }
-    for (const rid of ix.r) {
+    for (const rid of shielded ? [] : ix.r) {
       const aura = state.auras[rid]
       if (aura && getScript(aura.name)?.auraDisablesUnit?.(state, aura, unit)) return true
     }
@@ -922,10 +1091,10 @@ function computeDisabledByEffect(state: GameState, unit: UnitState): boolean {
       if (o.id === unit.id || o.silenced || !getScript(o.name)?.disablesOther || disabledByEffect(state, o)) continue
       if (disablesNow(o.name, o.id)) return true
     }
-    for (const a of Object.values(state.artifacts)) {
+    if (!shielded) for (const a of Object.values(state.artifacts)) {
       if (disablesNow(a.name, a.id)) return true
     }
-    for (const r of Object.values(state.auras)) {
+    if (!shielded) for (const r of Object.values(state.auras)) {
       if (getScript(r.name)?.auraDisablesUnit?.(state, r, unit)) return true
     }
     if (brookHits()) return true
@@ -982,7 +1151,10 @@ export function canTapForCost(state: GameState, unit: UnitState): boolean {
 /** Codex: a disabled site "has no abilities and cannot provide any mana or affinity". Disabled by an
  *  artifact atop it (Blightstone), or — a Court — while an Overflowing Court has disabled the OTHER Courts. */
 export function siteDisabled(state: GameState, site: { id?: string; name?: string; x: number; y: number }): boolean {
+  if (unmodifiableSiteAt(state, site.x, site.y)) return false
   if (siteDisabledByArtifact(state, site)) return true
+  // frozen by a Hibernal Legion still in the realm
+  if (site.id && ((state.flow?.hibernalFreezes ?? []) as HibernalFreeze[]).some((f) => f.siteId === site.id && !!state.units[f.legionId])) return true
   if (!site.name || !/\bCourt\b/.test(site.name)) return false
   return ((state.flow?.courtDisables ?? []) as { sourceId: string }[]).some((d) => d.sourceId !== site.id)
 }
@@ -1025,7 +1197,7 @@ export function hasRegionKeyword(state: GameState, unit: UnitState, key: 'burrow
   }
   if (!has) {
     const unmodBearer = isUnmodifiable(state, unit) // can't gain the abilities a carried artifact gives
-    for (const artId of unit.carrying) {
+    for (const artId of protectedFromNonUnits(state, unit) ? [] : unit.carrying) {
       const sc = state.artifacts[artId] ? artScript(state, state.artifacts[artId]) : undefined
       if (unmodBearer && !sc?.bearerUnmodifiable) continue
       if (sc?.bearerKeywords?.some(grants)) { has = true; break }
@@ -1101,12 +1273,14 @@ export function attackForbidden(state: GameState, attacker: UnitState, target: U
 }
 
 /** attacks against the site at (x,y) and surface units atop it are blocked
- *  (Dome of Osiros, Blizzard, White Hart) */
-export function attackBlockedAt(state: GameState, x: number, y: number, target?: UnitState): boolean {
-  for (const site of Object.values(state.sites)) {
+ *  (Dome of Osiros, Blizzard, White Hart). An `attacker` Protected from all but units (Humming Hummocks)
+ *  isn't impeded by a site or aura — only a unit's ban still stops it. */
+export function attackBlockedAt(state: GameState, x: number, y: number, target?: UnitState, attacker?: UnitState): boolean {
+  const shielded = !!attacker && protectedFromNonUnits(state, attacker)
+  if (!shielded) for (const site of Object.values(state.sites)) {
     if (site.x === x && site.y === y && getScript(site.name)?.siteBlocksAttacks) return true
   }
-  for (const aura of Object.values(state.auras)) {
+  if (!shielded) for (const aura of Object.values(state.auras)) {
     if (getScript(aura.name)?.auraBlocksAttacks && aura.squares.some((s) => s.x === x && s.y === y)) return true
   }
   for (const u of Object.values(state.units)) {
@@ -1276,11 +1450,12 @@ export function grantedAbilities(state: GameState, unit: UnitState): AbilityDef[
     const g = sc?.grantsAbilities
     if (g && (sc.grantsAbilitiesWhileDisabled ? !u.silenced && !isBlanked(u) : !abilitiesOff(state, u))) out.push(...tag(g(state, u.id, unit), u.name))
   }
-  for (const art of Object.values(state.artifacts)) {
+  const shielded = protectedFromNonUnits(state, unit) // Humming Hummocks: no aura/artifact modifies it
+  if (!shielded) for (const art of Object.values(state.artifacts)) {
     const g = artScript(state, art)?.artifactGrantsAbilities // silenced → grants no abilities
     if (g) out.push(...tag(g(state, art.id, unit), art.name))
   }
-  for (const aura of Object.values(state.auras)) {
+  if (!shielded) for (const aura of Object.values(state.auras)) {
     const g = getScript(aura.name)?.auraGrantsAbilities
     if (g) out.push(...tag(g(state, aura, unit), aura.name))
   }
@@ -1375,7 +1550,7 @@ export function isSummoningSick(state: GameState, unit: UnitState): boolean {
   // sites can deny Charge nearby (Pebbled Paths: "Minions atop nearby sites lose Charge"). "Nearby" is
   // the site's OWN square PLUS the surrounding ones (rulebook), and Magellan-aware — so a minion summoned
   // directly ATOP the Pebbled Paths is affected too, not just its neighbours.
-  if (charge && unit.region === 'surface') {
+  if (charge && unit.region === 'surface' && !protectedFromSites(state, unit)) {
     for (const site of Object.values(state.sites)) {
       if (site.isRubble || siteSilenced(state, site) || !getScript(site.name)?.denyChargeNearby) continue
       if (nearbySquaresW(state, site.x, site.y).some((s) => s.x === unit.x && s.y === unit.y)) {

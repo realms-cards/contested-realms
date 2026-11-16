@@ -15,9 +15,9 @@
 import type { Action, GameState, PlayerId, Region, UnitState } from '../engine/types'
 import { applyAction, canActivate, actingSeatFor } from '../engine/game'
 import { reachableWithPaths } from '../engine/movement'
-import { canCast, legalSiteSquares, validateSummonAt, legalTargetsFor, targetRefId, type TargetPick } from '../engine/casting'
+import { canCast, canHandArtifactTo, legalSiteSquares, validateSummonAt, legalTargetsFor, targetRefId, type TargetPick } from '../engine/casting'
 import { grantedAbilities, effAttack, effDefence, effKeywords, isCarriableArtifact, artifactController } from '../engine/statics'
-import { GRID_H, GRID_W, orthAdjacentWrapped, siteAt } from '../engine/grid'
+import { GRID_H, GRID_W, occupiedSquares, orthAdjacentWrapped, siteAt } from '../engine/grid'
 import { getCard } from '../cards/db'
 import { getScript, type CardScript, type TargetRef } from '../cards/scripts/registry'
 import { underEnemySiteEater } from './eval'
@@ -167,9 +167,13 @@ function placementSquares(state: GameState): { x: number; y: number }[] {
 // earlier target (`whereOf` — Blink's "a location it's nearby" is nearby the ALLY) is measured from that
 // target, not from the caster. A dependent pick multiplies per earlier choice (ally × its own squares), so
 // those casts get a larger cap, or later allies' destinations are cut off.
-function castTargetCombos(state: GameState, me: PlayerId, script: CardScript, caster: UnitState, source?: string): string[][] {
-  const specs = script.targets ?? []
-  const pick: TargetPick = { script, specs, caster, player: me, magic: true, source }
+/** at most this many Genesis target picks are tried for one summon square (the search's time is shared). */
+const GENESIS_COMBOS_PER_SQUARE = 6
+
+// `genesis` fills a minion's genesisTargets instead of a spell's targets, measured from where it lands.
+function castTargetCombos(state: GameState, me: PlayerId, script: CardScript, caster: UnitState, source?: string, genesis = false): string[][] {
+  const specs = (genesis ? script.genesisTargets : script.targets) ?? []
+  const pick: TargetPick = { script, specs, caster, player: me, magic: !genesis, source }
   const CAP = specs.some((s) => s.whereOf != null) ? 160 : 48
   type Cand = { id: string; ref: TargetRef }
   // squares are offered in every region (the cast's region can matter); the cast itself re-judges each combo
@@ -262,14 +266,20 @@ export function expandActions(state: GameState, player: PlayerId, opts?: { deadl
     ]
     for (const { dest, path } of options) {
       if (path.length) push({ t: 'moveAttack', unitId: u.id, path }) // pure move (empty path = stay put)
-      // attacks: any enemy unit at this square, or the site here
+      // attacks: any enemy unit at this square, or the site here — on EVERY square an oversized
+      // unit stands on there (an animated 2x2 aura, a Mountain Giant), not just its anchor square
+      const squares = u.size === '2x2' || u.extraSquares?.length
+        ? (path.length ? occupiedSquares({ ...u, x: dest.x, y: dest.y, extraSquares: undefined }) : occupiedSquares(u))
+        : [dest]
       for (const e of Object.values(state.units)) {
         if (e.controller === me || e.carriedBy) continue
-        if (e.x === dest.x && e.y === dest.y && e.region === dest.region) push({ t: 'moveAttack', unitId: u.id, path, attack: { unit: e.id } })
+        if (e.region === dest.region && squares.some((sq) => e.x === sq.x && e.y === sq.y)) push({ t: 'moveAttack', unitId: u.id, path, attack: { unit: e.id } })
       }
-      const site = siteAt(state, dest.x, dest.y)
-      if (site && site.controller !== null && site.controller !== me && !site.isRubble && dest.region === 'surface') {
-        push({ t: 'moveAttack', unitId: u.id, path, attack: { site: site.id } })
+      for (const sq of squares) {
+        const site = siteAt(state, sq.x, sq.y)
+        if (site && site.controller !== null && site.controller !== me && !site.isRubble && dest.region === 'surface') {
+          push({ t: 'moveAttack', unitId: u.id, path, attack: { site: site.id } })
+        }
       }
     }
   }
@@ -281,8 +291,10 @@ export function expandActions(state: GameState, player: PlayerId, opts?: { deadl
     const def = getCard(state.cards[cardId].name)
     if (def.type === 'Avatar') continue
     if (def.type === 'Site') {
-      for (const sq of legalSiteSquares(state, me, def.name))
-        if (!underEnemySiteEater(state, me, sq.x, sq.y)) push({ t: 'avatarSite', mode: 'play', cardId, x: sq.x, y: sq.y })
+      const squares = legalSiteSquares(state, me, def.name).filter((sq) => !underEnemySiteEater(state, me, sq.x, sq.y))
+      // Cornerstone is played for its corner, so it goes to an open corner when there is one
+      const corners = def.name === 'Cornerstone' ? squares.filter((sq) => (sq.x === 0 || sq.x === GRID_W - 1) && (sq.y === 0 || sq.y === GRID_H - 1)) : []
+      for (const sq of corners.length ? corners : squares) push({ t: 'avatarSite', mode: 'play', cardId, x: sq.x, y: sq.y })
       continue
     }
     if (opts?.noSpellCasts) continue // model development (sites) but not (unknown) spell casts — opponent rollout
@@ -313,7 +325,11 @@ export function expandActions(state: GameState, player: PlayerId, opts?: { deadl
       for (const sq of placementSquares(state)) {
         for (const region of REGIONS) {
           if (validateSummonAt(state, me, def.name, { x: sq.x, y: sq.y, region }) === null) {
-            push({ t: 'castSpell', cardId, casterId: avatarId, at: { x: sq.x, y: sq.y, region } })
+            // a Genesis that targets (Vile Imp's "may deal 2 to an adjacent unit") is aimed from where the
+            // minion lands; an optional one may also be left unused. Without its targets a summon skips it.
+            const script = getScript(def.name)
+            const combos = script?.genesisTargets?.length ? castTargetCombos(state, me, script, { ...state.units[avatarId], x: sq.x, y: sq.y, region }, def.name, true).slice(0, GENESIS_COMBOS_PER_SQUARE) : [[]]
+            for (const targets of combos) push(targets.length ? { t: 'castSpell', cardId, casterId: avatarId, at: { x: sq.x, y: sq.y, region }, targets } : { t: 'castSpell', cardId, casterId: avatarId, at: { x: sq.x, y: sq.y, region } })
           }
         }
       }
@@ -324,8 +340,15 @@ export function expandActions(state: GameState, player: PlayerId, opts?: { deadl
         }
       }
     } else {
+      // an artifact a unit can carry goes into a unit's hands (a bearer's book, a weapon, a curse
+      // conjured onto an enemy), as a player conjures one; one dropped on a bare site of ours far from
+      // anyone does nothing there. Laid on the ground only when no unit can take it.
+      const holders = def.type === 'Artifact'
+        ? Object.values(state.units).filter((u) => !u.carriedBy && canHandArtifactTo(state, me, def.name, u))
+        : []
+      for (const holder of holders) push({ t: 'castSpell', cardId, casterId: avatarId, extra: { giveTo: holder.id } })
       // Artifact / Aura: trial-apply confirms placement (fewer of these; no cheap shared validator)
-      for (const sq of placementSquares(state)) push({ t: 'castSpell', cardId, casterId: avatarId, at: { x: sq.x, y: sq.y, region: 'surface' } })
+      if (!holders.length) for (const sq of placementSquares(state)) push({ t: 'castSpell', cardId, casterId: avatarId, at: { x: sq.x, y: sq.y, region: 'surface' } })
     }
   }
   // draw a site off the atlas

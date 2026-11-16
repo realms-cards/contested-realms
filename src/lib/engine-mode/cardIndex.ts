@@ -1,6 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
 import type { CardRef } from "@/lib/game/store/types";
-import { SUPERSEDING_REPRINTS } from "@shared/engine/decks";
 import { findCard } from "@sorcery/shared";
 
 /** Our printing ids per card name, from /api/cards/search-index (preferred printing first). */
@@ -44,10 +43,8 @@ export function loadCardIndex(): Promise<Map<string, PrintingRef>> {
     .then(({ entries }) => {
       const map = new Map<string, PrintingRef>();
       for (const [cardId, variantId, , name, slug] of entries) {
-        if (!map.has(name)) map.set(name, { cardId, variantId, slug });
-        // Upstream's reprint ("Fireball 2") shows our reprint's printing, the art with its text
-        const reprint = SUPERSEDING_REPRINTS[name];
-        if (reprint && slug.startsWith("fvl") && !map.has(reprint)) map.set(reprint, { cardId, variantId, slug });
+        // A Frost Mage Vs. Lavamancer reprint supersedes the older printings: show the art with the text that plays
+        if (!map.has(name) || slug.startsWith("fvl")) map.set(name, { cardId, variantId, slug });
       }
       index = map;
       for (const listener of listeners) listener();

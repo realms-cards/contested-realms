@@ -76,7 +76,7 @@ registerScript('Monstermorphosis', {
         victim.name = choice
         victim.cardId = handId
       }
-      victim.damage = 0
+      // codex Transform: the same game object — its damage carries over
       // FAQ: a TRANSFORM never changes control — if you morphed an ENEMY minion it stays
       // under your opponent's control (though the new card is owned by you, so it goes to
       // YOUR cemetery when it dies). So we deliberately do NOT reassign victim.controller.

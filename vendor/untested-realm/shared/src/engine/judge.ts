@@ -3,6 +3,7 @@
 // logged with the acting player's name.
 
 import { findCard, getKeywords } from '../cards/db'
+import { tokenArtFor } from '../cards/tokenArt'
 import { isStatusMarker, keywordLabel, toModifierKeyword } from './keywords'
 import type { GameState, JudgeOp, PlayerId, UnitState } from './types'
 import {
@@ -298,7 +299,7 @@ export function applyJudge(state: GameState, player: PlayerId, op: JudgeOp): str
       if (!inBounds(op.x, op.y)) return 'Out of bounds.'
       const kw = getKeywords(def.name)
       const cardId = newId(state, 'c')
-      state.cards[cardId] = { id: cardId, name: op.name, owner: op.player }
+      state.cards[cardId] = { id: cardId, name: op.name, owner: op.player, art: tokenArtFor(state, op.player, op.name) }
       const unitId = newId(state, 'u')
       const unit: UnitState = {
         id: unitId,

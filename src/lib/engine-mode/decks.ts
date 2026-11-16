@@ -1,5 +1,5 @@
-import { betaPrecons } from "@/lib/game/cpu/precons";
-import { engineCardName, toEngineDeck, type NamedCountDeck } from "@shared/engine/decks";
+import { cpuPrecons } from "@/lib/game/cpu/precons";
+import { toEngineDeck, type NamedCountDeck } from "@shared/engine/decks";
 import { findCard, getScript } from "@sorcery/shared";
 import type { DeckList } from "@sorcery/shared";
 
@@ -8,7 +8,7 @@ import type { DeckList } from "@sorcery/shared";
 export type { NamedCountDeck } from "@shared/engine/decks";
 export { toEngineDeck } from "@shared/engine/decks";
 
-export const enginePrecons: NamedCountDeck[] = betaPrecons;
+export const enginePrecons: NamedCountDeck[] = cpuPrecons;
 
 /** A card row as /api/decks/[id] and /api/guest/deck return it: one entry per copy. */
 interface ApiDeckCard {
@@ -38,7 +38,7 @@ export function apiDeckToEngine(data: ApiDeckData, fallbackName: string): Engine
   const unknown = new Set<string>();
   const add = (into: Record<string, number>, rows: ApiDeckCard[] | undefined, allowAvatar: boolean) => {
     for (const row of rows ?? []) {
-      const def = findCard(engineCardName(row.name));
+      const def = findCard(row.name);
       if (!def) {
         unknown.add(row.name);
         continue;

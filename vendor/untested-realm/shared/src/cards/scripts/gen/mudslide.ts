@@ -18,14 +18,13 @@ registerScript('Mudslide', {
         const site = siteAt(ctx.state, u.x, u.y)
         if (!site || isWaterSite(ctx.state, site, getCard)) continue
         if (!inBounds(u.x + dx, u.y)) continue
-        // Mudslide spans the void — an ordinary unit may be slid into a siteless square — but
-        // "Avatars can never enter void locations", so an Avatar only slides onto another site.
-        if (u.isAvatar && !siteAt(ctx.state, u.x + dx, u.y)) continue
+        // Mudslide's column spans the void, but a forced "one step" is to an adjacent location in the
+        // same region (Windblast FAQ: you can't push something into the void), so a unit only
+        // slides onto another site; with the void beside it, it stays put.
+        if (!siteAt(ctx.state, u.x + dx, u.y)) continue
         if (moveProtected(ctx.state, u, ctx.controller)) continue // "can't be moved by force"
         const from = { x: u.x, y: u.y, region: u.region }
         u.x += dx
-        // slid into the void (no site) → the void region; checkStateBased banishes it unless Voidwalk
-        if (!siteAt(ctx.state, u.x, u.y)) u.region = 'void'
         emitUnitMoved(ctx.state, u, from) // a forced slide "enters" its new square — fire on-enter triggers
       }
       checkStateBased(ctx.state)

@@ -20,8 +20,5 @@ export const betaPrecons: PreconDeck[] = betaDecks;
 /** Frost Mage Vs. Lavamancer (provisional counts until the official lists are published) */
 export const fvlPrecons: PreconDeck[] = fvlDecks;
 
-/**
- * Every bundled precon, for vs-CPU play and /api/precons. Engine mode keeps to betaPrecons:
- * the vendored rules engine does not know every FvL card yet.
- */
+/** Every bundled precon, for vs-CPU play, engine mode and /api/precons. */
 export const cpuPrecons: PreconDeck[] = [...betaPrecons, ...fvlPrecons];

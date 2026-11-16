@@ -2,6 +2,7 @@ import { registerScript, type EffectAPI } from '../registry'
 import { nearbySquaresW, siteAt } from '../../../engine/grid'
 import { pushLog, effectSummonUnit } from '../../../engine/effects'
 import type { GameState, PlayerId, UnitState } from '../../../engine/types'
+import { tokenArtFor } from '../../tokenArt'
 
 // 'At the end of your turn, if no new Locusts have been summoned this turn,
 // summon a tapped copy of this nearby.'
@@ -51,7 +52,7 @@ registerScript('Locusts of Illyria', {
 /** create a token-copy of a unit; it enters the realm → Genesis fires (FAQ 1242) */
 function copyUnit(state: GameState, name: string, controller: PlayerId, x: number, y: number, region: any, tapped = false): UnitState | null {
   const cardId = `c${state.nextId++}`
-  state.cards[cardId] = { id: cardId, name, owner: controller, isToken: true }
+  state.cards[cardId] = { id: cardId, name, owner: controller, isToken: true, art: tokenArtFor(state, controller, name) }
   const unitId = `u${state.nextId++}`
   const unit: UnitState = {
     id: unitId, cardId, name, owner: controller, controller, isAvatar: false, x, y, region,

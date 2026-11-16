@@ -16,6 +16,7 @@ export function plagueScript(name: string, strongest: boolean): CardScript {
   const succumb = (ctx: EffectAPI, unitId: string) => {
     const u = ctx.state.units[unitId]
     if (!u) return passOn(ctx)
+    if (ctx.shields(u.id)) return passOn(ctx) // Protected from all but units (Humming Hummocks): no one died
     if (checkWard(ctx.state, u, ctx.controller, u.controller, 'destroy')) {
       pushLog(ctx.state, ctx.controller, `${u.name}'s ward breaks — no one succumbs to ${name}.`)
       return passOn(ctx)

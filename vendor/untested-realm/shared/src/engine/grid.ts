@@ -40,7 +40,10 @@ export function edgesConnected(state: GameState): boolean {
     if (a.name !== 'Magellan Globe') return false
     const x = a.carriedBy ? state.units[a.carriedBy]?.x ?? a.x : a.x
     const y = a.carriedBy ? state.units[a.carriedBy]?.y ?? a.y : a.y
-    return !Object.values(state.auras).some((r) => getScript(r.name)?.auraSilencesArtifacts && r.squares.some((q) => q.x === x && q.y === y))
+    return !Object.values(state.auras).some((r) => {
+      const f = getScript(r.name)?.auraSilencesArtifacts
+      return !!f && r.squares.some((q) => q.x === x && q.y === y) && (f === true || f(state, a))
+    })
   }) && !realmIsFlat(state) // only scanned when a live Globe exists (hot path)
 }
 
@@ -59,6 +62,8 @@ export function setGridSiteSilencedCheck(fn: (state: GameState, site: SiteState)
  *  Flood / Great Old One "will still be Flooded"). A PRINTED Flooded (Mismanaged Mortuary) is the site's own
  *  ability, so it is lost while the site is silenced (Smokestacks of Gnaak) or disabled. */
 export function siteFlooded(state: GameState, site: SiteState): boolean {
+  // a site that "can't be modified" (Bedrock) is never flooded, whatever tried to flood it (owner ruling)
+  if (!site.isRubble && getScript(site.name)?.unmodifiableSite) return false
   if (site.flooded) return true
   return !site.isRubble && !!getScript(site.name)?.printedFlooded && !siteLosesAbilities(state, site)
 }
@@ -150,8 +155,8 @@ export function isWaterSite(state: GameState, site: SiteState, defs: (name: stri
   // a granted flood survives silence; a printed one (Mismanaged Mortuary) doesn't — see siteFlooded
   const flooded = siteFlooded(state, site)
   if (site.isRubble) return flooded
-  // Drought: covered sites provide no water threshold (and no flood bonus)
-  const dried = Object.values(state.auras).some(
+  // Drought: covered sites provide no water threshold (and no flood bonus) — not one that can't be modified
+  const dried = !getScript(site.name)?.unmodifiableSite && Object.values(state.auras).some(
     (r) => getScript(r.name)?.driesSites && r.squares.some((s) => s.x === site.x && s.y === site.y),
   )
   if (dried) return false

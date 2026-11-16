@@ -1,7 +1,7 @@
 import { registerScript } from '../registry'
 import { nearbySquaresW, siteAt } from '../../../engine/grid'
-import { siteSilenced } from '../../../engine/statics'
-import { pushLog, dealDamageToUnit } from '../../../engine/effects'
+import { siteDisabled } from '../../../engine/statics'
+import { pushLog, dealDamageToUnit, siteCantBeModified } from '../../../engine/effects'
 
 // (Moss Troll moved to its own file: gen/moss-troll.ts — one-file-per-card refactor pilot.)
 
@@ -38,13 +38,14 @@ registerScript('Druid', {
     },
   }],
   // flip side only: an enemy entering a nearby allied site takes 1 damage. Per FAQ the
-  // SITE grants/deals it (no Druid kill credit, no Poisonous-Dagger lethality), and a
-  // silenced/unmodifiable site loses the ability.
+  // SITE grants/deals it (no Druid kill credit, no Poisonous-Dagger lethality). FAQ (Nov 2026):
+  // a SILENCED site keeps it (silence only removes printed abilities); a disabled site has no
+  // abilities at all, and an unmodifiable one (Bedrock) can't be granted it.
   onUnitEntersSquare: (ctx, moved) => {
     const self = ctx.state.units[ctx.sourceId]
     if (!self || !self.flipped || moved.controller === ctx.controller) return
     const site = siteAt(ctx.state, moved.x, moved.y)
-    if (!site || site.controller !== ctx.controller || siteSilenced(ctx.state, site)) return
+    if (!site || site.controller !== ctx.controller || siteDisabled(ctx.state, site) || siteCantBeModified(ctx.state, site)) return
     if (!nearbySquaresW(ctx.state, self.x, self.y).some((s) => s.x === site.x && s.y === site.y)) return
     dealDamageToUnit(ctx.state, moved, 1, ctx.controller, { source: { player: ctx.controller, kind: 'ability', name: site.name } })
     pushLog(ctx.state, ctx.controller, 'Thorns lash out at the intruder.')

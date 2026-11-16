@@ -6,6 +6,6 @@ registerScript('Frost Elemental', {
   genesisTargets: [{ what: 'unit', count: 1, upTo: true, targeted: true, where: 'adjacent', label: 'target adjacent unit' }],
   genesis: (ctx) => {
     const t = ctx.targets[0]
-    if (t && 'unit' in t) disableUntilYourNextTurn(ctx.state, t.unit, ctx.controller)
+    if (t && 'unit' in t) disableUntilYourNextTurn(ctx, t.unit, ctx.controller)
   },
 })

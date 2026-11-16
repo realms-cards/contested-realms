@@ -10,7 +10,7 @@ registerScript('Frost Nova', {
       // nearby minion is region-locked to the source
       for (const u of unitsAt(ctx.state, sq.x, sq.y, c.region)) {
         if (!u.isAvatar && u.controller !== ctx.controller) {
-          disableUntilYourNextTurn(ctx.state, u.id, ctx.controller)
+          disableUntilYourNextTurn(ctx, u.id, ctx.controller)
         }
       }
     }

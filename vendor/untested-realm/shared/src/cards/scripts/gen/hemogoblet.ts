@@ -19,7 +19,7 @@ registerScript('Hemogoblet', {
       } else {
         const meals = unitsAt(ctx.state, art.x, art.y, art.region).filter((u) => !u.isAvatar && u.controller === ctx.controller).map((u) => u.id)
         if (!meals.length) return ctx.log('No minion here to sacrifice.')
-        ctx.ask({ kind: 'chooseTargets', title: 'Fill the goblet with whom?', data: { candidates: meals, count: 1, upTo: true, kind: 'unit' } }, 'fill')
+        ctx.ask({ kind: 'chooseTargets', title: 'Fill the goblet with whom?', data: { candidates: meals, count: 1, upTo: true, kind: 'unit', notTargeted: true } }, 'fill') // a sacrifice, not targeting
       }
     },
   }],

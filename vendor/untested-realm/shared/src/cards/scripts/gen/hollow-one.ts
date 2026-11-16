@@ -6,6 +6,8 @@ import { pushLog } from '../../../engine/effects'
 // 'Disabled until a Mortal or Beast dies nearby.'
 registerScript('Hollow One', {
   selfDisabled: (state, self) => !self.counters?.awakened,
+  // the wake-up ends its own disable — it isn't a triggered ability, so it's heard while disabled
+  hearsWhileDisabled: ['onAnyDeath'],
   onAnyDeath: (ctx, dead) => {
     const self = ctx.state.units[ctx.sourceId]
     if (!self || self.counters?.awakened) return

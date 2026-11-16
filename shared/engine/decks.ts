@@ -20,35 +20,19 @@ export interface NamedCountDeck {
   avatar: string;
   spellbook: { name: string; count: number }[];
   atlas: { name: string; count: number }[];
-}
-
-/**
- * Reprints whose new text supersedes the original. Upstream keeps both versions as separate
- * cards ("Fireball 2" is the Frost Mage Vs. Lavamancer Fireball), while our catalogue has one
- * card per name whose newest printing is the rules text, so every copy plays as the reprint.
- * Explicit on purpose: upstream's "Foot Soldier 2" is a different token, not a reprint.
- */
-export const SUPERSEDING_REPRINTS: Readonly<Record<string, string>> = {
-  Fireball: "Fireball 2",
-  "Polar Bears": "Polar Bears 2",
-};
-
-/** The engine card one of our card names plays as. */
-export function engineCardName(name: string): string {
-  const reprint = SUPERSEDING_REPRINTS[name];
-  return reprint && findCard(reprint) ? reprint : name;
+  /** Cards outside the deck that "from your collection" effects (Toolbox, Molten Maar) fetch. */
+  collection?: { name: string; count: number }[];
 }
 
 function toCounts(entries: { name: string; count: number }[]): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const { name: ours, count } of entries) {
-    const name = engineCardName(ours);
+  for (const { name, count } of entries) {
     out[name] = (out[name] ?? 0) + count;
   }
   return out;
 }
 
-/** Card names are identical in both card databases apart from superseding reprints. */
+/** Card names are identical in both card databases. */
 export function toEngineDeck(deck: NamedCountDeck): DeckList {
   return {
     id: deck.id,
@@ -56,6 +40,7 @@ export function toEngineDeck(deck: NamedCountDeck): DeckList {
     avatar: deck.avatar,
     spellbook: toCounts(deck.spellbook),
     atlas: toCounts(deck.atlas),
+    collection: toCounts(deck.collection ?? []),
   };
 }
 
@@ -83,16 +68,21 @@ export function submittedDeckToEngine(cards: readonly SubmittedCard[], deckName:
   const unknown: string[] = [];
   const spellbook: Record<string, number> = {};
   const atlas: Record<string, number> = {};
+  const collection: Record<string, number> = {};
   for (const card of cards) {
     if (card === avatarCard) continue;
-    const name = engineCardName(card.name);
+    const name = card.name;
     if (!findCard(name)) {
       if (!unknown.includes(card.name)) unknown.push(card.name);
       continue;
     }
-    // The engine splits a deck the same way we do: sites in the atlas, everything else in the
-    // spellbook. `zone` is what the submitting client already decided.
-    const pile = /atlas|site/i.test(card.zone) || /site/i.test(card.type) ? atlas : spellbook;
+    // The engine splits a deck the same way we do: the collection apart, sites in the atlas,
+    // everything else in the spellbook. `zone` is what the submitting client already decided.
+    const pile = /collection/i.test(card.zone)
+      ? collection
+      : /atlas|site/i.test(card.zone) || /site/i.test(card.type)
+        ? atlas
+        : spellbook;
     pile[name] = (pile[name] ?? 0) + 1;
   }
   if (unknown.length) {
@@ -101,5 +91,5 @@ export function submittedDeckToEngine(cards: readonly SubmittedCard[], deckName:
   if (!findCard(avatarCard.name)) {
     return { ok: false, error: `The rules engine does not know the avatar ${avatarCard.name}.` };
   }
-  return { ok: true, deck: { name: deckName, avatar: avatarCard.name, spellbook, atlas } };
+  return { ok: true, deck: { name: deckName, avatar: avatarCard.name, spellbook, atlas, collection } };
 }

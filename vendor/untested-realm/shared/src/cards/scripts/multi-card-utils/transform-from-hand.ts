@@ -46,7 +46,7 @@ export function transformFromHand(opts: {
         p.hand.splice(p.hand.indexOf(cardId), 1)
         u.name = name
         u.cardId = cardId
-        u.damage = 0
+        // codex Transform: the same game object — its damage carries over
         pushLog(ctx.state, ctx.controller, log)
       },
     },

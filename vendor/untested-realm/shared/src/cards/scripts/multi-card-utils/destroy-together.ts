@@ -9,7 +9,7 @@ export function destroyTogether(ctx: EffectAPI, unitIds: Iterable<string>, artif
   const doomed: string[] = []
   for (const id of new Set(unitIds)) {
     const u = ctx.state.units[id]
-    if (!u || u.isAvatar) continue
+    if (!u || u.isAvatar || ctx.shields(id)) continue // Humming Hummocks: Protected from all but units
     if (checkWard(ctx.state, u, ctx.controller, u.controller, 'destroy')) {
       pushLog(ctx.state, ctx.controller, `${u.name}'s ward breaks.`)
       continue

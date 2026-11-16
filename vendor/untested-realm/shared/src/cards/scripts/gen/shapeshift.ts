@@ -34,7 +34,7 @@ registerScript('Shapeshift', {
       p.spellbook = p.spellbook.filter((id) => !top.includes(id))
       if (chosen && u && !isUnmodifiable(ctx.state, u)) {
         u.name = ctx.state.cards[chosen].name
-        u.damage = 0
+        // codex Transform: the same game object — its damage carries over
         pushLog(ctx.state, ctx.controller, `The flesh flows — it is now ${u.name}!`)
         // the used form goes to the cemetery, the rest to the bottom
         toCemetery(ctx.state, chosen)

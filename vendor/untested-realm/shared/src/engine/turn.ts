@@ -1,7 +1,7 @@
 import { getScript } from '../cards/scripts/registry'
 import { getCard } from '../cards/db'
 import type { GameState, PlayerId } from './types'
-import { pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkStateBased, killUnit, deferTurnStep, reconcileSummonTax, tapUnit, runDamageEvent, untapUnit, noAtlasDrawChoice, recordManaGain, siteStillFlooded, beginAreaReveal, sealAbilityReveal, snapshotRealm, recordTouchedSites, turnFingerprint } from './effects'
+import { settleUnitDamage, pushLog, pushPrompt, registerCont, drawCards, opponent, makeCtx, checkStateBased, killUnit, deferTurnStep, reconcileSummonTax, tapUnit, runDamageEvent, untapUnit, noAtlasDrawChoice, recordManaGain, siteStillFlooded, beginAreaReveal, sealAbilityReveal, snapshotRealm, recordTouchedSites, turnFingerprint } from './effects'
 import { sitesOf, unitsOf, avatarOf, siteAt } from './grid'
 import { abilitiesOff, siteSilenced, artifactSilenced, siteDisabled, canTap, isDisabled, artifactController, artifactActor } from './statics'
 import { playSite } from './casting'
@@ -135,7 +135,7 @@ export function beginTurn(state: GameState, player: PlayerId): void {
     )
   }
   // "until your next turn" area effects expire (Babbling Brook, Bog, Leadworks)
-  for (const key of ['areaDisables', 'immobileSites', 'siteSilences', 'enduringFaith', 'shieldWall', 'courtDisables', 'encased'] as const) {
+  for (const key of ['areaDisables', 'immobileSites', 'siteSilences', 'enduringFaith', 'shieldWall', 'courtDisables', 'encased', 'protectedFromNonUnits'] as const) {
     if (state.flow?.[key]) {
       state.flow[key] = state.flow[key].filter(
         (e: { player: PlayerId; turn: number }) => !(e.player === player && e.turn < state.turn),
@@ -721,11 +721,17 @@ function runTurnTrigger(state: GameState, player: PlayerId, ref: TriggerRef, hoo
   const snap = snapshotRealm(state)
   const before = turnFingerprint(state)
   beginAreaReveal(state, undefined, srcName, srcId) // opened BEFORE fire so any damage it deals is captured
+  const dmgMark = state.flow?.dmgPending?.length ?? 0
+  const promptsBefore = state.prompts.length
   fire()
+  // its own hits → numbers on its sites while its reveal is still open (a paused trigger settles at the boundary)
+  if (state.prompts.length === promptsBefore) settleUnitDamage(state, dmgMark)
   if (turnFingerprint(state) !== before) {
     recordTouchedSites(state, snap) // glow the unit/artifact sites it changed / created / removed…
     sealAbilityReveal(state, state.flow?.areaReveal?.shoots ? `${srcName} shoots!` : `${srcName}'s ability`) // …else the source's own site
-    if (state.flow?.areaReveal) state.flow.areaReveal.open = false // don't let later endOfEveryTurn hooks append
+    // don't let later endOfEveryTurn hooks append — unless it paused on a prompt: its damage still lands
+    // in the continuation, and its area hits must reach THIS reveal at the action's settle
+    if (state.flow?.areaReveal && state.prompts.length === promptsBefore) state.flow.areaReveal.open = false
   } else if (state.flow) {
     state.flow.areaReveal = prevReveal // no-op trigger: restore the prior reveal, don't clobber another trigger's animation
   }

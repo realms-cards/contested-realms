@@ -9,7 +9,7 @@ registerScript('Satanic Panic', {
   onCast: (ctx) => {
     const t = ctx.targets[0]
     for (const u of Object.values(ctx.state.units)) {
-      if (!u.isAvatar && effSubtypes(ctx.state, u).includes('Demon')) killUnit(ctx.state, u.id)
+      if (!u.isAvatar && effSubtypes(ctx.state, u).includes('Demon') && !ctx.shields(u.id)) killUnit(ctx.state, u.id)
     }
     if (t && 'unit' in t && ctx.state.units[t.unit]) killUnit(ctx.state, t.unit)
     checkStateBased(ctx.state)

@@ -2,7 +2,6 @@ import { registerScript, getScript } from '../registry'
 import { getCard } from '../../db'
 import { pushLog, makeCtx } from '../../../engine/effects'
 import { nearbySquaresW, siteAt } from '../../../engine/grid'
-import type { PlayerId } from '../../../engine/types'
 
 // 'Spellcaster / Whenever Fenvale Muse casts a spell, you may trigger the
 //  Genesis of a nearby River.'
@@ -26,8 +25,9 @@ registerScript('Fenvale Muse', {
       const site = sq ? siteAt(ctx.state, sq.x, sq.y) : null
       if (!site) return
       const g = getScript(site.name)?.genesis
-      if (g && site.controller !== null) {
-        g(makeCtx(ctx.state, site.id, site.controller as PlayerId, []))
+      // FAQ (Nov 2026): "You control the ability, even if it's your opponent's site."
+      if (g) {
+        g(makeCtx(ctx.state, site.id, ctx.controller, []))
         pushLog(ctx.state, ctx.controller, `${site.name} surges anew at the Muse's song.`)
       }
     },

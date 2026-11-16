@@ -292,7 +292,8 @@
 },
 "text": "",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-active_volcano-b-s.png"
 },
@@ -595,7 +596,8 @@
 "sets": [
 "Alpha",
 "Beta",
-"Promotional"
+"Promotional",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-amazon_warriors-b-s.png"
 },
@@ -1002,7 +1004,8 @@
 },
 "text": "Deal 4 damage to target nearby unit.",
 "sets": [
-"Arthurian Legends"
+"Arthurian Legends",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/004-arc_lightning-b-s.png"
 },
@@ -2681,7 +2684,8 @@
 "text": "This turn, give an ally Movement +2, it can't be intercepted, and it leaves a trail of fire at departed locations. When it stops, each unit along the trail takes 2 damage.",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-blaze-b-s.png"
 },
@@ -2875,7 +2879,8 @@
 "text": "Affected sites and units atop them can't be attacked or intercepted.\n\nAt the start of your turn, dispel Blizzard.",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-blizzard-b-s.png"
 },
@@ -3080,7 +3085,8 @@
 "text": "Destroy all minions occupying target water site up to two steps away.",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-boil-b-s.png"
 },
@@ -3852,7 +3858,8 @@
 "text": "Burrow target minion or artifact, if able.",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-bury-b-s.png"
 },
@@ -3956,7 +3963,8 @@
 },
 "text": "Minions adjacent to target Water site step towards it. Then submerge all minions there.",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-call_of_the_sea-b-s.png"
 },
@@ -5203,9 +5211,10 @@
 "fire": 0,
 "water": 2
 },
-"text": "Submerge\n\nOnce on your turn, Coy Nixie may force target nearby enemy to take a step towards her. Tap that enemy.",
+"text": "Submerge\n\nOnce on your turn, Coy Nixie may force target nearby enemy to take a step towards her. Tap that enemy if it is untapped.",
 "sets": [
-"Arthurian Legends"
+"Arthurian Legends",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/004-coy_nixie-b-s.png"
 },
@@ -5984,7 +5993,8 @@
 },
 "text": "",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-deep_sea-b-s.png"
 },
@@ -6406,7 +6416,8 @@
 "text": "Destroy all auras and artifacts at target location up to two steps away.",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-disenchant-b-s.png"
 },
@@ -6457,7 +6468,8 @@
 "sets": [
 "Alpha",
 "Beta",
-"Promotional"
+"Promotional",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-dispel-b-s.png"
 },
@@ -6481,7 +6493,8 @@
 },
 "text": "Teleport target minion, artifact, or aura one diagonal step.",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-displace-b-s.png"
 },
@@ -7054,7 +7067,8 @@
 "text": "Submerge target minion or artifact, if able.",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-drown-b-s.png"
 },
@@ -7279,7 +7293,8 @@
 "text": "You may rearrange sites within a two-by-two area, carrying along everything of normal size. Then burrow all minions and artifacts on those sites.",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-earthquake-b-s.png"
 },
@@ -7969,7 +7984,8 @@
 },
 "text": "Can't be targeted or damaged by magic.",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-failed_mutation-b-s.png"
 },
@@ -8271,7 +8287,8 @@
 },
 "text": "",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-fertile_earth-b-s.png"
 },
@@ -8298,7 +8315,8 @@
 "text": "May be summoned to any site.\n\nGenesis → You may return a minion here to its owner’s hand.",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-fey_changeling-b-s.png"
 },
@@ -8472,12 +8490,13 @@
 "fire": 2,
 "water": 0
 },
-"text": "Shoot a projectile. It deals 4 damage on impact, and 2 damage to each other unit at that location.",
+"text": "Shoot a projectile. It explodes on impact, dealing damage to each unit at affected locations: 4 at the location it hits, and 2 at each location orthogonally adjacent to it (plus-shaped pattern).",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
-"img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-fireball-b-s.png"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-fireball-pd-s.png"
 },
 {
 "name": "Firebolts",
@@ -8623,7 +8642,8 @@
 "text": "Flame Wave flows horizontally, from one edge of the realm to the other. Deal damage to each unit atop sites in the area of effect:",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-flame_wave-b-s.png"
 },
@@ -8772,7 +8792,8 @@
 },
 "text": "Genesis → Deal 1 damage to each other nearby unit.",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-flayer-b-s.png"
 },
@@ -9465,7 +9486,8 @@
 },
 "text": "Stealth\n\nBreak Stealth → Disable other nearby minions until your next turn.",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-frozen_horror-b-s.png"
 },
@@ -9838,7 +9860,8 @@
 },
 "text": "Give an allied minion Lethal this turn. Draw a spell.",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-gift_of_the_serpent-b-s.png"
 },
@@ -10952,9 +10975,10 @@
 "fire": 2,
 "water": 0
 },
-"text": "Conjure atop an Ordinary or Exceptional site.\n\nAt the start of your turn, destroy this site, minions atop it, and Hamlet's Ablaze.",
+"text": "Conjure atop an Ordinary or Exceptional site.\n\nAt the start of your turn, destroy this site, and minions atop it, and Hamlet's Ablaze.",
 "sets": [
-"Arthurian Legends"
+"Arthurian Legends",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/004-hamlets_ablaze-b-s.png"
 },
@@ -11202,10 +11226,11 @@
 "fire": 1,
 "water": 0
 },
-"text": "UPDATED: Shoot a piercing projectile. Deal 2 damage to each hit unit.",
+"text": "Shoot a piercing projectile. Deal 2 damage to each hit unit.",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-heat_ray-b-s.png"
 },
@@ -11277,7 +11302,8 @@
 },
 "text": "",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-hellhounds-b-s.png"
 },
@@ -11480,7 +11506,8 @@
 "text": "Charge",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-highland_clansmen-b-s.png"
 },
@@ -12114,7 +12141,8 @@
 },
 "text": "Shoot three projectiles, one at a time. Each deals 1 damage but melts before the third step.",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-ice_shards-b-s.png"
 },
@@ -12603,7 +12631,8 @@
 },
 "text": "Can't be disabled or moved by force.",
 "sets": [
-"Arthurian Legends"
+"Arthurian Legends",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/004-iron_man_talus-b-s.png"
 },
@@ -13485,7 +13514,8 @@
 },
 "text": "Draw a site. You may play a land site.",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-landmass-b-s.png"
 },
@@ -13533,7 +13563,8 @@
 },
 "text": "Lava flows from the caster's site in a cardinal direction. Deal damage to each other unit occupying a site in the area of effect:",
 "sets": [
-"Arthurian Legends"
+"Arthurian Legends",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/004-lava_flow-b-s.png"
 },
@@ -13758,7 +13789,8 @@
 "text": "",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-lighthouse-b-s.png"
 },
@@ -13784,7 +13816,8 @@
 "sets": [
 "Alpha",
 "Beta",
-"Promotional"
+"Promotional",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-lightning_bolt-b-s.png"
 },
@@ -15401,7 +15434,8 @@
 },
 "text": "(F)(F) — Genesis → You may cast a Hellhounds from your collection to this site.",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-molten_maar-b-s.png"
 },
@@ -15816,7 +15850,8 @@
 "text": "Minions can't enter this site on the ground if there's already a minion atop.",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-mountain_pass-b-s.png"
 },
@@ -15840,7 +15875,8 @@
 },
 "text": "",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-mountain_peaks-b-s.png"
 },
@@ -17986,7 +18022,8 @@
 "text": "Airborne",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-plumed_pegasus-b-s.png"
 },
@@ -18093,9 +18130,9 @@
 "name": "Polar Bears",
 "type": "Minion",
 "rarity": "Ordinary",
-"cost": 2,
-"attack": 2,
-"defence": 2,
+"cost": 3,
+"attack": 3,
+"defence": 3,
 "life": null,
 "elements": [
 "Water"
@@ -18112,9 +18149,10 @@
 "text": "Can move as if the top and bottom edges of the realm were connected.",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
-"img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-polar_bears-b-s.png"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-polar_bears-pd-s.png"
 },
 {
 "name": "Polar Explorers",
@@ -19646,7 +19684,8 @@
 },
 "text": "Once on your turn, you may push a minion on connected Rivers one step.",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-river_rapids-b-s.png"
 },
@@ -19772,7 +19811,8 @@
 "text": "Units here have “Tap → Give Rolling Boulder a push. It rolls as far as possible and deals 4 damage to each other unit along its path.”",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-rolling_boulder-b-s.png"
 },
@@ -19901,7 +19941,8 @@
 "Beta",
 "Arthurian Legends",
 "Promotional",
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-rubble-bt-s.png"
 },
@@ -21627,7 +21668,8 @@
 "text": "Sacrifice Sinkhole → Destroy a nearby site.",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-sinkhole-b-s.png"
 },
@@ -21653,7 +21695,8 @@
 },
 "text": "Genesis -> Target adjacent site is silenced and provides no threshold while Sinterfee is in the realm.",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-sinterfee-b-s.png"
 },
@@ -22616,7 +22659,8 @@
 "text": "Genesis → Fall asleep. Slumbering Giantess is disabled until hurt.",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-slumbering_giantess-b-s.png"
 },
@@ -22795,7 +22839,8 @@
 },
 "text": "Shoot a piercing projectile. It picks up all other units along its path and carries them with it. When it stops, units there take damage equal to the number of units in the snowball.",
 "sets": [
-"Arthurian Legends"
+"Arthurian Legends",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/004-snowball-b-s.png"
 },
@@ -23369,7 +23414,8 @@
 "text": "",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-steppe-b-s.png"
 },
@@ -24849,7 +24895,8 @@
 },
 "text": "At the end of your turn, if minions atop this site total 5 or more power, submerge them.",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-thin_ice-b-s.png"
 },
@@ -25101,7 +25148,8 @@
 },
 "text": "Sacrifice → Bearer may cast an Ordinary spell from your collection.",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-toolbox-b-s.png"
 },
@@ -25516,7 +25564,8 @@
 "text": "The first time Tuft Turtles would take damage each turn, prevent that damage.",
 "sets": [
 "Alpha",
-"Beta"
+"Beta",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/002-tufted_turtles-b-s.png"
 },
@@ -27350,7 +27399,8 @@
 },
 "text": "Genesis → Look at your next spell. You may put it on the bottom of your spellbook.",
 "sets": [
-"Alpha"
+"Alpha",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/001-winter_river-bt-f.png"
 },
@@ -27597,7 +27647,8 @@
 },
 "text": "Once on your turn, you may fly a minion atop here onto a nearby site.",
 "sets": [
-"Gothic"
+"Gothic",
+"Frost Mage vs Lavamancer"
 ],
 "img": "https://d27a44hjr9gen3.cloudfront.net/cards/006-wuthering_heights-b-s.png"
 },
@@ -27972,10 +28023,10 @@
 {
 "name": "Frost Mage",
 "type": "Avatar",
-"rarity": null,
+"rarity": "Elite",
 "cost": null,
 "attack": 1,
-"defence": 1,
+"defence": null,
 "life": 20,
 "elements": [],
 "subtypes": [],
@@ -27989,15 +28040,15 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/_ZfV8UJyb0Wi-1787084474443.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-frost_mage-pd-s.png"
 },
 {
 "name": "Lavamancer",
 "type": "Avatar",
-"rarity": null,
+"rarity": "Elite",
 "cost": null,
 "attack": 1,
-"defence": 1,
+"defence": null,
 "life": 20,
 "elements": [],
 "subtypes": [],
@@ -28011,7 +28062,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/hYimSvCc4AR1-1786756529403.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-lavamancer-pd-s.png"
 },
 {
 "name": "Frostbolt",
@@ -28036,7 +28087,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/Clh_YyTxRFrs-1786756442812.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-frostbolt-pd-s.png"
 },
 {
 "name": "Ground Slam",
@@ -28061,7 +28112,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/TUTV4PgKA_-E-1786756646191.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-ground_slam-pd-s.png"
 },
 {
 "name": "Smoldering Hollow",
@@ -28085,7 +28136,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/hTFvpYoDBWTS-1786756809212.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-smoldering_hollow-pd-s.png"
 },
 {
 "name": "The White Death",
@@ -28111,7 +28162,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/wVTLO3W3D7iV-1787084625008.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-the_white_death-pd-s.png"
 },
 {
 "name": "Aria Wraith",
@@ -28137,7 +28188,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/HmIHSY91omii-1787084641996.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-aria_wraith-pd-s.png"
 },
 {
 "name": "Shatter",
@@ -28161,7 +28212,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/duzAhNanopAh-1787084656804.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-shatter-pd-s.png"
 },
 {
 "name": "Scoria",
@@ -28171,10 +28222,7 @@
 "attack": null,
 "defence": null,
 "life": null,
-"elements": [
-"Earth",
-"Fire"
-],
+"elements": [],
 "subtypes": [],
 "thresholds": {
 "air": 0,
@@ -28182,11 +28230,11 @@
 "fire": 0,
 "water": 0
 },
-"text": "Your (E) and (F) are equal to the highest of the two.",
+"text": "Your (E) and (F) are equal to the higher of the two.",
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/Hf3nDK861dtv-1790683524609.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-scoria-pd-s.png"
 },
 {
 "name": "Tundra",
@@ -28196,10 +28244,7 @@
 "attack": null,
 "defence": null,
 "life": null,
-"elements": [
-"Air",
-"Water"
-],
+"elements": [],
 "subtypes": [],
 "thresholds": {
 "air": 0,
@@ -28207,11 +28252,11 @@
 "fire": 0,
 "water": 0
 },
-"text": "Your (A) and (W) are equal to the highest of the two.",
+"text": "Your (A) and (W) are equal to the higher of the two.",
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/t4WaIZexQ8Zn-1790683504035.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-tundra-pd-s.png"
 },
 {
 "name": "Lava Elemental",
@@ -28238,7 +28283,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/KzdZzsuXZZGO-1787243211368.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-lava_elemental-pd-s.png"
 },
 {
 "name": "Frost Elemental",
@@ -28265,57 +28310,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/-yN9r7gkrPba-1787243229452.webp"
-},
-{
-"name": "Polar Bears 2",
-"type": "Minion",
-"rarity": "Ordinary",
-"cost": 3,
-"attack": 3,
-"defence": 3,
-"life": null,
-"elements": [
-"Water"
-],
-"subtypes": [
-"Beast"
-],
-"thresholds": {
-"air": 0,
-"earth": 0,
-"fire": 0,
-"water": 1
-},
-"text": "Can move as if the top and bottom edges of the realm were connected.",
-"sets": [
-"Frost Mage vs Lavamancer"
-],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/4Tm-5rBEZiI3-1790099819741.webp"
-},
-{
-"name": "Fireball 2",
-"type": "Magic",
-"rarity": "Exceptional",
-"cost": 4,
-"attack": null,
-"defence": null,
-"life": null,
-"elements": [
-"Fire"
-],
-"subtypes": [],
-"thresholds": {
-"air": 0,
-"earth": 0,
-"fire": 2,
-"water": 0
-},
-"text": "Shoot a projectile. It explodes on impact, dealing damage to each unit at affected locations: 4 at the location it hits, and 2 at each location orthogonally adjacent to it (plus-shaped pattern).",
-"sets": [
-"Frost Mage vs Lavamancer"
-],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/baEJVSWeyj23-1790099836688.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-frost_elemental-pd-s.png"
 },
 {
 "name": "Lone Wolf",
@@ -28341,7 +28336,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/HE-CJj6hRnyi-1790099849939.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-lone_wolf-pd-s.png"
 },
 {
 "name": "Namira Cheetah",
@@ -28367,7 +28362,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/kYmfyN2bI4Wf-1790099868369.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-namira_cheetah-pd-s.png"
 },
 {
 "name": "Southpaw Dyrodor",
@@ -28393,7 +28388,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/nVAydpuBFVPj-1790099894527.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-southpaw_dyrodor-pd-s.png"
 },
 {
 "name": "Pass-plug Serpent",
@@ -28419,7 +28414,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/Qd8rz6MF1bFX-1790099916838.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-pass_plug_serpent-pd-s.png"
 },
 {
 "name": "Snapjaw Raptor",
@@ -28445,7 +28440,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/VDLQiQQb_sf2-1790099942683.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-snapjaw_raptor-pd-s.png"
 },
 {
 "name": "Flat Realm Society",
@@ -28471,7 +28466,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/XGiPKneLfzgK-1790099959258.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-flat_realm_society-pd-s.png"
 },
 {
 "name": "Spike Trap",
@@ -28495,7 +28490,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/FhF6s6pE0nY7-1790428644415.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-spike_trap-pd-s.png"
 },
 {
 "name": "Volcanic Eruption",
@@ -28519,7 +28514,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/ulBaP2ZNUy81-1790428724508.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-volcanic_eruption-pd-s.png"
 },
 {
 "name": "Icicle Dome",
@@ -28543,7 +28538,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/4tSvoas2_ls2-1790947304296.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-icicle_dome-pd-s.png"
 },
 {
 "name": "Springstem Meadow",
@@ -28567,7 +28562,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/gH0UGiCg8pDr-1790954892483.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-springstem_meadow-pd-s.png"
 },
 {
 "name": "Deep Snow",
@@ -28587,11 +28582,11 @@
 "fire": 0,
 "water": 0
 },
-"text": "Trap (1) → Tap minions at target adjacent site. They don't untap the next time they would.",
+"text": "Trap (1) → Tap minions at one adjacent site. They don't untap the next time they would.",
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/6xWAe-ERLNzm-1791562672872.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-deep_snow-pd-s.png"
 },
 {
 "name": "Combusting Busts",
@@ -28615,7 +28610,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/XhbcwXrBsOhO-1791569929884.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-combusting_busts-pd-s.png"
 },
 {
 "name": "Sulfur Vents",
@@ -28639,7 +28634,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/VD2H-nL5MxhV-1791854659180.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-sulfur_vents-pd-s.png"
 },
 {
 "name": "Avalanche",
@@ -28663,7 +28658,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/SBZ1-4EJUw5g-1792175399423.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-avalanche-pd-s.png"
 },
 {
 "name": "Supervolcano",
@@ -28687,7 +28682,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://playsorceryonline.com/api/tabletop/custom-card-images/0QNGSITOPsY4-1792178903357.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-supervolcano-pd-s.png"
 },
 {
 "name": "Trapper's Rest",
@@ -28711,7 +28706,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://cards.playsorceryonline.com/tabletop-custom-cards/nkNBj7KNZGWN-1792630019852.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-trappers_rest-pd-s.png"
 },
 {
 "name": "Bouldermaw",
@@ -28735,7 +28730,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://cards.playsorceryonline.com/tabletop-custom-cards/2r-ujjzXvcgM-1792630049936.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-bouldermaw-pd-s.png"
 },
 {
 "name": "Rite of Eruption",
@@ -28760,7 +28755,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://cards.playsorceryonline.com/tabletop-custom-cards/19yGjMbKIC5E-1793386588193.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-rite_of_eruption-pd-s.png"
 },
 {
 "name": "Stiff-pitch Witch",
@@ -28786,7 +28781,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://cards.playsorceryonline.com/tabletop-custom-cards/W2GOn9vMnLIe-1793386611317.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-stiff_pitch_witch-pd-s.png"
 },
 {
 "name": "Emberleaf Dryad",
@@ -28813,7 +28808,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://cards.playsorceryonline.com/tabletop-custom-cards/kgfDHUxAYM6I-1793386628848.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-emberleaf_dryad-pd-s.png"
 },
 {
 "name": "Polar Shift",
@@ -28838,7 +28833,7 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://cards.playsorceryonline.com/tabletop-custom-cards/2rPIASJ7UTqu-1793386647330.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-polar_shift-pd-s.png"
 },
 {
 "name": "Ash of Effort",
@@ -28862,6 +28857,894 @@
 "sets": [
 "Frost Mage vs Lavamancer"
 ],
-"img": "https://cards.playsorceryonline.com/tabletop-custom-cards/AGvE03SlMs5w-1793386671270.webp"
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-ash_of_effort-pd-s.png"
+},
+{
+"name": "Ancient Thaw",
+"type": "Site",
+"rarity": "Elite",
+"cost": null,
+"attack": null,
+"defence": null,
+"life": null,
+"elements": [],
+"subtypes": [],
+"thresholds": {
+"air": 0,
+"earth": 0,
+"fire": 0,
+"water": 0
+},
+"text": "Genesis → Cast an @ Beast from your collection here, disabled until your next turn.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-ancient_thaw-pd-s.png"
+},
+{
+"name": "Arctic Fox",
+"type": "Minion",
+"rarity": "Exceptional",
+"cost": 1,
+"attack": 1,
+"defence": 1,
+"life": null,
+"elements": [
+"Air"
+],
+"subtypes": [
+"Beast"
+],
+"thresholds": {
+"air": 1,
+"earth": 0,
+"fire": 0,
+"water": 0
+},
+"text": "Stealth, Can't be disabled\n\n(1), Banish this from your cemetery → An ally gains \"Stealth, Can't be disabled.\"",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-arctic_fox-pd-s.png"
+},
+{
+"name": "A Yeti So Shy",
+"type": "Minion",
+"rarity": "Elite",
+"cost": 3,
+"attack": 4,
+"defence": 4,
+"life": null,
+"elements": [
+"Air"
+],
+"subtypes": [
+"Giant"
+],
+"thresholds": {
+"air": 2,
+"earth": 0,
+"fire": 0,
+"water": 0
+},
+"text": "Stealth, Outerbound",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-a_yeti_so_shy-pd-s.png"
+},
+{
+"name": "Bearserker",
+"type": "Minion",
+"rarity": "Exceptional",
+"cost": 5,
+"attack": 4,
+"defence": 4,
+"life": null,
+"elements": [
+"Water"
+],
+"subtypes": [
+"Beast",
+"Mortal"
+],
+"thresholds": {
+"air": 0,
+"earth": 0,
+"fire": 0,
+"water": 1
+},
+"text": "(W)(W) — You may pay the difference in cost to transform a Mortal or Bear into Bearserker from hand, untapped.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-bearserker-pd-s.png"
+},
+{
+"name": "Chart",
+"type": "Magic",
+"rarity": "Ordinary",
+"cost": 2,
+"attack": null,
+"defence": null,
+"life": null,
+"elements": [
+"Earth"
+],
+"subtypes": [],
+"thresholds": {
+"air": 0,
+"earth": 2,
+"fire": 0,
+"water": 0
+},
+"text": "Draw two sites.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-chart-pd-s.png"
+},
+{
+"name": "Dust Devil",
+"type": "Minion",
+"rarity": "Exceptional",
+"cost": 3,
+"attack": 2,
+"defence": 2,
+"life": null,
+"elements": [
+"Fire"
+],
+"subtypes": [
+"Demon"
+],
+"thresholds": {
+"air": 0,
+"earth": 0,
+"fire": 2,
+"water": 0
+},
+"text": "Movement +1\n\nTakes no damage while attacking.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-dust_devil-pd-s.png"
+},
+{
+"name": "Flametongue Newt",
+"type": "Minion",
+"rarity": "Ordinary",
+"cost": 2,
+"attack": 1,
+"defence": 1,
+"life": null,
+"elements": [
+"Fire"
+],
+"subtypes": [
+"Beast"
+],
+"thresholds": {
+"air": 0,
+"earth": 0,
+"fire": 2,
+"water": 0
+},
+"text": "Once on your turn, may just for fun, shoot a projectile that deals damage 1.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-flametongue_newt-pd-s.png"
+},
+{
+"name": "Frost Breath",
+"type": "Magic",
+"rarity": "Exceptional",
+"cost": 4,
+"attack": null,
+"defence": null,
+"life": null,
+"elements": [
+"Water"
+],
+"subtypes": [],
+"thresholds": {
+"air": 0,
+"earth": 0,
+"fire": 0,
+"water": 2
+},
+"text": "May be cast by a Beast or Spirit. Each unit at affected locations takes damage and is disabled until your next turn.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-frost_breath-pd-s.png"
+},
+{
+"name": "Full-tilt Goliaths",
+"type": "Minion",
+"rarity": "Elite",
+"cost": 7,
+"attack": 5,
+"defence": 5,
+"life": null,
+"elements": [
+"Air"
+],
+"subtypes": [
+"Giant"
+],
+"thresholds": {
+"air": 2,
+"earth": 0,
+"fire": 0,
+"water": 0
+},
+"text": "Charge\n\nGenesis → Cover nearby sites with silencing snow until your next turn.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-full_tilt_goliaths-pd-s.png"
+},
+{
+"name": "Gnarled Laborers",
+"type": "Minion",
+"rarity": "Exceptional",
+"cost": 3,
+"attack": 3,
+"defence": 3,
+"life": null,
+"elements": [
+"Fire"
+],
+"subtypes": [
+"Mortal"
+],
+"thresholds": {
+"air": 0,
+"earth": 0,
+"fire": 1,
+"water": 0
+},
+"text": "Untaps the first time they take damage each turn.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-gnarled_laborers-pd-s.png"
+},
+{
+"name": "Hailstriker",
+"type": "Minion",
+"rarity": "Elite",
+"cost": 4,
+"attack": 3,
+"defence": 3,
+"life": null,
+"elements": [
+"Air",
+"Water"
+],
+"subtypes": [
+"Demon"
+],
+"thresholds": {
+"air": 1,
+"earth": 0,
+"fire": 0,
+"water": 1
+},
+"text": "Ranged\n\nGenesis → Target an adjacent location. Each minion there takes 1 damage and is disabled until your next turn.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-hailstriker-pd-s.png"
+},
+{
+"name": "Hibernal Legion",
+"type": "Minion",
+"rarity": "Elite",
+"cost": 6,
+"attack": 5,
+"defence": 5,
+"life": null,
+"elements": [
+"Water"
+],
+"subtypes": [
+"Spirit"
+],
+"thresholds": {
+"air": 0,
+"earth": 0,
+"fire": 0,
+"water": 3
+},
+"text": "At the end of your turn, freeze this site and other minions here. They're disabled until the Legion leaves the realm.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-hibernal_legion-pd-s.png"
+},
+{
+"name": "Highgate Guide",
+"type": "Minion",
+"rarity": "Ordinary",
+"cost": 2,
+"attack": 2,
+"defence": 2,
+"life": null,
+"elements": [
+"Air"
+],
+"subtypes": [
+"Mortal"
+],
+"thresholds": {
+"air": 1,
+"earth": 0,
+"fire": 0,
+"water": 0
+},
+"text": "Nearby allies are Protected from sites.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-highgate_guide-pd-s.png"
+},
+{
+"name": "Humming Hummocks",
+"type": "Site",
+"rarity": "Elite",
+"cost": null,
+"attack": null,
+"defence": null,
+"life": null,
+"elements": [
+"Earth"
+],
+"subtypes": [],
+"thresholds": {
+"air": 0,
+"earth": 1,
+"fire": 0,
+"water": 0
+},
+"text": "Genesis → Until your next turn, nearby allies are Protected from all but units.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-humming_hummocks-pd-s.png"
+},
+{
+"name": "Jormungand",
+"type": "Minion",
+"rarity": "Unique",
+"cost": 7,
+"attack": 10,
+"defence": 10,
+"life": null,
+"elements": [
+"Water"
+],
+"subtypes": [
+"Monster"
+],
+"thresholds": {
+"air": 0,
+"earth": 0,
+"fire": 0,
+"water": 3
+},
+"text": "Occupies all outer locations safely, and can't be modified.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-jormungand-pd-s.png"
+},
+{
+"name": "Jussi Puffins",
+"type": "Minion",
+"rarity": "Exceptional",
+"cost": 2,
+"attack": 2,
+"defence": 2,
+"life": null,
+"elements": [
+"Air",
+"Water"
+],
+"subtypes": [
+"Beast"
+],
+"thresholds": {
+"air": 1,
+"earth": 0,
+"fire": 0,
+"water": 1
+},
+"text": "Airborne, Submerge\n\nCan move as if the opposite edges of the realm were connected.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-jussi_puffins-pd-s.png"
+},
+{
+"name": "King Krakalak",
+"type": "Minion",
+"rarity": "Unique",
+"cost": 8,
+"attack": 8,
+"defence": 8,
+"life": null,
+"elements": [
+"Fire"
+],
+"subtypes": [
+"Demon"
+],
+"thresholds": {
+"air": 0,
+"earth": 0,
+"fire": 3,
+"water": 0
+},
+"text": "Genesis → Sacrifice this site to deal damage to each other unit at affected sites:",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-king_krakalak-pd-s.png"
+},
+{
+"name": "Landslide",
+"type": "Site",
+"rarity": "Ordinary",
+"cost": null,
+"attack": null,
+"defence": null,
+"life": null,
+"elements": [
+"Earth"
+],
+"subtypes": [],
+"thresholds": {
+"air": 0,
+"earth": 1,
+"fire": 0,
+"water": 0
+},
+"text": "Trap (2) → Swap this site with another adjacent site.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-landslide-pd-s.png"
+},
+{
+"name": "Man-made Ice Age",
+"type": "Aura",
+"rarity": "Unique",
+"cost": 6,
+"attack": null,
+"defence": null,
+"life": null,
+"elements": [
+"Water"
+],
+"subtypes": [],
+"thresholds": {
+"air": 0,
+"earth": 0,
+"fire": 0,
+"water": 3
+},
+"text": "Minions and artifacts atop affected sites are disabled.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-man_made_ice_age-pd-s.png"
+},
+{
+"name": "Myrmidons",
+"type": "Minion",
+"rarity": "Elite",
+"cost": 6,
+"attack": 0,
+"defence": 0,
+"life": null,
+"elements": [
+"Earth"
+],
+"subtypes": [
+"Beast"
+],
+"thresholds": {
+"air": 0,
+"earth": 3,
+"fire": 0,
+"water": 0
+},
+"text": "Burrowing\n\nHas +1 power for each site in their span of land.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-myrmidons-pd-s.png"
+},
+{
+"name": "Nanurluk",
+"type": "Minion",
+"rarity": "Unique",
+"cost": 6,
+"attack": 6,
+"defence": 6,
+"life": null,
+"elements": [
+"Water"
+],
+"subtypes": [
+"Spirit"
+],
+"thresholds": {
+"air": 0,
+"earth": 0,
+"fire": 0,
+"water": 3
+},
+"text": "Has Charge if there are Bears or sites in your cemetery.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-nanurluk-pd-s.png"
+},
+{
+"name": "None Survive the Sun",
+"type": "Aura",
+"rarity": "Unique",
+"cost": 6,
+"attack": null,
+"defence": null,
+"life": null,
+"elements": [
+"Fire"
+],
+"subtypes": [],
+"thresholds": {
+"air": 0,
+"earth": 0,
+"fire": 3,
+"water": 0
+},
+"text": "At the end of each turn, minions on the surface burn. Those here take 20 damage, those elsewhere take 1. Then the sun moves one step westward, or it is dispelled.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-none_survive_the_sun-pd-s.png"
+},
+{
+"name": "Permafrost",
+"type": "Site",
+"rarity": "Elite",
+"cost": null,
+"attack": null,
+"defence": null,
+"life": null,
+"elements": [
+"Water"
+],
+"subtypes": [],
+"thresholds": {
+"air": 0,
+"earth": 0,
+"fire": 0,
+"water": 1
+},
+"text": "Disable effects on minions here are permanent, but are removed if they leave.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-permafrost-pd-s.png"
+},
+{
+"name": "Reed Cord Measurer",
+"type": "Minion",
+"rarity": "Ordinary",
+"cost": 3,
+"attack": 1,
+"defence": 1,
+"life": null,
+"elements": [
+"Earth"
+],
+"subtypes": [
+"Mortal"
+],
+"thresholds": {
+"air": 0,
+"earth": 1,
+"fire": 0,
+"water": 0
+},
+"text": "Genesis → Play or draw a site.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-reed_cord_measurer-pd-s.png"
+},
+{
+"name": "Research",
+"type": "Magic",
+"rarity": "Ordinary",
+"cost": 3,
+"attack": null,
+"defence": null,
+"life": null,
+"elements": [
+"Air"
+],
+"subtypes": [],
+"thresholds": {
+"air": 2,
+"earth": 0,
+"fire": 0,
+"water": 0
+},
+"text": "Draw two spells.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-research-pd-s.png"
+},
+{
+"name": "Runeling",
+"type": "Minion",
+"rarity": "Ordinary",
+"cost": 2,
+"attack": 1,
+"defence": 1,
+"life": null,
+"elements": [
+"Air"
+],
+"subtypes": [
+"Mortal"
+],
+"thresholds": {
+"air": 1,
+"earth": 0,
+"fire": 0,
+"water": 0
+},
+"text": "Spellcaster\n\nGenesis → Draws his own spell, which only he can cast.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-runeling-pd-s.png"
+},
+{
+"name": "Sissi Marksmen",
+"type": "Minion",
+"rarity": "Exceptional",
+"cost": 2,
+"attack": 2,
+"defence": 2,
+"life": null,
+"elements": [
+"Air"
+],
+"subtypes": [
+"Mortal"
+],
+"thresholds": {
+"air": 2,
+"earth": 0,
+"fire": 0,
+"water": 0
+},
+"text": "Ranged\n\nMay shoot across the top and bottom edges of the realm.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-sissi_marksmen-pd-s.png"
+},
+{
+"name": "Slag Slug",
+"type": "Minion",
+"rarity": "Exceptional",
+"cost": 4,
+"attack": 4,
+"defence": 4,
+"life": null,
+"elements": [
+"Earth",
+"Fire"
+],
+"subtypes": [
+"Beast"
+],
+"thresholds": {
+"air": 0,
+"earth": 1,
+"fire": 1,
+"water": 0
+},
+"text": "Whenever the Slug leaves a site, it deals 2 damage to units there.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-slag_slug-pd-s.png"
+},
+{
+"name": "Slide",
+"type": "Magic",
+"rarity": "Exceptional",
+"cost": 2,
+"attack": null,
+"defence": null,
+"life": null,
+"elements": [
+"Air"
+],
+"subtypes": [],
+"thresholds": {
+"air": 2,
+"earth": 0,
+"fire": 0,
+"water": 0
+},
+"text": "Slide an ally or disabled enemy as far as possible in a cardinal direction. Draw a spell.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-slide-pd-s.png"
+},
+{
+"name": "Stomping Mammoth",
+"type": "Minion",
+"rarity": "Exceptional",
+"cost": 4,
+"attack": 4,
+"defence": 4,
+"life": null,
+"elements": [
+"Water"
+],
+"subtypes": [
+"Beast"
+],
+"thresholds": {
+"air": 0,
+"earth": 0,
+"fire": 0,
+"water": 1
+},
+"text": "While attacking, the Mammoth's excess damage is dealt to its site.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-stomping_mammoth-pd-s.png"
+},
+{
+"name": "Sunspear Tribe",
+"type": "Minion",
+"rarity": "Ordinary",
+"cost": 3,
+"attack": 3,
+"defence": 3,
+"life": null,
+"elements": [
+"Earth"
+],
+"subtypes": [
+"Mortal"
+],
+"thresholds": {
+"air": 0,
+"earth": 2,
+"fire": 0,
+"water": 0
+},
+"text": "Once per game → Throw a projectile that deals 1 damage.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-sunspear_tribe-pd-s.png"
+},
+{
+"name": "Swealand Longship",
+"type": "Minion",
+"rarity": "Exceptional",
+"cost": 4,
+"attack": 4,
+"defence": 4,
+"life": null,
+"elements": [
+"Water"
+],
+"subtypes": [
+"Mortal"
+],
+"thresholds": {
+"air": 0,
+"earth": 0,
+"fire": 0,
+"water": 2
+},
+"text": "Once on your turn, may move to an adjacent water site.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-swealand_longship-pd-s.png"
+},
+{
+"name": "Terraform",
+"type": "Magic",
+"rarity": "Unique",
+"cost": 1,
+"attack": null,
+"defence": null,
+"life": null,
+"elements": [
+"Earth"
+],
+"subtypes": [],
+"thresholds": {
+"air": 0,
+"earth": 3,
+"fire": 0,
+"water": 0
+},
+"text": "Replace sites in this column with ones from the top of their controller's atlas, starting at your back row going forwards.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-terraform-pd-s.png"
+},
+{
+"name": "Tusslin' Trolls",
+"type": "Minion",
+"rarity": "Elite",
+"cost": 5,
+"attack": 4,
+"defence": 4,
+"life": null,
+"elements": [
+"Earth"
+],
+"subtypes": [
+"Giant"
+],
+"thresholds": {
+"air": 0,
+"earth": 2,
+"fire": 0,
+"water": 0
+},
+"text": "At the end of your turn, strike target adjacent minion for D6 damage.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-tusslin_trolls-pd-s.png"
+},
+{
+"name": "When the Peaks Fell",
+"type": "Magic",
+"rarity": "Unique",
+"cost": 5,
+"attack": null,
+"defence": null,
+"life": null,
+"elements": [
+"Air"
+],
+"subtypes": [],
+"thresholds": {
+"air": 3,
+"earth": 0,
+"fire": 0,
+"water": 0
+},
+"text": "Choose any number of allied sites. Snow rolls forward from them, picking up surface units in its path and carrying them as far as possible. When it stops, they take 3 damage and are disabled until your next turn.",
+"sets": [
+"Frost Mage vs Lavamancer"
+],
+"img": "https://d27a44hjr9gen3.cloudfront.net/cards/008-when_the_peaks_fell-pd-s.png"
 }
 ]
