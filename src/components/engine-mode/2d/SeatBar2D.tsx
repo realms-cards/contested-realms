@@ -15,6 +15,7 @@ import { toneColors } from "@/lib/game/cpu/fieldTargets";
 import { selectPilePick, type DeckPile } from "@/lib/game/cpu/handPilePicks";
 import { useGameStore } from "@/lib/game/store";
 import { viewFor } from "@sorcery/shared";
+import EngineClock from "../EngineClock";
 import { handSplitOf, handSplitText, lifeText, pileActionLabel, pileChipState, readHandCounts, type HandSplit } from "./handStrip";
 import type { SeatBarDensity } from "./useBoard2DSizing";
 
@@ -440,6 +441,8 @@ export default function SeatBar2D({ seat, density }: { seat: Seat; density: Seat
           {active && <span className="sr-only">, active turn</span>}
           {/* the hourglass rides on this line, so a thinking computer never grows the stack */}
           {thinkingNode}
+          {/* ...and so does the chess clock: the column's height is fixed (useBoard2DSizing) */}
+          {game.clock && <EngineClock seat={engineSeat} compact />}
         </span>
         {!tight && avatarName && (
           <span className="block truncate text-center font-fantaisie text-[11px] leading-tight text-rc-fg-muted" title={avatarName}>
@@ -539,6 +542,7 @@ export default function SeatBar2D({ seat, density }: { seat: Seat; density: Seat
       {/* tight: a 2 x 2 block, the height of one chip, so all four fit a phone-width line */}
       {thresholds}
       {thinkingNode}
+      {game.clock && <EngineClock seat={engineSeat} compact />}
 
       <span className={`ml-auto flex shrink-0 items-center ${tight ? "gap-0.5" : "gap-1"}`}>
         {counts(`min-h-[24px] text-[11px] ${tight ? "gap-0.5 px-1" : "gap-1 px-1.5"}`)}

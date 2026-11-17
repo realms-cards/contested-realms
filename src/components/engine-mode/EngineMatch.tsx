@@ -13,10 +13,12 @@ import OnlineLifeCounters from "@/components/game/OnlineLifeCounters";
 import RestoreUiButton from "@/components/game/RestoreUiButton";
 import TurnStartOverlay from "@/components/game/TurnStartOverlay";
 import AppShell from "@/components/ui/AppShell";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import { PageHeader } from "@/components/ui/page-header";
 import { RcButton } from "@/components/ui/rc-button";
 import { GameSoundEffects } from "@/lib/audio/gameSfx";
 import { useResolvedBoardView } from "@/lib/engine-mode/boardView";
+import { clockPreset, ENGINE_CLOCK_PRESETS } from "@/lib/engine-mode/clock";
 import { enginePrecons, loadEngineDeck } from "@/lib/engine-mode/decks";
 import { loadEngineGame } from "@/lib/engine-mode/persistence";
 import type { SavedEngineGame } from "@/lib/engine-mode/persistence";
@@ -51,6 +53,8 @@ interface Setup {
   level: BotLevel;
   /** optional rule: the second player scries 1 before turn 1 */
   secondSeer: boolean;
+  /** chess clock: an ENGINE_CLOCK_PRESETS id ("off" = untimed) */
+  clock: string;
 }
 
 const SETUP_KEY = "realms:engineSetup";
@@ -61,6 +65,7 @@ const DEFAULT_SETUP: Setup = {
   theirsLink: "",
   level: "quick",
   secondSeer: false,
+  clock: "off",
 };
 
 /** The last setup is a per-viewer convenience; any storage failure just means defaults. */
@@ -136,7 +141,7 @@ export default function EngineMatch() {
       if (!aliveRef.current) return;
       if (!a.ok) return setError(`Your deck: ${a.error}`);
       if (!b.ok) return setError(`Opponent's deck: ${b.error}`);
-      await start(a.deck, b.deck, s.level, { secondSeer: s.secondSeer });
+      await start(a.deck, b.deck, s.level, { secondSeer: s.secondSeer, clock: clockPreset(s.clock) });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not start the game.");
     } finally {
@@ -264,6 +269,14 @@ export default function EngineMatch() {
               </RcButton>
             ))}
           </div>
+        </div>
+        <div>
+          <div className="rc-field-label mb-2">Chess clock</div>
+          <CustomSelect
+            value={setup.clock}
+            onChange={(clock) => update({ clock })}
+            options={ENGINE_CLOCK_PRESETS.map((p) => ({ value: p.id, label: p.label }))}
+          />
         </div>
         <label className="rc-check flex text-[13px]">
           <input

@@ -228,3 +228,48 @@ describe("an engine match across a server restart", () => {
     expect(m?.engineMode).toBeUndefined();
   });
 });
+
+describe("engine chess clocks on the server", () => {
+  const timed = async () => {
+    const s = service();
+    expect((await s.start("t", decks(), ["A", "B"], 7, 0, { base: 60_000, inc: 5_000 })).ok).toBe(true);
+    for (const seat of [0, 1] as const) await s.act("t", seat, { t: "keepHand" });
+    return s;
+  };
+
+  it("an untimed match is never on the clock", async () => {
+    const s = await opened();
+    expect(s.timedMatches()).toEqual([]);
+    expect(await s.tickClock("m")).toBeNull();
+    s.shutdown();
+  });
+
+  it("charges the seat the game waits on, and its flag falls on the ticker with nobody acting", async () => {
+    const s = await timed();
+    expect(s.timedMatches()).toEqual(["t"]);
+    const start = Date.now();
+    expect(await s.tickClock("t", start + 30_000)).toEqual({ flagged: false, winner: null });
+    const view = await s.viewFor("t", 0);
+    const clock = (view?.view as { clock?: { remaining: [number, number] } }).clock!;
+    // seat 0 went first: half its minute is gone, seat 1 untouched
+    expect(clock.remaining[0]).toBeLessThanOrEqual(30_000 + 50);
+    expect(clock.remaining[1]).toBe(60_000);
+
+    const fell = await s.tickClock("t", start + 61_000);
+    expect(fell).toEqual({ flagged: true, winner: 1 });
+    expect(s.isOver("t")).toBe(true);
+    expect(s.timedMatches(), "a finished match leaves the ticker").toEqual([]);
+    s.shutdown();
+  });
+
+  it("an action that lands after the flag fell ends the game on time instead of being applied", async () => {
+    const s = await timed();
+    // the next tick the service takes is the action's own; push the clock past the minute first
+    await s.tickClock("t", Date.now() - 1); // settle now
+    const live = (s as unknown as { live: Map<string, { lastTick: number }> }).live.get("t")!;
+    live.lastTick = Date.now() - 61_000;
+    const outcome = await s.act("t", 0, { t: "endTurn" });
+    expect(outcome).toMatchObject({ ok: true, over: true, winner: 1 });
+    s.shutdown();
+  });
+});

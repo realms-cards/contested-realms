@@ -48,8 +48,8 @@ describe("auraAreas", () => {
     addAura(game, "r2", [{ x: 0, y: 0 }, { x: 0, y: 0 }], P1);
     const areas = auraAreas(game);
     expect(areas).toContainEqual({ id: "r1", controller: "p1", cells: SQUARE_2X2.map((sq) => engineCellKey(sq.x, sq.y)) });
-    // engine (0,0) is the far corner from seat 1's view: board 4,3; duplicates collapse
-    expect(areas).toContainEqual({ id: "r2", controller: "p2", cells: ["4,3"] });
+    // engine (0,0) is seat 0's near-left corner: board 0,3; duplicates collapse
+    expect(areas).toContainEqual({ id: "r2", controller: "p2", cells: ["0,3"] });
   });
 
   it("keeps an Enchantress-animated aura's area (the tint stays, only the card is shared)", () => {
@@ -72,7 +72,7 @@ describe("multiSquareBodies", () => {
     const big = bodies.find((b) => b.id === "uBig")!;
     expect(big.controller).toBe("p1");
     expect(sorted(big.cells)).toEqual(sorted(SQUARE_2X2.map((sq) => engineCellKey(sq.x, sq.y))));
-    expect(sorted(bodies.find((b) => b.id === "uLong")!.cells)).toEqual(["0,3", "1,3"]);
+    expect(sorted(bodies.find((b) => b.id === "uLong")!.cells)).toEqual(["3,3", "4,3"]);
   });
 });
 
@@ -147,8 +147,8 @@ describe("spanEntities", () => {
       expect(span.cells).toContain(span.anchor);
     }
     const big = spans.find((s) => s.instanceId === "uBig")!;
-    // engine (1,1)-(2,2) is board (2,1)-(3,2): the four squares meet at (2.5, 1.5)
-    expect(big.centre).toEqual({ x: 2.5, y: 1.5 });
+    // engine (1,1)-(2,2) is board (1,1)-(2,2): the four squares meet at (1.5, 1.5)
+    expect(big.centre).toEqual({ x: 1.5, y: 1.5 });
     expect(big.controller).toBe("p1");
     expect(spans.find((s) => s.instanceId === "r1")!.controller).toBe("p2");
   });

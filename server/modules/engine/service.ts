@@ -12,7 +12,8 @@ import { ENGINE_BUILD } from "../../../shared/engine/build";
 import { EnginePool } from "./pool";
 
 /** Bumped on every applied action. A client that receives an older rev ignores it. */
-type Live = { rev: number; over: boolean };
+/** `lastTick`: when the chess clock was last charged (ms), or null for an untimed game. */
+type Live = { rev: number; over: boolean; lastTick: number | null };
 
 export type EngineSeat = 0 | 1;
 
@@ -60,11 +61,34 @@ export class EngineMatchService {
     names: [string, string],
     seed: number,
     first: EngineSeat,
+    clock: { base: number; inc: number } | null = null,
   ): Promise<{ ok: true } | { ok: false; reason: string }> {
-    const reply = await this.pool.create(matchId, decks, names, seed, first);
+    const reply = await this.pool.create(matchId, decks, names, seed, first, clock);
     if (!reply.ok) return { ok: false, reason: reply.error };
-    this.live.set(matchId, { rev: 0, over: false });
+    this.live.set(matchId, { rev: 0, over: false, lastTick: clock ? Date.now() : null });
     return { ok: true };
+  }
+
+  /** Timed matches still being played: the ones the clock ticker has to watch. */
+  timedMatches(): string[] {
+    return [...this.live].filter(([, live]) => live.lastTick !== null && !live.over).map(([id]) => id);
+  }
+
+  /**
+   * Charge the seat the game is waiting on for the time since the clock was last settled, and end
+   * the game if their flag has fallen. The engine never reads the wall clock (engine/clock.ts); this
+   * is the authority that does. Null for an untimed or finished game.
+   */
+  async tickClock(matchId: string, now = Date.now()): Promise<{ flagged: boolean; winner: EngineSeat | null } | null> {
+    const live = this.live.get(matchId);
+    if (!live || live.over || live.lastTick === null) return null;
+    const reply = await this.pool.clock(matchId, live.lastTick, now);
+    if (!reply.ok || reply.kind !== "clock") return null;
+    live.lastTick = now;
+    if (!reply.flagged) return { flagged: false, winner: null };
+    live.rev += 1;
+    live.over = true;
+    return { flagged: true, winner: reply.winner };
   }
 
   /**
@@ -81,6 +105,10 @@ export class EngineMatchService {
     if (expectedRev !== undefined && expectedRev !== live.rev) {
       return { ok: false, reason: "Your board was out of date; it has been refreshed.", rev: live.rev };
     }
+    // a timed game first charges the thinking time; a flag that fell before this action landed
+    // ends the game on time, and the action is never applied
+    const clock = await this.tickClock(matchId);
+    if (clock?.flagged) return { ok: true, rev: live.rev, over: true, winner: clock.winner, draw: false };
     const reply = await this.pool.act(matchId, seat, action);
     if (!reply.ok) return { ok: false, reason: reply.error, rev: live.rev };
     if (reply.kind !== "act") return { ok: false, reason: "Unexpected reply from the engine.", rev: live.rev };
@@ -113,7 +141,9 @@ export class EngineMatchService {
   async restore(matchId: string, state: unknown, rev: number, over: boolean): Promise<boolean> {
     const reply = await this.pool.restore(matchId, state);
     if (!reply.ok) return false;
-    this.live.set(matchId, { rev, over });
+    // the clock resumes now: time the server was down is charged to nobody
+    const timed = reply.kind === "restore" && reply.timed;
+    this.live.set(matchId, { rev, over, lastTick: timed && !over ? Date.now() : null });
     return true;
   }
 

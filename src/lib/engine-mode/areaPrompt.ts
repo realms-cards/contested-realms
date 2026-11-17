@@ -30,6 +30,47 @@ export function areaFootprints(
   return out;
 }
 
+/** One way an oversized unit can land: the squares it would cover (the engine's TeleportPlacement). */
+export interface Placement {
+  squares: readonly { x: number; y: number }[];
+}
+
+/**
+ * Board picks for choosing among an oversized unit's landing placements (a 2x2's four corners, a
+ * rotated body): each placement is offered on ONE tile that only it covers — for a 2x2 turned about
+ * its landing square, the far corner — and previews its whole footprint under the pointer. Null when
+ * some placement covers no tile of its own; the caller then lists them instead.
+ */
+export function placementPicks(
+  placements: readonly Placement[],
+  viewer: ViewerSeat = 0,
+): { tokens: string[]; areas: Record<string, string[]>; index: Record<string, number> } | null {
+  const cells = placements.map((p) => p.squares.map((sq) => engineCellKey(sq.x, sq.y, viewer)));
+  const count = new Map<string, number>();
+  for (const list of cells) for (const cell of new Set(list)) count.set(cell, (count.get(cell) ?? 0) + 1);
+  const tokens: string[] = [];
+  const areas: Record<string, string[]> = {};
+  const index: Record<string, number> = {};
+  for (const [i, list] of cells.entries()) {
+    // the tile only this placement covers, farthest from what the others share (the far corner)
+    const own = list.filter((cell) => count.get(cell) === 1);
+    if (!own.length) return null;
+    const shared = list.filter((cell) => (count.get(cell) ?? 0) > 1);
+    const far = (cell: string) => {
+      const [x, y] = cell.split(",").map(Number);
+      return shared.reduce((sum, c) => {
+        const [sx, sy] = c.split(",").map(Number);
+        return sum + Math.abs(sx - x) + Math.abs(sy - y);
+      }, 0);
+    };
+    const token = own.reduce((best, cell) => (far(cell) > far(best) ? cell : best));
+    tokens.push(token);
+    areas[token] = list;
+    index[token] = i;
+  }
+  return { tokens, areas, index };
+}
+
 /**
  * The footprint of every Aura among `actions`, keyed by the tile token of the square it would be
  * anchored on.

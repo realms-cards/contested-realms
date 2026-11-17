@@ -181,6 +181,7 @@ async function maybeStartEngineMatch(match: AnyRecord | null | undefined): Promi
     names,
     Math.abs(seed) || 1,
     first,
+    engineClockOf(match),
   );
   if (!started.ok) {
     console.error(`[Engine] match ${matchId} failed to start:`, started.reason);
@@ -198,6 +199,71 @@ async function maybeStartEngineMatch(match: AnyRecord | null | undefined): Promi
   }
   console.log(`[Engine] match ${matchId} started (seat ${first} goes first)`);
 }
+
+/**
+ * The chess clock the lobby host chose for an engine match (ms), or null for an untimed one. Read
+ * back defensively: it is persisted with the match and comes back from the database as plain JSON.
+ */
+function engineClockOf(match: AnyRecord): { base: number; inc: number } | null {
+  const clock = match.engineClock as { base?: unknown; inc?: unknown } | null | undefined;
+  const base = Number(clock?.base);
+  const inc = Number(clock?.inc ?? 0);
+  if (!Number.isFinite(base) || base <= 0) return null;
+  return { base, inc: Number.isFinite(inc) && inc > 0 ? inc : 0 };
+}
+
+/** Send each seat of an engine match its OWN view: they differ on purpose, and the difference is the whole security property. */
+async function pushEngineViews(match: ServerMatchState | null | undefined, matchId: string): Promise<void> {
+  const engine = engineService();
+  if (!engine) return;
+  for (const seat of [0, 1] as const) {
+    const pid = match?.playerIds?.[seat];
+    const target = pid ? players.get(pid) : null;
+    const targetSocket = target?.socketId ? io.sockets.sockets.get(target.socketId) : null;
+    if (!targetSocket) continue;
+    const envelope = await engine.viewFor(matchId, seat);
+    if (envelope) targetSocket.emit("engine:view", envelope);
+  }
+}
+
+/**
+ * The engine ended the game — by the rules, or a chess-clock flag falling: record the result it
+ * decided and free its worker. The engine decided this, not a client claim — strictly more
+ * trustworthy than the legacy `client_patch` route, which matters because these matches are rated.
+ */
+async function finishEngineMatch(match: ServerMatchState, matchId: string, winner: 0 | 1 | null, draw: boolean): Promise<void> {
+  const engine = engineService();
+  const winnerSeat = winner === 0 ? "p1" : winner === 1 ? "p2" : null;
+  try {
+    await finalizeMatch(match, {
+      ...(winnerSeat ? { winnerSeat, loserSeat: winnerSeat === "p1" ? "p2" : "p1" } : {}),
+      draw,
+      source: "engine",
+    });
+  } finally {
+    await engine?.end(matchId);
+  }
+}
+
+/**
+ * Engine chess clocks: a flag can fall while nobody acts (the other player is simply out of time),
+ * so timed matches are charged and checked once a second, not only when an action lands.
+ */
+setInterval(() => {
+  const engine = _engineService;
+  if (!engine) return;
+  for (const matchId of engine.timedMatches()) {
+    void (async () => {
+      const result = await engine.tickClock(matchId);
+      if (!result?.flagged) return;
+      const match = await getOrLoadMatch(matchId);
+      if (!match) return;
+      await persistEngineState(match);
+      await pushEngineViews(match, matchId);
+      await finishEngineMatch(match, matchId, result.winner, false);
+    })().catch((error) => console.warn(`[Engine] clock tick failed for ${matchId}:`, error));
+  }
+}, 1000).unref();
 
 /**
  * Write the engine's full state onto the match so it is persisted with it. Called after the
@@ -3913,18 +3979,6 @@ io.on("connection", async (socket: SocketClient) => {
       if (!engine || !(await restoreEngineMatch(match))) return;
       const seat = engineSeatOf(match, player.id);
       if (seat === null) return; // a spectator has no actions to take
-      const pushView = async () => {
-        // Each seat is sent ITS OWN view; they are different documents on purpose, and the
-        // difference is the whole security property.
-        for (const other of [0, 1] as const) {
-          const pid = match?.playerIds?.[other];
-          const target = pid ? players.get(pid) : null;
-          const targetSocket = target?.socketId ? io.sockets.sockets.get(target.socketId) : null;
-          if (!targetSocket) continue;
-          const envelope = await engine.viewFor(matchId, other);
-          if (envelope) targetSocket.emit("engine:view", envelope);
-        }
-      };
       if (type === "engine:resync") {
         const envelope = await engine.viewFor(matchId, seat);
         if (envelope) socket.emit("engine:view", envelope);
@@ -3949,21 +4003,8 @@ io.on("connection", async (socket: SocketClient) => {
         return;
       }
       if (match) await persistEngineState(match);
-      await pushView();
-      if (outcome.over && match) {
-        // The engine decided this, not a client claim — strictly more trustworthy than the
-        // legacy `client_patch` route, which matters because these matches are rated.
-        const winnerSeat = outcome.winner === 0 ? "p1" : outcome.winner === 1 ? "p2" : null;
-        try {
-          await finalizeMatch(match, {
-            ...(winnerSeat ? { winnerSeat, loserSeat: winnerSeat === "p1" ? "p2" : "p1" } : {}),
-            draw: outcome.draw,
-            source: "engine",
-          });
-        } finally {
-          await engine.end(matchId);
-        }
-      }
+      await pushEngineViews(match, matchId);
+      if (outcome.over && match) await finishEngineMatch(match, matchId, outcome.winner, outcome.draw);
       return;
     }
 

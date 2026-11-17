@@ -260,6 +260,20 @@ function footprintCentre(
   return { cx, cy, anchor };
 }
 
+/**
+ * Is a multi-square body drawn as ONE card centred over its footprint? Only when that centre lies on
+ * the footprint. A hollow one — Jormungand's ring of the 14 outer squares — would put its card in the
+ * middle of the board, the one place it is not, so it keeps its card on its own square instead (its
+ * outline still shows every square it occupies).
+ */
+export function drawnCentred(squares: readonly { x: number; y: number }[], viewer: ViewerSeat = 0): boolean {
+  if (squares.length < 2) return false;
+  const centre = footprintCentre(squares, viewer);
+  if (!centre) return false;
+  const covered = new Set(squares.map((sq) => { const c = engineToBoard(sq.x, sq.y, viewer); return `${c.x},${c.y}`; }));
+  return covered.has(`${Math.round(centre.cx)},${Math.round(centre.cy)}`);
+}
+
 /** The board cell an area of ENGINE squares is keyed on: the covered cell nearest its centre. */
 export function footprintCell(squares: readonly { x: number; y: number }[], viewer: ViewerSeat = 0): string | null {
   const centre = footprintCentre(squares, viewer);
@@ -278,7 +292,7 @@ export function footprintCell(squares: readonly { x: number; y: number }[], view
 export function unitCell(unit: UnitState, viewer: ViewerSeat = 0): string {
   if (unit.isAvatar) return engineCellKey(unit.x, unit.y, viewer);
   const body = occupiedSquares(unit);
-  return (body.length > 1 ? footprintCell(body, viewer) : null) ?? engineCellKey(unit.x, unit.y, viewer);
+  return (drawnCentred(body, viewer) ? footprintCell(body, viewer) : null) ?? engineCellKey(unit.x, unit.y, viewer);
 }
 
 /**
@@ -811,7 +825,7 @@ export function projectView(
     if (below && layer !== "surface") continue;
     // a multi-square body is drawn centred over everything it covers, like an aura
     const body = occupiedSquares(unit);
-    const placed = body.length > 1 ? auraPlacement(body, seatOwner(unit.controller, viewer), viewer) : null;
+    const placed = drawnCentred(body, viewer) ? auraPlacement(body, seatOwner(unit.controller, viewer), viewer) : null;
     const at = placed?.at ?? engineCellKey(unit.x, unit.y, viewer);
     if (placed) pinned.add(unit.id);
     const index = pushTo(permanents, at, {

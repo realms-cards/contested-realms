@@ -2,13 +2,13 @@ import type { CellKey, PlayerKey } from "@/lib/game/store/types";
 import { findCard, isWaterSite, nearbySquaresW, occupiedSquares, siteAt } from "@sorcery/shared";
 import type { GameState as EngineState } from "@sorcery/shared";
 import { engineCellKey, engineToBoard, type ViewerSeat } from "./coords";
-import { animatedAuras, footprintCell, layerOf, seatKey } from "./projection";
+import { animatedAuras, drawnCentred, footprintCell, layerOf, seatKey } from "./projection";
 import type { BoardLayer } from "./projection";
 
 /**
  * Board-space overlays the engine needs beyond our regular board, worked out once so the 3D
  * board (EngineLayerOverlay) and the 2D board draw exactly the same areas. Every cell here is a
- * BOARD cell key "x,y" — the engine's squares already rotated 180° (engineCellKey).
+ * BOARD cell key "x,y" — the engine's squares already mapped to the viewer's side (engineCellKey).
  */
 
 /** An area of board cells owned by one seat: an aura's coverage, a multi-square body. */
@@ -163,7 +163,8 @@ export function spanEntities(game: EngineState, layer: BoardLayer = "surface", v
     if (unit.isAvatar) continue;
     if (layerOf(unit.region) !== layer && layer !== "surface") continue;
     const body = occupiedSquares(unit);
-    if (body.length < 2) continue;
+    // a hollow body (Jormungand's ring) keeps its card on its own square, like a 1x1 unit
+    if (!drawnCentred(body, viewer)) continue;
     const entity = span(unit.id, "body", seatKey(unit.controller, viewer), body, viewer);
     if (entity) out.push(entity);
   }

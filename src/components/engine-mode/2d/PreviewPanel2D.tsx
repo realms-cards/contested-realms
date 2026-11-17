@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cardImage } from "@/components/game/CpuPlayReveal";
 import { cardRefFor, loadCardIndex } from "@/lib/engine-mode/cardIndex";
-import { describeCardStatus, type BoardStatus, type StatusChip } from "@/lib/engine-mode/cardStatus";
+import { describeCardStatus, effectMarks, type BoardStatus, type StatusChip } from "@/lib/engine-mode/cardStatus";
 import { imposterMaskOf } from "@/lib/engine-mode/projection";
 import { THRESHOLD_ELEMENTS, type ThresholdElement } from "@/lib/engine-mode/resources";
 import { opponentName, useEngineSession } from "@/lib/engine-mode/session";
@@ -335,6 +335,7 @@ function useCardStatus(card: CardRef | null): { chips: StatusChip[]; notes: stri
       carrying: unit.carrying.map((a) => game.artifacts[a]?.name).filter((n): n is string => !!n),
       carriedBy: unit.carriedBy ? (game.units[unit.carriedBy]?.name ?? null) : null,
       mask: imposterMaskOf(game, unit),
+      marks: effectMarks(game)[unit.id],
     });
     return status.chips.length || status.notes.length ? status : null;
   }, [card?.instanceId, game, permanents, trap]);

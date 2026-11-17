@@ -10,17 +10,20 @@ import type { PlayerId } from "@sorcery/shared";
 export type ViewerSeat = PlayerId;
 
 /**
- * The engine puts seat 0 at y=0; our board puts the VIEWER at the bottom (y=3). For a seat-0
- * viewer that is a 180° rotation — a rotation rather than a mirror, so left/right stay correct.
- * A seat-1 viewer sits on the far side of the same table, so their view is the seat-0 view
- * turned another 180°, and two half-turns compose to the identity: engine squares pass through
- * untouched. Derived, not guessed: seat 0's avatar starts at engine (2,0) and must land on the
- * near row, board (2,3) — the rotation puts it there; seat 1's starts at engine (2,3) and must
- * land on that same near row — the identity puts it there.
+ * The engine draws its board the way a seat-0 player sees it: x runs left to right and y runs
+ * AWAY from seat 0 (seat 0's avatar starts at engine (2,0)). Its cards rely on that handedness —
+ * Southpaw Dyrodor's "left" is -x for seat 0, and the Codex puts East on the first player's right
+ * (None Survive the Sun). Our board puts the VIEWER at the bottom (y=3) with y growing DOWN the
+ * screen, so a seat-0 viewer only needs y flipped: x passes through and left stays left. A seat-1
+ * viewer sits across the table, so their view is that one turned 180°: x flips and the two y
+ * flips cancel. (An earlier mapping negated both axes for seat 0; with our downward y that is a
+ * left-right MIRROR, which swung Dyrodor's tail the wrong way.)
+ * Derived, not guessed: seat 0's avatar starts at engine (2,0) and must land on the near row,
+ * board (2,3); seat 1's starts at engine (2,3) and must land on that same near row.
  * Both maps are their own inverse, which is why `boardToEngine` is the very same function.
  */
 export function engineToBoard(x: number, y: number, viewer: ViewerSeat = 0): { x: number; y: number } {
-  return viewer === 0 ? { x: GRID_W - 1 - x, y: GRID_H - 1 - y } : { x, y };
+  return viewer === 0 ? { x, y: GRID_H - 1 - y } : { x: GRID_W - 1 - x, y };
 }
 
 export const boardToEngine = engineToBoard;
@@ -47,19 +50,16 @@ export const ENGINE_STEPS: Record<EngineDirection, readonly [number, number]> = 
 };
 
 /**
- * Engine n/s/e/w as one of our board arrows, per viewer. The two viewers differ in WHICH axis
- * flips, not in sign, so seat 1 is emphatically not seat 0 negated:
- *  • Seat-0 viewer: the board is the engine rotated 180°, which negates BOTH axes — but our
- *    board's y also grows downward (y=0 is the far row), so the two inversions cancel on the
- *    vertical axis. Engine north still runs up the screen; only east and west swap.
- *  • Seat-1 viewer: no rotation, so x passes through and east stays east — but the downward y
- *    now inverts on its own, so north and south swap instead.
- * Derived rather than guessed: seat 0's avatar starts at engine (2,0) and `engineToBoard` puts
- * it at board (2,3), the near row; seat 1's starts at engine (2,3) and lands on that same row.
+ * Engine n/s/e/w as one of our board arrows, per viewer.
+ *  • Seat-0 viewer: only y flips, and our y grows downward, so the two cancel: engine north runs
+ *    up the screen and east stays on the right. The engine's compass reads as printed.
+ *  • Seat-1 viewer: the same table turned 180°, so every direction is its opposite.
+ * Derived rather than guessed (see engineToBoard), and checked by stepping in engine space and
+ * mapping both ends (coords.test.ts).
  */
 export const BOARD_DIRECTIONS: Record<ViewerSeat, Record<EngineDirection, ArrowDirection>> = {
-  0: { n: "N", s: "S", e: "W", w: "E" },
-  1: { n: "S", s: "N", e: "E", w: "W" },
+  0: { n: "N", s: "S", e: "E", w: "W" },
+  1: { n: "S", s: "N", e: "W", w: "E" },
 };
 
 /** The seat-0 table on its own, for single-player callers that have no viewer to pass. */
@@ -80,7 +80,7 @@ export function engineTileNumber(x: number, y: number, viewer: ViewerSeat = 0): 
 }
 
 /**
- * Engine text (log lines, prompt titles) names squares in its own rotated space, in TWO
+ * Engine text (log lines, prompt titles) names squares in its own space (seat 0's view), in TWO
  * spellings, and they do NOT share a base:
  *   • `squareLabel(x,y)` → "b3": letter is 0-based x, number is 1-based y. (combat, judge…)
  *   • `plays <site> at (x+1,y+1)` → "(2,3)": BOTH 1-based. (casting.ts:207)

@@ -1,9 +1,11 @@
 import { dirToken, handToken, optToken, pileToken, unitToken } from "@/lib/game/cpu/pickTokens";
+import { footprintAfter, teleportLandingSquares } from "@shared/engine/casterActions";
 import { getCard, getScript, grantedAbilities } from "@sorcery/shared";
 import type { Action, GameState as EngineState, PlayerId, UnitState } from "@sorcery/shared";
-import { footprintAfter } from "@shared/engine/casterActions";
+import { placementPicks } from "./areaPrompt";
 import { BOARD_DIRECTIONS, ENGINE_DIRECTIONS, type EngineDirection, engineCellKey, type ViewerSeat } from "./coords";
 import { footprintCell, seatKey, unitCell } from "./projection";
+import { chartedMoves } from "./routes";
 
 /**
  * Turns each legal engine action into the sequence of board clicks that picks it:
@@ -135,6 +137,12 @@ const REGION_LABEL: Record<string, string> = {
   void: "In the void",
 };
 
+/** The tile number the log and the board show for a board cell ("x,y"): 1–20, left to right, top to bottom. */
+function boardTileNumber(cell: string): number {
+  const [x, y] = cell.split(",").map(Number);
+  return y * 5 + x + 1;
+}
+
 /** Ability label for a source; falls back to the key. */
 /** The ability's label, prefixed with the carried artifact's name when it is not the bearer's own. */
 function activateLabel(game: EngineState, sourceId: string, key: string): string {
@@ -202,6 +210,12 @@ export function actionPaths(
   actions: Action[],
   seat: PlayerId = 0,
   viewer: ViewerSeat = 0,
+  /**
+   * The token the player has clicked first, when it is one of their units: its moves can then
+   * also be charted route by route (see `routePaths`). Worked out only for that unit, since the
+   * routes of every unit at once would be a large search for clicks nobody has asked for.
+   */
+  routeFrom: string | null = null,
 ): { paths: ActionPath[]; labels: Record<string, string> } {
   const key = seatKey(seat, viewer);
   const labels: Record<string, string> = {};
@@ -230,6 +244,28 @@ export function actionPaths(
     const ids = targetsBySource.get(source) ?? new Set<string>();
     for (const target of action.targets ?? []) ids.add(target);
     targetsBySource.set(source, ids);
+  }
+  /**
+   * An oversized ally sent by Blink / Flanking Maneuver lands one of several ways (one cast each, see
+   * casterActions withTeleportPlacements). After its destination, each landing is picked on the board
+   * like an area: on a tile only it covers, its footprint lit under the pointer; when footprints can't
+   * be told apart that way, a labelled option naming its tiles.
+   */
+  const landingGroups = new Map<string, { action: Action; squares: { x: number; y: number }[] }[]>();
+  for (const action of actions) {
+    const squares = teleportLandingSquares(game, action);
+    if (!squares || action.t !== "castSpell") continue;
+    const group = `${action.cardId}|${action.casterId}|${(action.targets ?? []).join(",")}`;
+    landingGroups.set(group, [...(landingGroups.get(group) ?? []), { action, squares }]);
+  }
+  const landings = new Map<Action, { token: string; cells: string[] } | { label: string; id: string }>();
+  for (const group of landingGroups.values()) {
+    const picks = placementPicks(group.map((g) => ({ squares: g.squares })), viewer);
+    group.forEach(({ action, squares }, i) => {
+      const cells = squares.map((sq) => engineCellKey(sq.x, sq.y, viewer));
+      if (picks) landings.set(action, { token: picks.tokens[i], cells });
+      else landings.set(action, { id: `land-${cells.join("-")}`, label: `Land on tiles ${cells.map(boardTileNumber).sort((a, b) => a - b).join(", ")}` });
+    });
   }
   const twoWayBySource = new Map<string, Set<string>>();
   for (const [source, ids] of targetsBySource) {
@@ -314,6 +350,9 @@ export function actionPaths(
         // an artifact handed straight to a bearer: pick the unit instead of a square
         if (extra?.giveTo) steps.push(tokenForEngineId(game, extra.giveTo, seat, viewer));
         for (const target of action.targets ?? []) steps.push(...targetSteps(target, action));
+        const landing = landings.get(action);
+        if (landing && "token" in landing) steps.push(landing.token);
+        else if (landing) steps.push(opt(steps[steps.length - 1] ?? "2,2", landing.id, landing.label));
         if (extra?.direction) {
           // a projectile flies from the caster; Chaos Twister's blow starts at its origin square
           const from = extra.origin
@@ -330,7 +369,7 @@ export function actionPaths(
           if (summonSteps.has(fingerprint)) break;
           summonSteps.add(fingerprint);
         }
-        paths.push({ action, steps });
+        paths.push(landing && "token" in landing ? { action, steps, areas: { [landing.token]: landing.cells } } : { action, steps });
         break;
       }
       case "moveAttack": {
@@ -429,6 +468,34 @@ export function actionPaths(
       default:
         // endTurn, mulligan, prompts: driven by buttons and the prompt panel, not board clicks
         break;
+    }
+  }
+  /**
+   * Charting a route: after the unit, "Choose the route", then the squares it walks through, one
+   * click each, and an end where the walk may stop (or the enemy it attacks there). The squares
+   * clicked so far glow as the trail. Only offered when some destination can be reached more than
+   * one way; the plain destination click above keeps the engine's own shortest path.
+   */
+  if (routeFrom) {
+    const mover = actions.find(
+      (a): a is Extract<Action, { t: "moveAttack" }> => a.t === "moveAttack" && tokenForEngineId(game, a.unitId, seat, viewer) === routeFrom,
+    );
+    const charted = mover ? chartedMoves(game, actions, mover.unitId) : [];
+    if (mover && charted.length) {
+      const chart = opt(tileOf(game, mover.unitId, viewer), "route", "Choose the route");
+      for (const action of charted) {
+        const steps = [routeFrom, chart];
+        for (const step of action.path) {
+          const tile = engineCellKey(step.x, step.y, viewer);
+          steps.push(tile, opt(tile, `region-${step.region}`, REGION_LABEL[step.region] ?? step.region));
+        }
+        const last = action.path[action.path.length - 1];
+        const end = engineCellKey(last.x, last.y, viewer);
+        if (!action.attack) steps.push(opt(end, "route-end", "End the move here"));
+        else if ("unit" in action.attack) steps.push(tokenForEngineId(game, action.attack.unit, seat, viewer));
+        else steps.push(opt(end, `route-attack-${action.attack.site}`, `Attack ${game.sites[action.attack.site]?.name ?? "the site"}`));
+        paths.push({ action, steps });
+      }
     }
   }
   // A hand card that can be both played and used for its hand ability means two things on one

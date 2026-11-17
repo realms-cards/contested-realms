@@ -600,6 +600,8 @@ const createPersistenceLayerInternal = ({
         // Left UNSET rather than false when off: tournament hydration only applies the
         // organiser's engine setting to a match whose flag is not yet a boolean.
         engineMode: row.engineMode === true || row.game?.engineMode === true ? true : undefined,
+        // the host's chess clock, needed until the engine deals (it then lives in engineState)
+        engineClock: row.game?.engineClock ?? null,
         engineState: row.engineState || null,
         lastTs: Number(row.lastTs || 0) || 0,
         // Timer/tiebreak state (present in Redis session payloads only)

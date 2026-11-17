@@ -137,8 +137,20 @@ export class EnginePool {
     return worker ? worker.send(full) : handle(full);
   }
 
-  create(matchId: string, decks: [unknown, unknown], names: [string, string], seed: number, first: 0 | 1) {
-    return this.run({ kind: "create", matchId, decks, names, seed, first } as Omit<EngineRequest, "id">, matchId);
+  create(
+    matchId: string,
+    decks: [unknown, unknown],
+    names: [string, string],
+    seed: number,
+    first: 0 | 1,
+    clock: { base: number; inc: number } | null = null,
+  ) {
+    return this.run({ kind: "create", matchId, decks, names, seed, first, clock } as Omit<EngineRequest, "id">, matchId);
+  }
+
+  /** Charge the running seat's chess clock for `since`..`now`, ending the game if its flag fell. */
+  clock(matchId: string, since: number, now: number) {
+    return this.run({ kind: "clock", matchId, since, now } as Omit<EngineRequest, "id">, matchId);
   }
 
   act(matchId: string, seat: 0 | 1, action: unknown) {

@@ -32,6 +32,7 @@ import { useOrbitKeyboardPan } from "@/lib/hooks/useOrbitKeyboardPan";
 import { useViewportSize } from "@/lib/hooks/useTouchDevice";
 import { useZoomKeyboardShortcuts } from "@/lib/hooks/useZoomKeyboardShortcuts";
 import EngineDamageMarks from "./EngineDamageMarks";
+import EngineEffectMarks from "./EngineEffectMarks";
 import EngineEventReveal from "./EngineEventReveal";
 import EngineLayerOverlay from "./EngineLayerOverlay";
 
@@ -245,6 +246,7 @@ export default function EngineBoard3D({
           damage numbers it is in the middle of floating. */}
       <EngineEventReveal />
       <EngineDamageMarks />
+      <EngineEffectMarks />
 
       <OrbitControls
         ref={controlsRef}

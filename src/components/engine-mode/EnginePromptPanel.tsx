@@ -8,7 +8,16 @@ import CpuCardPick from "@/components/game/CpuCardPick";
 import { cardImage } from "@/components/game/CpuPlayReveal";
 import { RcButton } from "@/components/ui/rc-button";
 import { tokenForEngineId } from "@/lib/engine-mode/actionPaths";
-import { areaFootprints, edgeFootprints, edgeToken, type EngineEdge, permutationPlacements, swapSlots } from "@/lib/engine-mode/areaPrompt";
+import {
+  areaFootprints,
+  edgeFootprints,
+  edgeToken,
+  type EngineEdge,
+  permutationPlacements,
+  type Placement,
+  placementPicks,
+  swapSlots,
+} from "@/lib/engine-mode/areaPrompt";
 import { cardRefFor, useCardIndexReady } from "@/lib/engine-mode/cardIndex";
 import {
   BOARD_DIRECTIONS,
@@ -57,6 +66,8 @@ export interface PromptData {
    */
   edgeSelect?: boolean;
   edges?: EngineEdge[];
+  /** teleportPlace: the ways an oversized unit can land (each with the squares it would cover) */
+  placements?: Placement[];
   /** sitePermutation: the area's squares that may actually move (an immovable site is a fixed point) */
   movable?: { x: number; y: number }[];
   /** sitePermutation: what currently stands on each square of the area */
@@ -523,6 +534,23 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
         >
           {autoButton}
         </SinglePick>
+      );
+    }
+    case "teleportPlace": {
+      const placements = data.placements ?? [];
+      const picks = placementPicks(placements, viewer);
+      if (picks) return <PlacementPick prompt={prompt} picks={picks} onSend={send} />;
+      // footprints that share every tile: name each by the tiles it covers
+      return (
+        <PromptDialog title={prompt.title} hint="Choose where it lands.">
+          <div className="flex flex-wrap justify-center gap-2 pt-2">
+            {placements.map((placement, i) => (
+              <RcButton key={i} variant="outline" size="sm" onClick={() => send(i)}>
+                {footprintLabel(placement, viewer)}
+              </RcButton>
+            ))}
+          </div>
+        </PromptDialog>
       );
     }
     case "defend":
@@ -1256,6 +1284,48 @@ function NameCard({
  * re-keying the request on hover would reconfigure the board, and `configure` clears `hovered`
  * — the preview would clear itself on the frame it appeared.
  */
+/** "Tiles 7, 8, 12, 13": a footprint named the way the log names squares. */
+function footprintLabel(placement: Placement, viewer: ViewerSeat): string {
+  const tiles = placement.squares.map((sq) => tileNumberOf(engineCellKey(sq.x, sq.y, viewer))).sort((a, b) => a - b);
+  return `Tiles ${tiles.join(", ")}`;
+}
+
+/**
+ * Where an oversized unit lands (the engine's teleportPlace prompt): each placement is a tile only it
+ * covers, its whole footprint lit under the pointer — the same picking as a two-by-two area.
+ */
+function PlacementPick({
+  prompt,
+  picks,
+  onSend,
+}: {
+  prompt: Prompt;
+  picks: NonNullable<ReturnType<typeof placementPicks>>;
+  onSend: (choice: unknown) => void;
+}) {
+  const hovered = useCpuBoardPicker((picker) => picker.hovered);
+  const onPick = useMemo(
+    () => (token: string) => {
+      const index = picks.index[token];
+      if (index !== undefined) onSend(index);
+    },
+    [picks, onSend],
+  );
+  useBoardPick(`engine-prompt:${prompt.id}`, picks.tokens, [], onPick, undefined, { areas: picks.areas });
+  const preview = hovered ? (picks.areas[hovered] ?? []) : [];
+  return (
+    <PromptBanner
+      title={prompt.title}
+      hint={
+        preview.length
+          ? `Lands on tiles ${preview.map(tileNumberOf).sort((a, b) => a - b).join(", ")}.`
+          : "Hover a highlighted square to see where it would land, then click it."
+      }
+      counter={`${picks.tokens.length} ways`}
+    />
+  );
+}
+
 function AreaPick({
   prompt,
   game,

@@ -5,6 +5,7 @@ import { seatKey } from "@/lib/engine-mode/projection";
 import { engineSeatResources, manaColor, THRESHOLD_ELEMENTS } from "@/lib/engine-mode/resources";
 import { opponentName, useEngineSession } from "@/lib/engine-mode/session";
 import { PLAYER_COLORS } from "@/lib/game/constants";
+import EngineClock from "./EngineClock";
 
 /**
  * Mana and threshold readout for engine matches, in the regular panels' spot (right middle).
@@ -20,7 +21,7 @@ export default function EngineResourcePanels() {
   useEngineSession((s) => s.rev);
   if (!game || game.phase === "mulligan" || game.phase === "over") return null;
 
-  // the opponent's panel sits above ours, whichever seat we are
+  // the opponent's panel sits above ours, whichever seat we are (and its clock with it)
   const order = viewer === 0 ? ([1, 0] as const) : ([0, 1] as const);
 
   return (
@@ -55,6 +56,7 @@ export default function EngineResourcePanels() {
                 </span>
               ))}
             </div>
+            {game.clock && <EngineClock seat={seat} compact />}
           </div>
         );
       })}

@@ -1,11 +1,12 @@
-import { applyAction, createGame, getCard, getScript, isDisabled, makeCtx, viewFor } from "@sorcery/shared";
+import { applyAction, checkStateBased, createGame, getCard, getScript, isDisabled, makeCtx, viewFor } from "@sorcery/shared";
 import type { PlayerId } from "@sorcery/shared";
 import { botAction, botNeedsToAct } from "@untested-realm/bot/bot";
 import { describe, expect, it, vi } from "vitest";
 import { actionPaths, narrow } from "./actionPaths";
 import { loadCardIndex } from "./cardIndex";
 import { legalActionsWithCasters } from "@shared/engine/casterActions";
-import { engineCellKey } from "./coords";
+import { multiSquareBodies, spanEntities } from "./boardOverlays";
+import { engineCellKey, engineToBoard } from "./coords";
 import { apiDeckToEngine, enginePrecons, toEngineDeck } from "./decks";
 import {
   arrangeableCell,
@@ -114,9 +115,9 @@ function playOut(seed: number, maxActions: number) {
 }
 
 describe("engine projection", () => {
-  it("rotates the board so seat 0 sits on our bottom row", () => {
+  it("flips the board so seat 0 sits on our bottom row, keeping its left on the left", () => {
     expect(engineCellKey(2, 0)).toBe("2,3");
-    expect(engineCellKey(0, 0)).toBe("4,3");
+    expect(engineCellKey(0, 0)).toBe("0,3");
   });
 
   it.each([1, 2, 3, 4])("stays consistent through a bot-vs-bot game (seed %i)", (seed) => {
@@ -154,19 +155,19 @@ describe("engine projection", () => {
   });
 
   it("centres a 2x2 aura where its four squares meet", () => {
-    // engine squares (1,1)-(2,2) → board cells (2,1)-(3,2); centre (2.5, 1.5)
+    // engine squares (1,1)-(2,2) → board cells (1,1)-(2,2); centre (1.5, 1.5)
     const placed = auraPlacement([{ x: 1, y: 1 }, { x: 2, y: 1 }, { x: 1, y: 2 }, { x: 2, y: 2 }], 1);
     expect(placed).not.toBeNull();
     const [ax, ay] = placed!.at.split(",").map(Number);
-    expect(ax + placed!.offset[0] / TILE_SIZE).toBeCloseTo(2.5);
+    expect(ax + placed!.offset[0] / TILE_SIZE).toBeCloseTo(1.5);
     expect(ay + (placed!.offset[1] + getPermanentOwnerBaseZ(1)) / TILE_SIZE).toBeCloseTo(1.5);
-    expect(auraPlacement([{ x: 0, y: 0 }], 2)).toEqual({ at: "4,3", offset: [0, -getPermanentOwnerBaseZ(2)] });
+    expect(auraPlacement([{ x: 0, y: 0 }], 2)).toEqual({ at: "0,3", offset: [0, -getPermanentOwnerBaseZ(2)] });
   });
 
-  it("maps Harbinger portents onto rotated board tile numbers", () => {
-    // engine squares, seat 0: (0,1)→board (4,2)=tile 15, (1,2)→(3,1)=9, (3,1)→(1,2)=12
+  it("maps Harbinger portents onto the viewer's board tile numbers", () => {
+    // engine squares, seat 0: (0,1)→board (0,2)=tile 11, (1,2)→(1,1)=7, (3,1)→(3,2)=14
     const view = { flow: { harbinger: { 0: [{ x: 0, y: 1 }, { x: 1, y: 2 }, { x: 3, y: 1 }] } } } as unknown as Parameters<typeof harbingerTiles>[0];
-    expect(harbingerTiles(view)).toEqual({ p1: [15, 9, 12] });
+    expect(harbingerTiles(view)).toEqual({ p1: [11, 7, 14] });
   });
 });
 
@@ -428,6 +429,37 @@ describe("subsurface hint", () => {
   });
 });
 
+describe("the board keeps the engine's handedness", () => {
+  /**
+   * Southpaw Dyrodor swings its tail 4 / 3 / 2 / 1 from its controller's LEFT, up and over to the
+   * right (the engine's script works that out per seat). Whoever is looking at their own Dyrodor
+   * must see the 4 land on the tile to its left on our board, not its right.
+   */
+  it.each([0, 1] as PlayerId[])("puts Southpaw Dyrodor's heaviest blow on its controller's left (seat %i)", (seat) => {
+    const deck = toEngineDeck(enginePrecons[0]);
+    const game = createGame([deck, deck], ["You", "Computer"], 7, 0 as PlayerId);
+    game.phase = "main";
+    game.prompts = [];
+    game.activePlayer = seat;
+    const foe = (1 - seat) as PlayerId;
+    const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === seat)!;
+    const base = { ...avatar, isAvatar: false, tapped: false, damage: 0, enteredTurn: -1, counters: {}, modifiers: [], carrying: [], carryingUnits: [], region: "surface" as const };
+    game.cards.cDyrodor = { id: "cDyrodor", name: "Southpaw Dyrodor", owner: seat } as (typeof game.cards)[string];
+    game.units.uDyrodor = { ...base, id: "uDyrodor", cardId: "cDyrodor", name: "Southpaw Dyrodor", x: 2, y: 1, owner: seat, controller: seat };
+    // a sturdy enemy on each side of it: the Dyrodor's own row
+    for (const [id, x] of [["uWest", 1], ["uEast", 3]] as const) {
+      game.cards[`c${id}`] = { id: `c${id}`, name: "Southpaw Dyrodor", owner: foe } as (typeof game.cards)[string];
+      game.units[id] = { ...base, id, cardId: `c${id}`, name: "Southpaw Dyrodor", x, y: 1, owner: foe, controller: foe };
+    }
+    expect(applyAction(game, seat, { t: "activate", sourceId: "uDyrodor", ability: "tail" }).ok).toBe(true);
+    // the 4 kills a 4/4 outright; the 1 over on the right never reaches this row
+    const boardX = (engineX: number) => engineToBoard(engineX, 1, seat).x;
+    const [left, right] = boardX(1) < boardX(3) ? ["uWest", "uEast"] : ["uEast", "uWest"];
+    expect(game.units[left]).toBeUndefined();
+    expect(game.units[right]?.damage).toBe(0);
+  });
+});
+
 describe("aura placement on the board", () => {
   /**
    * Through projectView, not auraPlacement alone: the tile layout used to run over auras too and
@@ -463,8 +495,8 @@ describe("aura placement on the board", () => {
     return null;
   };
   const centroid = (squares: Sq[]) => ({
-    x: squares.reduce((sum, sq) => sum + (4 - sq.x), 0) / squares.length,
-    y: squares.reduce((sum, sq) => sum + (3 - sq.y), 0) / squares.length,
+    x: squares.reduce((sum, sq) => sum + engineToBoard(sq.x, sq.y).x, 0) / squares.length,
+    y: squares.reduce((sum, sq) => sum + engineToBoard(sq.x, sq.y).y, 0) / squares.length,
   });
 
   for (const controller of [0, 1] as PlayerId[]) {
@@ -502,6 +534,24 @@ describe("aura placement on the board", () => {
     expect(aura.y).toBeCloseTo(centroid(squares).y, 3);
     const stack = after.permanents[aura.at];
     expect(stack[stack.length - 1].instanceId).toBe(id);
+  });
+
+  it("keeps Jormungand's card on its own square: its ring's centre is the one place it is not", () => {
+    const game = freshGame();
+    const avatar = Object.values(game.units).find((u) => u.isAvatar && u.owner === 0)!;
+    game.cards.cJorm = { id: "cJorm", name: "Jormungand", owner: 0 } as (typeof game.cards)[string];
+    game.units.uJorm = { ...avatar, id: "uJorm", cardId: "cJorm", isAvatar: false, name: "Jormungand", region: "surface", x: 0, y: 3, counters: {}, modifiers: [] };
+    checkStateBased(game); // the ring footprint is applied from the name
+    const own = engineCellKey(0, 3, 0);
+    const card = Object.entries(projectView(viewFor(game, 0)).permanents)
+      .flatMap(([at, items]) => items.map((p) => ({ at, p })))
+      .find(({ p }) => p.instanceId === "uJorm")!;
+    expect(card.at).toBe(own);
+    expect(card.p.lift).toBeUndefined(); // not pinned over an area (pinned cards are lifted)
+    expect(unitCell(game.units.uJorm)).toBe(own);
+    expect(spanEntities(game).some((e) => e.instanceId === "uJorm")).toBe(false);
+    // ...while its outline still takes in all 14 outer squares
+    expect(multiSquareBodies(game).find((b) => b.id === "uJorm")?.cells).toHaveLength(14);
   });
 
   it("centres a 2x2 body over its four squares and keeps its status tokens on it", () => {
@@ -859,7 +909,7 @@ describe("projecting for the seat-1 viewer", () => {
       expect(theirs.board.sites[engineCellKey(site.x, site.y, 1)]).toBeTruthy();
       const [mx, my] = engineCellKey(site.x, site.y, 0).split(",").map(Number);
       const [tx, ty] = engineCellKey(site.x, site.y, 1).split(",").map(Number);
-      expect({ x: tx, y: ty }).toEqual({ x: 4 - mx, y: 3 - my });
+      expect({ x: tx, y: ty }).toEqual(engineToBoard(mx, my));
     }
     // and each viewer's own seat owns the P1 side of every seat-derived field
     expect(mine.currentPlayer).toBe(game.activePlayer === 0 ? 1 : 2);

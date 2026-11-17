@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useGraphicsSettings, useVisualAid } from "@/hooks/useGraphicsSettings";
 import { auraAreas, disableAreas, layerTints, multiSquareBodies, spanEntities } from "@/lib/engine-mode/boardOverlays";
+import { effectMarks } from "@/lib/engine-mode/cardStatus";
 import { faceDownTraps } from "@/lib/engine-mode/projection";
 import { useEngineSession } from "@/lib/engine-mode/session";
 import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
@@ -124,6 +125,8 @@ export default function Board2D({ tileW, tileH, docked = false, children }: Boar
   const marks = useMemo(() => tileMarks(permanents), [permanents]);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the engine mutates `game` in place; `rev` is what changes
   const traps = useMemo(() => (game ? faceDownTraps(game, viewer) : {}), [game, rev, viewer]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- as above: `rev` is what says the engine state changed
+  const unitMarks = useMemo(() => (game ? effectMarks(game) : {}), [game, rev]);
   const toneOf = useCallback((token: string) => cardTone(picker, token), [picker]);
 
   // Engine card ids behind every board id seen this match: once a unit leaves the board its
@@ -343,6 +346,7 @@ export default function Board2D({ tileW, tileH, docked = false, children }: Boar
               onHover={onCardHover}
               bounds={bounds}
               arrange={p.arrangeId ? { mode: arrangeMode, held: arrangeHeld, dragging, onDrag: onArrangeDrag } : undefined}
+              marks={p.arrangeId ? unitMarks[p.arrangeId] : undefined}
             />
           );
         })}

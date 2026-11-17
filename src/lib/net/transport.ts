@@ -151,6 +151,8 @@ export type StartMatchConfig = {
   enableSeer?: boolean;
   /** Play on the vendored rules engine instead of the legacy board; off by default */
   engineMode?: boolean;
+  /** Rules-engine chess clock (ms per player + per-turn increment); absent or null = untimed */
+  engineClock?: { base: number; inc: number } | null;
 };
 
 export type MatchTimerConfig = {

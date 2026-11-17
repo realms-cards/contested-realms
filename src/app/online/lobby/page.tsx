@@ -27,6 +27,7 @@ import {
   normalizeCubeSummary,
   type CubeSummaryInput,
 } from "@/lib/cubes/normalizers";
+import { clockPreset, ENGINE_CLOCK_PRESETS } from "@/lib/engine-mode/clock";
 import { useEngineGamesCount } from "@/lib/engine-mode/presence";
 import { useGuestSession } from "@/lib/guest/guestSession";
 import {
@@ -606,6 +607,8 @@ function LobbyPageContent({
   // Rules-engine mode for constructed/precon matches (opt-in, host-selected).
   // Sealed/draft pools are out of scope for the first cut.
   const [engineModeEnabled, setEngineModeEnabled] = useState(false);
+  // ...and its chess clock (an ENGINE_CLOCK_PRESETS id; "off" = untimed)
+  const [engineClockId, setEngineClockId] = useState("off");
 
   // Match timer configuration (optional, host-selected)
   const [timerEnabled, setTimerEnabled] = useState(false);
@@ -1434,6 +1437,7 @@ function LobbyPageContent({
         timerConfig: timerPayload,
         enableSeer: seerEnabled,
         engineMode: engineModeEnabled,
+        engineClock: engineModeEnabled ? clockPreset(engineClockId) : null,
       });
       return;
     }
@@ -1497,6 +1501,7 @@ function LobbyPageContent({
     timerPayload,
     seerEnabled,
     engineModeEnabled,
+    engineClockId,
   ]);
 
   // Planned match summary (client-side, only reliable for host)
@@ -2831,6 +2836,20 @@ function LobbyPageContent({
                       board: illegal plays are refused, and only the choices
                       the rules allow are offered.
                     </p>
+                    {engineModeEnabled && (
+                      <div className="mt-3 pl-6">
+                        <label className="rc-field-label mb-1">Chess clock</label>
+                        <CustomSelect
+                          value={engineClockId}
+                          onChange={setEngineClockId}
+                          options={ENGINE_CLOCK_PRESETS.map((p) => ({ value: p.id, label: p.label }))}
+                        />
+                        <p className="mt-1 font-rc-sans text-xs text-rc-fg-subtle">
+                          Each player&apos;s time runs while the game waits on
+                          them. Running out of time loses the game.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -2983,6 +3002,7 @@ function LobbyPageContent({
                           timerConfig: timerPayload,
                           enableSeer: seerEnabled,
                           engineMode: engineModeEnabled,
+                          engineClock: engineModeEnabled ? clockPreset(engineClockId) : null,
                         });
                         setConfigOpen(false);
                         return;

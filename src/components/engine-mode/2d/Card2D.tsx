@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { cardImage } from "@/components/game/CpuPlayReveal";
+import { EFFECT_MARKS, type EffectMark } from "@/lib/engine-mode/cardStatus";
 import type { FieldTone } from "@/lib/game/cpu/fieldTargets";
 import type { CardRef } from "@/lib/game/store/types";
 import { getCardImageUrl } from "@/lib/utils/cdnUrl";
@@ -23,6 +24,7 @@ const STATUS_LABELS: Record<StatusKind, string> = {
   disabled: "Disabled",
   silenced: "Silenced",
 };
+const MARK_TONE = { good: "text-rc-success-ink", bad: "text-rc-danger-ink", info: "text-rc-info" } as const;
 const LAYER_ICONS = { burrowed: "game-icons:underground-cave", submerged: "game-icons:wave-crest" } as const;
 
 /** Board art: the CDN for real cards (a whole board of images), token art from assets, the image API as the fallback. */
@@ -146,6 +148,8 @@ export interface Card2DProps {
    * when a tap does nothing at all. Absent for a card that keeps its place (an aura, a body).
    */
   arrange?: { mode: boolean; held: boolean; dragging: boolean; onDrag: ArrangeDrag };
+  /** lasting effects with no board token (encased, protected, blazing), drawn beside the statuses */
+  marks?: EffectMark[];
 }
 
 const BADGE = "flex items-center justify-center gap-px rounded-full border font-rc-mono tabular-nums leading-none shadow-rc-sm";
@@ -157,7 +161,7 @@ const BADGE = "flex items-center justify-center gap-px rounded-full border font-
  * Status tokens are icon badges and carried artifacts chips under the card, both outside the
  * rotation so they always read upright.
  */
-export default function Card2D({ placed, tone, colors, toneOf, onTap, onLongPress, onHover, bounds, arrange }: Card2DProps) {
+export default function Card2D({ placed, tone, colors, toneOf, onTap, onLongPress, onHover, bounds, arrange, marks = [] }: Card2DProps) {
   const { card, owner, x, y, w, h, rotate, z, faded, badges, statuses, attachments } = placed;
   const press = useLongPress({
     onTap: (info) => onTap(placed, info),
@@ -238,6 +242,7 @@ export default function Card2D({ placed, tone, colors, toneOf, onTap, onLongPres
     turned ? "tapped" : null,
     badges.damage ? `${badges.damage} damage` : null,
     ...statuses.map((s) => (s.status ? STATUS_LABELS[s.status] : null)),
+    ...marks.map((m) => EFFECT_MARKS[m].label),
     badges.layerState,
   ]
     .filter(Boolean)
@@ -288,7 +293,7 @@ export default function Card2D({ placed, tone, colors, toneOf, onTap, onLongPres
           />
         )}
 
-        {statuses.length > 0 && (
+        {(statuses.length > 0 || marks.length > 0) && (
           <div className="absolute -left-1 -top-1 flex gap-px">
             {statuses.map((s) => {
               const statusTone = toneOf?.(s.token) ?? null;
@@ -304,6 +309,16 @@ export default function Card2D({ placed, tone, colors, toneOf, onTap, onLongPres
                 </span>
               );
             })}
+            {marks.map((m) => (
+              <span
+                key={m}
+                title={EFFECT_MARKS[m].label}
+                className={`${BADGE} border-rc-line/30 bg-[rgba(7,10,20,0.9)] ${MARK_TONE[EFFECT_MARKS[m].tone]}`}
+                style={badgeStyle}
+              >
+                <Icon icon={EFFECT_MARKS[m].icon} width={badge - 4} height={badge - 4} />
+              </span>
+            ))}
           </div>
         )}
 

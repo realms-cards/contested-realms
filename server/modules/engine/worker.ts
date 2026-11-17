@@ -22,8 +22,11 @@ import {
   viewFor,
   effAttack,
   effDefence,
+  flagFall,
   getCard,
   isDisabled,
+  runningSeat,
+  settleClock,
   siteDisabled,
   siteSilenced,
 } from "../../../vendor/untested-realm/shared/src/index";
@@ -42,7 +45,19 @@ type EngineAction = any;
 const matches = new Map<string, EngineState>();
 
 export type EngineRequest =
-  | { id: number; kind: "create"; matchId: string; decks: [unknown, unknown]; names: [string, string]; seed: number; first: 0 | 1 }
+  | {
+      id: number;
+      kind: "create";
+      matchId: string;
+      decks: [unknown, unknown];
+      names: [string, string];
+      seed: number;
+      first: 0 | 1;
+      /** a chess clock (ms), or null/absent for an untimed game */
+      clock?: { base: number; inc: number } | null;
+    }
+  /** charge the seat on the clock for the time since `since`, and end the game if its flag fell */
+  | { id: number; kind: "clock"; matchId: string; since: number; now: number }
   | { id: number; kind: "act"; matchId: string; seat: 0 | 1; action: EngineAction }
   | { id: number; kind: "view"; matchId: string; seat: 0 | 1 | null }
   | { id: number; kind: "drop"; matchId: string }
@@ -62,9 +77,10 @@ export type EngineReply =
       siteMarks: { silenced: string[]; disabled: string[] };
       legal: unknown[];
     }
+  | { id: number; ok: true; kind: "clock"; flagged: boolean; over: boolean; winner: 0 | 1 | null }
   | { id: number; ok: true; kind: "drop" }
   | { id: number; ok: true; kind: "snapshot"; state: unknown }
-  | { id: number; ok: true; kind: "restore" }
+  | { id: number; ok: true; kind: "restore"; timed: boolean }
   | { id: number; ok: false; error: string };
 
 /**
@@ -129,7 +145,7 @@ export function handle(request: EngineRequest): EngineReply {
   try {
     switch (request.kind) {
       case "create": {
-        const game = createGame(request.decks as never, request.names, request.seed, request.first as never);
+        const game = createGame(request.decks as never, request.names, request.seed, request.first as never, request.clock ?? null);
         matches.set(request.matchId, game);
         return { id: request.id, ok: true, kind: "create" };
       }
@@ -172,6 +188,17 @@ export function handle(request: EngineRequest): EngineReply {
           legal,
         };
       }
+      case "clock": {
+        const game = matches.get(request.matchId);
+        if (!game) return { id: request.id, ok: false, error: "No such match on this worker." };
+        if (!game.clock || game.phase === "over") return { id: request.id, ok: true, kind: "clock", flagged: false, over: game.phase === "over", winner: game.winner ?? null };
+        // the engine never reads the wall clock itself (clock.ts): the authority supplies both ends
+        const seat = runningSeat(game);
+        settleClock(game, request.since, request.now);
+        const flagged = seat !== null && game.clock.remaining[seat] <= 0;
+        if (flagged) flagFall(game, seat);
+        return { id: request.id, ok: true, kind: "clock", flagged, over: game.phase === "over", winner: game.winner ?? null };
+      }
       case "drop": {
         matches.delete(request.matchId);
         return { id: request.id, ok: true, kind: "drop" };
@@ -187,7 +214,8 @@ export function handle(request: EngineRequest): EngineReply {
         // A state written by a DIFFERENT engine build throws deep inside a card script rather
         // than failing cleanly, so the caller is responsible for checking the build first.
         matches.set(request.matchId, request.state);
-        return { id: request.id, ok: true, kind: "restore" };
+        const restored = request.state as { clock?: unknown; phase?: string } | null;
+        return { id: request.id, ok: true, kind: "restore", timed: !!restored?.clock && restored.phase !== "over" };
       }
     }
   } catch (error) {

@@ -129,11 +129,13 @@ export function useEngineInteraction(): EngineInteraction {
 
   useEffect(() => setClicked([]), [rev]);
 
+  // the first click: when it is a unit, its routes are charted too (actionPaths routeFrom)
+  const first = clicked[0] ?? null;
   const { paths, labels } = useMemo(
-    () => (game && legal ? actionPaths(game, legal, decisionSeat ?? viewer, viewer) : { paths: [], labels: {} }),
+    () => (game && legal ? actionPaths(game, legal, decisionSeat ?? viewer, viewer, first) : { paths: [], labels: {} }),
     // the engine mutates `game` in place; `rev` marks each new state
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [game, legal, rev, decisionSeat, viewer],
+    [game, legal, rev, decisionSeat, viewer, first],
   );
   const narrowed = useMemo(() => narrow(paths, clicked), [paths, clicked]);
   const cemetery = useMemo(() => {
@@ -194,9 +196,16 @@ export function useEngineInteraction(): EngineInteraction {
     // carries the text of anchored option buttons; anything else is described from the action
     // the token leads to, so a highlighted tile or card can explain itself.
     const nextLabels: Record<string, string> = {};
+    // charting a route (actionPaths routeFrom): every lit tile is the next square of the walk
+    const charting = narrowed.prefix[1]?.startsWith("opt:") && narrowed.prefix[1].endsWith(":route");
     for (const token of narrowed.next) {
       if (labels[token]) {
         nextLabels[token] = labels[token];
+        continue;
+      }
+      const tile = /^(\d),(\d)$/.exec(token);
+      if (charting && tile) {
+        nextLabels[token] = `Through tile ${Number(tile[2]) * 5 + Number(tile[1]) + 1}`;
         continue;
       }
       if (!game) continue;

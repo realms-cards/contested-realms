@@ -1,12 +1,13 @@
 "use client";
 
 import { Html } from "@react-three/drei";
-import { auraPlacement, PINNED_SCALE, unitCell } from "@/lib/engine-mode/projection";
+import { auraPlacement, drawnCentred, PINNED_SCALE, unitCell } from "@/lib/engine-mode/projection";
 import { useEngineSession } from "@/lib/engine-mode/session";
 import { getPermanentOwnerBaseZ } from "@/lib/game/boardShared";
 import { TILE_SIZE } from "@/lib/game/constants";
 import { useGameStore } from "@/lib/game/store";
 import { occupiedSquares } from "@sorcery/shared";
+import type { UnitState } from "@sorcery/shared";
 
 /**
  * A standing mark on every minion carrying damage.
@@ -25,8 +26,32 @@ const OWNER_SHIFT = TILE_SIZE * 0.15;
 /** Up and to the right of the card's centre, clear of the art. */
 const CORNER_X = TILE_SIZE * 0.3;
 const CORNER_Z = TILE_SIZE * 0.26;
+
+/**
+ * Where a unit's card sits on the 3D board, and how big: board-space x/z of the card's centre plus the
+ * scale of a pinned card. A multi-square body is drawn pinned at its footprint's centre, smaller
+ * (projectView's auraPlacement + PINNED_SCALE), with the owner nudge cancelled — unless it is hollow
+ * (Jormungand), whose card stays on its own square (drawnCentred).
+ */
+export function unitCardSpot(
+  unit: UnitState,
+  viewer: 0 | 1,
+  board: { width: number; height: number },
+): { x: number; z: number; scale: number } {
+  const offsetX = -((board.width - 1) * TILE_SIZE) / 2;
+  const offsetY = -((board.height - 1) * TILE_SIZE) / 2;
+  const owner = unit.controller === viewer ? 1 : 2;
+  const body = occupiedSquares(unit);
+  const placed = drawnCentred(body, viewer) ? auraPlacement(body, owner, viewer) : null;
+  const [bx, by] = (placed?.at ?? unitCell(unit, viewer)).split(",").map(Number);
+  // the seat we are drawing for is our p1, who sits at the near edge; its cards shift toward it
+  const toward = placed ? placed.offset[1] + getPermanentOwnerBaseZ(owner) : unit.controller === viewer ? OWNER_SHIFT : -OWNER_SHIFT;
+  const sideX = placed ? placed.offset[0] : 0;
+  return { x: offsetX + bx * TILE_SIZE + sideX, z: offsetY + by * TILE_SIZE + toward, scale: placed ? PINNED_SCALE : 1 };
+}
+
 /** Under the DOM HUD and the prompt shell, above the board. */
-const HTML_Z: [number, number] = [25, 0];
+export const BADGE_HTML_Z: [number, number] = [25, 0];
 
 export default function EngineDamageMarks() {
   const game = useEngineSession((s) => s.game);
@@ -37,8 +62,6 @@ export default function EngineDamageMarks() {
   const height = useGameStore((s) => s.board.size.h);
   if (!game || game.phase === "mulligan" || game.phase === "over") return null;
 
-  const offsetX = -((width - 1) * TILE_SIZE) / 2;
-  const offsetY = -((height - 1) * TILE_SIZE) / 2;
   const surface = layer !== "subsurface";
 
   const marks = Object.values(game.units).filter((unit) => {
@@ -53,31 +76,15 @@ export default function EngineDamageMarks() {
   return (
     <group>
       {marks.map((unit) => {
-        // A multi-square body is drawn pinned at its footprint's centre, smaller (projectView's
-        // auraPlacement + PINNED_SCALE), with the owner nudge cancelled: ride on THAT card.
-        const owner = unit.controller === viewer ? 1 : 2;
-        const body = occupiedSquares(unit);
-        const placed = body.length > 1 ? auraPlacement(body, owner, viewer) : null;
-        const [bx, by] = (placed?.at ?? unitCell(unit, viewer)).split(",").map(Number);
-        // the seat we are drawing for is our p1, who sits at the near edge; its cards shift toward it
-        const toward = placed
-          ? placed.offset[1] + getPermanentOwnerBaseZ(owner)
-          : unit.controller === viewer
-            ? OWNER_SHIFT
-            : -OWNER_SHIFT;
-        const sideX = placed ? placed.offset[0] : 0;
-        const corner = placed ? PINNED_SCALE : 1;
+        // ride on the card itself, wherever and however big it is drawn
+        const spot = unitCardSpot(unit, viewer, { width, height });
         return (
           <Html
             key={unit.id}
             center
-            zIndexRange={HTML_Z}
+            zIndexRange={BADGE_HTML_Z}
             style={{ pointerEvents: "none" }}
-            position={[
-              offsetX + bx * TILE_SIZE + sideX + CORNER_X * corner,
-              0.12,
-              offsetY + by * TILE_SIZE + toward - CORNER_Z * corner,
-            ]}
+            position={[spot.x + CORNER_X * spot.scale, 0.12, spot.z - CORNER_Z * spot.scale]}
           >
             <span
               title={`${unit.name} has taken ${unit.damage} damage this turn`}

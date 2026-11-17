@@ -14,8 +14,12 @@ import {
   GRID_H,
   GRID_W,
   legalActions,
+  multiSquareDestSquares,
+  nearbySquaresW,
+  occupiedLocations,
   occupiedSquares,
   occupies,
+  oversizedTeleportPlacements,
   orthAdjacentWrapped,
   reachableWithPaths,
   resolveCaster,
@@ -23,7 +27,7 @@ import {
   validateSummonAt,
   validateTarget,
 } from "../../vendor/untested-realm/shared/src/index";
-import type { Action, CardDef, GameState, PlayerId, Region, UnitState } from "../../vendor/untested-realm/shared/src/index";
+import type { Action, CardDef, GameState, PlayerId, Region, TargetRef, UnitState } from "../../vendor/untested-realm/shared/src/index";
 
 /**
  * Upstream's move generator (bot/moves.ts expandActions) covers what its bot needs: avatar casts
@@ -252,6 +256,68 @@ function oversizedAttacks(state: GameState, me: PlayerId, myUnits: UnitState[]):
 }
 
 /** Cast candidates for one card and caster. `fromCemetery` only changes where the card sits. */
+const REGION_NAMES: readonly Region[] = ["surface", "underground", "underwater", "void"];
+
+/** A cast's target ids as the engine's TargetRefs (casting.ts parseTargetRefs, which it does not export). */
+function targetRefsOf(ids: readonly string[]): TargetRef[] {
+  return ids.flatMap((id): TargetRef[] => {
+    if (id.startsWith("sq:")) {
+      const [x, y, region] = id.slice(3).split(",");
+      const known = REGION_NAMES.find((r) => r === region);
+      return [{ square: { x: Number(x), y: Number(y), ...(known ? { region: known } : {}) } }];
+    }
+    if (id.startsWith("u")) return [{ unit: id }];
+    if (id.startsWith("s")) return [{ site: id }];
+    if (id.startsWith("a")) return [{ artifact: id }];
+    if (id.startsWith("r")) return [{ aura: id }];
+    return [];
+  });
+}
+
+/**
+ * A teleport spell moving an OVERSIZED ally (Blink, Flanking Maneuver) can land it several ways:
+ * which of its parts goes on the chosen square, and how the body turns about it. The cast carries the
+ * choice as `extra.teleportPlace`; without one the engine quietly picks a default. So: one action per
+ * distinct landing, for the player to choose between. A 1x1 unit, or a single possible landing, keeps
+ * the plain cast.
+ */
+/**
+ * The squares an oversized ally lands on for a cast that carries its landing (withTeleportPlacements),
+ * or null for any other action — what the board previews for that choice.
+ */
+export function teleportLandingSquares(state: GameState, action: Action): { x: number; y: number }[] | null {
+  if (action.t !== "castSpell") return null;
+  const place = (action.extra as { teleportPlace?: { x: number; y: number; shape?: { dx: number; dy: number }[] } } | undefined)?.teleportPlace;
+  if (!place) return null;
+  const script = getScript(state.cards[action.cardId]?.name ?? "");
+  const target = script?.teleportPlacement?.(state, targetRefsOf(action.targets ?? []));
+  const unit = target ? state.units[target.unitId] : undefined;
+  return unit ? multiSquareDestSquares(state, unit, { x: place.x, y: place.y }, place.shape) : null;
+}
+
+function withTeleportPlacements(state: GameState, cast: Extract<Action, { t: "castSpell" }>, script: ReturnType<typeof getScript>): Action[] {
+  const target = script?.teleportPlacement?.(state, targetRefsOf(cast.targets ?? []));
+  const unit = target ? state.units[target.unitId] : undefined;
+  if (!target || !unit || !(unit.size === "2x2" || unit.extraSquares?.length)) return [cast];
+  const { dest } = target;
+  // the parts the destination is nearby (Flanking Maneuver names its own part)
+  const froms = target.from
+    ? [target.from]
+    : occupiedLocations(unit).filter((part) => nearbySquaresW(state, part.x, part.y).some((sq) => sq.x === dest.x && sq.y === dest.y));
+  const seen = new Set<string>();
+  const out: Action[] = [];
+  for (const from of froms) {
+    for (const landing of oversizedTeleportPlacements(state, unit, dest, from)) {
+      const key = landing.squares.map((sq) => `${sq.x},${sq.y}`).sort().join("|");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const teleportPlace = { x: landing.x, y: landing.y, shape: landing.shape, from: landing.from ?? { x: from.x, y: from.y } };
+      out.push({ ...cast, extra: { ...(cast.extra ?? {}), teleportPlace } });
+    }
+  }
+  return out.length > 1 ? out : [cast];
+}
+
 function castCandidates(
   state: GameState,
   me: PlayerId,
@@ -289,7 +355,7 @@ function castCandidates(
         );
       });
     }
-    return combos.map((targets): Action => ({ t: "castSpell", cardId, casterId, targets }));
+    return combos.flatMap((targets) => withTeleportPlacements(state, { t: "castSpell", cardId, casterId, targets }, script));
   }
 
   const squares = placementSquares(state);
@@ -503,5 +569,11 @@ export function legalActionsWithCasters(state: GameState, me: PlayerId): Action[
     for (const artifactId of unit.carrying) offer({ t: "drop", unitId: unit.id, artifactIds: [artifactId] });
   }
 
-  return out;
+  // Where an oversized ally's landing is offered as a choice (withTeleportPlacements), a plain cast of
+  // the same spell beside it (upstream's list has one) would be the engine's default landing dressed up
+  // as a fourth option: drop it.
+  const landingOf = (a: Action) => (a.t === "castSpell" ? (a.extra as { teleportPlace?: unknown } | undefined)?.teleportPlace : undefined);
+  const castKey = (a: Action) => (a.t === "castSpell" ? `${a.cardId}|${a.casterId}|${(a.targets ?? []).join(",")}` : "");
+  const chosen = new Set(out.filter((a) => landingOf(a)).map(castKey));
+  return chosen.size ? out.filter((a) => !(a.t === "castSpell" && !landingOf(a) && chosen.has(castKey(a)))) : out;
 }

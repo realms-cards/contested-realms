@@ -294,8 +294,8 @@ const COMPASS_TURN: Record<string, number> = { N: 180, E: 270, S: 0, W: 90 };
  * attaches `from`/`dirs` when every option is a bare n/s/e/w). With an origin we draw the
  * arrows on the board itself instead; see DirectionPick.
  *
- * Callers pass OUR board arrow (BOARD_DIRECTION in lib/engine-mode/coords), already rotated
- * out of engine space — the engine's "north" runs up our screen, and only east/west swap.
+ * Callers pass OUR board arrow (BOARD_DIRECTION in lib/engine-mode/coords), already mapped
+ * out of engine space for this viewer (BOARD_DIRECTIONS).
  */
 export function Compass({ options, onPick }: { options: { key: string; label: string }[]; onPick: (label: string) => void }) {
   return (

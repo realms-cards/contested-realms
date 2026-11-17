@@ -15,13 +15,17 @@ import {
   BY_ID as ACHIEVEMENTS_BY_ID,
   createGame,
   evaluate,
+  flagFall,
   legalActions,
+  runningSeat,
+  settleClock,
   viewFor,
 } from "@sorcery/shared";
 import type { Action, ActionResult, DeckList, GameState as EngineState, PlayerId, PlayerView } from "@sorcery/shared";
 import { botActionKey, botNeedsToAct } from "@untested-realm/bot/bot";
 import type { BotReply, BotRequest } from "@untested-realm/bot/bot.worker";
 import { loadCardIndex } from "./cardIndex";
+import type { EngineClockConfig } from "./clock";
 import { localizeEngineText } from "./coords";
 import type { LegalReply, LegalRequest } from "./engine-legal.worker";
 import { narrate, narratePromptAnswer, snapshotPromptAnswer } from "./narration";
@@ -255,12 +259,18 @@ interface EngineSession {
   dismissEndTurn: () => void;
   lastError: string | null;
   /**
+   * When the chess clock in `game.clock` was last charged (ms): by the session in single player, or
+   * the arrival of the server's view online. A clock display counts the running seat down from here
+   * (clock.ts clockReading).
+   */
+  clockSettledAt: number;
+  /**
    * Remote only: the server runs different rules from this page (a release landed on one and
    * not yet the other). Nothing can be played until the player reloads.
    */
   outdated: boolean;
   canUndo: boolean;
-  start: (human: DeckList, bot: DeckList, botLevel: BotLevel, opts?: { secondSeer?: boolean }) => Promise<void>;
+  start: (human: DeckList, bot: DeckList, botLevel: BotLevel, opts?: { secondSeer?: boolean; clock?: EngineClockConfig | null }) => Promise<void>;
   /** pre-game: true once the Harbinger portent roll has been shown (always true without a Harbinger) */
   portalsRevealed: boolean;
   revealPortals: () => void;
@@ -422,6 +432,10 @@ let lastRemoteView: {
   disabled: Set<string>;
   marks: SiteMarks | undefined;
 } | null = null;
+/** Single player's chess-clock ticker (see chargeClock). */
+let clockTimer: ReturnType<typeof setInterval> | null = null;
+/** How often single player charges a running clock and checks for a flag fall. */
+const CLOCK_TICK_MS = 500;
 /** Wait before retrying a failed card index load (a cold or restarting server). */
 const CARD_INDEX_RETRY_MS = 2000;
 
@@ -689,6 +703,46 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     legalWorker.postMessage(request);
   }
 
+  /**
+   * Single player is its own clock authority, as upstream's client is (the server is online): charge
+   * the seat the game waits on for the time since the last charge, and end the game if their flag
+   * fell. The engine never reads the wall clock itself (engine/clock.ts). A hidden tab stops the
+   * clock, as it stops the computer. True when a flag fell.
+   */
+  function chargeClock(game: EngineState): boolean {
+    const now = Date.now();
+    const settledAt = get().clockSettledAt;
+    if (!game.clock || game.phase === "over" || get().mode === "remote") return false;
+    const hidden = typeof document !== "undefined" && document.hidden;
+    const seat = runningSeat(game);
+    if (!hidden) settleClock(game, settledAt, now);
+    set({ clockSettledAt: now });
+    if (seat === null || game.clock.remaining[seat] > 0) return false;
+    flagFall(game, seat);
+    return true;
+  }
+
+  function startClock(game: EngineState) {
+    if (clockTimer) clearInterval(clockTimer);
+    clockTimer = null;
+    set({ clockSettledAt: Date.now() });
+    if (!game.clock || typeof window === "undefined") return;
+    // keyed on the match, not the object: an undo swaps in a restored copy of the same game
+    const matchId = get().matchId;
+    clockTimer = setInterval(() => {
+      const current = get().game;
+      if (!current || get().matchId !== matchId || current.phase === "over") {
+        if (clockTimer) clearInterval(clockTimer);
+        clockTimer = null;
+        return;
+      }
+      if (chargeClock(current)) {
+        cancelBot();
+        committed(current, "local");
+      }
+    }, CLOCK_TICK_MS);
+  }
+
   function cancelBot() {
     botRequestId++;
     if (botTimer) clearTimeout(botTimer);
@@ -834,6 +888,11 @@ export const useEngineSession = create<EngineSession>((set, get) => {
   function applyBotAction(action: Action) {
     const { game } = get();
     if (!game) return;
+    // the computer's thinking time is on its clock; out of time, its move never lands
+    if (chargeClock(game)) {
+      committed(game, "remote");
+      return;
+    }
     const before = game.phase === "main" && action.t !== "endTurn" ? evaluate(game, BOT_SEAT) : null;
     // Courtesan Thaïs: the computer is playing OUR turn, so its moves are told as moves of ours
     const pilotedUs = thaisActiveSeat(game) === HUMAN_SEAT;
@@ -919,6 +978,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
     endTurnConfirm: false,
     legal: null,
     lastError: null,
+    clockSettledAt: 0,
     outdated: false,
     canUndo: false,
     layer: "surface",
@@ -1015,6 +1075,8 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       // the log is history now: replay none of it as toasts
       toastedLogLength = game.log.length;
       try {
+        // the clock resumes now: time spent away from the page is charged to nobody
+        startClock(game);
         committed(game, "silent");
       } catch {
         // the record passed its shape check but this engine build cannot rebuild it:
@@ -1040,7 +1102,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         .catch(() => undefined);
       const seed = Math.floor(Math.random() * 0xffffffff);
       const first: PlayerId = Math.random() < 0.5 ? 0 : 1;
-      const game = createGame([human, bot], ["You", "Computer"], seed, first, null, { secondSeer: opts?.secondSeer });
+      const game = createGame([human, bot], ["You", "Computer"], seed, first, opts?.clock ?? null, { secondSeer: opts?.secondSeer });
       history = [];
       nextBotAt = 0;
       lastBotTurn = -1;
@@ -1065,6 +1127,7 @@ export const useEngineSession = create<EngineSession>((set, get) => {
       lastDamage = null;
       lastRevealSeq = 0;
       toastedLogLength = game.log.length;
+      startClock(game);
       committed(game, "silent");
     },
 
@@ -1080,6 +1143,12 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         return { ok: true };
       }
       if (!game) return { ok: false, error: "No game in progress." };
+      // your thinking time is on your clock; a flag that already fell ends the game instead
+      if (chargeClock(game)) {
+        cancelBot();
+        committed(game, "local");
+        return { ok: false, error: "Your time ran out." };
+      }
       const snapshot = JSON.stringify(game);
       let result: ActionResult;
       try {
@@ -1190,6 +1259,8 @@ export const useEngineSession = create<EngineSession>((set, get) => {
         legal: envelope.legal,
         lastError: null,
         decisionSeat: envelope.over ? null : envelope.seat,
+        // the server charged the clock just before sending this: count down from its arrival
+        clockSettledAt: Date.now(),
       });
       lastRemoteView = { view: envelope.view, power: envelope.power, disabled: new Set(envelope.disabled), marks: envelope.siteMarks };
       paint(lastRemoteView.view, lastRemoteView.power, lastRemoteView.disabled, lastRemoteView.marks, "remote");
@@ -1214,6 +1285,8 @@ export const useEngineSession = create<EngineSession>((set, get) => {
 
     stop: () => {
       cancelBot();
+      if (clockTimer) clearInterval(clockTimer);
+      clockTimer = null;
       // a deferred effect must not fire into a torn-down match
       if (revealTimer) clearTimeout(revealTimer);
       revealTimer = null;

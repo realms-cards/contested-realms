@@ -1,4 +1,4 @@
-import { keywordLabel, type UnitState } from "@sorcery/shared";
+import { keywordLabel, protectedFromNonUnits, type GameState, type UnitState } from "@sorcery/shared";
 
 /**
  * What is going on with a card on the board, spelled out for the preview: the statuses the board
@@ -12,6 +12,54 @@ import { keywordLabel, type UnitState } from "@sorcery/shared";
  */
 
 export type BoardStatus = "stealth" | "ward" | "disabled" | "silenced";
+
+/**
+ * Lasting effects on a unit the engine keeps in `flow` (public in every view), which the board has no
+ * token for: the Frost Mage's encasing, Humming Hummocks' protection, a Blaze runner this turn.
+ */
+export type EffectMark = "encased" | "protected" | "blazing";
+
+export const EFFECT_MARKS: Record<EffectMark, Omit<StatusChip, "key"> & { note: string }> = {
+  encased: {
+    icon: "game-icons:ice-cube",
+    label: "Encased in ice",
+    tone: "info",
+    note: "Encased in ice: disabled, and takes no damage until the Frost Mage's controller's next turn.",
+  },
+  protected: {
+    icon: "game-icons:shield-reflect",
+    label: "Protected",
+    tone: "good",
+    note: "Protected from all but units: no magic, site, artifact or aura can target, damage, destroy, banish, modify or move it.",
+  },
+  blazing: {
+    icon: "game-icons:fire-dash",
+    label: "Blazing",
+    tone: "good",
+    note: "Blazing this turn: Movement +2, can't be intercepted, and leaves a trail of fire that deals 2 damage to each unit along it when it stops.",
+  },
+};
+
+/** The effect marks on every unit, by unit id (only units that have any). */
+export function effectMarks(game: GameState): Record<string, EffectMark[]> {
+  const flow = (game.flow ?? {}) as {
+    encased?: { unitId: string }[];
+    blazeTrail?: { unitId: string; turn: number }[];
+    protectedFromNonUnits?: unknown[];
+  };
+  const out: Record<string, EffectMark[]> = {};
+  const add = (id: string, mark: EffectMark) => {
+    if (!game.units[id]) return;
+    const list = (out[id] ??= []);
+    if (!list.includes(mark)) list.push(mark);
+  };
+  for (const e of flow.encased ?? []) add(e.unitId, "encased");
+  for (const e of flow.blazeTrail ?? []) if (e.turn === game.turn) add(e.unitId, "blazing");
+  if (flow.protectedFromNonUnits?.length) {
+    for (const unit of Object.values(game.units)) if (protectedFromNonUnits(game, unit)) add(unit.id, "protected");
+  }
+  return out;
+}
 
 export interface StatusChip {
   key: string;
@@ -35,6 +83,8 @@ export interface CardStatusInput {
   mask?: string | null;
   /** the card is a site: its Disabled / Silenced read as a site's */
   site?: boolean;
+  /** lasting effects with no board token (effectMarks) */
+  marks?: EffectMark[];
 }
 
 const STATUS_CHIPS: Record<BoardStatus, Omit<StatusChip, "key">> = {
@@ -78,6 +128,12 @@ export function describeCardStatus(input: CardStatusInput): { chips: StatusChip[
     chips.push({ key: status, ...STATUS_CHIPS[status] });
     const note = (input.site ? SITE_STATUS_NOTES : STATUS_NOTES)[status];
     if (note) notes.push(note);
+  }
+
+  for (const mark of input.marks ?? []) {
+    const { note, ...chip } = EFFECT_MARKS[mark];
+    chips.push({ key: mark, ...chip });
+    notes.push(note);
   }
 
   if (stats && printed) {

@@ -790,6 +790,7 @@ function createLobbyFeature(deps) {
       timerConfig = null,
       enableSeer = false,
       engineMode = false,
+      engineClock = null,
       rematchOfMatch = null,
     } = options;
     console.log(
@@ -827,12 +828,20 @@ function createLobbyFeature(deps) {
     const engineEnabled =
       engineMode === true &&
       (matchType === "constructed" || matchType === "precon");
+    // Engine chess clock (ms): base 1–180 minutes, increment 0–120 seconds; anything else untimed
+    const clockBase = Number(engineClock && engineClock.base);
+    const clockInc = Number((engineClock && engineClock.inc) || 0);
+    const clock =
+      engineEnabled && Number.isFinite(clockBase) && clockBase >= 60000 && clockBase <= 180 * 60000
+        ? { base: Math.round(clockBase), inc: Number.isFinite(clockInc) ? Math.min(120000, Math.max(0, Math.round(clockInc))) : 0 }
+        : null;
     const match = {
       id: rid("match"),
       lobbyId: lobby.id,
       lobbyName: lobby.name || null,
       enableSeer: seerEnabled,
       engineMode: engineEnabled,
+      engineClock: clock,
       timedMatch: Boolean(timer),
       matchTimeMinutes: timer ? timer.matchTimeMinutes : undefined,
       // Flat mirrors so raw `{ ...match }` broadcasts carry them too
@@ -876,6 +885,7 @@ function createLobbyFeature(deps) {
         // Persisted with the session so the flat flags can be restored on recovery
         enableSeer: seerEnabled,
         engineMode: engineEnabled,
+        engineClock: clock,
       },
       lastTs: 0,
       interactionRequests: new Map(),
@@ -1574,6 +1584,7 @@ function createLobbyFeature(deps) {
         timerConfig,
         enableSeer,
         engineMode,
+        engineClock,
       } = msg;
       const p = await ensurePlayerCached(playerId);
       const lobby = findLobbyForPlayer(playerId, p.lobbyId);
@@ -1589,6 +1600,7 @@ function createLobbyFeature(deps) {
         timerConfig: timerConfig || null,
         enableSeer: enableSeer === true,
         engineMode: engineMode === true,
+        engineClock: engineClock || null,
       });
       if (lobby && lobbies.has(lobby.id)) {
         await publishLobbyState(lobbies.get(lobby.id));
@@ -2518,6 +2530,7 @@ function createLobbyFeature(deps) {
         timerConfig: payload?.timerConfig || null,
         enableSeer: payload?.enableSeer === true,
         engineMode: payload?.engineMode === true,
+        engineClock: payload?.engineClock || null,
       };
       try {
         const leader = await getOrClaimLobbyLeader();
