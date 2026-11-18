@@ -1,4 +1,5 @@
 import type { VisualAid } from "@/hooks/useGraphicsSettings";
+import type { PickMode } from "@/lib/game/cpu/boardPicker";
 import { isTileToken, parsePickToken } from "@/lib/game/cpu/pickTokens";
 
 /** How a board target is lit.
@@ -64,8 +65,21 @@ const TONE_PALETTES: Record<VisualAid, Record<FieldTone, string>> = {
   },
 };
 
-export function toneColors(aid: VisualAid): Record<FieldTone, string> {
-  return TONE_PALETTES[aid] ?? TONE_PALETTES.none;
+/**
+ * A defender pick's candidates, per visual aid: what you COULD block with reads as combat, not as
+ * an ordinary target. Only the candidate tone changes — what you have picked stays the usual pick
+ * colour. `none` takes rose (no other tone uses red); `colorblind` takes Okabe-Ito vermillion;
+ * `monochrome` has no hue to spend, so it steps the candidate a notch brighter than usual.
+ */
+const DEFEND_CANDIDATE: Record<VisualAid, string> = {
+  none: "#fb7185",
+  colorblind: "#d55e00",
+  monochrome: "#d8d8d8",
+};
+
+export function toneColors(aid: VisualAid, mode: PickMode = null): Record<FieldTone, string> {
+  const palette = TONE_PALETTES[aid] ?? TONE_PALETTES.none;
+  return mode === "defend" ? { ...palette, candidate: DEFEND_CANDIDATE[aid] ?? DEFEND_CANDIDATE.none } : palette;
 }
 /** Grid step per direction (y grows toward p1's home row), matching the CPU rules' DIRECTIONS. */
 export const ARROW_STEPS: Record<ArrowDirection, readonly [number, number]> = {N:[0,-1],E:[1,0],S:[0,1],W:[-1,0]};

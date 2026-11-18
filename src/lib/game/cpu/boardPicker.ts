@@ -1,5 +1,9 @@
 import { create } from "zustand";
 
+/** What a pick is FOR, when that changes how the board should colour it: `defend` while the
+ *  player assigns defenders (they read differently from an ordinary target pick). */
+export type PickMode = "defend" | null;
+
 /** Transient UI selection only; never sent to the match or saved in snapshots.
  * Entries are pick tokens (see pickTokens.js): plain "x,y" tiles, or board cards, hand cards, directions, piles and anchored buttons;
  * each renderer shows only its own kind. `tiles` capture clicks (`selected` is the one clicked); `glow` (chosen targets) and
@@ -16,28 +20,32 @@ export const useCpuBoardPicker = create<{
   /** For an area prompt: tile token -> the squares that picking it would cover, so the board can
    *  show the whole footprint under the pointer without the caller rearming on every hover. */
   areas: Record<string, string[]>;
+  /** see PickMode; reset whenever a different request takes the picker over */
+  mode: PickMode;
   configure: (request: string, tiles: string[]) => void;
   setGlow: (request: string, tiles: string[], sources?: string[]) => void;
   setLabels: (request: string, labels: Record<string, string>) => void;
   setHovered: (token: string | null) => void;
   setSequence: (request: string, sequence: boolean) => void;
   setAreas: (request: string, areas: Record<string, string[]>) => void;
+  setMode: (request: string, mode: PickMode) => void;
   select: (tile: string) => void;
   /** Drop the current selection but keep the armed tokens, glow and labels, so a caller can
    *  accept a click — or refuse it — and leave exactly the same choices live. */
   deselect: (request: string) => void;
   clear: (request: string) => void;
 }>((set) => ({
-  request:"",tiles:[],selected:null,glow:[],sources:[],labels:{},hovered:null,sequence:false,areas:{},
-  configure:(request,tiles) => set(state => state.request === request ? {tiles,selected:state.selected && tiles.includes(state.selected) ? state.selected : null} : {request,tiles,selected:null,glow:[],sources:[],labels:{},hovered:null,sequence:false,areas:{}}),
-  setGlow:(request,glow,sources = []) => set(state => state.request === request ? {glow,sources} : {request,tiles:[],selected:null,glow,sources,labels:{},hovered:null,sequence:false,areas:{}}),
-  setLabels:(request,labels) => set(state => state.request === request ? {labels} : {request,tiles:[],selected:null,glow:[],sources:[],labels,hovered:null,sequence:false,areas:{}}),
+  request:"",tiles:[],selected:null,glow:[],sources:[],labels:{},hovered:null,sequence:false,areas:{},mode:null,
+  configure:(request,tiles) => set(state => state.request === request ? {tiles,selected:state.selected && tiles.includes(state.selected) ? state.selected : null} : {request,tiles,selected:null,glow:[],sources:[],labels:{},hovered:null,sequence:false,areas:{},mode:null}),
+  setGlow:(request,glow,sources = []) => set(state => state.request === request ? {glow,sources} : {request,tiles:[],selected:null,glow,sources,labels:{},hovered:null,sequence:false,areas:{},mode:null}),
+  setLabels:(request,labels) => set(state => state.request === request ? {labels} : {request,tiles:[],selected:null,glow:[],sources:[],labels,hovered:null,sequence:false,areas:{},mode:null}),
   setHovered:hovered => set(state => state.hovered === hovered ? state : {hovered}),
   setSequence:(request,sequence) => set(state => state.request === request && state.sequence !== sequence ? {sequence} : state),
-  setAreas:(request,areas) => set(state => state.request === request ? {areas} : {request,tiles:[],selected:null,glow:[],sources:[],labels:{},hovered:null,sequence:false,areas}),
+  setAreas:(request,areas) => set(state => state.request === request ? {areas} : {request,tiles:[],selected:null,glow:[],sources:[],labels:{},hovered:null,sequence:false,areas,mode:null}),
+  setMode:(request,mode) => set(state => state.request === request && state.mode !== mode ? {mode} : state),
   select:tile => set(state => state.tiles.includes(tile) ? {selected:tile} : state),
   deselect:request => set(state => state.request === request ? {selected:null} : state),
-  clear:request => set(state => state.request === request ? {request:"",tiles:[],selected:null,glow:[],sources:[],labels:{},hovered:null,sequence:false,areas:{}} : state),
+  clear:request => set(state => state.request === request ? {request:"",tiles:[],selected:null,glow:[],sources:[],labels:{},hovered:null,sequence:false,areas:{},mode:null} : state),
 }));
 
 // Dev handle so headless checks can click picker tokens (the canvas can't be DOM-clicked).

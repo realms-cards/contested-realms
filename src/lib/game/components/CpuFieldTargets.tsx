@@ -93,7 +93,7 @@ export default function CpuFieldTargets({offsetX,offsetY}: {offsetX:number;offse
   const {request,tiles,selected,glow,sources,labels,sequence,areas,hovered} = useCpuBoardPicker(useShallow(picker => ({request:picker.request,tiles:picker.tiles,selected:picker.selected,glow:picker.glow,sources:picker.sources,labels:picker.labels,sequence:picker.sequence,areas:picker.areas,hovered:picker.hovered})));
   // `hovered` only feeds the area preview, so a board with no areas never re-derives on hover.
   const anchor = Object.keys(areas).length ? hovered : null;
-  const COLORS = toneColors(useVisualAid());
+  const COLORS = toneColors(useVisualAid(), useCpuBoardPicker((s) => s.mode));
   const targets = useMemo(() => fieldTargets({tiles,selected,glow,sources,labels,sequence,areas,hovered:anchor}),[tiles,selected,glow,sources,labels,sequence,areas,anchor]);
   // Rules Engine matches (src/lib/engine-mode) drive the same picker; their requests start with "engine".
   if (!cpu && !request.startsWith("engine")) return null;

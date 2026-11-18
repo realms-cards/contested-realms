@@ -30,7 +30,7 @@ import {
 } from "@/lib/engine-mode/coords";
 import { seatKey } from "@/lib/engine-mode/projection";
 import { useEngineSession } from "@/lib/engine-mode/session";
-import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
+import { type PickMode, useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import type { ArrowDirection } from "@/lib/game/cpu/fieldTargets";
 import { dirToken, handToken, pileToken } from "@/lib/game/cpu/pickTokens";
 import { useGameStore } from "@/lib/game/store";
@@ -355,6 +355,8 @@ function useBoardPick(
     sources?: string[];
     /** tile token -> the squares picking it would cover, previewed under the pointer */
     areas?: Record<string, string[]>;
+    /** what the pick is for, when the board colours it differently (defenders) */
+    mode?: PickMode;
   },
 ) {
   const tokenKey = tokens.join("|");
@@ -369,9 +371,10 @@ function useBoardPick(
     picker.setGlow(request, glow, extra?.sources ?? []);
     if (labels) picker.setLabels(request, labels);
     if (extra?.areas) picker.setAreas(request, extra.areas);
+    if (extra?.mode) picker.setMode(request, extra.mode);
     // configure/setGlow/setLabels/setAreas read the arrays once; the keys capture their contents
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [request, tokenKey, glowKey, labelKey, sourceKey, areaKey]);
+  }, [request, tokenKey, glowKey, labelKey, sourceKey, areaKey, extra?.mode]);
   useEffect(
     () =>
       useCpuBoardPicker.subscribe((state, prev) => {
@@ -572,6 +575,7 @@ function PromptView({ game, prompt: rawPrompt }: { game: EngineState; prompt: Pr
           // had nothing but an unlabelled Confirm at zero picks.
           declineLabel={prompt.kind === "chooseTargets" && data.upTo ? (data.skipLabel ?? "None") : null}
           kind={data.kind}
+          mode={prompt.kind === "defend" ? "defend" : null}
           onConfirm={send}
         >
           {autoButton}
@@ -824,6 +828,7 @@ function MultiPick({
   confirmLabel,
   declineLabel,
   kind,
+  mode = null,
   onConfirm,
   children,
 }: {
@@ -840,6 +845,8 @@ function MultiPick({
   declineLabel?: string | null;
   /** the engine's `data.kind`, so the hint names what is being clicked */
   kind?: string;
+  /** `defend`: the candidates are lit in the defenders' colour and the hint says so */
+  mode?: PickMode;
   onConfirm: (ids: string[]) => void;
   children?: React.ReactNode;
 }) {
@@ -879,10 +886,10 @@ function MultiPick({
     },
     [ids, tokenOf, toggleId, min, max, onConfirm],
   );
-  useBoardPick(`${request}:${chosen.join(",")}`, ids.map(tokenOf), chosen.map(tokenOf), toggle);
+  useBoardPick(`${request}:${chosen.join(",")}`, ids.map(tokenOf), chosen.map(tokenOf), toggle, undefined, mode ? { mode } : undefined);
   const ready = chosen.length >= min && chosen.length <= max;
   return (
-    <PromptBanner title={title} hint={pickHint(kind, !!declineLabel)} counter={`${chosen.length}/${max}`}>
+    <PromptBanner title={title} hint={mode === "defend" ? DEFEND_HINT : pickHint(kind, !!declineLabel)} counter={`${chosen.length}/${max}`}>
       <TwinChoice
         twins={twins}
         labelOf={labelOf}
@@ -909,6 +916,9 @@ function MultiPick({
     </PromptBanner>
   );
 }
+
+/** Defenders are lit in their own colour (toneColors' defend mode), not the usual target amber. */
+const DEFEND_HINT = "Click the highlighted units to send them to defend; click one again to call it back.";
 
 /** What the player is clicking: the engine tells us with `data.kind`. */
 function pickHint(kind: string | undefined, declinable: boolean): string {

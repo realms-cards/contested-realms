@@ -79,7 +79,7 @@ export default function Board2D({ tileW, tileH, docked = false, children }: Boar
     useShallow((p) => ({ tiles: p.tiles, glow: p.glow, sources: p.sources, selected: p.selected, sequence: p.sequence })),
   );
   const { settings } = useGraphicsSettings();
-  const colors = toneColors(useVisualAid());
+  const colors = toneColors(useVisualAid(), useCpuBoardPicker((s) => s.mode));
 
   // the engine state is mutated in place between projections; `rev` is what says it changed
   const overlays = useMemo(() => {

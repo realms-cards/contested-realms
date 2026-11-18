@@ -270,7 +270,7 @@ export default function SeatBar2D({ seat, density }: { seat: Seat; density: Seat
   const viewer = useEngineSession((s) => s.seat);
   const botThinking = useEngineSession((s) => s.botThinking);
   const aid = useVisualAid();
-  const colors = toneColors(aid);
+  const colors = toneColors(aid, useCpuBoardPicker((s) => s.mode));
   const drawColor = DRAW_COLORS[aid] ?? DRAW_COLORS.none;
   const pileSelector = useMemo(() => selectPilePick(seat), [seat]);
   const pileSlice = useCpuBoardPicker(useShallow(pileSelector));

@@ -5,6 +5,7 @@ import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, use
 import { DoubleSide, type Group, type Intersection, MathUtils, Mesh, type MeshBasicMaterial, type Raycaster } from "three";
 import { useVisualAid } from "@/hooks/useGraphicsSettings";
 import CardOutline from "@/lib/game/components/CardOutline";
+import { useCpuBoardPicker } from "@/lib/game/cpu/boardPicker";
 import { toneColors } from "@/lib/game/cpu/fieldTargets";
 import {
   isPickable,
@@ -76,7 +77,7 @@ export function UnitPickCapture({token,state,width,height,rotationZ,elevation = 
 }) {
   // Hooks first: `state` is null for most cards on the board, and an early return above this
   // would change the hook order between a lit card and an unlit one.
-  const colors = toneColors(useVisualAid());
+  const colors = toneColors(useVisualAid(), useCpuBoardPicker((s) => s.mode));
   if (!state) return null;
   // the cards speak the same colour language as the tiles
   const color = colors[state];

@@ -1102,6 +1102,16 @@ function summonProbe(state: GameState, me: PlayerId, name: string, spot: SummonS
   } as unknown as UnitState
 }
 
+/** Would `name` be disabled the moment it is summoned at `spot`? Asked of the probe placed IN the realm:
+ *  isDisabled only judges units in state.units (disabledByEffect: "only a unit IN THE REALM can be
+ *  disabled"), so an off-board probe read "not disabled" for every selfDisabled minion (Bound Spirit,
+ *  Outerbound) and every disabling aura or neighbour; only [X]bound got through. A shallow copy carries
+ *  the probe, so the real state is never touched and no frozen-state memo can see it. */
+function arrivesDisabled(state: GameState, me: PlayerId, name: string, spot: SummonSpot): boolean {
+  const probe = summonProbe(state, me, name, spot)
+  return isDisabled({ ...state, units: { ...state.units, [probe.id]: probe } }, probe)
+}
+
 /** the opponent's half of the board = the GRID_H/2 rows nearest the enemy avatar.
  *  With a 5x4 grid that's the 10 squares on the enemy's two rows. */
 function inOpponentHalf(sq: { y: number }, enemyAvatar: UnitState): boolean {
@@ -1251,9 +1261,10 @@ function castMinion(
   if (!surfaceSpots.length && !subSpots.length && !voidSpots.length) return null
 
   // a minion that would arrive DISABLED is a wasted summon (Bound Spirit away from an allied
-  // Spellcaster, a waterbound minion on land): keep only the spots where it can act, if any.
+  // Spellcaster, Outerbound on an inner square, a waterbound minion on land): keep only the spots
+  // where it can act, if any.
   for (const spots of [surfaceSpots, subSpots, voidSpots]) {
-    const active = spots.filter((s) => !isDisabled(state, summonProbe(state, me, name, s)))
+    const active = spots.filter((s) => !arrivesDisabled(state, me, name, s))
     if (active.length) spots.splice(0, spots.length, ...active)
   }
 

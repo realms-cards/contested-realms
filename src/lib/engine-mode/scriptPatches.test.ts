@@ -285,3 +285,44 @@ describe("Waveshaper on an already-flooded site", () => {
     expect(g.sites["dry"].flooded, "the wave dried out a site Atlantean Fate flooded").toBe(true);
   });
 });
+
+describe("Avalanche flows one step (shared/engine/scriptPatches.ts)", () => {
+  /**
+   * Seat 0 springs an Avalanche at engine (1,0): forward is +y. Minions stand on the trap site,
+   * on the square in front of it, and one further on — off column 2, where the avatars stand.
+   */
+  it.each([0, 1] as PlayerId[])("carries the units on the trap one square forward and stops there (springer seat %i)", (seat) => {
+    applyScriptPatches();
+    const deck = toEngineDeck(enginePrecons[0]);
+    const g = createGame([deck, deck], ["You", "Computer"], 7, 0 as PlayerId);
+    g.phase = "main";
+    g.prompts = [];
+    g.activePlayer = seat;
+    const foe = (1 - seat) as PlayerId;
+    const forward = seat === 0 ? 1 : -1;
+    const startY = seat === 0 ? 0 : 3;
+    for (let y = 0; y < 4; y++) {
+      const id = y === startY ? "avalanche" : `snow${y}`;
+      const name = y === startY ? "Avalanche" : "Spire";
+      g.cards[`c${id}`] = { id: `c${id}`, name, owner: seat } as EngineState["cards"][string];
+      g.sites[id] = { id, cardId: `c${id}`, name, x: 1, y, owner: seat, controller: seat, isRubble: false, tapped: false } as unknown as EngineState["sites"][string];
+    }
+    const avatar = Object.values(g.units).find((u) => u.isAvatar && u.owner === foe)!;
+    const minion = (id: string, y: number) => {
+      g.units[id] = { ...avatar, id, isAvatar: false, name: "Southpaw Dyrodor", x: 1, y, region: "surface", tapped: false, damage: 0, enteredTurn: -1, counters: {}, modifiers: [], carrying: [], carryingUnits: [], owner: foe, controller: foe };
+    };
+    minion("uOnTrap", startY);
+    minion("uInFront", startY + forward);
+    minion("uBeyond", startY + 2 * forward);
+
+    getScript("Avalanche")!.siteTrapAbility!.effect(makeCtx(g, "avalanche", seat, []));
+
+    expect(g.units.uOnTrap.y).toBe(startY + forward);
+    expect(g.units.uInFront.y).toBe(startY + forward);
+    expect(g.units.uBeyond.y).toBe(startY + 2 * forward);
+    const disabled = disabledUnits(g);
+    expect(disabled.has("uOnTrap")).toBe(true);
+    expect(disabled.has("uInFront")).toBe(true);
+    expect(disabled.has("uBeyond")).toBe(false);
+  });
+});

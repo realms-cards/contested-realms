@@ -186,3 +186,27 @@ describe("the board's colour language under a visual aid", () => {
     expect(toneColors(unknown)).toEqual(toneColors("none"));
   });
 });
+
+describe("defender picks", () => {
+  it("light the candidates in their own colour and leave every other tone alone", () => {
+    for (const aid of ["none", "colorblind", "monochrome"] as const) {
+      const plain = toneColors(aid);
+      const defend = toneColors(aid, "defend");
+      expect(defend.candidate).not.toBe(plain.candidate);
+      for (const tone of ["continue", "selected", "target", "source", "area"] as FieldTone[]) expect(defend[tone]).toBe(plain[tone]);
+    }
+  });
+
+  it("forget the mode as soon as another pick takes the board over", () => {
+    const picker = useCpuBoardPicker.getState();
+    picker.configure("engine-prompt:p1:", ["unit:perm:u1"]);
+    picker.setMode("engine-prompt:p1:", "defend");
+    expect(useCpuBoardPicker.getState().mode).toBe("defend");
+    // a stale request cannot set it
+    picker.setMode("someone-else", null);
+    expect(useCpuBoardPicker.getState().mode).toBe("defend");
+    picker.configure("engine:3:", ["2,2"]);
+    expect(useCpuBoardPicker.getState().mode).toBeNull();
+    picker.clear("engine:3:");
+  });
+});

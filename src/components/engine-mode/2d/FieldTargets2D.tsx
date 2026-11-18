@@ -62,7 +62,7 @@ export default function FieldTargets2D({tile,docked}: {tile: TileSize; docked: b
   const cpu = useGameStore(state => state.opponentPlayerId?.startsWith("cpu_") === true);
   const permanents = useGameStore(state => state.permanents);
   const avatars = useGameStore(state => state.avatars);
-  const colors = toneColors(useVisualAid());
+  const colors = toneColors(useVisualAid(), useCpuBoardPicker((s) => s.mode));
   const hasAreas = Object.keys(areas).length > 0;
   // `hovered` only feeds the area preview, so a board with no areas never re-derives on hover.
   const anchor = hasAreas ? hovered : null;
